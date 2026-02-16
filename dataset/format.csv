@@ -1,0 +1,6 @@
+﻿name,aliases
+type,TY|Type|type_of_reference
+doi,Doi|DOI|DO
+title,Title|TITLE
+url,URL|Link|link
+openalex,openalex_id
