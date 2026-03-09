@@ -39,15 +39,16 @@ class Record:
 		dir_path = os.path.dirname(__file__) + "\\"
 		data_format = pd.read_csv(dir_path + "format.csv")
 		for _, row in data_format.iterrows():
-			self.fields.append(Field(row["name"], row["aliases"].split("|")))
+			self.fields.append(Field(row["name"], [] if pd.isna(row["aliases"]) else row["aliases"].split("|")))
 
 	def get_row(self):
 		return [field.value for field in self.fields]
 
 	# returns true if a new field was created. False if it existed and is now updated.
 	def add_value(self, name: str, value):
+		low_name = name.lower()
 		for field in self.fields:
-			if field.match(name):
+			if field.match(low_name):
 				field.add_value(value)
 				return
 

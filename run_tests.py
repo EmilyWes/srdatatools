@@ -1,11 +1,9 @@
 from dataset.dataset import *
 from dataset.record import *
-from tests.dataset import *
-from tests.reading import *
+from tests.test_dataset import *
 
 # running of tests.
-test_dataset()
-test_reading()
+run_dataset_tests()
 
 
 # oke, test idee:
