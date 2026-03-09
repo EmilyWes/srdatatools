@@ -60,6 +60,8 @@ class Dataset:
 			csv_io.write_csv_file(self.get_df(), filepath)
 		elif extension == "xlsx":
 			xlsx_io.write_excel_file(self.get_df(), filepath)
+		elif extension == "json":
+			json_io.write_json_file(self, filepath)
 		else:
 			print(f"extension type {extension} not supported as output.")
 
@@ -83,3 +85,8 @@ class Dataset:
 				raise ValueError(f"Error reading file: {e}")
 
 		return df
+
+	def json_encode(self):
+		return {
+			"dataset": self.records
+		}

@@ -5,7 +5,10 @@ import dataset.dataset as dataset
 def write_json_file(dataset, filepath:str):
 
 	# Write the file
-	print(json.dumps(dataset))
+	print(json.dumps(dataset, 
+				  default=lambda o: o.json_encode(),
+				  indent=2
+				  ))
 
 	# do checks, convert to df, actually return the df
 

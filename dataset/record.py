@@ -31,6 +31,14 @@ class Field:
 				self.value = new_value
 			else:
 				self.alt_values.append(new_value)
+	
+	def json_encode(self):
+		return { self.name:
+			{
+			"value": self.value,
+			"alternatives": self.alt_values
+		}
+		}
 
 class Record:
 
@@ -55,3 +63,11 @@ class Record:
 		# case where we did not have any match:
 		# todo: create new field in the record and return 
 
+	def json_encode(self):
+
+		return {
+			"record": 
+			{
+				f.name: {"value": f.value, "alt": f.alt_values} for f in self.fields if not  pd.isna(f.value)
+	}
+		}
