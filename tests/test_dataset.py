@@ -17,10 +17,9 @@ def test_dataset():
 def test_reading():
 
 	# cleanup old output files
-	files = [os.path.join(dirpath,f) for (dirpath, dirnames, filenames) in os.walk("tests\\data") for f in filenames] 
+	files = [os.path.join(dirpath,f) for (dirpath, dirnames, filenames) in os.walk("tests\\data\\output") for f in filenames] 
 	for file in files:
-		if "out" in file:
-			os.remove(file)
+		os.remove(file)
 
 	# list of input files
 	files = [os.path.join(dirpath,f) for (dirpath, dirnames, filenames) in os.walk("tests\\data") for f in filenames] 
@@ -32,7 +31,7 @@ def test_reading():
 		dataset.get_data(file)
 
 		file_split = file.split(".")
-		output_path = "".join(file_split[:-1]) + "_out." + file_split[-1]
+		output_path = "tests\\data\\output\\" + "".join(file.split("\\")[-2:-1]) + "_out." + file_split[-1]
 		dataset.write_data(output_path)
 
 def json_test():
@@ -40,11 +39,11 @@ def json_test():
 	dataset = Dataset()
 	dataset.records.append(my_rec)
 	dataset.records.append(my_rec)
-	dataset.write_data("test.json")
+	dataset.write_data("tests\\data\\output\\test.json")
 
 	dataset = Dataset()
 	dataset.get_data("tests\\data\\abgaz_2023_ids.csv")
-	#dataset.write_data("test.json")
+	dataset.write_data("tests\\data\\output\\abgaz.json")
 
 
 def run_dataset_tests():
