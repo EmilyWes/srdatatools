@@ -45,6 +45,12 @@ def json_test():
 	dataset.get_data("tests\\data\\abgaz_2023_ids.csv")
 	dataset.write_data("tests\\data\\output\\abgaz.json")
 
+	dataset = Dataset()
+	dataset.get_data("tests\\data\\output\\abgaz.json")
+	
+	dataset = Dataset()
+	dataset.get_data("tests\\data\\output\\test.json")
+
 
 def run_dataset_tests():
 	test_dataset()

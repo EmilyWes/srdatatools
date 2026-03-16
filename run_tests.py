@@ -1,5 +1,3 @@
-from dataset.dataset import *
-from dataset.record import *
 from tests.test_dataset import *
 
 # running of tests.

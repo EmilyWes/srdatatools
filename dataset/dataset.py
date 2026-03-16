@@ -3,30 +3,18 @@ import os
 from dataset.record import *
 
 # formats
-import dataset.json_io as json_io
-import dataset.csv_io as csv_io
-import dataset.ris_io as ris_io
-import dataset.xlsx_io as xlsx_io
-
-
-class Author:
-
-	def __init__(self):
-		self.name = ""
-		self.first_name = ""
-		self.last_name = ""
-		self.address = ""
-
+import dataset.io.json_io as json_io
+import dataset.io.csv_io as csv_io
+import dataset.io.ris_io as ris_io
+import dataset.io.xlsx_io as xlsx_io
 
 class Dataset:
 
+	# columns for writing. todo: move this code to get it from record automatically.
+	columns = ["doi", "openalex_id", "authors", "title"]
+
 	def __init__(self):
 		self.records = []
-
-		# Remember the columns for writing.
-		dir_path = os.path.dirname(__file__) + "\\"
-		data_format = pd.read_csv(dir_path + "format.csv")
-		self.columns = list(data_format["name"])
 
 	# reads input file to records
 	def get_data(self, filepath: str):
@@ -39,12 +27,17 @@ class Dataset:
 					record.add_value(col, val)
 				self.records.append(record)
 		elif filepath.split('.')[-1] == "json":
-			i = 5 #todo
+			data = json_io.read_json_file(filepath)
+
+			# hardcoded use of own format only at the moment!
+			dataset = Dataset()
+			for record_data in data["dataset"]:
+				record = Record.create_from_json(record_data["record"])
 
 	# converts records to dataframe
 	def get_df(self):
 		data = [record.get_row() for record in self.records]
-		df = pd.DataFrame(data, columns=self.columns)
+		df = pd.DataFrame(data, columns=Dataset.columns)
 		df = df.dropna(how='all', axis=1)
 
 		return df

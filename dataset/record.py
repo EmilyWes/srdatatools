@@ -2,96 +2,18 @@ import pandas as pd
 import numpy as np
 import os
 
+from dataset.field import *
+from dataset.fields.authors import *
+from dataset.fields.doi import *
+from dataset.fields.openalex_id import *
+from dataset.fields.title import *
+
 '''
 
 The record class is for a single record, aka paper or book chapter.
 It contains all possible fields the record can have, together with modifying functions.
 
 '''
-
-
-# The field class is a simple data object for field in the record
-class Field:
-
-	def __init__(self, name: str, aliases: list[str], value = None, alt_values = []):
-		self.name = name
-		self.aliases = aliases
-		self.value = value
-		self.alt_values = []
-
-	def match(self, name: str):
-		return name == self.name or name in self.aliases
-
-	def add_value(self, new_value):
-		if isinstance(new_value, list):
-			for v in new_value:
-				self.add_value(v)
-		else:
-			if pd.isna(self.value):
-				self.value = new_value
-			else:
-				self.alt_values.append(new_value)
-	
-	def is_empty(self):
-		return pd.isna(self.value)
-
-	def is_not_empty(self):
-		return not self.is_empty()
-
-	def json_encode(self):
-		return { self.name:
-			{
-			"value": self.value,
-			"alternatives": self.alt_values
-		}
-		}
-	
-class Author:
-	def __init__(self, input):
-		# determine separator
-		sep = ","
-
-		names = input.split(sep)
-
-		self.name = input
-		self.firstname = names[0].strip() if len(names) > 1 else ""
-		self.lastname = names[-1].strip() if len(names) > 0 else ""
-		self.address = ""
-
-	def json_encode(self):
-		return {
-			self.name:
-			{
-				"first name": self.firstname,
-				"last name": self.lastname,
-				"address": self.address
-			}
-		}
-
-class Authors(Field):
-
-	def __init__(self, name: str, aliases: list[str], value = None, alt_values = []):
-		super().__init__(name, aliases, value, alt_values)
-		self.value = []
-
-	def is_empty(self):
-		return len(self.value) == 0
-
-	def add_value(self, new_value):
-		if isinstance(new_value, list):
-			for v in new_value:
-				self.add_value(v)
-		else:
-
-			if not pd.isna(new_value):
-				print(new_value)
-				# determine format
-				sep = ";"
-				
-				# split into multiple authors
-				author_strings = new_value.split(sep)
-				for a in author_strings:
-					self.value.append(Author(a))		
 	
 
 class Record:
@@ -100,11 +22,12 @@ class Record:
 		self.fields = []
 		dir_path = os.path.dirname(__file__) + "\\"
 		data_format = pd.read_csv(dir_path + "format.csv")
-		for _, row in data_format.iterrows():
-			if row["name"] == "authors":
-				self.fields.append(Authors(row["name"], [] if pd.isna(row["aliases"]) else row["aliases"].split("|")))
-			else :
-				self.fields.append(Field(row["name"], [] if pd.isna(row["aliases"]) else row["aliases"].split("|")))
+
+		# Add fields
+		self.fields.append(Doi())
+		self.fields.append(OpenalexID())
+		self.fields.append(Authors())
+		self.fields.append(Title())
 
 	def get_row(self):
 		return [field.value for field in self.fields]
@@ -119,6 +42,9 @@ class Record:
 
 		# case where we did not have any match:
 		# todo: create new field in the record and return 
+	
+	def add_field(self, field):
+		self.fields.append(field)
 
 	def json_encode(self):
 
@@ -128,3 +54,17 @@ class Record:
 				f.name: {"value": f.value, "alt": f.alt_values} for f in self.fields if not f.is_empty()
 		}
 		}
+	
+	@staticmethod
+	def create_from_json(record_data):
+		record = Record()
+		for field in record_data:
+			if field == "authors":
+				for value in record_data[field]["value"]:
+					record.add_value(field, value["author"]["name"])
+			else:
+				record.add_value(field, record_data[field]["value"])
+				for alt in record_data[field]["alt"]:
+					record.add_value(field, alt)
+		return record
+
