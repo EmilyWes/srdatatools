@@ -38,6 +38,13 @@
 - Well-known acronyms (DOI, RIS, NBIB, etc.) are lowercased in identifiers, same as any other word: `record.doi`, `parse_ris()`.
 - Test functions: `test_<unit>__<scenario>` (double underscore separates the unit under test from the scenario), e.g. `test_ris_parser__handles_multiline_abstract`, `test_dedup__exact_doi_match`.
 
+## Branching
+
+- Each to-do item gets its own branch, created off the latest `main` right after its plan is approved (before any code is written). Emily names the branch each time.
+- Commit the item's logical steps to that branch as described above.
+- When the item is done (tests passing, checkbox in `design_document.md` checked off), open a PR via `gh` for Emily to review/merge on GitHub — this is the merge path even for solo work, to keep a review checkpoint and PR history.
+- Always ask before pushing the branch or opening the PR — never push or open a PR without explicit go-ahead, even once the item is otherwise complete.
+
 ## Definition of done
 
 - Tests pass.
