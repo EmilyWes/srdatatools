@@ -6,6 +6,7 @@
 
 - Treat the named item as the scope. Don't expand into neighboring checklist items or "while I'm here" cleanups — flag those as separate candidate items instead of doing them.
 - Always start in Plan Mode, even for small items: explore relevant existing code/tests, propose an approach (data structures, key functions/modules per the design doc's module layout, test cases), and get explicit approval before writing any code.
+- During planning, actively ask Emily about design decisions and tradeoffs relevant to the item rather than just presenting one proposed approach for yes/no approval — surface the decision points (edge cases, naming, structure, how a rule should behave) and ask for her view before settling on one, especially where the design doc doesn't already spell out the answer.
 - Check the design doc's explicit out-of-scope list and phase boundaries before proposing an approach — don't pull forward later-phase work (e.g. don't wire in OpenAlex enrichment while doing a Phase 1 parser) without asking first.
 
 ## Implementation style
