@@ -10,3 +10,7 @@ tests/data/output/*
 
 # packaging artifacts
 *.egg-info/
+
+# local SQLite database
+/data/
+*.db
