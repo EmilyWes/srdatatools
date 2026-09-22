@@ -19,6 +19,9 @@ dev = [
     "ruff",
     "mypy",
 ]
+build = [
+    "pyinstaller>=6",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
