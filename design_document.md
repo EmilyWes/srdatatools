@@ -234,7 +234,9 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] Full activity log GUI tab with filters/search
 - [ ] Dashboard-style stats page (charts: records over time, by source, by dedup status)
 - [ ] One-click installers for Windows/macOS/Linux
+  - Bundle a third-party license notices file (MIT/BSD/Apache-2.0/MPL-2.0 dependency copyrights) alongside the PyInstaller-built binary — pip-installed/source use is covered by each package's own `site-packages` license file, but a frozen executable needs its own attribution file
 - [ ] User docs / README + MIT LICENSE file for open-source release
+  - Add a `[project.scripts]` entry point so `pip install` provides a `srdatatools` command (currently only the importable `app` package, launched via `python -m app.main`)
 - [ ] Broaden test coverage to integration tests across the full import → dedup → enrich → export pipeline
 
 **Backlog / stretch**
