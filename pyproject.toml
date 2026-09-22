@@ -2,6 +2,7 @@
 name = "srdatatools"
 version = "0.1.0"
 description = "Local tool for importing, merging, deduplicating, enriching, and exporting academic paper metadata."
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2",
