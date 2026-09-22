@@ -20,5 +20,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: black --check .
       - run: mypy app tests
       - run: pytest

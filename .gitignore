@@ -19,3 +19,8 @@ tests/data/output/*
 # local SQLite database
 /data/
 *.db
+
+# tool caches
+/.mypy_cache/
+/.ruff_cache/
+/.pytest_cache/
