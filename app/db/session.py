@@ -2,16 +2,15 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+import platformdirs
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-
 
 def default_db_path() -> Path:
-    db_path = PROJECT_ROOT / "data" / "srdatatools.db"
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    return db_path
+    data_dir = Path(platformdirs.user_data_dir("srdatatools", appauthor=False))
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir / "srdatatools.db"
 
 
 def get_engine(db_path: Path | None = None) -> Engine:

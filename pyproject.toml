@@ -7,6 +7,9 @@ dependencies = [
     "pydantic>=2",
     "sqlalchemy>=2",
     "alembic>=1.13",
+    "platformdirs>=4",
+    "nicegui>=2",
+    "pywebview>=5",
 ]
 
 [project.optional-dependencies]
@@ -15,6 +18,9 @@ dev = [
     "black",
     "ruff",
     "mypy",
+]
+build = [
+    "pyinstaller>=6",
 ]
 
 [build-system]

@@ -179,7 +179,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 
 - [x] Define the common internal `Record` schema (fields every parser normalizes to)
 - [x] Set up SQLite + SQLAlchemy models + Alembic migrations
-- [ ] Project scaffolding, packaging pipeline (PyInstaller) proven end-to-end early, even with a trivial GUI
+- [x] Project scaffolding, packaging pipeline (PyInstaller) proven end-to-end early, even with a trivial GUI
 - [ ] Test suite + CI set up from day one (pytest + GitHub Actions or similar), running on Windows, macOS, and Linux — every parser and dedup rule gets tests as it's written, not bolted on later; data-handling correctness is a core goal, not a nice-to-have
 - [ ] Contribution basics for open source: CONTRIBUTING.md, code style/lint config, issue templates
 
