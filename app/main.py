@@ -7,7 +7,7 @@ def main() -> None:
     ui.run(
         title="srdatatools",
         native=True,
-        window_size=(480, 320),
+        window_size=(1100, 700),
         reload=False,
         port=native.find_open_port(),
     )
