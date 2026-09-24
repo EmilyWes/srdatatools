@@ -1,9 +1,8 @@
-from importlib.metadata import version
-
 from nicegui import ui
+
+from app.gui.layout import shell
 
 
 @ui.page("/")
 def home() -> None:
-    ui.label("srdatatools").classes("text-h4")
-    ui.label(f"v{version('srdatatools')}")
+    shell()
