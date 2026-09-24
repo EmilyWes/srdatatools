@@ -125,7 +125,7 @@ flowchart LR
   F -.logs.-> H
 ```
 
-**Import & parsing.** Each format (RIS, NBIB, CSV) has its own parser that maps fields into the common `Record` schema. CSV needs a column-mapping step in the GUI since headers vary by export source (Scopus, Web of Science, etc. all name columns differently).
+**Import & parsing.** Each format (RIS, NBIB, CSV) has its own parser that maps fields into the common `Record` schema, with a per-database vendor profile layered on top where one applies. CSV needs a column-mapping step in the GUI since headers vary by export source (Scopus, Web of Science, etc. all name columns differently). Import accepts multiple files per action (all sharing one source/type selection) and auto-detects type/source from file extension + content sniffing to prefill the source/type dropdowns; see GUI & UX design below for the full import flow. Import writes directly to both `record_source` (raw parsed fields) and `record` (one row per imported record, pre-dedup) — dedup is a separate, on-demand step the user triggers later over the whole `record` table, not something that happens automatically at import time.
 
 **Deduplication.** At tens-of-thousands scale, comparing every record against every other (all-pairs) is too slow for fuzzy matching, so dedup uses **blocking**: records are first grouped into small candidate buckets (e.g. by normalized publication year + first few characters of first-author surname, or a title n-gram key), and expensive fuzzy comparison only runs *within* a bucket, not across the whole library. Layered checks, cheapest first: (1) exact DOI match (no blocking needed — indexed lookup), (2) exact PubMed/other id match, (3) blocked fuzzy match on normalized title + year + author overlap (e.g. rapidfuzz). The fuzzy-match confidence threshold is **user-adjustable**, defaulting to effectively requiring an exact match — so out of the box the tool only merges what it's certain about, and the user explicitly loosens the threshold if they want it to catch more near-duplicates (trading some risk of false merges for fewer missed ones). Matches below the active threshold are queued for manual review in the GUI rather than auto-merged — this is the main way the tool avoids silently corrupting data.
 
@@ -150,11 +150,27 @@ flowchart LR
 
 ## GUI & UX design
 
-**Layout:** a single-window app with tabs/sections, not a step-by-step wizard — Import, Library, Merge/Dedup review, Enrich, Snowball, Export, Stats — all reachable at any time, since real usage jumps between them rather than following one fixed order.
+**Layout:** a single-window, three-pane shell — no tabs, not a step-by-step wizard, since real usage jumps between actions rather than following one fixed order.
 
-**Activity log:** always visible, not a tab the user has to remember to check — likely a persistent panel (e.g. a collapsible sidebar or footer strip) showing the latest actions live, with a way to expand into the full searchable history. Exact placement gets worked out once there's a working layout to prototype against.
+- **Left panel** — navigation: a **Library** entry (the full combined record set) followed by a list of imported source files, one per `source_file` row. Selecting an entry drives what the middle panel shows. An **Import** button sits at the top of this panel.
+- **Middle panel** — content for whatever is selected on the left:
+  - **Library** selected: overview stats (total records, records per source, per year) plus a table of records. Table sorting/filtering/search is deferred past this pass (see to-do list).
+  - **A source file** selected: that file's info — rows currently in the library from this file, how many rows were skipped on import (and why), and an option to remove all of this file's records from the library (see open question on how this interacts with records already merged via dedup).
+  - **Import** clicked: the middle panel is replaced by the import flow (below) until the user confirms or cancels.
+- **Right panel** — one button per cross-cutting action, top to bottom: **Dedup**, **Enrich**, **Snowball**, **Export**. Dedup, Enrich, and Snowball each have a small gear icon beside them opening a popup with that action's settings (merge-settings for Dedup; polite-pool email/overwrite policy for Enrich; pre-fetch size-warning threshold for Snowball). Below the four buttons, a read-only textbox shows the live activity log — always visible, no separate tab needed.
 
-**Visualizations:** valued highly (e.g. publications-per-year charts, source-overlap Venn diagrams), but in service of the workflow rather than cluttering it — a few well-chosen, contextually placed visuals (embedded on the Stats page, small inline previews elsewhere) rather than a wall of graphs. The specific set and placement will be figured out iteratively as the app takes shape, not fully speced up front.
+**Import flow.**
+
+1. The user clicks **Import** in the left panel and picks one or more files via a native file-selector popup. All files in one Import action must share the same source/type; if the selected files' content looks like it spans more than one source, the user gets a warning to re-select.
+2. The middle panel switches to the import view: two dropdowns, **Source** and **Type**, each listing that dropdown's implemented options plus an **Unknown** choice.
+   - **Type** = file format (RIS / NBIB / CSV, tied to the generic parsers). Type is required — while it's Unknown, both **Get stats** and **Import** are disabled, with a "please select the type" tooltip.
+   - **Source** = vendor profile (PubMed, Scopus, Web of Science, IEEE Xplore, Embase, PsycINFO). Source may stay **Unknown**, meaning no vendor-specific field mapping is applied.
+   - On upload, the app tries to auto-detect both from file extension + content sniffing and prefills the dropdowns (exact per-format/per-profile detection heuristics are an implementation detail, not specced here). A failed detection leaves a dropdown at Unknown rather than blocking the flow, except Type, which blocks per above.
+   - The two dropdowns work independently — picking a Source doesn't filter Type's options or vice versa. If the chosen combination isn't one the source actually exports (e.g. PubMed + CSV), the app falls back to the default parser for the chosen Type with no vendor mapping, and shows an inline note next to Source: *"No profile for this source/type combination — using the default parser."*
+3. **Get stats** runs a dry-run parse (selected Source/Type, no DB writes) and shows a summary: record count, per-field completeness, and any rows that would be skipped as malformed (with reasons). Re-clicking Get stats after changing a dropdown re-runs the dry run, so the user can compare e.g. a vendor profile's stats against the default parser's before deciding.
+4. **Import** parses for real and writes both `record_source` (raw fields) and `record` (one row per imported record, pre-dedup). Malformed rows are skipped, logged, and rolled into a result summary ("998 imported, 2 skipped"), consistent with the general malformed-record handling.
+
+**Visualizations:** valued highly (e.g. publications-per-year charts, source-overlap Venn diagrams), but in service of the workflow rather than cluttering it — shown in the middle panel when Library is selected, a few well-chosen, contextually placed visuals rather than a wall of graphs. The specific set beyond the basic counts (a later dashboard pass — see to-do list) will be figured out iteratively as the app takes shape, not fully speced up front.
 
 ## Related work
 
@@ -195,8 +211,16 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] Embase profile (RIS/CSV)
 - [ ] PsycINFO profile — EBSCO and ProQuest variants (RIS/CSV)
 - [ ] Store parsed records, keep raw source data (`record_source`)
-- [ ] Basic GUI: single-window tab shell (Import, Library, Stats, Activity Log), file upload, import history list, persistent always-visible activity log panel
-- [ ] Basic stats view: total records, records per source, per year
+- [ ] Three-pane GUI shell: left navigation panel, middle content panel, right action panel (no tabs)
+- [ ] Left panel: Library entry + list of imported source files (from `source_file`), selecting an entry drives the middle panel; Import button
+- [ ] Import flow: multi-file picker (one source/type per import action), warning when selected files' content looks like it spans more than one source
+- [ ] Auto-detection of type/source from file extension + content sniffing, prefilling the Source/Type dropdowns
+- [ ] Source/Type dropdowns: implemented profiles/formats + "Unknown"; Type required (Get stats/Import disabled with a tooltip while Unknown); mismatched Source/Type combination falls back to the default parser with an inline notice
+- [ ] "Get stats" dry-run preview: record count, per-field completeness, malformed/skipped-row preview, re-runnable per dropdown change, no DB write
+- [ ] Import action: writes `record_source` + `record`, per-file "N imported, M skipped" summary
+- [ ] Source-file detail view: records currently in library from this file, skipped-row count, remove-this-source's-records action
+- [ ] Right panel: Dedup / Enrich / Snowball / Export buttons in order, gear-icon settings popups for Dedup/Enrich/Snowball, read-only activity log textbox beneath
+- [ ] Middle panel Library view: basic stats (total records, records per source, per year) + record table (sorting/filtering/search deferred)
 
 **Phase 2 — Export & dedup**
 
@@ -249,3 +273,4 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 ## Open questions
 
 - [ ] Once a user loosens the fuzzy-match threshold below exact-match, should matches above a high-confidence level auto-merge, or should every merge always go through manual review?
+- [ ] When a user removes a source file's records from the library, and some of those records were merged via dedup into a combined `record` that also has data from another source, what should happen — strip just that source's contribution from the merged record (leaving it intact via the other source), or only allow removal of un-merged/standalone records, with merged ones needing separate handling?
