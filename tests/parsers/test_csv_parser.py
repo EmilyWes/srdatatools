@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from app.parsers.csv_ import ColumnMapping, parse_csv_file, parse_csv_text
+from app.parsers.csv_ import (
+    ColumnMapping,
+    parse_csv_file,
+    parse_csv_text,
+    suggest_mapping,
+)
 
 CSV_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "csv"
 
@@ -237,6 +242,32 @@ def test_parse_csv_file__falls_back_to_cp1252_on_decode_error() -> None:
     assert result.skipped == []
     assert result.rows[0].record.title == "Café Study"
     assert result.rows[0].record.notes == "Müller"
+
+
+@pytest.mark.parametrize(
+    ("header", "expected_target"),
+    [
+        ("Article Title", "title"),
+        ("Source title", "journal"),
+        ("Author full names", "authors"),
+        ("Author Keywords", "keywords"),
+        ("DOI", "doi"),
+        ("Document Type", "publication_type"),
+        ("Year", "year"),
+    ],
+)
+def test_suggest_mapping__matches_known_vendor_headers(
+    header: str, expected_target: str
+) -> None:
+    suggestions = suggest_mapping([header])
+
+    assert suggestions[header] == expected_target
+
+
+def test_suggest_mapping__returns_none_for_unrecognized_header() -> None:
+    suggestions = suggest_mapping(["Zzzqqqxx123"])
+
+    assert suggestions["Zzzqqqxx123"] is None
 
 
 def test_column_mapping__rejects_unknown_target_field() -> None:

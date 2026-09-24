@@ -1,4 +1,5 @@
 import csv
+import difflib
 import logging
 import re
 from dataclasses import dataclass, field
@@ -13,6 +14,34 @@ from app.models.record import Author, PartialDate, Record
 logger = logging.getLogger(__name__)
 
 _FILE_ENCODINGS = ("utf-8-sig", "cp1252")
+
+_SUGGESTION_ALIASES: dict[str, list[str]] = {
+    "title": ["article title", "document title", "title"],
+    "abstract": ["abstract"],
+    "journal": ["source title", "journal", "publication title"],
+    "conference_name": ["conference name", "proceedings title"],
+    "volume": ["volume"],
+    "issue": ["issue"],
+    "pages": ["pages", "page range"],
+    "doi": ["doi"],
+    "pmid": ["pubmed id", "pmid"],
+    "issn": ["issn"],
+    "isbn": ["isbn"],
+    "publication_type": ["document type", "publication type"],
+    "language": ["language of original document", "language"],
+    "publisher": ["publisher"],
+    "url": ["link", "url"],
+    "notes": ["notes"],
+    "authors": ["authors", "author full names", "author(s)"],
+    "keywords": ["author keywords", "index keywords", "keywords"],
+    "year": ["year", "publication year"],
+    "month": ["month"],
+    "day": ["day"],
+    "date": ["date", "publication date", "coverdate"],
+    "other_ids": ["eid"],
+}
+
+_SUGGESTION_CUTOFF = 0.6
 
 _MONTH_ABBREVIATIONS = {
     "jan": 1,
@@ -283,3 +312,24 @@ def parse_csv_file(path: Path, mapping: ColumnMapping) -> CsvParseResult:
     else:
         raise ValueError(f"could not decode {path} using any of {_FILE_ENCODINGS}")
     return parse_csv_text(text, mapping)
+
+
+def suggest_mapping(headers: list[str]) -> dict[str, str | None]:
+    alias_to_target = {
+        alias: target
+        for target, aliases in _SUGGESTION_ALIASES.items()
+        for alias in aliases
+    }
+
+    suggestions: dict[str, str | None] = {}
+    for header in headers:
+        normalized = header.strip().lower()
+        target = alias_to_target.get(normalized)
+        if target is None:
+            matches = difflib.get_close_matches(
+                normalized, alias_to_target.keys(), n=1, cutoff=_SUGGESTION_CUTOFF
+            )
+            target = alias_to_target[matches[0]] if matches else None
+        suggestions[header] = target
+
+    return suggestions
