@@ -3,6 +3,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from io import StringIO
+from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
@@ -10,6 +11,8 @@ from pydantic import ValidationError
 from app.models.record import Author, PartialDate, Record
 
 logger = logging.getLogger(__name__)
+
+_FILE_ENCODINGS = ("utf-8-sig", "cp1252")
 
 _MONTH_ABBREVIATIONS = {
     "jan": 1,
@@ -267,3 +270,16 @@ def parse_csv_text(text: str, mapping: ColumnMapping) -> CsvParseResult:
         rows.append(ParsedRow(record=record, raw_fields=raw_fields))
 
     return CsvParseResult(rows=rows, skipped=skipped)
+
+
+def parse_csv_file(path: Path, mapping: ColumnMapping) -> CsvParseResult:
+    raw_bytes = path.read_bytes()
+    for encoding in _FILE_ENCODINGS:
+        try:
+            text = raw_bytes.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raise ValueError(f"could not decode {path} using any of {_FILE_ENCODINGS}")
+    return parse_csv_text(text, mapping)

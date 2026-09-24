@@ -1,6 +1,10 @@
+from pathlib import Path
+
 import pytest
 
-from app.parsers.csv_ import ColumnMapping, parse_csv_text
+from app.parsers.csv_ import ColumnMapping, parse_csv_file, parse_csv_text
+
+CSV_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "csv"
 
 
 def test_parse_csv_text__maps_scalar_fields() -> None:
@@ -223,6 +227,16 @@ def test_column_mapping__rejects_other_ids_target_without_key() -> None:
 def test_column_mapping__rejects_date_column_with_year_column() -> None:
     with pytest.raises(ValueError):
         ColumnMapping(date_column="Date", year_column="Year")
+
+
+def test_parse_csv_file__falls_back_to_cp1252_on_decode_error() -> None:
+    mapping = ColumnMapping(fields={"Title": "title", "Author": "notes"})
+
+    result = parse_csv_file(CSV_FIXTURES_DIR / "cp1252_encoded.csv", mapping)
+
+    assert result.skipped == []
+    assert result.rows[0].record.title == "Café Study"
+    assert result.rows[0].record.notes == "Müller"
 
 
 def test_column_mapping__rejects_unknown_target_field() -> None:
