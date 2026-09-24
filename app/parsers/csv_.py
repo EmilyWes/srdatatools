@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from io import StringIO
 from typing import Any
 
-from app.models.record import Record
+from app.models.record import Author, Record
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,9 @@ _EXTRA_FIELDS_KEY = "__extra__"
 @dataclass
 class ColumnMapping:
     fields: dict[str, str] = field(default_factory=dict)
+    authors_column: str | None = None
+    keywords_column: str | None = None
+    list_delimiter: str = ";"
 
     def __post_init__(self) -> None:
         for column, target in self.fields.items():
@@ -69,12 +72,30 @@ def _sniff_dialect(sample: str) -> type[csv.Dialect] | str:
         return "excel"
 
 
+def _split_list(value: str | None, delimiter: str) -> list[str]:
+    if value is None:
+        return []
+    return [piece.strip() for piece in value.split(delimiter) if piece.strip()]
+
+
 def _apply_mapping(raw_fields: dict[str, str], mapping: ColumnMapping) -> Record:
     values: dict[str, Any] = {}
     for column, target in mapping.fields.items():
         value = raw_fields.get(column)
         if value is not None and value.strip():
             values[target] = value.strip()
+
+    if mapping.authors_column is not None:
+        names = _split_list(
+            raw_fields.get(mapping.authors_column), mapping.list_delimiter
+        )
+        values["authors"] = [Author(full_name=name) for name in names]
+
+    if mapping.keywords_column is not None:
+        values["keywords"] = _split_list(
+            raw_fields.get(mapping.keywords_column), mapping.list_delimiter
+        )
+
     return Record(**values)
 
 

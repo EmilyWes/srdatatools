@@ -95,6 +95,45 @@ def test_parse_csv_text__sniffs_semicolon_delimiter() -> None:
     assert result.rows[0].record.doi == "10.1/x"
 
 
+def test_parse_csv_text__splits_authors_on_delimiter() -> None:
+    text = "Authors\nJane Smith; John Doe\n"
+    mapping = ColumnMapping(authors_column="Authors")
+
+    result = parse_csv_text(text, mapping)
+
+    authors = result.rows[0].record.authors
+    assert [author.full_name for author in authors] == ["Jane Smith", "John Doe"]
+
+
+def test_parse_csv_text__splits_keywords_on_delimiter() -> None:
+    text = "Keywords\nmachine learning; nlp\n"
+    mapping = ColumnMapping(keywords_column="Keywords")
+
+    result = parse_csv_text(text, mapping)
+
+    assert result.rows[0].record.keywords == ["machine learning", "nlp"]
+
+
+def test_parse_csv_text__uses_custom_list_delimiter() -> None:
+    text = "Authors\nJane Smith| John Doe\n"
+    mapping = ColumnMapping(authors_column="Authors", list_delimiter="|")
+
+    result = parse_csv_text(text, mapping)
+
+    authors = result.rows[0].record.authors
+    assert [author.full_name for author in authors] == ["Jane Smith", "John Doe"]
+
+
+def test_parse_csv_text__empty_authors_column_gives_empty_list() -> None:
+    text = "Title,Authors\nSome Paper,\n"
+    mapping = ColumnMapping(fields={"Title": "title"}, authors_column="Authors")
+
+    result = parse_csv_text(text, mapping)
+
+    assert result.skipped == []
+    assert result.rows[0].record.authors == []
+
+
 def test_column_mapping__rejects_unknown_target_field() -> None:
     with pytest.raises(ValueError):
         ColumnMapping(fields={"Title": "not_a_real_field"})
