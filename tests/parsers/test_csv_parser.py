@@ -134,6 +134,66 @@ def test_parse_csv_text__empty_authors_column_gives_empty_list() -> None:
     assert result.rows[0].record.authors == []
 
 
+@pytest.mark.parametrize(
+    ("date_value", "expected"),
+    [
+        ("2020", (2020, None, None)),
+        ("2020-05", (2020, 5, None)),
+        ("2020-05-14", (2020, 5, 14)),
+        ("2020/05/14", (2020, 5, 14)),
+    ],
+)
+def test_parse_csv_text__parses_single_date_column(
+    date_value: str, expected: tuple[int, int | None, int | None]
+) -> None:
+    text = f"Date\n{date_value}\n"
+    mapping = ColumnMapping(date_column="Date")
+
+    result = parse_csv_text(text, mapping)
+
+    date = result.rows[0].record.publication_date
+    assert date is not None
+    assert (date.year, date.month, date.day) == expected
+
+
+def test_parse_csv_text__parses_year_month_day_columns() -> None:
+    text = "Year,Month,Day\n2020,5,14\n"
+    mapping = ColumnMapping(year_column="Year", month_column="Month", day_column="Day")
+
+    result = parse_csv_text(text, mapping)
+
+    date = result.rows[0].record.publication_date
+    assert date is not None
+    assert (date.year, date.month, date.day) == (2020, 5, 14)
+
+
+def test_parse_csv_text__accepts_month_abbreviation() -> None:
+    text = "Year,Month\n2020,May\n"
+    mapping = ColumnMapping(year_column="Year", month_column="Month")
+
+    result = parse_csv_text(text, mapping)
+
+    date = result.rows[0].record.publication_date
+    assert date is not None
+    assert date.month == 5
+
+
+def test_parse_csv_text__drops_day_when_month_missing() -> None:
+    text = "Year,Day\n2020,14\n"
+    mapping = ColumnMapping(year_column="Year", day_column="Day")
+
+    result = parse_csv_text(text, mapping)
+
+    date = result.rows[0].record.publication_date
+    assert date is not None
+    assert (date.year, date.month, date.day) == (2020, None, None)
+
+
+def test_column_mapping__rejects_date_column_with_year_column() -> None:
+    with pytest.raises(ValueError):
+        ColumnMapping(date_column="Date", year_column="Year")
+
+
 def test_column_mapping__rejects_unknown_target_field() -> None:
     with pytest.raises(ValueError):
         ColumnMapping(fields={"Title": "not_a_real_field"})
