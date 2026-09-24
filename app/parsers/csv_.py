@@ -70,10 +70,13 @@ class ColumnMapping:
 
     def __post_init__(self) -> None:
         for column, target in self.fields.items():
-            if target not in SCALAR_FIELDS:
-                raise ValueError(
-                    f"column {column!r} maps to unknown Record field {target!r}"
-                )
+            if target in SCALAR_FIELDS:
+                continue
+            if target.startswith("other_ids.") and len(target) > len("other_ids."):
+                continue
+            raise ValueError(
+                f"column {column!r} maps to unknown Record field {target!r}"
+            )
         if self.date_column is not None and (
             self.year_column is not None
             or self.month_column is not None
@@ -203,10 +206,17 @@ def _parse_publication_date(
 
 def _apply_mapping(raw_fields: dict[str, str], mapping: ColumnMapping) -> Record:
     values: dict[str, Any] = {}
+    other_ids: dict[str, str] = {}
     for column, target in mapping.fields.items():
         value = raw_fields.get(column)
-        if value is not None and value.strip():
+        if value is None or not value.strip():
+            continue
+        if target.startswith("other_ids."):
+            other_ids[target.removeprefix("other_ids.")] = value.strip()
+        else:
             values[target] = value.strip()
+    if other_ids:
+        values["other_ids"] = other_ids
 
     if mapping.authors_column is not None:
         names = _split_list(

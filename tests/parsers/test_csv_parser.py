@@ -189,6 +189,37 @@ def test_parse_csv_text__drops_day_when_month_missing() -> None:
     assert (date.year, date.month, date.day) == (2020, None, None)
 
 
+def test_parse_csv_text__routes_column_into_other_ids() -> None:
+    text = "Title,EID\nSome Paper,2-s2.0-123\n"
+    mapping = ColumnMapping(fields={"Title": "title", "EID": "other_ids.eid"})
+
+    result = parse_csv_text(text, mapping)
+
+    assert result.rows[0].record.other_ids == {"eid": "2-s2.0-123"}
+
+
+def test_parse_csv_text__routes_multiple_columns_into_other_ids() -> None:
+    text = "EID,Scopus Author ID\n2-s2.0-123,456\n"
+    mapping = ColumnMapping(
+        fields={
+            "EID": "other_ids.eid",
+            "Scopus Author ID": "other_ids.scopus_author_id",
+        }
+    )
+
+    result = parse_csv_text(text, mapping)
+
+    assert result.rows[0].record.other_ids == {
+        "eid": "2-s2.0-123",
+        "scopus_author_id": "456",
+    }
+
+
+def test_column_mapping__rejects_other_ids_target_without_key() -> None:
+    with pytest.raises(ValueError):
+        ColumnMapping(fields={"EID": "other_ids."})
+
+
 def test_column_mapping__rejects_date_column_with_year_column() -> None:
     with pytest.raises(ValueError):
         ColumnMapping(date_column="Date", year_column="Year")
