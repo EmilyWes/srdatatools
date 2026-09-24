@@ -1,9 +1,11 @@
 from nicegui import native, ui
 
+from app.db.session import run_migrations
 from app.gui import home  # noqa: F401  (registers the "/" page)
 
 
 def main() -> None:
+    run_migrations()
     ui.run(
         title="srdatatools",
         native=True,
