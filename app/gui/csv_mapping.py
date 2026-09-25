@@ -7,6 +7,16 @@ from nicegui.element import Element
 
 from app.parsers.csv_ import SCALAR_FIELDS, ColumnMapping, suggest_mapping
 
+_ROW_FIELD_CSS = """
+.mapping-field .q-field__control, .mapping-field .q-field__marginal {
+    min-height: 24px;
+    height: 24px;
+}
+.mapping-field .q-field__control-container {
+    padding-top: 0;
+}
+"""
+
 _IGNORE = "ignore"
 _AUTHORS = "authors"
 _KEYWORDS = "keywords"
@@ -191,6 +201,8 @@ def render_csv_mapping(
                 taken[target] = header
         initial_targets[header] = target
 
+    ui.add_css(_ROW_FIELD_CSS)
+
     middle.clear()
     with middle:
         with ui.column().classes("gap-0 border rounded-borders"):
@@ -209,12 +221,12 @@ def render_csv_mapping(
                             {key: _option_label(key) for key in _ALL_TARGET_KEYS},
                             value=initial_targets[header],
                         )
-                        .classes("w-40 text-xs")
+                        .classes("mapping-field w-40 text-xs")
                         .props("dense options-dense outlined")
                     )
                     key_input = (
                         ui.input(value=_slugify(header))
-                        .classes("w-32 text-xs")
+                        .classes("mapping-field w-32 text-xs")
                         .props("dense")
                     )
                     key_input.set_visibility(initial_targets[header] == _OTHER_ID)
