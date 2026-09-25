@@ -72,9 +72,7 @@ def test_show_csv_mapping__renders_mapping_screen_with_file_headers(
         len(middle_children) == 3
     )  # header rows column + delimiter input + Confirm button
     header_rows = middle_children[0].default_slot.children
-    assert (
-        len(header_rows) == 3
-    )  # column header labels row + one row per CSV column
+    assert len(header_rows) == 3  # column header labels row + one row per CSV column
     assert confirmed == []
 
 
