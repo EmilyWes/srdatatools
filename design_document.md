@@ -211,7 +211,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] IEEE Xplore profile (CSV)
 - [ ] Embase profile (RIS/CSV)
 - [ ] PsycINFO profile — EBSCO and ProQuest variants (RIS/CSV)
-- [ ] Store parsed records, keep raw source data (`record_source`)
+- [x] Store parsed records, keep raw source data (`record_source`)
 - [x] Three-pane GUI shell: left navigation panel, middle content panel, right action panel (no tabs)
 - [x] Left panel: Library entry + list of imported source files (from `source_file`), selecting an entry drives the middle panel; Import button
 - [ ] Import flow: multi-file picker (one source/type per import action), warning when selected files' content looks like it spans more than one source
