@@ -92,8 +92,8 @@ _EXTRA_FIELDS_KEY = "__extra__"
 @dataclass
 class ColumnMapping:
     fields: dict[str, str] = field(default_factory=dict)
-    authors_column: str | None = None
-    keywords_column: str | None = None
+    authors_columns: list[str] = field(default_factory=list)
+    keywords_columns: list[str] = field(default_factory=list)
     list_delimiter: str = ";"
     date_column: str | None = None
     year_column: str | None = None
@@ -250,16 +250,17 @@ def _apply_mapping(raw_fields: dict[str, str], mapping: ColumnMapping) -> Record
     if other_ids:
         values["other_ids"] = other_ids
 
-    if mapping.authors_column is not None:
-        names = _split_list(
-            raw_fields.get(mapping.authors_column), mapping.list_delimiter
-        )
+    if mapping.authors_columns:
+        names: list[str] = []
+        for column in mapping.authors_columns:
+            names.extend(_split_list(raw_fields.get(column), mapping.list_delimiter))
         values["authors"] = [Author(full_name=name) for name in names]
 
-    if mapping.keywords_column is not None:
-        values["keywords"] = _split_list(
-            raw_fields.get(mapping.keywords_column), mapping.list_delimiter
-        )
+    if mapping.keywords_columns:
+        keywords: list[str] = []
+        for column in mapping.keywords_columns:
+            keywords.extend(_split_list(raw_fields.get(column), mapping.list_delimiter))
+        values["keywords"] = keywords
 
     publication_date = _parse_publication_date(raw_fields, mapping)
     if publication_date is not None:

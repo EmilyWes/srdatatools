@@ -106,7 +106,7 @@ def test_parse_csv_text__sniffs_semicolon_delimiter() -> None:
 
 def test_parse_csv_text__splits_authors_on_delimiter() -> None:
     text = "Authors\nJane Smith; John Doe\n"
-    mapping = ColumnMapping(authors_column="Authors")
+    mapping = ColumnMapping(authors_columns=["Authors"])
 
     result = parse_csv_text(text, mapping)
 
@@ -116,7 +116,7 @@ def test_parse_csv_text__splits_authors_on_delimiter() -> None:
 
 def test_parse_csv_text__splits_keywords_on_delimiter() -> None:
     text = "Keywords\nmachine learning; nlp\n"
-    mapping = ColumnMapping(keywords_column="Keywords")
+    mapping = ColumnMapping(keywords_columns=["Keywords"])
 
     result = parse_csv_text(text, mapping)
 
@@ -125,7 +125,7 @@ def test_parse_csv_text__splits_keywords_on_delimiter() -> None:
 
 def test_parse_csv_text__uses_custom_list_delimiter() -> None:
     text = "Authors\nJane Smith| John Doe\n"
-    mapping = ColumnMapping(authors_column="Authors", list_delimiter="|")
+    mapping = ColumnMapping(authors_columns=["Authors"], list_delimiter="|")
 
     result = parse_csv_text(text, mapping)
 
@@ -133,9 +133,32 @@ def test_parse_csv_text__uses_custom_list_delimiter() -> None:
     assert [author.full_name for author in authors] == ["Jane Smith", "John Doe"]
 
 
+def test_parse_csv_text__combines_multiple_author_columns_in_order() -> None:
+    text = "First Author,Other Authors\nJane Smith,John Doe; Alice Lee\n"
+    mapping = ColumnMapping(authors_columns=["First Author", "Other Authors"])
+
+    result = parse_csv_text(text, mapping)
+
+    authors = result.rows[0].record.authors
+    assert [author.full_name for author in authors] == [
+        "Jane Smith",
+        "John Doe",
+        "Alice Lee",
+    ]
+
+
+def test_parse_csv_text__combines_multiple_keyword_columns_in_order() -> None:
+    text = "Author Keywords,Index Keywords\nmachine learning,nlp; llms\n"
+    mapping = ColumnMapping(keywords_columns=["Author Keywords", "Index Keywords"])
+
+    result = parse_csv_text(text, mapping)
+
+    assert result.rows[0].record.keywords == ["machine learning", "nlp", "llms"]
+
+
 def test_parse_csv_text__empty_authors_column_gives_empty_list() -> None:
     text = "Title,Authors\nSome Paper,\n"
-    mapping = ColumnMapping(fields={"Title": "title"}, authors_column="Authors")
+    mapping = ColumnMapping(fields={"Title": "title"}, authors_columns=["Authors"])
 
     result = parse_csv_text(text, mapping)
 
