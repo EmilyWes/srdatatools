@@ -302,17 +302,25 @@ def parse_csv_text(text: str, mapping: ColumnMapping) -> CsvParseResult:
     return CsvParseResult(rows=rows, skipped=skipped)
 
 
-def parse_csv_file(path: Path, mapping: ColumnMapping) -> CsvParseResult:
+def _decode_file(path: Path) -> str:
     raw_bytes = path.read_bytes()
     for encoding in _FILE_ENCODINGS:
         try:
-            text = raw_bytes.decode(encoding)
-            break
+            return raw_bytes.decode(encoding)
         except UnicodeDecodeError:
             continue
-    else:
-        raise ValueError(f"could not decode {path} using any of {_FILE_ENCODINGS}")
-    return parse_csv_text(text, mapping)
+    raise ValueError(f"could not decode {path} using any of {_FILE_ENCODINGS}")
+
+
+def parse_csv_file(path: Path, mapping: ColumnMapping) -> CsvParseResult:
+    return parse_csv_text(_decode_file(path), mapping)
+
+
+def read_csv_headers(path: Path) -> list[str]:
+    text = _decode_file(path)
+    dialect = _sniff_dialect(text[:2048])
+    reader = csv.reader(StringIO(text), dialect=dialect)
+    return next(reader, [])
 
 
 def suggest_mapping(headers: list[str]) -> dict[str, str | None]:

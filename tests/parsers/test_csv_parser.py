@@ -6,6 +6,7 @@ from app.parsers.csv_ import (
     ColumnMapping,
     parse_csv_file,
     parse_csv_text,
+    read_csv_headers,
     suggest_mapping,
 )
 
@@ -265,6 +266,26 @@ def test_parse_csv_file__falls_back_to_cp1252_on_decode_error() -> None:
     assert result.skipped == []
     assert result.rows[0].record.title == "Café Study"
     assert result.rows[0].record.notes == "Müller"
+
+
+def test_read_csv_headers__returns_header_row(tmp_path: Path) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title,DOI,Journal\nSome Paper,10.1/xyz,Nature\n")
+
+    assert read_csv_headers(csv_path) == ["Title", "DOI", "Journal"]
+
+
+def test_read_csv_headers__empty_file_returns_empty_list(tmp_path: Path) -> None:
+    csv_path = tmp_path / "empty.csv"
+    csv_path.write_text("")
+
+    assert read_csv_headers(csv_path) == []
+
+
+def test_read_csv_headers__decodes_cp1252_file() -> None:
+    headers = read_csv_headers(CSV_FIXTURES_DIR / "cp1252_encoded.csv")
+
+    assert headers == ["Title", "Author"]
 
 
 @pytest.mark.parametrize(
