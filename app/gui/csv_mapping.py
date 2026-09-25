@@ -11,9 +11,15 @@ _ROW_FIELD_CSS = """
 .mapping-field .q-field__control, .mapping-field .q-field__marginal {
     min-height: 24px;
     height: 24px;
+    align-items: center;
 }
 .mapping-field .q-field__control-container {
     padding-top: 0;
+    align-items: center;
+}
+.mapping-field .q-field__native, .mapping-field .q-field__input {
+    padding: 0;
+    min-height: 0;
 }
 """
 
