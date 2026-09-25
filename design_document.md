@@ -204,7 +204,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] Generic RIS tokenizer/parser
 - [ ] Generic NBIB/MEDLINE tokenizer/parser
 - [x] Generic CSV reader (column-mapping logic)
-- [ ] CSV column-mapping UI (GUI screen)
+- [x] CSV column-mapping UI (GUI screen)
 - [ ] PubMed profile (NBIB)
 - [ ] Scopus profile (CSV, RIS)
 - [ ] Web of Science profile (RIS)
