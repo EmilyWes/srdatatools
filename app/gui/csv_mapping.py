@@ -190,22 +190,33 @@ def render_csv_mapping(
 
     middle.clear()
     with middle:
-        for header in headers:
-            with ui.row().classes("w-full items-center gap-2"):
-                ui.label(header).classes("w-48 truncate")
-                select = ui.select(
-                    {key: _option_label(key) for key in _ALL_TARGET_KEYS},
-                    value=initial_targets[header],
-                ).classes("w-48")
-                key_input = ui.input(value=_slugify(header)).classes("w-40")
-                key_input.set_visibility(initial_targets[header] == _OTHER_ID)
+        with ui.column().classes("gap-0"):
+            for header in headers:
+                with ui.row().classes("w-full items-center gap-1 pl-6 py-0"):
+                    ui.label(header).classes("w-48 truncate text-xs")
+                    select = (
+                        ui.select(
+                            {key: _option_label(key) for key in _ALL_TARGET_KEYS},
+                            value=initial_targets[header],
+                        )
+                        .classes("w-40 text-xs")
+                        .props("dense options-dense")
+                    )
+                    key_input = (
+                        ui.input(value=_slugify(header))
+                        .classes("w-32 text-xs")
+                        .props("dense")
+                    )
+                    key_input.set_visibility(initial_targets[header] == _OTHER_ID)
 
-            row = _Row(header=header, select=select, key_input=key_input)
-            screen.rows.append(row)
-            select.on_value_change(lambda _e, row=row: screen._on_row_changed(row))
+                row = _Row(header=header, select=select, key_input=key_input)
+                screen.rows.append(row)
+                select.on_value_change(lambda _e, row=row: screen._on_row_changed(row))
 
-        screen.list_delimiter_input = ui.input("List delimiter", value=";")
-        ui.button("Confirm", on_click=screen.confirm)
+        screen.list_delimiter_input = (
+            ui.input("List delimiter", value=";").classes("pl-6 text-xs").props("dense")
+        )
+        ui.button("Confirm", on_click=screen.confirm).classes("ml-6")
 
     screen._refresh_options()
     return screen
