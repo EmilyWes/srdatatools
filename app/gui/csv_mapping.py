@@ -123,6 +123,9 @@ class CsvMappingScreen:
         return set(self._row_for(header).select.options)
 
     def confirm(self) -> None:
+        self.on_confirm(self.current_mapping())
+
+    def current_mapping(self) -> ColumnMapping:
         fields: dict[str, str] = {}
         authors_columns: list[str] = []
         keywords_columns: list[str] = []
@@ -156,7 +159,7 @@ class CsvMappingScreen:
         delimiter = (
             self.list_delimiter_input.value if self.list_delimiter_input else ";"
         )
-        mapping = ColumnMapping(
+        return ColumnMapping(
             fields=fields,
             authors_columns=authors_columns,
             keywords_columns=keywords_columns,
@@ -166,13 +169,13 @@ class CsvMappingScreen:
             month_column=month_column,
             day_column=day_column,
         )
-        self.on_confirm(mapping)
 
 
 def render_csv_mapping(
     middle: Element,
     headers: list[str],
     on_confirm: Callable[[ColumnMapping], None],
+    show_confirm_button: bool = True,
 ) -> CsvMappingScreen:
     screen = CsvMappingScreen(middle=middle, on_confirm=on_confirm)
 
@@ -223,7 +226,8 @@ def render_csv_mapping(
         screen.list_delimiter_input = (
             ui.input("List delimiter", value=";").classes("pl-6 text-xs").props("dense")
         )
-        ui.button("Confirm", on_click=screen.confirm).classes("ml-6")
+        if show_confirm_button:
+            ui.button("Confirm", on_click=screen.confirm).classes("ml-6")
 
     screen._refresh_options()
     return screen

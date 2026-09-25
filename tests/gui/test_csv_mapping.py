@@ -100,3 +100,23 @@ def test_render_csv_mapping__conflicting_suggested_years_only_keeps_first() -> N
 
     assert screen._row_for("Year").select.value == "year"
     assert screen._row_for("Publication Year").select.value == "ignore"
+
+
+def test_render_csv_mapping__current_mapping_matches_confirm_callback_result() -> None:
+    confirmed, screen = _render(["Title", "DOI"])
+
+    live_mapping = screen.current_mapping()
+    screen.confirm()
+
+    assert confirmed == [live_mapping]
+
+
+def test_render_csv_mapping__show_confirm_button_false_omits_button() -> None:
+    panes = shell()
+
+    render_csv_mapping(
+        panes.middle, ["Title"], lambda _m: None, show_confirm_button=False
+    )
+
+    middle_children = panes.middle.default_slot.children
+    assert len(middle_children) == 2  # header rows column + delimiter input, no button
