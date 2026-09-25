@@ -69,6 +69,9 @@ class ImportView:
     path: Path | None = None
     file_type: str = _TYPE_UNKNOWN
     mapping: ColumnMapping | None = None
+    check_mapping_button: ui.button | None = None
+    import_button: ui.button | None = None
+    stats_button: ui.button | None = None
 
     async def _select_file(self) -> None:
         picked = await pick_file()
@@ -122,26 +125,26 @@ class ImportView:
                 )
                 type_select.on_value_change(lambda e: self._set_type(e.value))
 
-                check_mapping_button = ui.button(
+                self.check_mapping_button = ui.button(
                     "Check Mapping", on_click=self._check_mapping
                 ).props("dense")
-                check_mapping_button.set_enabled(has_file)
+                self.check_mapping_button.set_enabled(has_file)
 
-                import_button = ui.button("Import", on_click=self._import).props(
+                self.import_button = ui.button("Import", on_click=self._import).props(
                     "dense"
                 )
-                import_button.set_enabled(has_file and type_known and has_mapping)
+                self.import_button.set_enabled(has_file and type_known and has_mapping)
                 if not type_known:
-                    import_button.tooltip("please select the type")
+                    self.import_button.tooltip("please select the type")
                 elif not has_mapping:
-                    import_button.tooltip("check mapping first")
+                    self.import_button.tooltip("check mapping first")
 
-                stats_button = ui.button("Get stats", on_click=self._get_stats).props(
-                    "dense"
-                )
-                stats_button.set_enabled(type_known)
+                self.stats_button = ui.button(
+                    "Get stats", on_click=self._get_stats
+                ).props("dense")
+                self.stats_button.set_enabled(type_known)
                 if not type_known:
-                    stats_button.tooltip("please select the type")
+                    self.stats_button.tooltip("please select the type")
 
 
 def render_import_view(
