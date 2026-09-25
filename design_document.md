@@ -167,8 +167,9 @@ flowchart LR
    - **Source** = vendor profile (PubMed, Scopus, Web of Science, IEEE Xplore, Embase, PsycINFO). Source may stay **Unknown**, meaning no vendor-specific field mapping is applied.
    - On upload, the app tries to auto-detect both from file extension + content sniffing and prefills the dropdowns (exact per-format/per-profile detection heuristics are an implementation detail, not specced here). A failed detection leaves a dropdown at Unknown rather than blocking the flow, except Type, which blocks per above.
    - The two dropdowns work independently — picking a Source doesn't filter Type's options or vice versa. If the chosen combination isn't one the source actually exports (e.g. PubMed + CSV), the app falls back to the default parser for the chosen Type with no vendor mapping, and shows an inline note next to Source: *"No profile for this source/type combination — using the default parser."*
-3. **Get stats** runs a dry-run parse (selected Source/Type, no DB writes) and shows a summary: record count, per-field completeness, and any rows that would be skipped as malformed (with reasons). Re-clicking Get stats after changing a dropdown re-runs the dry run, so the user can compare e.g. a vendor profile's stats against the default parser's before deciding.
-4. **Import** parses for real and writes both `record_source` (raw fields) and `record` (one row per imported record, pre-dedup). Malformed rows are skipped, logged, and rolled into a result summary ("998 imported, 2 skipped"), consistent with the general malformed-record handling.
+3. Once a file and Type with a mapping renderer are set, a column-mapping table appears inline in the import view itself, directly below the Source/Type dropdowns — no separate screen or confirm step. It's pre-filled with suggested field mappings and stays editable; **Get stats** and **Import** always read whatever the table currently shows at the moment they're clicked. (Today only CSV has a mapping renderer; RIS/NBIB don't need one once their parsers land, since their fields are tag-based rather than user-mapped columns.)
+4. **Get stats** runs a dry-run parse (selected Source/Type/mapping, no DB writes) and shows a summary: record count, per-field completeness, and any rows that would be skipped as malformed (with reasons). Re-clicking Get stats after changing a dropdown or editing the mapping re-runs the dry run, so the user can compare e.g. a vendor profile's stats against the default parser's before deciding.
+5. **Import** parses for real and writes both `record_source` (raw fields) and `record` (one row per imported record, pre-dedup). Malformed rows are skipped, logged, and rolled into a result summary ("998 imported, 2 skipped"), consistent with the general malformed-record handling.
 
 **Visualizations:** valued highly (e.g. publications-per-year charts, source-overlap Venn diagrams), but in service of the workflow rather than cluttering it — shown in the middle panel when Library is selected, a few well-chosen, contextually placed visuals rather than a wall of graphs. The specific set beyond the basic counts (a later dashboard pass — see to-do list) will be figured out iteratively as the app takes shape, not fully speced up front.
 
@@ -204,7 +205,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] Generic RIS tokenizer/parser
 - [ ] Generic NBIB/MEDLINE tokenizer/parser
 - [x] Generic CSV reader (column-mapping logic)
-- [x] CSV column-mapping UI (GUI screen)
+- [x] CSV column-mapping UI, embedded inline in the import view (live table below Source/Type, no separate screen/confirm step)
 - [ ] PubMed profile (NBIB)
 - [ ] Scopus profile (CSV, RIS)
 - [ ] Web of Science profile (RIS)
