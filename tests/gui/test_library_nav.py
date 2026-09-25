@@ -81,3 +81,19 @@ def test_render_left_panel__import_button_shows_placeholder_without_selecting() 
     assert nav.selected_key is None
     middle_children = panes.middle.default_slot.children
     assert middle_children[0].text == "Import"  # type: ignore[attr-defined]
+
+
+def test_render_left_panel__import_button_uses_on_import_callback_when_given() -> None:
+    panes = shell()
+    calls: list[None] = []
+
+    nav = render_left_panel(
+        panes.left, panes.middle, [], on_import=lambda: calls.append(None)
+    )
+    import_button = panes.left.default_slot.children[0]
+    click_listener = next(iter(import_button._event_listeners.values()))
+    assert click_listener.handler is not None
+    click_listener.handler(None)
+
+    assert calls == [None]
+    assert nav.selected_key is None  # placeholder fallback was not used

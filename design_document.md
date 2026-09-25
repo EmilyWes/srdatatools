@@ -214,6 +214,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Store parsed records, keep raw source data (`record_source`)
 - [x] Three-pane GUI shell: left navigation panel, middle content panel, right action panel (no tabs)
 - [x] Left panel: Library entry + list of imported source files (from `source_file`), selecting an entry drives the middle panel; Import button
+- [x] Import flow: single-file picker (native file dialog) through to storing records
 - [ ] Import flow: multi-file picker (one source/type per import action), warning when selected files' content looks like it spans more than one source
 - [ ] Auto-detection of type/source from file extension + content sniffing, prefilling the Source/Type dropdowns
 - [ ] Source/Type dropdowns: implemented profiles/formats + "Unknown"; Type required (Get stats/Import disabled with a tooltip while Unknown); mismatched Source/Type combination falls back to the default parser with an inline notice
