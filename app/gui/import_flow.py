@@ -107,44 +107,48 @@ class ImportView:
 
         self.middle.clear()
         with self.middle:
-            with ui.row().classes("items-center gap-2 pl-6 pt-4"):
-                ui.label(self.path.name if self.path else "No file selected").classes(
-                    "text-sm"
-                )
-                ui.button("Select file", on_click=self._select_file).props("dense")
+            with ui.column().classes("gap-4 pt-4 items-center w-full"):
+                with ui.row().classes("items-center gap-2"):
+                    ui.label(
+                        self.path.name if self.path else "No file selected"
+                    ).classes("text-sm")
+                    ui.button("Select file", on_click=self._select_file).props("dense")
 
-            with ui.column().classes("gap-2 pl-6 pt-4 items-start"):
-                ui.select(_SOURCE_OPTIONS, value=_SOURCE_UNKNOWN, label="Source").props(
-                    "dense outlined"
-                ).classes("w-48")
+                with ui.row().classes("items-center gap-2"):
+                    ui.select(
+                        _SOURCE_OPTIONS, value=_SOURCE_UNKNOWN, label="Source"
+                    ).props("dense outlined").classes("w-48")
 
-                type_select = (
-                    ui.select(_TYPE_OPTIONS, value=self.file_type, label="Type")
-                    .props("dense outlined")
-                    .classes("w-48")
-                )
-                type_select.on_value_change(lambda e: self._set_type(e.value))
+                    type_select = (
+                        ui.select(_TYPE_OPTIONS, value=self.file_type, label="Type")
+                        .props("dense outlined")
+                        .classes("w-48")
+                    )
+                    type_select.on_value_change(lambda e: self._set_type(e.value))
 
                 self.check_mapping_button = ui.button(
                     "Check Mapping", on_click=self._check_mapping
                 ).props("dense")
                 self.check_mapping_button.set_enabled(has_file)
 
-                self.import_button = ui.button("Import", on_click=self._import).props(
-                    "dense"
-                )
-                self.import_button.set_enabled(has_file and type_known and has_mapping)
-                if not type_known:
-                    self.import_button.tooltip("please select the type")
-                elif not has_mapping:
-                    self.import_button.tooltip("check mapping first")
+                with ui.row().classes("items-center gap-2"):
+                    self.import_button = ui.button(
+                        "Import", on_click=self._import
+                    ).props("dense")
+                    self.import_button.set_enabled(
+                        has_file and type_known and has_mapping
+                    )
+                    if not type_known:
+                        self.import_button.tooltip("please select the type")
+                    elif not has_mapping:
+                        self.import_button.tooltip("check mapping first")
 
-                self.stats_button = ui.button(
-                    "Get stats", on_click=self._get_stats
-                ).props("dense")
-                self.stats_button.set_enabled(type_known)
-                if not type_known:
-                    self.stats_button.tooltip("please select the type")
+                    self.stats_button = ui.button(
+                        "Get stats", on_click=self._get_stats
+                    ).props("dense")
+                    self.stats_button.set_enabled(type_known)
+                    if not type_known:
+                        self.stats_button.tooltip("please select the type")
 
 
 def render_import_view(

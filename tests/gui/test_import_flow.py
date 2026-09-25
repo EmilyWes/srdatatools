@@ -170,7 +170,8 @@ def test_render_import_view__selecting_file_updates_label_and_enables_check_mapp
     assert view.path == csv_path
     assert view.check_mapping_button is not None
     assert view.check_mapping_button.enabled is True
-    file_row = panes.middle.default_slot.children[0]
+    outer_column = panes.middle.default_slot.children[0]
+    file_row = outer_column.default_slot.children[0]
     assert file_row.default_slot.children[0].text == "export.csv"  # type: ignore[attr-defined]
 
 
