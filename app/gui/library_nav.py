@@ -1,4 +1,4 @@
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -36,7 +36,7 @@ def render_left_panel(
     left: Element,
     middle: Element,
     source_files: Sequence[SourceFile],
-    on_import: Callable[[], Awaitable[Any]] | None = None,
+    on_import: Callable[[], Any] | None = None,
 ) -> LeftPanelNav:
     nav = LeftPanelNav(middle=middle)
 

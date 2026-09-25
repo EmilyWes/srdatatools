@@ -4,7 +4,7 @@ from nicegui import ui
 
 from app.db.queries import list_source_files
 from app.db.session import get_engine, session_scope
-from app.gui.import_flow import import_file, pick_file, show_csv_mapping
+from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
 from app.gui.library_nav import render_left_panel
 from app.parsers.csv_ import ColumnMapping
@@ -25,16 +25,14 @@ def home() -> None:
             if select_key is not None:
                 nav.select(select_key)
 
-    def on_confirmed(path: Path, mapping: ColumnMapping) -> None:
+    def on_confirmed(path: Path, file_type: str, mapping: ColumnMapping) -> None:
         with session_scope(_engine) as session:
-            source_file = import_file(session, path, mapping)
+            source_file = import_file(session, path, file_type, mapping)
             session.flush()
             key = f"source_file:{source_file.id}"
         refresh(select_key=key)
 
-    async def start_import() -> None:
-        path = await pick_file()
-        if path is not None:
-            show_csv_mapping(panes.middle, path, on_confirmed)
+    def start_import() -> None:
+        render_import_view(panes.middle, on_import=on_confirmed)
 
     refresh()
