@@ -1,5 +1,6 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 from nicegui import ui
 from nicegui.element import Element
@@ -31,14 +32,19 @@ class LeftPanelNav:
 
 
 def render_left_panel(
-    left: Element, middle: Element, source_files: Sequence[SourceFile]
+    left: Element,
+    middle: Element,
+    source_files: Sequence[SourceFile],
+    on_import: Callable[[], Any] | None = None,
 ) -> LeftPanelNav:
     nav = LeftPanelNav(middle=middle)
 
     left.clear()
     with left:
         ui.button(
-            "Import", color=None, on_click=lambda: nav.show_placeholder("Import")
+            "Import",
+            color=None,
+            on_click=on_import or (lambda: nav.show_placeholder("Import")),
         ).classes("w-full")
         ui.separator()
 
