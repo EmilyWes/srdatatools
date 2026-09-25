@@ -190,9 +190,16 @@ def render_csv_mapping(
 
     middle.clear()
     with middle:
-        with ui.column().classes("gap-0"):
-            for header in headers:
-                with ui.row().classes("w-full items-center gap-1 pl-6 py-0"):
+        with ui.column().classes("gap-0 border rounded-borders"):
+            header_classes = "w-full items-center gap-1 pl-6 py-2 bg-grey-2 border-b"
+            with ui.row().classes(header_classes):
+                ui.label("Input").classes("w-48 text-xs font-bold")
+                ui.label("Mapping").classes("flex-grow text-xs font-bold")
+            for i, header in enumerate(headers):
+                row_classes = "w-full items-center gap-1 pl-6 py-1 border-b"
+                if i % 2 == 1:
+                    row_classes += " bg-grey-1"
+                with ui.row().classes(row_classes):
                     ui.label(header).classes("w-48 truncate text-xs")
                     select = (
                         ui.select(
@@ -200,7 +207,7 @@ def render_csv_mapping(
                             value=initial_targets[header],
                         )
                         .classes("w-40 text-xs")
-                        .props("dense options-dense")
+                        .props("dense options-dense outlined")
                     )
                     key_input = (
                         ui.input(value=_slugify(header))
