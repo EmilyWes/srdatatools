@@ -15,7 +15,7 @@ from app.gui.import_flow import (
     import_file,
     pick_file,
     render_import_view,
-    show_csv_mapping,
+    render_mapping,
 )
 from app.gui.layout import shell
 from app.parsers.csv_ import ColumnMapping
@@ -64,36 +64,42 @@ def test_pick_file__returns_none_when_cancelled(
     assert result is None
 
 
-def test_show_csv_mapping__renders_mapping_screen_with_file_headers(
+def test_render_mapping__renders_mapping_screen_with_file_headers(
     tmp_path: Path,
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\n")
     panes = shell()
-    confirmed: list[tuple[Path, ColumnMapping]] = []
 
-    show_csv_mapping(panes.middle, csv_path, lambda p, m: confirmed.append((p, m)))
+    screen = render_mapping(panes.middle, "csv", csv_path)
 
+    assert screen is not None
     middle_children = panes.middle.default_slot.children
-    assert (
-        len(middle_children) == 3
-    )  # header rows column + delimiter input + Confirm button
+    assert len(middle_children) == 2  # header rows column + delimiter input, no button
     header_rows = middle_children[0].default_slot.children
     assert len(header_rows) == 3  # column header labels row + one row per CSV column
-    assert confirmed == []
 
 
-def test_show_csv_mapping__notifies_when_file_cannot_be_decoded(
+def test_render_mapping__notifies_and_returns_none_when_file_cannot_be_decoded(
     tmp_path: Path,
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_bytes(b"\x81")  # undefined in both utf-8-sig and cp1252
     panes = shell()
 
-    show_csv_mapping(panes.middle, csv_path, lambda p, m: None)  # must not raise
+    screen = render_mapping(panes.middle, "csv", csv_path)  # must not raise
 
-    # no mapping screen was rendered; middle still shows the shell's placeholder
-    assert panes.middle.default_slot.children[0].text == "Content"  # type: ignore[attr-defined]
+    assert screen is None
+
+
+def test_render_mapping__returns_none_for_non_csv_type(tmp_path: Path) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title\nSome Paper\n")
+    panes = shell()
+
+    screen = render_mapping(panes.middle, "unknown", csv_path)
+
+    assert screen is None
 
 
 def test_import_csv__stores_records_and_returns_source_file_with_row_count(
@@ -148,16 +154,14 @@ def test_render_import_view__initial_state_has_no_file_and_disabled_buttons() ->
 
     assert view.path is None
     assert view.file_type == "unknown"
-    assert view.mapping is None
-    assert view.check_mapping_button is not None
-    assert view.check_mapping_button.enabled is False
+    assert view.mapping_screen is None
     assert view.import_button is not None
     assert view.import_button.enabled is False
     assert view.stats_button is not None
     assert view.stats_button.enabled is False
 
 
-def test_render_import_view__selecting_file_updates_label_and_enables_check_mapping(
+def test_render_import_view__selecting_file_updates_label(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     panes = shell()
@@ -168,8 +172,8 @@ def test_render_import_view__selecting_file_updates_label_and_enables_check_mapp
     asyncio.run(view._select_file())
 
     assert view.path == csv_path
-    assert view.check_mapping_button is not None
-    assert view.check_mapping_button.enabled is True
+    # type is still unknown, so no mapping renders yet
+    assert view.mapping_screen is None
     outer_column = panes.middle.default_slot.children[0]
     file_row = outer_column.default_slot.children[0]
     assert file_row.default_slot.children[0].text == "export.csv"  # type: ignore[attr-defined]
@@ -186,7 +190,7 @@ def test_render_import_view__setting_type_enables_stats_button() -> None:
     assert view.stats_button.enabled is True
 
 
-def test_render_import_view__import_disabled_until_type_and_mapping_are_set(
+def test_render_import_view__mapping_renders_inline_and_enables_import_without_confirm(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     panes = shell()
@@ -198,56 +202,60 @@ def test_render_import_view__import_disabled_until_type_and_mapping_are_set(
 
     assert view.import_button is not None
     assert view.import_button.enabled is False  # type still unknown
+    assert view.mapping_screen is None
 
     view._set_type("csv")
-    assert view.import_button.enabled is False  # mapping not confirmed yet
 
-    view._check_mapping()
-    mapping_confirm_button = panes.middle.default_slot.children[-1]
-    click_listener = next(iter(mapping_confirm_button._event_listeners.values()))
-    assert click_listener.handler is not None
-    click_listener.handler(None)
-
-    assert view.mapping is not None
-    assert view.import_button is not None
+    # mapping table rendered automatically, no "Check Mapping"/confirm click needed
+    assert view.mapping_screen is not None
     assert view.import_button.enabled is True
 
 
-def test_render_import_view__selecting_new_file_resets_confirmed_mapping(
+def test_render_import_view__import_reads_live_mapping_edits(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     panes = shell()
-    view = render_import_view(panes.middle, on_import=lambda p, t, m: None)
-    view.path = tmp_path / "export.csv"
-    view.mapping = ColumnMapping(fields={"Title": "title"})
-    view._set_type("csv")
-    assert view.import_button is not None
-    assert view.import_button.enabled is True
-
-    other_csv = tmp_path / "other.csv"
-    _pick(monkeypatch, other_csv)
-    asyncio.run(view._select_file())
-
-    assert view.mapping is None
-    assert view.import_button is not None
-    assert view.import_button.enabled is False
-
-
-def test_render_import_view__import_click_calls_on_import_with_args() -> None:
-    panes = shell()
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Scopus Author ID\nabc123\n")
+    _pick(monkeypatch, csv_path)
     calls: list[tuple[Path, str, ColumnMapping]] = []
     view = render_import_view(
         panes.middle, on_import=lambda p, t, m: calls.append((p, t, m))
     )
-    path = Path("export.csv")
-    mapping = ColumnMapping(fields={"Title": "title"})
-    view.path = path
-    view.mapping = mapping
+    asyncio.run(view._select_file())
     view._set_type("csv")
+    assert view.mapping_screen is not None
 
+    view.mapping_screen.set_target("Scopus Author ID", "authors")
     view._import()
 
-    assert calls == [(path, "csv", mapping)]
+    assert calls == [
+        (csv_path, "csv", ColumnMapping(authors_columns=["Scopus Author ID"]))
+    ]
+
+
+def test_render_import_view__selecting_new_file_rerenders_mapping_from_new_headers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    panes = shell()
+    first_csv = tmp_path / "export.csv"
+    first_csv.write_text("Title\nSome Paper\n")
+    _pick(monkeypatch, first_csv)
+    view = render_import_view(panes.middle, on_import=lambda p, t, m: None)
+    asyncio.run(view._select_file())
+    view._set_type("csv")
+    assert view.mapping_screen is not None
+    assert [row.header for row in view.mapping_screen.rows] == ["Title"]
+
+    other_csv = tmp_path / "other.csv"
+    other_csv.write_text("DOI\n10.1/xyz\n")
+    _pick(monkeypatch, other_csv)
+    asyncio.run(view._select_file())
+
+    assert view.mapping_screen is not None
+    assert [row.header for row in view.mapping_screen.rows] == ["DOI"]
+    assert view.import_button is not None
+    assert view.import_button.enabled is True
 
 
 def test_render_import_view__get_stats_click_notifies_not_implemented() -> None:
@@ -257,7 +265,7 @@ def test_render_import_view__get_stats_click_notifies_not_implemented() -> None:
     view._get_stats()  # must not raise; dry-run logic isn't implemented yet
 
 
-def test_render_import_view__check_mapping_notifies_when_file_cannot_be_decoded(
+def test_render_import_view__import_disabled_when_csv_file_cannot_be_decoded(
     tmp_path: Path,
 ) -> None:
     panes = shell()
@@ -265,6 +273,9 @@ def test_render_import_view__check_mapping_notifies_when_file_cannot_be_decoded(
     csv_path.write_bytes(b"\x81")  # undefined in both utf-8-sig and cp1252
     view = ImportView(middle=panes.middle, on_import=lambda p, t, m: None)
     view.path = csv_path
-    view.render()
 
-    view._check_mapping()  # must not raise
+    view._set_type("csv")  # must not raise
+
+    assert view.mapping_screen is None
+    assert view.import_button is not None
+    assert view.import_button.enabled is False
