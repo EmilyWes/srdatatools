@@ -7,6 +7,22 @@ from nicegui.element import Element
 
 from app.parsers.csv_ import SCALAR_FIELDS, ColumnMapping, suggest_mapping
 
+_ROW_FIELD_CSS = """
+.mapping-field .q-field__control, .mapping-field .q-field__marginal {
+    min-height: 24px;
+    height: 24px;
+    align-items: center;
+}
+.mapping-field .q-field__control-container {
+    padding-top: 0;
+    align-items: center;
+}
+.mapping-field .q-field__native, .mapping-field .q-field__input {
+    padding: 0;
+    min-height: 0;
+}
+"""
+
 _IGNORE = "ignore"
 _AUTHORS = "authors"
 _KEYWORDS = "keywords"
@@ -123,6 +139,9 @@ class CsvMappingScreen:
         return set(self._row_for(header).select.options)
 
     def confirm(self) -> None:
+        self.on_confirm(self.current_mapping())
+
+    def current_mapping(self) -> ColumnMapping:
         fields: dict[str, str] = {}
         authors_columns: list[str] = []
         keywords_columns: list[str] = []
@@ -156,7 +175,7 @@ class CsvMappingScreen:
         delimiter = (
             self.list_delimiter_input.value if self.list_delimiter_input else ";"
         )
-        mapping = ColumnMapping(
+        return ColumnMapping(
             fields=fields,
             authors_columns=authors_columns,
             keywords_columns=keywords_columns,
@@ -166,13 +185,13 @@ class CsvMappingScreen:
             month_column=month_column,
             day_column=day_column,
         )
-        self.on_confirm(mapping)
 
 
 def render_csv_mapping(
     middle: Element,
     headers: list[str],
     on_confirm: Callable[[ColumnMapping], None],
+    show_confirm_button: bool = True,
 ) -> CsvMappingScreen:
     screen = CsvMappingScreen(middle=middle, on_confirm=on_confirm)
 
@@ -188,6 +207,8 @@ def render_csv_mapping(
                 taken[target] = header
         initial_targets[header] = target
 
+    ui.add_css(_ROW_FIELD_CSS)
+
     middle.clear()
     with middle:
         with ui.column().classes("gap-0 border rounded-borders"):
@@ -196,7 +217,7 @@ def render_csv_mapping(
                 ui.label("Input").classes("w-48 text-xs font-bold")
                 ui.label("Mapping").classes("flex-grow text-xs font-bold")
             for i, header in enumerate(headers):
-                row_classes = "w-full items-center gap-1 pl-6 py-1 border-b"
+                row_classes = "w-full items-center gap-1 pl-6 py-0 border-b"
                 if i % 2 == 1:
                     row_classes += " bg-grey-1"
                 with ui.row().classes(row_classes):
@@ -206,12 +227,12 @@ def render_csv_mapping(
                             {key: _option_label(key) for key in _ALL_TARGET_KEYS},
                             value=initial_targets[header],
                         )
-                        .classes("w-40 text-xs")
+                        .classes("mapping-field w-40 text-xs")
                         .props("dense options-dense outlined")
                     )
                     key_input = (
                         ui.input(value=_slugify(header))
-                        .classes("w-32 text-xs")
+                        .classes("mapping-field w-32 text-xs")
                         .props("dense")
                     )
                     key_input.set_visibility(initial_targets[header] == _OTHER_ID)
@@ -223,7 +244,8 @@ def render_csv_mapping(
         screen.list_delimiter_input = (
             ui.input("List delimiter", value=";").classes("pl-6 text-xs").props("dense")
         )
-        ui.button("Confirm", on_click=screen.confirm).classes("ml-6")
+        if show_confirm_button:
+            ui.button("Confirm", on_click=screen.confirm).classes("ml-6")
 
     screen._refresh_options()
     return screen

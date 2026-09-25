@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
-from app.gui.csv_mapping import render_csv_mapping
+from app.gui.csv_mapping import CsvMappingScreen, render_csv_mapping
 from app.parsers.csv_ import ColumnMapping, parse_csv_file, read_csv_headers
 
 _TYPE_UNKNOWN = "unknown"
@@ -25,22 +25,27 @@ async def pick_file() -> Path | None:
     return Path(selected[0]) if selected else None
 
 
-def show_csv_mapping(
-    middle: Element, path: Path, on_confirm: Callable[[Path, ColumnMapping], None]
-) -> None:
+def render_mapping(
+    container: Element, file_type: str, path: Path
+) -> CsvMappingScreen | None:
+    if file_type != _TYPE_CSV:
+        return None
+
     try:
         headers = read_csv_headers(path)
     except ValueError as exc:
-        with middle:
+        with container:
             ui.notify(str(exc), type="negative")
-        return
+        return None
 
     if not headers:
-        with middle:
+        with container:
             ui.notify(f"{path.name} has no columns to map", type="negative")
-        return
+        return None
 
-    render_csv_mapping(middle, headers, lambda mapping: on_confirm(path, mapping))
+    return render_csv_mapping(
+        container, headers, lambda _m: None, show_confirm_button=False
+    )
 
 
 def import_csv(session: Session, path: Path, mapping: ColumnMapping) -> SourceFile:
@@ -68,8 +73,7 @@ class ImportView:
     on_import: Callable[[Path, str, ColumnMapping], None]
     path: Path | None = None
     file_type: str = _TYPE_UNKNOWN
-    mapping: ColumnMapping | None = None
-    check_mapping_button: ui.button | None = None
+    mapping_screen: CsvMappingScreen | None = None
     import_button: ui.button | None = None
     stats_button: ui.button | None = None
 
@@ -77,25 +81,16 @@ class ImportView:
         picked = await pick_file()
         if picked is not None:
             self.path = picked
-            self.mapping = None
             self.render()
 
     def _set_type(self, file_type: str) -> None:
         self.file_type = file_type
         self.render()
 
-    def _check_mapping(self) -> None:
-        assert self.path is not None
-        show_csv_mapping(self.middle, self.path, self._on_mapping_confirmed)
-
-    def _on_mapping_confirmed(self, path: Path, mapping: ColumnMapping) -> None:
-        self.mapping = mapping
-        self.render()
-
     def _import(self) -> None:
         assert self.path is not None
-        assert self.mapping is not None
-        self.on_import(self.path, self.file_type, self.mapping)
+        assert self.mapping_screen is not None
+        self.on_import(self.path, self.file_type, self.mapping_screen.current_mapping())
 
     def _get_stats(self) -> None:
         ui.notify("Get stats is not implemented yet")
@@ -103,7 +98,6 @@ class ImportView:
     def render(self) -> None:
         type_known = self.file_type != _TYPE_UNKNOWN
         has_file = self.path is not None
-        has_mapping = self.mapping is not None
 
         self.middle.clear()
         with self.middle:
@@ -126,10 +120,14 @@ class ImportView:
                     )
                     type_select.on_value_change(lambda e: self._set_type(e.value))
 
-                self.check_mapping_button = ui.button(
-                    "Check Mapping", on_click=self._check_mapping
-                ).props("dense")
-                self.check_mapping_button.set_enabled(has_file)
+                mapping_container = ui.column().classes("items-center w-full")
+                if self.path is not None:
+                    self.mapping_screen = render_mapping(
+                        mapping_container, self.file_type, self.path
+                    )
+                else:
+                    self.mapping_screen = None
+                has_mapping = self.mapping_screen is not None
 
                 with ui.row().classes("items-center gap-2"):
                     self.import_button = ui.button(
@@ -141,7 +139,7 @@ class ImportView:
                     if not type_known:
                         self.import_button.tooltip("please select the type")
                     elif not has_mapping:
-                        self.import_button.tooltip("check mapping first")
+                        self.import_button.tooltip("file has no mapping available")
 
                     self.stats_button = ui.button(
                         "Get stats", on_click=self._get_stats
