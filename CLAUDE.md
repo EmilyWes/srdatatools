@@ -15,6 +15,7 @@
 - **GUI/glue/wiring code**: implementation can come first; tests follow before the item is considered done.
 - Work in logical steps (e.g. tokenizer, then field mapping, then tests, then wiring). One commit per step, short imperative commit messages matching existing history style.
 - Check in after each step/commit-sized piece of work — don't run through an entire item silently.
+- Never do visual/UI testing (launching the app, opening a browser, taking screenshots) — Emily does that herself. Never launch or drive a browser for this project for any reason without asking first and getting explicit go-ahead. Static checks (ruff, black, mypy, pytest) are fine and expected as usual.
 
 ## Coding style
 
