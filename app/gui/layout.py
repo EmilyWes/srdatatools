@@ -14,9 +14,7 @@ class ShellPanes:
 def shell() -> ShellPanes:
     ui.query(".nicegui-content").classes("h-screen p-0 gap-0")
     with ui.row().classes("w-full h-full no-wrap gap-0 border"):
-        left = ui.column().classes(
-            "w-56 h-full border-r items-center bg-grey-2 pt-4"
-        )
+        left = ui.column().classes("w-56 h-full border-r items-center bg-grey-2 pt-4")
         with left:
             ui.label("Navigation")
 

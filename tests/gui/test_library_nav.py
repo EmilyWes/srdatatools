@@ -46,7 +46,7 @@ def test_render_left_panel__adds_one_entry_per_source_file() -> None:
 
     nav = render_left_panel(panes.left, panes.middle, source_files)
 
-    # Import, separator, Library, separator, "Imported files" label, source_file:1, source_file:2
+    # Import, sep, Library, sep, "Imported files" label, source_file:1, source_file:2
     assert len(panes.left.default_slot.children) == 7
     assert list(nav.buttons) == [
         "import",
