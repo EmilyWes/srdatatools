@@ -1,9 +1,9 @@
-from app.gui.csv_mapping import render_csv_mapping
+from app.gui.csv_mapping import CsvMappingScreen, render_csv_mapping
 from app.gui.layout import shell
 from app.parsers.csv_ import ColumnMapping
 
 
-def _render(headers: list[str]) -> tuple[list[ColumnMapping], object]:
+def _render(headers: list[str]) -> tuple[list[ColumnMapping], CsvMappingScreen]:
     panes = shell()
     confirmed: list[ColumnMapping] = []
     screen = render_csv_mapping(panes.middle, headers, confirmed.append)
