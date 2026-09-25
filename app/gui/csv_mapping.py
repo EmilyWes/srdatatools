@@ -199,7 +199,7 @@ def render_csv_mapping(
                 ui.label("Input").classes("w-48 text-xs font-bold")
                 ui.label("Mapping").classes("flex-grow text-xs font-bold")
             for i, header in enumerate(headers):
-                row_classes = "w-full items-center gap-1 pl-6 py-1 border-b"
+                row_classes = "w-full items-center gap-1 pl-6 py-0 border-b"
                 if i % 2 == 1:
                     row_classes += " bg-grey-1"
                 with ui.row().classes(row_classes):
