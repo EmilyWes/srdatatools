@@ -83,6 +83,13 @@ _FIELD_ORDER = (
 
 Status = Literal["green", "orange", "red"]
 _STATUS_ORDER: tuple[Status, ...] = ("green", "orange", "red")
+_CHANGED = "blue"
+_STATUS_CLASSES = {
+    "green": "bg-green-2",
+    "orange": "bg-orange-2",
+    "red": "bg-red-2",
+    _CHANGED: "bg-blue-2",
+}
 
 
 def _initial_status(header: str, suggestion: FieldMapping) -> Status:
@@ -122,6 +129,12 @@ class _Row:
     select: ui.select
     other_id_key: str
     status: Status
+    initial_target: str
+    container: ui.row
+
+    @property
+    def display_status(self) -> str:
+        return _CHANGED if self.select.value != self.initial_target else self.status
 
 
 @dataclass
@@ -146,6 +159,16 @@ class MappingScreen:
                 if _exclusive_available(row.header, target, taken)
             ]
             row.select.set_options({key: _option_label(key) for key in keys})
+
+    def _refresh_colors(self) -> None:
+        for row in self.rows:
+            current = row.display_status
+            stale = " ".join(c for s, c in _STATUS_CLASSES.items() if s != current)
+            row.container.classes(add=_STATUS_CLASSES[current], remove=stale)
+
+    def on_target_change(self) -> None:
+        self._refresh_options()
+        self._refresh_colors()
 
     def set_target(self, header: str, target: str) -> None:
         row = self._row_for(header)
@@ -204,11 +227,12 @@ def render_mapping_table(
                 ui.label("Input").classes("w-48 text-xs font-bold")
                 ui.label("Mapping").classes("w-40 text-xs font-bold")
                 ui.label("Example").classes("w-48 text-xs font-bold")
-            for i, header in enumerate(headers):
+            for header in headers:
+                status = _initial_status(header, suggestion)
                 row_classes = "w-full items-center gap-1 pl-6 py-0 border-b"
-                if i % 2 == 1:
-                    row_classes += " bg-grey-1"
-                with ui.row().classes(row_classes):
+                with ui.row().classes(
+                    f"{row_classes} {_STATUS_CLASSES[status]}"
+                ) as container:
                     ui.label(header).classes("w-48 truncate text-xs")
                     select = (
                         ui.select(
@@ -230,10 +254,12 @@ def render_mapping_table(
                         sample=sample,
                         select=select,
                         other_id_key=initial_keys[header],
-                        status=_initial_status(header, suggestion),
+                        status=status,
+                        initial_target=initial_targets[header],
+                        container=container,
                     )
                 )
-                select.on_value_change(lambda _e: screen._refresh_options())
+                select.on_value_change(lambda _e: screen.on_target_change())
 
         if show_delimiter:
             screen.list_delimiter_input = (

@@ -278,3 +278,43 @@ def test_render_mapping_table__other_ids_sort_between_url_and_notes() -> None:
     screen = _render(["Notes", "PMCID", "Title"])
 
     assert [row.header for row in screen.rows] == ["Title", "PMCID", "Notes"]
+
+
+def _row_color_classes(screen: MappingScreen, header: str) -> set[str]:
+    classes = set(screen._row_for(header).container.classes)
+    return classes & {"bg-green-2", "bg-orange-2", "bg-red-2", "bg-blue-2"}
+
+
+def test_render_mapping_table__rows_are_tinted_by_status() -> None:
+    screen = _render(["DOI", "Titles", "Zzzqqqxx123"])
+
+    assert _row_color_classes(screen, "DOI") == {"bg-green-2"}
+    assert _row_color_classes(screen, "Titles") == {"bg-orange-2"}
+    assert _row_color_classes(screen, "Zzzqqqxx123") == {"bg-red-2"}
+
+
+def test_render_mapping_table__changed_row_turns_blue() -> None:
+    screen = _render(["DOI", "Zzzqqqxx123"])
+
+    screen.set_target("DOI", "pmid")
+    screen.set_target("Zzzqqqxx123", "language")
+
+    assert _row_color_classes(screen, "DOI") == {"bg-blue-2"}
+    assert _row_color_classes(screen, "Zzzqqqxx123") == {"bg-blue-2"}
+
+
+def test_render_mapping_table__reverting_change_restores_original_color() -> None:
+    screen = _render(["DOI"])
+
+    screen.set_target("DOI", "pmid")
+    screen.set_target("DOI", "doi")
+
+    assert _row_color_classes(screen, "DOI") == {"bg-green-2"}
+
+
+def test_render_mapping_table__changing_a_row_does_not_reorder_rows() -> None:
+    screen = _render(["DOI", "Title"])
+
+    screen.set_target("DOI", "notes")
+
+    assert [row.header for row in screen.rows] == ["DOI", "Title"]
