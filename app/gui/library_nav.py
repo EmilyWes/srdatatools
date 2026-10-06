@@ -39,6 +39,10 @@ def render_left_panel(
     on_import: Callable[[], Any] | None = None,
 ) -> LeftPanelNav:
     nav = LeftPanelNav(middle=middle)
+    ui.add_css(
+        ".source-file-btn .q-btn__content"
+        " { white-space: normal; overflow-wrap: anywhere; text-align: center; }"
+    )
 
     def handle_import() -> Any:
         nav.select(_IMPORT_KEY)
@@ -72,7 +76,7 @@ def render_left_panel(
             key = f"source_file:{source_file.id}"
             button = (
                 ui.button(source_file.filename, color=None)
-                .classes("w-44 text-sm")
+                .classes("w-44 text-xs source-file-btn")
                 .props("dense")
             )
             button.on_click(lambda key=key: nav.select(key))
