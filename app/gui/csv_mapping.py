@@ -1,5 +1,4 @@
 import re
-from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from nicegui import ui
@@ -97,8 +96,6 @@ class _Row:
 
 @dataclass
 class CsvMappingScreen:
-    middle: Element
-    on_confirm: Callable[[ColumnMapping], None]
     rows: list[_Row] = field(default_factory=list)
     list_delimiter_input: ui.input | None = None
 
@@ -133,9 +130,6 @@ class CsvMappingScreen:
 
     def available_targets(self, header: str) -> set[str]:
         return set(self._row_for(header).select.options)
-
-    def confirm(self) -> None:
-        self.on_confirm(self.current_mapping())
 
     def current_mapping(self) -> ColumnMapping:
         fields: dict[str, str] = {}
@@ -183,13 +177,8 @@ class CsvMappingScreen:
         )
 
 
-def render_csv_mapping(
-    middle: Element,
-    headers: list[str],
-    on_confirm: Callable[[ColumnMapping], None],
-    show_confirm_button: bool = True,
-) -> CsvMappingScreen:
-    screen = CsvMappingScreen(middle=middle, on_confirm=on_confirm)
+def render_csv_mapping(middle: Element, headers: list[str]) -> CsvMappingScreen:
+    screen = CsvMappingScreen()
 
     suggestions = suggest_mapping(headers)
     taken: dict[str, str] = {}
@@ -240,8 +229,6 @@ def render_csv_mapping(
         screen.list_delimiter_input = (
             ui.input("List delimiter", value=";").classes("pl-6 text-xs").props("dense")
         )
-        if show_confirm_button:
-            ui.button("Confirm", on_click=screen.confirm).classes("ml-6")
 
     screen._refresh_options()
     return screen
