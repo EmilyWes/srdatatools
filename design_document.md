@@ -72,7 +72,7 @@ app/
     mapping.py       # generic input-key -> Record field mapping (CSV columns, RIS tags)
     csv_.py          # generic CSV reader + column-mapping suggestions
     ris.py           # generic RIS tokenizer + tag-mapping suggestions
-    nbib.py          # (planned) generic NBIB/MEDLINE tokenizer
+    nbib.py          # generic NBIB/MEDLINE tokenizer + tag-mapping suggestions
     profiles/        # (planned) per-database tag/column mappings + quirks
       pubmed.py
       scopus.py
@@ -96,7 +96,7 @@ app/
     layout.py        # three-pane shell
     library_nav.py   # left panel navigation
     import_flow.py   # import view in the middle panel
-    mapping_table.py # field-mapping table (CSV columns, RIS tags)
+    mapping_table.py # field-mapping table (CSV columns, RIS/NBIB tags)
   main.py            # launches pywebview + NiceGUI server
 ```
 
@@ -182,7 +182,7 @@ flowchart LR
    - **Source** = vendor profile (PubMed, Scopus, Web of Science, IEEE Xplore, Embase, PsycINFO). Source may stay **Unknown**, meaning no vendor-specific field mapping is applied.
    - On upload, the app tries to auto-detect both from file extension + content sniffing and prefills the dropdowns (exact per-format/per-profile detection heuristics are an implementation detail, not specced here). A failed detection leaves a dropdown at Unknown rather than blocking the flow, except Type, which blocks per above.
    - The two dropdowns work independently — picking a Source doesn't filter Type's options or vice versa. If the chosen combination isn't one the source actually exports (e.g. PubMed + CSV), the app falls back to the default parser for the chosen Type with no vendor mapping, and shows an inline note next to Source: *"No profile for this source/type combination — using the default parser."*
-3. Once a file and Type with a mapping renderer are set, a column-mapping table appears inline in the import view itself, directly below the Source/Type dropdowns — no separate screen or confirm step. It's pre-filled with suggested field mappings and stays editable; **Get stats** and **Import** always read whatever the table currently shows at the moment they're clicked. (Today CSV and RIS share the same mapping table: CSV rows are the file's columns, RIS rows are the tags found in the file (except `ER`), pre-filled from a default tag mapping. The list-delimiter input only shows for CSV, since RIS repeats a tag per value.)
+3. Once a file and Type with a mapping renderer are set, a column-mapping table appears inline in the import view itself, directly below the Source/Type dropdowns — no separate screen or confirm step. It's pre-filled with suggested field mappings and stays editable; **Get stats** and **Import** always read whatever the table currently shows at the moment they're clicked. (Today CSV, RIS and NBIB share the same mapping table: CSV rows are the file's columns, RIS rows are the tags found in the file (except `ER`), NBIB rows are the tags found in the file plus a derived `DOI` row (taken from the `AID`/`LID` entry ending `[doi]`), pre-filled from a default tag mapping. The list-delimiter input only shows for CSV, since RIS and NBIB repeat a tag per value.)
 4. **Get stats** runs a dry-run parse (selected Source/Type/mapping, no DB writes) and shows a summary: record count, per-field completeness, and any rows that would be skipped as malformed (with reasons). Re-clicking Get stats after changing a dropdown or editing the mapping re-runs the dry run, so the user can compare e.g. a vendor profile's stats against the default parser's before deciding.
 5. **Import** parses for real and writes both `record_source` (raw fields) and `record` (one row per imported record, pre-dedup). Malformed rows are skipped, logged, and rolled into a result summary ("998 imported, 2 skipped"), consistent with the general malformed-record handling.
    - **CSV dates:** a full-date column and Year/Month/Day columns may both be mapped. Each of year, month and day comes from its Year/Month/Day column when the row has a value there; missing parts are filled from the full-date column. When the two disagree, Year/Month/Day wins.
@@ -217,7 +217,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 **Phase 1 — Import & storage (MVP)**
 
 - [x] Generic RIS tokenizer/parser
-- [ ] Generic NBIB/MEDLINE tokenizer/parser
+- [x] Generic NBIB/MEDLINE tokenizer/parser
 - [x] Generic CSV reader (column-mapping logic)
 - [x] CSV column-mapping UI, embedded inline in the import view (live table below Source/Type, no separate screen/confirm step)
 - [ ] CSV column-mapping UI: visual indicators (different colors) per row for columns that are mapped directly (exact alias), mapped via fuzzy match or the ID fallback, or mapped multiple times to the same target
