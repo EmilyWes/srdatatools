@@ -210,7 +210,7 @@ def test_render_mapping__ris_lists_distinct_tags_without_delimiter_input(
     screen = render_mapping(panes.middle, "ris", ris_path)
 
     assert screen is not None
-    assert [row.header for row in screen.rows] == ["TY", "TI", "AU"]
+    assert [row.header for row in screen.rows] == ["TI", "AU", "TY"]
     assert screen.list_delimiter_input is None
     assert screen.current_mapping().list_delimiter == "\n"
 

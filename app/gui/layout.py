@@ -12,17 +12,17 @@ class ShellPanes:
 
 
 def shell() -> ShellPanes:
-    ui.query(".nicegui-content").classes("h-screen p-0 gap-0")
-    with ui.row().classes("w-full h-full no-wrap gap-0 border"):
-        left = ui.column().classes("w-56 h-full border-r items-center bg-grey-2 pt-4")
+    ui.query(".nicegui-content").classes("min-h-screen p-0 gap-0")
+    with ui.row().classes("w-full flex-grow no-wrap gap-0 border items-stretch"):
+        left = ui.column().classes("w-56 border-r items-center bg-grey-2 pt-4")
         with left:
             ui.label("Navigation")
 
-        middle = ui.column().classes("flex-grow h-full")
+        middle = ui.column().classes("flex-grow")
         with middle:
             ui.label("Content")
 
-        right = ui.column().classes("w-52 h-full border-l bg-grey-2")
+        right = ui.column().classes("w-52 border-l bg-grey-2")
         with right:
             ui.label("Actions")
 

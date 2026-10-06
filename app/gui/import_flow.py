@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
 from app.gui.mapping_table import MappingScreen, render_mapping_table
-from app.parsers.common import ParseResult
+from app.parsers.common import FileSummary, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
 from app.parsers.mapping import FieldMapping
 from app.parsers.nbib import parse_nbib_file, read_nbib_tags, suggest_nbib_mapping
@@ -39,7 +39,7 @@ async def pick_file() -> Path | None:
 def render_mapping(
     container: Element, file_type: str, path: Path
 ) -> MappingScreen | None:
-    read_keys: Callable[[Path], dict[str, str]]
+    read_keys: Callable[[Path], FileSummary]
     suggest: Callable[[list[str]], FieldMapping]
     if file_type == _TYPE_CSV:
         read_keys, suggest, noun = read_csv_headers, suggest_mapping, "columns"
@@ -51,21 +51,21 @@ def render_mapping(
         return None
 
     try:
-        samples = read_keys(path)
+        summary = read_keys(path)
     except ValueError as exc:
         with container:
             ui.notify(str(exc), type="negative")
         return None
 
-    if not samples:
+    if not summary.samples:
         with container:
             ui.notify(f"{path.name} has no {noun} to map", type="negative")
         return None
 
     return render_mapping_table(
         container,
-        samples,
-        suggest(list(samples)),
+        summary,
+        suggest(list(summary.samples)),
         show_delimiter=file_type == _TYPE_CSV,
     )
 

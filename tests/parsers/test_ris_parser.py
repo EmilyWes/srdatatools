@@ -286,7 +286,7 @@ def test_parse_ris_file__default_mapping_on_realistic_export() -> None:
 
 
 def test_read_ris_tags__returns_distinct_tags_in_first_seen_order_without_er() -> None:
-    samples = read_ris_tags(RIS_FIXTURES_DIR / "scopus_style.ris")
+    samples = read_ris_tags(RIS_FIXTURES_DIR / "scopus_style.ris").samples
 
     assert list(samples) == [
         "TY", "AU", "TI", "T2", "PY", "DA", "VL", "IS", "SP", "EP",
@@ -295,7 +295,7 @@ def test_read_ris_tags__returns_distinct_tags_in_first_seen_order_without_er() -
 
 
 def test_read_ris_tags__sample_is_first_occurrence_of_tag() -> None:
-    samples = read_ris_tags(RIS_FIXTURES_DIR / "scopus_style.ris")
+    samples = read_ris_tags(RIS_FIXTURES_DIR / "scopus_style.ris").samples
 
     assert samples["TY"] == "JOUR"
     assert samples["AU"] == "Smith, John A."
@@ -308,11 +308,42 @@ def test_read_ris_tags__sample_skips_empty_occurrence_to_first_non_empty(
     path = tmp_path / "export.ris"
     path.write_text("TY  - JOUR\nN1  -\nER  -\n\nTY  - JOUR\nN1  - a note\nER  -\n")
 
-    assert read_ris_tags(path) == {"TY": "JOUR", "N1": "a note"}
+    assert read_ris_tags(path).samples == {"TY": "JOUR", "N1": "a note"}
 
 
 def test_read_ris_tags__empty_file_returns_empty_dict(tmp_path: Path) -> None:
     path = tmp_path / "empty.ris"
     path.write_text("")
 
-    assert read_ris_tags(path) == {}
+    assert read_ris_tags(path).samples == {}
+
+
+def test_read_ris_tags__counts_records_and_records_with_a_value_per_tag(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "export.ris"
+    path.write_text(
+        "TY  - JOUR\nAU  - A\nAU  - B\nN1  -\nER  -\n\n"
+        "TY  - JOUR\nN1  - a note\nER  -\n"
+    )
+
+    summary = read_ris_tags(path)
+
+    assert summary.total_rows == 2
+    assert summary.filled == {"TY": 2, "AU": 1, "N1": 1}
+
+
+def test_read_ris_tags__record_without_er_terminator_still_counts(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "export.ris"
+    path.write_text("TY  - JOUR\nER  -\n\nTY  - JOUR\nTI  - Unfinished\n")
+
+    assert read_ris_tags(path).total_rows == 2
+
+
+def test_read_ris_tags__empty_file_has_zero_rows(tmp_path: Path) -> None:
+    path = tmp_path / "empty.ris"
+    path.write_text("")
+
+    assert read_ris_tags(path).total_rows == 0

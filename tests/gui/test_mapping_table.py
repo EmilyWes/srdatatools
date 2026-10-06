@@ -1,16 +1,27 @@
-﻿from nicegui.elements.tooltip import Tooltip
+﻿import pytest
+from nicegui.elements.label import Label
+from nicegui.elements.tooltip import Tooltip
 
 from app.gui.layout import shell
-from app.gui.mapping_table import MappingScreen, render_mapping_table
+from app.gui.mapping_table import (
+    MappingScreen,
+    _input_width_ch,
+    render_mapping_table,
+)
+from app.parsers.common import FileSummary
 from app.parsers.csv_ import suggest_mapping
 from app.parsers.ris import suggest_ris_mapping
+
+
+def _summary(samples: dict[str, str]) -> FileSummary:
+    return FileSummary(samples, dict.fromkeys(samples, 0), 0)
 
 
 def _render(headers: list[str]) -> MappingScreen:
     panes = shell()
     return render_mapping_table(
         panes.middle,
-        dict.fromkeys(headers, ""),
+        _summary(dict.fromkeys(headers, "")),
         suggest_mapping(headers),
         show_delimiter=True,
     )
@@ -20,7 +31,7 @@ def _render_ris(tags: list[str]) -> MappingScreen:
     panes = shell()
     return render_mapping_table(
         panes.middle,
-        dict.fromkeys(tags, ""),
+        _summary(dict.fromkeys(tags, "")),
         suggest_ris_mapping(tags),
         show_delimiter=False,
     )
@@ -139,7 +150,7 @@ def test_render_mapping_table__renders_table_and_delimiter_input_only() -> None:
 
     render_mapping_table(
         panes.middle,
-        dict.fromkeys(headers, ""),
+        _summary(dict.fromkeys(headers, "")),
         suggest_mapping(headers),
         show_delimiter=True,
     )
@@ -154,7 +165,7 @@ def test_render_mapping_table__ris_has_no_delimiter_input_and_keeps_newline() ->
 
     render_mapping_table(
         panes.middle,
-        dict.fromkeys(tags, ""),
+        _summary(dict.fromkeys(tags, "")),
         suggest_ris_mapping(tags),
         show_delimiter=False,
     )
@@ -191,7 +202,10 @@ def test_render_mapping_table__shows_sample_value_for_each_row() -> None:
     panes = shell()
 
     screen = render_mapping_table(
-        panes.middle, samples, suggest_mapping(list(samples)), show_delimiter=True
+        panes.middle,
+        _summary(samples),
+        suggest_mapping(list(samples)),
+        show_delimiter=True,
     )
 
     assert screen._row_for("Title").sample.text == "Some Paper"
@@ -205,7 +219,10 @@ def test_render_mapping_table__sample_has_full_value_tooltip_only_when_non_empty
     panes = shell()
 
     screen = render_mapping_table(
-        panes.middle, samples, suggest_mapping(list(samples)), show_delimiter=True
+        panes.middle,
+        _summary(samples),
+        suggest_mapping(list(samples)),
+        show_delimiter=True,
     )
 
     targets = {
@@ -215,5 +232,183 @@ def test_render_mapping_table__sample_has_full_value_tooltip_only_when_non_empty
     }
     title_sample = screen._row_for("Title").sample
     notes_sample = screen._row_for("Notes").sample
-    assert targets == {f"#{title_sample.html_id}": "Some Paper"}
+    assert targets[f"#{title_sample.html_id}"] == "Some Paper"
     assert f"#{notes_sample.html_id}" not in targets
+
+
+def _statuses(screen: MappingScreen) -> list[tuple[str, str]]:
+    return [(row.header, row.status) for row in screen.rows]
+
+
+def test_render_mapping_table__exact_match_is_green() -> None:
+    screen = _render(["DOI"])
+
+    assert _statuses(screen) == [("DOI", "green")]
+
+
+def test_render_mapping_table__fuzzy_and_id_fallback_are_orange() -> None:
+    screen = _render(["Titles", "Scopus Author ID"])
+
+    assert {status for _, status in _statuses(screen)} == {"orange"}
+
+
+def test_render_mapping_table__several_keys_on_same_target_are_orange() -> None:
+    screen = _render(["Author Keywords", "Index Keywords", "DOI"])
+
+    assert dict(_statuses(screen)) == {
+        "DOI": "green",
+        "Author Keywords": "orange",
+        "Index Keywords": "orange",
+    }
+
+
+def test_render_mapping_table__ignored_is_red() -> None:
+    screen = _render(["Zzzqqqxx123"])
+
+    assert _statuses(screen) == [("Zzzqqqxx123", "red")]
+
+
+def test_render_mapping_table__sorts_green_then_orange_then_red() -> None:
+    screen = _render(["Zzzqqqxx123", "Scopus Author ID", "DOI"])
+
+    assert [status for _, status in _statuses(screen)] == ["green", "orange", "red"]
+
+
+def test_render_mapping_table__sorts_within_status_by_field_sequence() -> None:
+    screen = _render(["Notes", "Title", "Authors", "DOI"])
+
+    assert [row.header for row in screen.rows] == ["DOI", "Title", "Authors", "Notes"]
+
+
+def test_render_mapping_table__sort_keeps_file_order_for_ties() -> None:
+    screen = _render(["Zzzqqqxx123", "Aaaa111", "Author Keywords", "Index Keywords"])
+
+    assert [row.header for row in screen.rows] == [
+        "Author Keywords",
+        "Index Keywords",
+        "Zzzqqqxx123",
+        "Aaaa111",
+    ]
+
+
+def test_render_mapping_table__other_ids_sort_between_url_and_notes() -> None:
+    screen = _render(["Notes", "PMCID", "Title"])
+
+    assert [row.header for row in screen.rows] == ["Title", "PMCID", "Notes"]
+
+
+def _mapping_color(screen: MappingScreen, header: str) -> str:
+    return str(screen._row_for(header).select.props["bg-color"])
+
+
+def test_render_mapping_table__mapping_cell_is_tinted_by_status() -> None:
+    screen = _render(["DOI", "Titles", "Zzzqqqxx123"])
+
+    assert _mapping_color(screen, "DOI") == "green-2"
+    assert _mapping_color(screen, "Titles") == "orange-2"
+    assert _mapping_color(screen, "Zzzqqqxx123") == "red-2"
+
+
+def test_render_mapping_table__changed_row_turns_blue() -> None:
+    screen = _render(["DOI", "Zzzqqqxx123"])
+
+    screen.set_target("DOI", "pmid")
+    screen.set_target("Zzzqqqxx123", "language")
+
+    assert _mapping_color(screen, "DOI") == "blue-2"
+    assert _mapping_color(screen, "Zzzqqqxx123") == "blue-2"
+
+
+def test_render_mapping_table__reverting_change_restores_original_color() -> None:
+    screen = _render(["DOI"])
+
+    screen.set_target("DOI", "pmid")
+    screen.set_target("DOI", "doi")
+
+    assert _mapping_color(screen, "DOI") == "green-2"
+
+
+def test_render_mapping_table__changing_a_row_does_not_reorder_rows() -> None:
+    screen = _render(["DOI", "Title"])
+
+    screen.set_target("DOI", "notes")
+
+    assert [row.header for row in screen.rows] == ["DOI", "Title"]
+
+
+@pytest.mark.parametrize(
+    ("headers", "expected"),
+    [
+        (["ID"], 8),
+        (["Title", "Publication Year"], 17),
+        (["A very long column header that exceeds the cap"], 24),
+    ],
+)
+def test_input_width_ch__fits_longest_header_within_bounds(
+    headers: list[str], expected: int
+) -> None:
+    assert _input_width_ch(headers) == expected
+
+
+def test_render_mapping_table__dropdown_options_are_sorted_alphabetically() -> None:
+    screen = _render(["Title", "Year"])
+
+    options = screen._row_for("Title").select.options
+    assert isinstance(options, dict)
+    labels = list(options.values())
+
+    assert labels == sorted(labels, key=str.lower)
+    assert "Ignore" in labels
+    assert "Date (full)" in labels
+
+
+def test_render_mapping_table__truncated_input_header_has_full_value_tooltip() -> None:
+    long_header = "A very long column header that exceeds the cap"
+    panes = shell()
+
+    render_mapping_table(
+        panes.middle,
+        _summary({long_header: "", "Title": ""}),
+        suggest_mapping([long_header, "Title"]),
+        show_delimiter=True,
+    )
+
+    tooltips = [t.text for t in panes.middle.descendants() if isinstance(t, Tooltip)]
+    assert tooltips.count(long_header) == 1
+    assert "Title" not in tooltips
+
+
+def test_render_mapping_table__shows_filled_bar_per_row_with_count_tooltip() -> None:
+    samples = {"Title": "Some Paper", "Notes": "", "Year": "2020"}
+    summary = FileSummary(samples, {"Title": 12, "Notes": 0, "Year": 6}, 12)
+    panes = shell()
+
+    screen = render_mapping_table(
+        panes.middle, summary, suggest_mapping(list(samples)), show_delimiter=True
+    )
+
+    title, notes, year = (screen._row_for(h).count for h in samples)
+    assert (title.value, notes.value, year.value) == (1.0, 0.0, 0.5)
+    assert "hsl(120," in title.props["color"]
+    assert "hsl(0," in notes.props["color"]
+    assert "hsl(60," in year.props["color"]
+    tooltips = {
+        c.props["target"]: c.text
+        for c in panes.middle.descendants()
+        if isinstance(c, Tooltip)
+    }
+    assert tooltips[f"#{title.html_id}"] == "12 of 12"
+    assert tooltips[f"#{notes.html_id}"] == "0 of 12"
+    header_texts = [e.text for e in panes.middle.descendants() if isinstance(e, Label)]
+    assert "#" in header_texts
+
+
+def test_render_mapping_table__empty_file_bar_is_empty() -> None:
+    summary = FileSummary({"Title": ""}, {"Title": 0}, 0)
+    panes = shell()
+
+    screen = render_mapping_table(
+        panes.middle, summary, suggest_mapping(["Title"]), show_delimiter=True
+    )
+
+    assert screen._row_for("Title").count.value == 0.0

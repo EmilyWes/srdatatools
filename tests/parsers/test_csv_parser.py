@@ -313,7 +313,7 @@ def test_read_csv_headers__returns_headers_with_first_row_values(
         "Title,DOI,Journal\nSome Paper,10.1/xyz,Nature\nOther,10.1/abc,Science\n"
     )
 
-    samples = read_csv_headers(csv_path)
+    samples = read_csv_headers(csv_path).samples
 
     assert list(samples) == ["Title", "DOI", "Journal"]
     assert samples == {"Title": "Some Paper", "DOI": "10.1/xyz", "Journal": "Nature"}
@@ -325,7 +325,7 @@ def test_read_csv_headers__skips_blank_cells_to_first_non_empty_value(
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\nA,\nB,  \nC,10.1/xyz\n")
 
-    assert read_csv_headers(csv_path) == {"Title": "A", "DOI": "10.1/xyz"}
+    assert read_csv_headers(csv_path).samples == {"Title": "A", "DOI": "10.1/xyz"}
 
 
 def test_read_csv_headers__column_empty_in_every_row_has_empty_sample(
@@ -334,14 +334,14 @@ def test_read_csv_headers__column_empty_in_every_row_has_empty_sample(
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,Notes\nA,\nB,\n")
 
-    assert read_csv_headers(csv_path) == {"Title": "A", "Notes": ""}
+    assert read_csv_headers(csv_path).samples == {"Title": "A", "Notes": ""}
 
 
 def test_read_csv_headers__header_only_file_has_empty_samples(tmp_path: Path) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\n")
 
-    assert read_csv_headers(csv_path) == {"Title": "", "DOI": ""}
+    assert read_csv_headers(csv_path).samples == {"Title": "", "DOI": ""}
 
 
 def test_read_csv_headers__short_row_leaves_missing_cells_for_later_rows(
@@ -350,18 +350,18 @@ def test_read_csv_headers__short_row_leaves_missing_cells_for_later_rows(
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\nA\nB,10.1/xyz\n")
 
-    assert read_csv_headers(csv_path) == {"Title": "A", "DOI": "10.1/xyz"}
+    assert read_csv_headers(csv_path).samples == {"Title": "A", "DOI": "10.1/xyz"}
 
 
 def test_read_csv_headers__empty_file_returns_empty_dict(tmp_path: Path) -> None:
     csv_path = tmp_path / "empty.csv"
     csv_path.write_text("")
 
-    assert read_csv_headers(csv_path) == {}
+    assert read_csv_headers(csv_path).samples == {}
 
 
 def test_read_csv_headers__decodes_cp1252_file() -> None:
-    samples = read_csv_headers(CSV_FIXTURES_DIR / "cp1252_encoded.csv")
+    samples = read_csv_headers(CSV_FIXTURES_DIR / "cp1252_encoded.csv").samples
 
     assert samples == {"Title": "Café Study", "Author": "Müller"}
 
@@ -426,3 +426,47 @@ def test_suggest_mapping__keeps_only_first_column_per_date_part() -> None:
     suggestions = suggest_mapping(["Year", "Publication Year", "Date"])
 
     assert suggestions.targets == {"Year": "year", "Date": "date"}
+
+
+def test_read_csv_headers__counts_rows_and_non_empty_cells_per_column(
+    tmp_path: Path,
+) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title,DOI\nA,\nB,  \nC,10.1/xyz\n")
+
+    summary = read_csv_headers(csv_path)
+
+    assert summary.total_rows == 3
+    assert summary.filled == {"Title": 3, "DOI": 1}
+
+
+def test_read_csv_headers__short_row_counts_as_row_with_missing_cells_empty(
+    tmp_path: Path,
+) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title,DOI\nA\nB,10.1/xyz\n")
+
+    summary = read_csv_headers(csv_path)
+
+    assert summary.total_rows == 2
+    assert summary.filled == {"Title": 2, "DOI": 1}
+
+
+def test_read_csv_headers__blank_lines_are_not_rows(tmp_path: Path) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title\nA\n\nB\n")
+
+    assert read_csv_headers(csv_path).total_rows == 2
+
+
+def test_read_csv_headers__header_only_and_empty_files_have_zero_rows(
+    tmp_path: Path,
+) -> None:
+    header_only = tmp_path / "header_only.csv"
+    header_only.write_text("Title,DOI\n")
+    empty = tmp_path / "empty.csv"
+    empty.write_text("")
+
+    assert read_csv_headers(header_only).filled == {"Title": 0, "DOI": 0}
+    assert read_csv_headers(header_only).total_rows == 0
+    assert read_csv_headers(empty).total_rows == 0

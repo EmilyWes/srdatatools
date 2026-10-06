@@ -212,6 +212,28 @@ def test_apply_mapping__parses_nbib_style_date(
     assert (date.year, date.month, date.day) == expected
 
 
+def test_suggest_mapping__records_match_kind_per_key() -> None:
+    aliases = {"title": ["article title"], "doi": ["doi"]}
+
+    suggestions = suggest_mapping(
+        ["DOI", "Article Titles", "Custom ID", "Zzzqqqxx123"], aliases, lenient=True
+    )
+
+    assert suggestions.match_kinds == {
+        "DOI": "exact",
+        "Article Titles": "fuzzy",
+        "Custom ID": "id_fallback",
+    }
+
+
+def test_suggest_mapping__dropped_exclusive_loser_has_no_match_kind() -> None:
+    aliases = {"date": ["da", "py"]}
+
+    suggestions = suggest_mapping(["PY", "DA"], aliases, lenient=False)
+
+    assert suggestions.match_kinds == {"DA": "exact"}
+
+
 def test_suggest_mapping__lenient_fuzzy_matches_and_falls_back_to_id() -> None:
     aliases = {"title": ["article title"]}
 

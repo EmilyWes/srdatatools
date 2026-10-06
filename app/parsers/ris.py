@@ -3,7 +3,14 @@ import re
 from dataclasses import replace
 from pathlib import Path
 
-from app.parsers.common import ParsedRow, ParseResult, SkippedRow, decode_file
+from app.parsers.common import (
+    FileSummary,
+    ParsedRow,
+    ParseResult,
+    SkippedRow,
+    SummaryBuilder,
+    decode_file,
+)
 from app.parsers.mapping import FieldMapping, apply_mapping
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
 
@@ -87,14 +94,17 @@ def parse_ris_file(path: Path, mapping: FieldMapping) -> ParseResult:
     return parse_ris_text(decode_file(path), mapping)
 
 
-def read_ris_tags(path: Path) -> dict[str, str]:
-    samples: dict[str, str] = {}
+def read_ris_tags(path: Path) -> FileSummary:
+    summary = SummaryBuilder()
     for line in decode_file(path).splitlines():
         match = _TAG_LINE.match(line)
-        if match is not None and match["tag"] != _END_TAG:
-            if not samples.get(match["tag"]):
-                samples[match["tag"]] = (match["value"] or "").strip()
-    return samples
+        if match is None:
+            continue
+        if match["tag"] == _END_TAG:
+            summary.end_record()
+        else:
+            summary.add(match["tag"], match["value"] or "")
+    return summary.build()
 
 
 def suggest_ris_mapping(tags: list[str]) -> FieldMapping:

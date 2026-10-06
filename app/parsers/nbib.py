@@ -3,7 +3,14 @@ import re
 from dataclasses import replace
 from pathlib import Path
 
-from app.parsers.common import ParsedRow, ParseResult, SkippedRow, decode_file
+from app.parsers.common import (
+    FileSummary,
+    ParsedRow,
+    ParseResult,
+    SkippedRow,
+    SummaryBuilder,
+    decode_file,
+)
 from app.parsers.mapping import FieldMapping, apply_mapping
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
 
@@ -106,24 +113,29 @@ def parse_nbib_file(path: Path, mapping: FieldMapping) -> ParseResult:
     return parse_nbib_text(decode_file(path), mapping)
 
 
-def read_nbib_tags(path: Path) -> dict[str, str]:
-    samples: dict[str, str] = {}
+def read_nbib_tags(path: Path) -> FileSummary:
+    summary = SummaryBuilder()
     for line in decode_file(path).splitlines():
+        if not line.strip():
+            summary.end_record()
+            continue
         match = _TAG_LINE.match(line)
         if match is None:
             continue
-        value = (match["value"] or "").strip()
-        if not samples.get(match["tag"]):
-            samples[match["tag"]] = value
+        value = match["value"] or ""
+        summary.add(match["tag"], value)
         if match["tag"] in _ID_TAGS and (doi := _doi_from_id(value)) is not None:
-            if not samples.get(_DOI_TAG):
-                samples[_DOI_TAG] = doi
-    return samples
+            summary.add(_DOI_TAG, doi)
+    return summary.build()
 
 
 def suggest_nbib_mapping(tags: list[str]) -> FieldMapping:
     mapping = _suggest_mapping(tags, _SUGGESTION_ALIASES, lenient=False)
     targets = dict(mapping.targets)
+    match_kinds = dict(mapping.match_kinds)
     if "FAU" not in tags and "AU" in tags:
         targets["AU"] = "authors"
-    return replace(mapping, targets=targets, list_delimiter="\n")
+        match_kinds["AU"] = "exact"
+    return replace(
+        mapping, targets=targets, list_delimiter="\n", match_kinds=match_kinds
+    )

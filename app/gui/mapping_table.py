@@ -1,8 +1,11 @@
-﻿from dataclasses import dataclass, field
+﻿from collections.abc import Iterable
+from dataclasses import dataclass, field
+from typing import Literal
 
 from nicegui import ui
 from nicegui.element import Element
 
+from app.parsers.common import FileSummary
 from app.parsers.mapping import (
     EXCLUSIVE_TARGETS,
     ISSN_ISBN_TARGET,
@@ -51,8 +54,88 @@ _LABELS: dict[str, str] = {
 }
 
 
+_FIELD_ORDER = (
+    "doi",
+    "pmid",
+    "title",
+    "authors",
+    "keywords",
+    "abstract",
+    "publisher",
+    "journal",
+    "conference_name",
+    "publication_type",
+    "date",
+    "year",
+    "month",
+    "day",
+    ISSN_ISBN_TARGET,
+    "issn",
+    "isbn",
+    "volume",
+    "issue",
+    "pages",
+    "page_start",
+    "page_end",
+    "language",
+    "url",
+    _OTHER_IDS,
+    "notes",
+)
+
+Status = Literal["green", "orange", "red"]
+_STATUS_ORDER: tuple[Status, ...] = ("green", "orange", "red")
+_CHANGED = "blue"
+_STATUS_COLORS = {
+    "green": "green-2",
+    "orange": "orange-2",
+    "red": "red-2",
+    _CHANGED: "blue-2",
+}
+
+
+def _initial_status(header: str, suggestion: FieldMapping) -> Status:
+    target = suggestion.targets.get(header)
+    if target is None:
+        return "red"
+    shared = sum(t == target for t in suggestion.targets.values()) > 1
+    if shared or suggestion.match_kinds.get(header) != "exact":
+        return "orange"
+    return "green"
+
+
+def _sorted_headers(headers: list[str], suggestion: FieldMapping) -> list[str]:
+    def sort_key(header: str) -> tuple[int, int]:
+        status = _initial_status(header, suggestion)
+        target = suggestion.targets.get(header, "")
+        if target.startswith(OTHER_IDS_PREFIX):
+            target = _OTHER_IDS
+        position = _FIELD_ORDER.index(target) if status != "red" else 0
+        return _STATUS_ORDER.index(status), position
+
+    return sorted(headers, key=sort_key)
+
+
 def _option_label(key: str) -> str:
     return _LABELS.get(key, key.replace("_", " ").capitalize())
+
+
+_INPUT_WIDTH_CH = (8, 24)
+_SELECT_CHROME_CH = 6
+
+
+def _sorted_options(keys: Iterable[str]) -> dict[str, str]:
+    options = {key: _option_label(key) for key in keys}
+    return dict(sorted(options.items(), key=lambda item: item[1].lower()))
+
+
+def _input_width_ch(headers: list[str]) -> int:
+    low, high = _INPUT_WIDTH_CH
+    return max(low, min(high, max(map(len, headers), default=0) + 1))
+
+
+def _mapping_width_ch() -> int:
+    return max(len(_option_label(key)) for key in _ALL_TARGET_KEYS) + _SELECT_CHROME_CH
 
 
 def _exclusive_available(header: str, target: str, taken: dict[str, str]) -> bool:
@@ -63,8 +146,15 @@ def _exclusive_available(header: str, target: str, taken: dict[str, str]) -> boo
 class _Row:
     header: str
     sample: ui.label
+    count: ui.linear_progress
     select: ui.select
     other_id_key: str
+    status: Status
+    initial_target: str
+
+    @property
+    def display_status(self) -> str:
+        return _CHANGED if self.select.value != self.initial_target else self.status
 
 
 @dataclass
@@ -88,7 +178,15 @@ class MappingScreen:
                 for target in EXCLUSIVE_TARGETS
                 if _exclusive_available(row.header, target, taken)
             ]
-            row.select.set_options({key: _option_label(key) for key in keys})
+            row.select.set_options(_sorted_options(keys))
+
+    def _refresh_colors(self) -> None:
+        for row in self.rows:
+            row.select.props(f"bg-color={_STATUS_COLORS[row.display_status]}")
+
+    def on_target_change(self) -> None:
+        self._refresh_options()
+        self._refresh_colors()
 
     def set_target(self, header: str, target: str) -> None:
         row = self._row_for(header)
@@ -118,13 +216,17 @@ class MappingScreen:
 
 def render_mapping_table(
     middle: Element,
-    samples: dict[str, str],
+    summary: FileSummary,
     suggestion: FieldMapping,
     *,
     show_delimiter: bool,
 ) -> MappingScreen:
     screen = MappingScreen(list_delimiter=suggestion.list_delimiter)
-    headers = list(samples)
+    samples = summary.samples
+    headers = _sorted_headers(list(samples), suggestion)
+    input_width = _input_width_ch(headers)
+    input_style = f"width: {input_width}ch"
+    mapping_style = f"width: {_mapping_width_ch()}ch"
 
     suggested = suggestion.targets
     initial_targets: dict[str, str] = {}
@@ -139,27 +241,55 @@ def render_mapping_table(
 
     ui.add_css(_ROW_FIELD_CSS)
 
+    count_cell_classes = "self-stretch flex items-center px-2 mr-1"
+    count_cell_style = "background: rgba(0, 0, 0, 0.04)"
+
     middle.clear()
     with middle:
         with ui.column().classes("gap-0 border rounded-borders"):
-            header_classes = "w-full items-center gap-1 pl-6 py-2 bg-grey-2 border-b"
+            header_classes = "w-full items-center gap-1 pl-0 py-2 bg-grey-2 border-b"
             with ui.row().classes(header_classes):
-                ui.label("Input").classes("w-48 text-xs font-bold")
-                ui.label("Mapping").classes("w-40 text-xs font-bold")
-                ui.label("Example").classes("w-48 text-xs font-bold")
+                with (
+                    ui.element("div")
+                    .classes(count_cell_classes)
+                    .style(count_cell_style)
+                ):
+                    ui.label("#").classes("w-10 text-xs font-bold text-center")
+                ui.label("Input").classes("text-xs font-bold").style(input_style)
+                ui.label("Mapping").classes("text-xs font-bold").style(mapping_style)
+                ui.label("Example").classes("w-48 text-xs font-bold text-center")
             for i, header in enumerate(headers):
-                row_classes = "w-full items-center gap-1 pl-6 py-0 border-b"
+                status = _initial_status(header, suggestion)
+                row_classes = "w-full items-center gap-1 pl-0 py-0 border-b"
                 if i % 2 == 1:
                     row_classes += " bg-grey-1"
                 with ui.row().classes(row_classes):
-                    ui.label(header).classes("w-48 truncate text-xs")
+                    filled = summary.filled.get(header, 0)
+                    ratio = filled / summary.total_rows if summary.total_rows else 0.0
+                    with (
+                        ui.element("div")
+                        .classes(count_cell_classes)
+                        .style(count_cell_style)
+                    ):
+                        count = ui.linear_progress(value=ratio, show_value=False)
+                        count.props(f'color="hsl({120 * ratio:.0f}, 70%, 45%)"')
+                        count.classes("w-10")
+                        count.tooltip(f"{filled} of {summary.total_rows}")
+                    label = ui.label(header).classes("truncate text-xs")
+                    label.style(input_style)
+                    if len(header) >= input_width:
+                        label.tooltip(header)
                     select = (
                         ui.select(
-                            {key: _option_label(key) for key in _ALL_TARGET_KEYS},
+                            _sorted_options(_ALL_TARGET_KEYS),
                             value=initial_targets[header],
                         )
-                        .classes("mapping-field w-40 text-xs")
-                        .props("dense options-dense outlined")
+                        .classes("mapping-field text-xs")
+                        .style(mapping_style)
+                        .props(
+                            "dense options-dense outlined "
+                            f"bg-color={_STATUS_COLORS[status]}"
+                        )
                     )
                     sample = ui.label(samples[header]).classes(
                         "w-48 truncate text-xs text-grey-7"
@@ -171,11 +301,14 @@ def render_mapping_table(
                     _Row(
                         header=header,
                         sample=sample,
+                        count=count,
                         select=select,
                         other_id_key=initial_keys[header],
+                        status=status,
+                        initial_target=initial_targets[header],
                     )
                 )
-                select.on_value_change(lambda _e: screen._refresh_options())
+                select.on_value_change(lambda _e: screen.on_target_change())
 
         if show_delimiter:
             screen.list_delimiter_input = (

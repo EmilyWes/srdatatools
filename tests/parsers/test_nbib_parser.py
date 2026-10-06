@@ -266,7 +266,9 @@ def test_suggest_nbib_mapping__leaves_unknown_tags_unmapped() -> None:
 def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
     path = NBIB_FIXTURES_DIR / "pubmed_style.nbib"
 
-    result = parse_nbib_file(path, suggest_nbib_mapping(list(read_nbib_tags(path))))
+    result = parse_nbib_file(
+        path, suggest_nbib_mapping(list(read_nbib_tags(path).samples))
+    )
 
     first, second = (row.record for row in result.rows)
     assert first.pmid == "31234567"
@@ -289,7 +291,7 @@ def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
 
 
 def test_read_nbib_tags__returns_distinct_tags_in_first_seen_order_with_doi() -> None:
-    samples = read_nbib_tags(NBIB_FIXTURES_DIR / "pubmed_style.nbib")
+    samples = read_nbib_tags(NBIB_FIXTURES_DIR / "pubmed_style.nbib").samples
 
     assert list(samples) == [
         "PMID", "OWN", "STAT", "DP", "TI", "PG", "LID", "DOI", "AB", "FAU", "AU",
@@ -298,7 +300,7 @@ def test_read_nbib_tags__returns_distinct_tags_in_first_seen_order_with_doi() ->
 
 
 def test_read_nbib_tags__sample_is_first_occurrence_of_tag() -> None:
-    samples = read_nbib_tags(NBIB_FIXTURES_DIR / "pubmed_style.nbib")
+    samples = read_nbib_tags(NBIB_FIXTURES_DIR / "pubmed_style.nbib").samples
 
     assert samples["PMID"] == "31234567"
     assert samples["FAU"] == "Smith, John A"
@@ -307,7 +309,7 @@ def test_read_nbib_tags__sample_is_first_occurrence_of_tag() -> None:
 
 
 def test_read_nbib_tags__doi_sample_is_doi_without_suffix() -> None:
-    samples = read_nbib_tags(NBIB_FIXTURES_DIR / "pubmed_style.nbib")
+    samples = read_nbib_tags(NBIB_FIXTURES_DIR / "pubmed_style.nbib").samples
 
     assert samples["DOI"] == "10.1016/j.jbi.2020.1"
 
@@ -316,4 +318,33 @@ def test_read_nbib_tags__empty_file_returns_empty_dict(tmp_path: Path) -> None:
     path = tmp_path / "empty.nbib"
     path.write_text("")
 
-    assert read_nbib_tags(path) == {}
+    assert read_nbib_tags(path).samples == {}
+
+
+def test_read_nbib_tags__counts_records_and_records_with_a_value_per_tag(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "export.nbib"
+    path.write_text("PMID- 1\nTI  - A\nAB  -\n\nPMID- 2\nTI  - B\nTI  - C\n")
+
+    summary = read_nbib_tags(path)
+
+    assert summary.total_rows == 2
+    assert summary.filled == {"PMID": 2, "TI": 2, "AB": 0}
+
+
+def test_read_nbib_tags__doi_from_id_tag_counts_as_filled_doi(tmp_path: Path) -> None:
+    path = tmp_path / "export.nbib"
+    path.write_text("PMID- 1\nLID - 10.1/xyz [doi]\n\nPMID- 2\nAID - S1532 [pii]\n")
+
+    summary = read_nbib_tags(path)
+
+    assert summary.filled["DOI"] == 1
+    assert summary.filled["AID"] == 1
+
+
+def test_read_nbib_tags__empty_file_has_zero_rows(tmp_path: Path) -> None:
+    path = tmp_path / "empty.nbib"
+    path.write_text("")
+
+    assert read_nbib_tags(path).total_rows == 0
