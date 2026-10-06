@@ -54,6 +54,7 @@ def import_csv(session: Session, path: Path, mapping: ColumnMapping) -> SourceFi
         path=str(path),
         format="csv",
         parsed_rows=[(row.record, row.raw_fields) for row in result.rows],
+        skipped_rows=[(row.row_number, row.reason) for row in result.skipped],
     )
 
 

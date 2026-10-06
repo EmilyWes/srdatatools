@@ -106,10 +106,9 @@ Core tables, kept normalized so the same paper found via two sources becomes one
 
 | Table | Purpose |
 | --- | --- |
-| `record` | One row per imported record (pre-dedup), one per unique paper after dedup: title, abstract, publication year/month/day, DOI, PMID and other ids, merged/enriched fields |
-| `record_source` | Raw import: which file/source a record came from, its original raw fields, import timestamp |
-| `author` / `record_author` | Authors, many-to-many with order and affiliation |
-| `source_file` | Metadata about each imported file: path/name, format, import date, row count |
+| `record` | One row per imported record (pre-dedup), one per unique paper after dedup: title, authors (ordered JSON list: names, ORCID, affiliations), abstract, publication year/month/day, DOI, PMID and other ids, merged/enriched fields |
+| `record_source` | Raw import: which file/source a record came from, its original raw fields (import time is on `source_file`) |
+| `source_file` | Metadata about each imported file: path/name, format, import date, row count, skipped rows (row number + reason) |
 | `dedup_link` *(planned, Phase 2)* | Which raw `record_source` rows were merged into which `record`, match method used, confidence score, blocking key used |
 | `enrichment_log` *(planned, Phase 3)* | What was fetched from OpenAlex for a record, when, and which fields it filled or overwrote |
 | `citation_edge` *(planned, Phase 4)* | Snowballing results: `record_id` cites/is cited by `record_id` (or an external id not yet imported) |

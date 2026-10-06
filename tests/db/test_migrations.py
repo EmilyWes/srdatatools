@@ -7,9 +7,7 @@ from alembic.config import Config
 
 EXPECTED_TABLES = {
     "activity_log",
-    "author",
     "record",
-    "record_author",
     "record_source",
     "source_file",
 }

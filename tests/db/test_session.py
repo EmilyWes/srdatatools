@@ -8,9 +8,7 @@ from app.db.session import default_db_path, run_migrations
 
 EXPECTED_TABLES = {
     "activity_log",
-    "author",
     "record",
-    "record_author",
     "record_source",
     "source_file",
 }
