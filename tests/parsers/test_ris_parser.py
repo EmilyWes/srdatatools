@@ -242,8 +242,25 @@ def test_suggest_ris_mapping__routes_accession_number_to_other_ids() -> None:
     assert suggestions.targets == {"AN": "other_ids.an"}
 
 
-def test_suggest_ris_mapping__leaves_sn_and_unknown_tags_unmapped() -> None:
-    assert suggest_ris_mapping(["SN", "ZZ", "TZ"]).targets == {}
+def test_suggest_ris_mapping__maps_sn_to_issn_isbn() -> None:
+    assert suggest_ris_mapping(["SN"]).targets == {"SN": "issn_isbn"}
+
+
+def test_suggest_ris_mapping__leaves_unknown_tags_unmapped() -> None:
+    assert suggest_ris_mapping(["ZZ", "TZ"]).targets == {}
+
+
+def test_parse_ris_text__sn_routes_to_issn_or_isbn_by_value() -> None:
+    mapping = suggest_ris_mapping(["SN"])
+    text = (
+        "TY  - JOUR\nSN  - 1234-5678\nER  - \n"
+        "TY  - BOOK\nSN  - 978-3-16-148410-0\nER  - \n"
+    )
+
+    journal, book = (row.record for row in parse_ris_text(text, mapping).rows)
+
+    assert (journal.issn, journal.isbn) == ("1234-5678", None)
+    assert (book.issn, book.isbn) == (None, "978-3-16-148410-0")
 
 
 def test_parse_ris_file__default_mapping_on_realistic_export() -> None:

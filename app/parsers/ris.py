@@ -15,6 +15,7 @@ _SUGGESTION_ALIASES: dict[str, list[str]] = {
     "authors": ["au", "a1"],
     "abstract": ["ab", "n2"],
     "journal": ["jo", "jf", "t2"],
+    "issn_isbn": ["sn"],
     "volume": ["vl"],
     "issue": ["is"],
     "page_start": ["sp"],

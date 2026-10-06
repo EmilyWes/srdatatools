@@ -90,6 +90,63 @@ def test_apply_mapping__explicit_pages_win_over_start_and_end() -> None:
     assert record.pages == "5-9"
 
 
+def test_field_mapping__accepts_issn_isbn_target() -> None:
+    mapping = FieldMapping(targets={"SN": "issn_isbn"})
+
+    assert mapping.targets == {"SN": "issn_isbn"}
+
+
+@pytest.mark.parametrize("value", ["1234-5678", "12345678", "1234-567X"])
+def test_apply_mapping__issn_isbn_routes_issn(value: str) -> None:
+    record = apply_mapping({"SN": value}, FieldMapping(targets={"SN": "issn_isbn"}))
+
+    assert (record.issn, record.isbn) == (value, None)
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["0-306-40615-2", "0306406152", "978-3-16-148410-0", "9783161484100"],
+)
+def test_apply_mapping__issn_isbn_routes_isbn(value: str) -> None:
+    record = apply_mapping({"SN": value}, FieldMapping(targets={"SN": "issn_isbn"}))
+
+    assert (record.issn, record.isbn) == (None, value)
+
+
+def test_apply_mapping__issn_isbn_splits_multiple_values() -> None:
+    mapping = FieldMapping(targets={"SN": "issn_isbn"})
+
+    record = apply_mapping({"SN": "1234-5678; 9783161484100"}, mapping)
+
+    assert (record.issn, record.isbn) == ("1234-5678", "9783161484100")
+
+
+def test_apply_mapping__issn_isbn_keeps_first_of_each_kind() -> None:
+    mapping = FieldMapping(targets={"SN": "issn_isbn"})
+
+    record = apply_mapping({"SN": "1234-5678 8765-4321"}, mapping)
+
+    assert record.issn == "1234-5678"
+
+
+def test_apply_mapping__issn_isbn_unrecognised_value_goes_to_issn_and_warns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    mapping = FieldMapping(targets={"SN": "issn_isbn"})
+
+    with caplog.at_level("WARNING"):
+        record = apply_mapping({"SN": "12345"}, mapping)
+
+    assert (record.issn, record.isbn) == ("12345", None)
+    assert "12345" in caplog.text
+
+
+def test_apply_mapping__issn_isbn_empty_value_sets_nothing() -> None:
+    record = apply_mapping({"SN": "  "}, FieldMapping(targets={"SN": "issn_isbn"}))
+
+    assert (record.issn, record.isbn) == (None, None)
+
+
 def test_suggest_mapping__strict_matches_exact_aliases_only() -> None:
     aliases = {"title": ["ti"], "doi": ["do"]}
 

@@ -244,6 +244,21 @@ def test_suggest_nbib_mapping__routes_pmc_and_mid_to_other_ids() -> None:
     assert suggestions.targets == {"PMC": "other_ids.pmc", "MID": "other_ids.mid"}
 
 
+def test_suggest_nbib_mapping__maps_is_to_issn_and_isbn_tag_to_isbn() -> None:
+    suggestions = suggest_nbib_mapping(["IS", "ISBN"])
+
+    assert suggestions.targets == {"IS": "issn", "ISBN": "isbn"}
+
+
+def test_parse_nbib_text__isbn_tag_fills_isbn() -> None:
+    text = "PMID- 1\nIS  - 1234-5678 (Print)\nISBN- 978-3-16-148410-0\n"
+
+    record = parse_nbib_text(text, suggest_nbib_mapping(["IS", "ISBN"])).rows[0].record
+
+    assert record.issn == "1234-5678 (Print)"
+    assert record.isbn == "978-3-16-148410-0"
+
+
 def test_suggest_nbib_mapping__leaves_unknown_tags_unmapped() -> None:
     assert suggest_nbib_mapping(["OWN", "STAT", "ZZ"]).targets == {}
 

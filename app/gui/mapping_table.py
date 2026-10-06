@@ -5,6 +5,7 @@ from nicegui.element import Element
 
 from app.parsers.mapping import (
     EXCLUSIVE_TARGETS,
+    ISSN_ISBN_TARGET,
     LIST_TARGETS,
     OTHER_IDS_PREFIX,
     SCALAR_FIELDS,
@@ -31,13 +32,19 @@ _ROW_FIELD_CSS = """
 _IGNORE = "ignore"
 _OTHER_IDS = "other_ids"
 
-_BASE_TARGET_KEYS = (_IGNORE, *sorted(SCALAR_FIELDS), *LIST_TARGETS, _OTHER_IDS)
+_BASE_TARGET_KEYS = (
+    _IGNORE,
+    *sorted({*SCALAR_FIELDS, ISSN_ISBN_TARGET}),
+    *LIST_TARGETS,
+    _OTHER_IDS,
+)
 _ALL_TARGET_KEYS = (*_BASE_TARGET_KEYS, *EXCLUSIVE_TARGETS)
 
 _LABELS: dict[str, str] = {
     "doi": "DOI",
     "issn": "ISSN",
     "isbn": "ISBN",
+    ISSN_ISBN_TARGET: "ISSN/ISBN",
     "pmid": "PMID",
     "date": "Date (full)",
     _OTHER_IDS: "Other ID",
