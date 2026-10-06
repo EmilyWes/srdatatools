@@ -1,0 +1,28 @@
+TY  - JOUR
+AU  - Smith, John A.
+AU  - Doe, Jane
+TI  - Deep learning for systematic review screening
+T2  - Journal of Biomedical Informatics
+PY  - 2020///
+DA  - 2020/05/14/
+VL  - 12
+IS  - 3
+SP  - 100
+EP  - 110
+DO  - 10.1016/j.jbi.2020.1
+AB  - We evaluate neural classifiers for citation screening.
+Results show a large reduction in manual workload.
+KW  - machine learning
+KW  - systematic review
+SN  - 1532-0464
+UR  - https://example.org/articles/1
+ER  -
+
+TY  - CONF
+TI  - Active learning for title screening
+T2  - Proceedings of the Evidence Synthesis Workshop
+AU  - Müller, Hans
+PY  - 2019
+N1  - Preprint available
+N1  - Presented as a poster
+ER  -
