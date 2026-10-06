@@ -21,6 +21,7 @@ def run_migrations(db_path: Path | None = None) -> None:
     resolved_path = db_path if db_path is not None else default_db_path()
     config = Config(PROJECT_ROOT / "alembic.ini")
     config.set_main_option("sqlalchemy.url", f"sqlite:///{resolved_path}")
+    config.attributes["configure_logger"] = False
     command.upgrade(config, "head")
 
 

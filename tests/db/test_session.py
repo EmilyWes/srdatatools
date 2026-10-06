@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 from pathlib import Path
 
@@ -41,6 +42,20 @@ def test_run_migrations__creates_all_tables_at_given_path(tmp_path: Path) -> Non
         connection.close()
 
     assert EXPECTED_TABLES <= tables
+
+
+def test_run_migrations__leaves_app_logging_configuration_alone(
+    tmp_path: Path,
+) -> None:
+    app_logger = logging.getLogger("app.parsers.csv_")
+    root = logging.getLogger()
+    handlers_before, level_before = root.handlers[:], root.level
+
+    run_migrations(tmp_path / "migration_test.db")
+
+    assert app_logger.disabled is False
+    assert root.handlers == handlers_before
+    assert root.level == level_before
 
 
 def test_run_migrations__defaults_to_default_db_path(
