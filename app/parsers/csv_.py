@@ -69,24 +69,7 @@ _DATE_PATTERNS = [
 ]
 
 SCALAR_FIELDS = frozenset(
-    {
-        "title",
-        "abstract",
-        "journal",
-        "conference_name",
-        "volume",
-        "issue",
-        "pages",
-        "doi",
-        "pmid",
-        "issn",
-        "isbn",
-        "publication_type",
-        "language",
-        "publisher",
-        "url",
-        "notes",
-    }
+    name for name, info in Record.model_fields.items() if info.annotation == str | None
 )
 
 _EXTRA_FIELDS_KEY = "__extra__"

@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from app.parsers.csv_ import (
+    SCALAR_FIELDS,
     ColumnMapping,
     parse_csv_file,
     parse_csv_text,
@@ -379,3 +380,24 @@ def test_suggest_mapping__returns_none_for_unrecognized_header() -> None:
 def test_column_mapping__rejects_unknown_target_field() -> None:
     with pytest.raises(ValueError):
         ColumnMapping(fields={"Title": "not_a_real_field"})
+
+
+def test_scalar_fields__are_the_records_optional_string_fields() -> None:
+    assert SCALAR_FIELDS == {
+        "title",
+        "abstract",
+        "journal",
+        "conference_name",
+        "volume",
+        "issue",
+        "pages",
+        "doi",
+        "pmid",
+        "issn",
+        "isbn",
+        "publication_type",
+        "language",
+        "publisher",
+        "url",
+        "notes",
+    }

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Author, Record, RecordAuthor, RecordSource, SourceFile
 from app.models.record import Author as AuthorSchema
+from app.models.record import PartialDate
 from app.models.record import Record as RecordSchema
 
 
@@ -71,36 +72,12 @@ def _build_record_authors(
 
 
 def _build_record(schema: RecordSchema) -> Record:
-    publication_year = None
-    publication_month = None
-    publication_day = None
-    if schema.publication_date is not None:
-        publication_year = schema.publication_date.year
-        publication_month = schema.publication_date.month
-        publication_day = schema.publication_date.day
-
+    date = schema.publication_date or PartialDate()
     return Record(
-        title=schema.title,
-        abstract=schema.abstract,
-        publication_year=publication_year,
-        publication_month=publication_month,
-        publication_day=publication_day,
-        journal=schema.journal,
-        conference_name=schema.conference_name,
-        volume=schema.volume,
-        issue=schema.issue,
-        pages=schema.pages,
-        doi=schema.doi,
-        pmid=schema.pmid,
-        issn=schema.issn,
-        isbn=schema.isbn,
-        other_ids=dict(schema.other_ids),
-        publication_type=schema.publication_type,
-        keywords=list(schema.keywords),
-        language=schema.language,
-        publisher=schema.publisher,
-        url=schema.url,
-        notes=schema.notes,
+        **schema.model_dump(exclude={"authors", "publication_date"}),
+        publication_year=date.year,
+        publication_month=date.month,
+        publication_day=date.day,
     )
 
 
