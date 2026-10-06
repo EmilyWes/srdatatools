@@ -12,12 +12,19 @@ from app.gui.mapping_table import MappingScreen, render_mapping_table
 from app.parsers.common import ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
 from app.parsers.mapping import FieldMapping
+from app.parsers.nbib import parse_nbib_file, read_nbib_tags, suggest_nbib_mapping
 from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
 
 _TYPE_UNKNOWN = "unknown"
 _TYPE_RIS = "ris"
+_TYPE_NBIB = "nbib"
 _TYPE_CSV = "csv"
-_TYPE_OPTIONS = {_TYPE_UNKNOWN: "Unknown", _TYPE_RIS: "RIS", _TYPE_CSV: "CSV"}
+_TYPE_OPTIONS = {
+    _TYPE_UNKNOWN: "Unknown",
+    _TYPE_RIS: "RIS",
+    _TYPE_NBIB: "NBIB",
+    _TYPE_CSV: "CSV",
+}
 
 _SOURCE_UNKNOWN = "unknown"
 _SOURCE_OPTIONS = {_SOURCE_UNKNOWN: "Unknown"}
@@ -38,6 +45,8 @@ def render_mapping(
         read_keys, suggest, noun = read_csv_headers, suggest_mapping, "columns"
     elif file_type == _TYPE_RIS:
         read_keys, suggest, noun = read_ris_tags, suggest_ris_mapping, "tags"
+    elif file_type == _TYPE_NBIB:
+        read_keys, suggest, noun = read_nbib_tags, suggest_nbib_mapping, "tags"
     else:
         return None
 
@@ -79,6 +88,10 @@ def import_ris(session: Session, path: Path, mapping: FieldMapping) -> SourceFil
     return _store(session, path, _TYPE_RIS, parse_ris_file(path, mapping))
 
 
+def import_nbib(session: Session, path: Path, mapping: FieldMapping) -> SourceFile:
+    return _store(session, path, _TYPE_NBIB, parse_nbib_file(path, mapping))
+
+
 def import_file(
     session: Session, path: Path, file_type: str, mapping: FieldMapping
 ) -> SourceFile:
@@ -86,6 +99,8 @@ def import_file(
         return import_csv(session, path, mapping)
     if file_type == _TYPE_RIS:
         return import_ris(session, path, mapping)
+    if file_type == _TYPE_NBIB:
+        return import_nbib(session, path, mapping)
     raise ValueError(f"unsupported file type: {file_type!r}")
 
 

@@ -37,6 +37,11 @@ _DATE_PATTERNS = [
     re.compile(r"^(?P<year>\d{4})/(?P<month>\d{1,2})/(?P<day>\d{1,2})$"),
     # RIS: YYYY/MM/DD/other, where every part after the year may be empty
     re.compile(r"^(?P<year>\d{4})/(?P<month>\d{1,2})?/(?P<day>\d{1,2})?/.*$"),
+    # NBIB: YYYY Mon, YYYY Mon DD, YYYY Mon-Mon (a month range keeps its first month)
+    re.compile(
+        r"^(?P<year>\d{4}) (?P<month>[A-Za-z]{3,9})(?:-[A-Za-z]{3,9})?"
+        r"(?: (?P<day>\d{1,2}))?$"
+    ),
 ]
 
 SCALAR_FIELDS = frozenset(
@@ -122,7 +127,7 @@ def _parse_date_string(value: str) -> PartialDate | None:
         parts = match.groupdict()
         return _build_partial_date(
             year=int(parts["year"]),
-            month=int(parts["month"]) if parts.get("month") else None,
+            month=_parse_month(parts.get("month")),
             day=int(parts["day"]) if parts.get("day") else None,
         )
     logger.warning("Could not parse date value %r", value)

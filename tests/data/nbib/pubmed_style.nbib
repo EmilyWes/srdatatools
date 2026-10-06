@@ -1,0 +1,35 @@
+PMID- 31234567
+OWN - NLM
+STAT- MEDLINE
+DP  - 2020 May 14
+TI  - Deep learning for systematic review screening: a title long enough to wrap
+      onto a second line.
+PG  - 100-110
+LID - 10.1016/j.jbi.2020.1 [doi]
+AB  - We evaluate neural classifiers for citation screening. Results show a large
+      reduction in manual workload.
+FAU - Smith, John A
+AU  - Smith JA
+FAU - Doe, Jane
+AU  - Doe J
+LA  - eng
+PT  - Journal Article
+JT  - Journal of Biomedical Informatics
+TA  - J Biomed Inform
+VI  - 108
+IP  - 2
+AID - S1532-0464(20)30001-1 [pii]
+AID - 10.1016/j.jbi.2020.1 [doi]
+OT  - machine learning
+OT  - systematic review
+PMC - PMC7000001
+IS  - 1532-0480 (Electronic)
+
+PMID- 30123456
+DP  - 2019 Jan-Feb
+TI  - A second paper without a DOI
+JT  - Systematic Reviews
+FAU - Roe, Richard
+MH  - Humans
+MH  - Review Literature as Topic
+PT  - Journal Article
