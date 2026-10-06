@@ -251,7 +251,7 @@ def test_suggest_nbib_mapping__leaves_unknown_tags_unmapped() -> None:
 def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
     path = NBIB_FIXTURES_DIR / "pubmed_style.nbib"
 
-    result = parse_nbib_file(path, suggest_nbib_mapping(read_nbib_tags(path)))
+    result = parse_nbib_file(path, suggest_nbib_mapping(list(read_nbib_tags(path))))
 
     first, second = (row.record for row in result.rows)
     assert first.pmid == "31234567"
@@ -274,16 +274,31 @@ def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
 
 
 def test_read_nbib_tags__returns_distinct_tags_in_first_seen_order_with_doi() -> None:
-    tags = read_nbib_tags(NBIB_FIXTURES_DIR / "pubmed_style.nbib")
+    samples = read_nbib_tags(NBIB_FIXTURES_DIR / "pubmed_style.nbib")
 
-    assert tags == [
+    assert list(samples) == [
         "PMID", "OWN", "STAT", "DP", "TI", "PG", "LID", "DOI", "AB", "FAU", "AU",
         "LA", "PT", "JT", "TA", "VI", "IP", "AID", "OT", "PMC", "IS", "MH",
     ]  # fmt: skip
 
 
-def test_read_nbib_tags__empty_file_returns_empty_list(tmp_path: Path) -> None:
+def test_read_nbib_tags__sample_is_first_occurrence_of_tag() -> None:
+    samples = read_nbib_tags(NBIB_FIXTURES_DIR / "pubmed_style.nbib")
+
+    assert samples["PMID"] == "31234567"
+    assert samples["FAU"] == "Smith, John A"
+    assert samples["OT"] == "machine learning"
+    assert samples["AID"] == "S1532-0464(20)30001-1 [pii]"
+
+
+def test_read_nbib_tags__doi_sample_is_doi_without_suffix() -> None:
+    samples = read_nbib_tags(NBIB_FIXTURES_DIR / "pubmed_style.nbib")
+
+    assert samples["DOI"] == "10.1016/j.jbi.2020.1"
+
+
+def test_read_nbib_tags__empty_file_returns_empty_dict(tmp_path: Path) -> None:
     path = tmp_path / "empty.nbib"
     path.write_text("")
 
-    assert read_nbib_tags(path) == []
+    assert read_nbib_tags(path) == {}

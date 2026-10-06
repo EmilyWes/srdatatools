@@ -305,24 +305,65 @@ def test_parse_csv_file__falls_back_to_cp1252_on_decode_error() -> None:
     assert result.rows[0].record.notes == "Müller"
 
 
-def test_read_csv_headers__returns_header_row(tmp_path: Path) -> None:
+def test_read_csv_headers__returns_headers_with_first_row_values(
+    tmp_path: Path,
+) -> None:
     csv_path = tmp_path / "export.csv"
-    csv_path.write_text("Title,DOI,Journal\nSome Paper,10.1/xyz,Nature\n")
+    csv_path.write_text(
+        "Title,DOI,Journal\nSome Paper,10.1/xyz,Nature\nOther,10.1/abc,Science\n"
+    )
 
-    assert read_csv_headers(csv_path) == ["Title", "DOI", "Journal"]
+    samples = read_csv_headers(csv_path)
+
+    assert list(samples) == ["Title", "DOI", "Journal"]
+    assert samples == {"Title": "Some Paper", "DOI": "10.1/xyz", "Journal": "Nature"}
 
 
-def test_read_csv_headers__empty_file_returns_empty_list(tmp_path: Path) -> None:
+def test_read_csv_headers__skips_blank_cells_to_first_non_empty_value(
+    tmp_path: Path,
+) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title,DOI\nA,\nB,  \nC,10.1/xyz\n")
+
+    assert read_csv_headers(csv_path) == {"Title": "A", "DOI": "10.1/xyz"}
+
+
+def test_read_csv_headers__column_empty_in_every_row_has_empty_sample(
+    tmp_path: Path,
+) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title,Notes\nA,\nB,\n")
+
+    assert read_csv_headers(csv_path) == {"Title": "A", "Notes": ""}
+
+
+def test_read_csv_headers__header_only_file_has_empty_samples(tmp_path: Path) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title,DOI\n")
+
+    assert read_csv_headers(csv_path) == {"Title": "", "DOI": ""}
+
+
+def test_read_csv_headers__short_row_leaves_missing_cells_for_later_rows(
+    tmp_path: Path,
+) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title,DOI\nA\nB,10.1/xyz\n")
+
+    assert read_csv_headers(csv_path) == {"Title": "A", "DOI": "10.1/xyz"}
+
+
+def test_read_csv_headers__empty_file_returns_empty_dict(tmp_path: Path) -> None:
     csv_path = tmp_path / "empty.csv"
     csv_path.write_text("")
 
-    assert read_csv_headers(csv_path) == []
+    assert read_csv_headers(csv_path) == {}
 
 
 def test_read_csv_headers__decodes_cp1252_file() -> None:
-    headers = read_csv_headers(CSV_FIXTURES_DIR / "cp1252_encoded.csv")
+    samples = read_csv_headers(CSV_FIXTURES_DIR / "cp1252_encoded.csv")
 
-    assert headers == ["Title", "Author"]
+    assert samples == {"Title": "Café Study", "Author": "Müller"}
 
 
 @pytest.mark.parametrize(

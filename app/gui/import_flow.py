@@ -39,7 +39,7 @@ async def pick_file() -> Path | None:
 def render_mapping(
     container: Element, file_type: str, path: Path
 ) -> MappingScreen | None:
-    read_keys: Callable[[Path], list[str]]
+    read_keys: Callable[[Path], dict[str, str]]
     suggest: Callable[[list[str]], FieldMapping]
     if file_type == _TYPE_CSV:
         read_keys, suggest, noun = read_csv_headers, suggest_mapping, "columns"
@@ -51,7 +51,7 @@ def render_mapping(
         return None
 
     try:
-        keys = read_keys(path)
+        keys = list(read_keys(path))
     except ValueError as exc:
         with container:
             ui.notify(str(exc), type="negative")

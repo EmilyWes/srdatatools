@@ -84,11 +84,19 @@ def parse_csv_file(path: Path, mapping: FieldMapping) -> ParseResult:
     return parse_csv_text(decode_file(path), mapping)
 
 
-def read_csv_headers(path: Path) -> list[str]:
+def read_csv_headers(path: Path) -> dict[str, str]:
     text = decode_file(path)
     dialect = _sniff_dialect(text[:2048])
     reader = csv.reader(StringIO(text), dialect=dialect)
-    return next(reader, [])
+    headers = next(reader, [])
+    samples = dict.fromkeys(headers, "")
+    for row in reader:
+        for header, value in zip(headers, row, strict=False):
+            if not samples[header]:
+                samples[header] = value.strip()
+        if all(samples.values()):
+            break
+    return samples
 
 
 def suggest_mapping(headers: list[str]) -> FieldMapping:

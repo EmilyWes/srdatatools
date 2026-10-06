@@ -269,16 +269,33 @@ def test_parse_ris_file__default_mapping_on_realistic_export() -> None:
 
 
 def test_read_ris_tags__returns_distinct_tags_in_first_seen_order_without_er() -> None:
-    tags = read_ris_tags(RIS_FIXTURES_DIR / "scopus_style.ris")
+    samples = read_ris_tags(RIS_FIXTURES_DIR / "scopus_style.ris")
 
-    assert tags == [
+    assert list(samples) == [
         "TY", "AU", "TI", "T2", "PY", "DA", "VL", "IS", "SP", "EP",
         "DO", "AB", "KW", "SN", "UR", "N1",
     ]  # fmt: skip
 
 
-def test_read_ris_tags__empty_file_returns_empty_list(tmp_path: Path) -> None:
+def test_read_ris_tags__sample_is_first_occurrence_of_tag() -> None:
+    samples = read_ris_tags(RIS_FIXTURES_DIR / "scopus_style.ris")
+
+    assert samples["TY"] == "JOUR"
+    assert samples["AU"] == "Smith, John A."
+    assert samples["TI"] == "Deep learning for systematic review screening"
+
+
+def test_read_ris_tags__sample_skips_empty_occurrence_to_first_non_empty(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "export.ris"
+    path.write_text("TY  - JOUR\nN1  -\nER  -\n\nTY  - JOUR\nN1  - a note\nER  -\n")
+
+    assert read_ris_tags(path) == {"TY": "JOUR", "N1": "a note"}
+
+
+def test_read_ris_tags__empty_file_returns_empty_dict(tmp_path: Path) -> None:
     path = tmp_path / "empty.ris"
     path.write_text("")
 
-    assert read_ris_tags(path) == []
+    assert read_ris_tags(path) == {}
