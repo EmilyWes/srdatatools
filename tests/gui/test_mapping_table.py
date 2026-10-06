@@ -1,4 +1,5 @@
 ﻿import pytest
+from nicegui.elements.label import Label
 from nicegui.elements.tooltip import Tooltip
 
 from app.gui.layout import shell
@@ -374,3 +375,18 @@ def test_render_mapping_table__truncated_input_header_has_full_value_tooltip() -
 
     tooltips = [t.text for t in panes.middle.descendants() if isinstance(t, Tooltip)]
     assert tooltips == [long_header]
+
+
+def test_render_mapping_table__shows_filled_count_per_row_and_total_in_header() -> None:
+    samples = {"Title": "Some Paper", "Notes": ""}
+    summary = FileSummary(samples, {"Title": 7, "Notes": 0}, 12)
+    panes = shell()
+
+    screen = render_mapping_table(
+        panes.middle, summary, suggest_mapping(list(samples)), show_delimiter=True
+    )
+
+    assert screen._row_for("Title").count.text == "7"
+    assert screen._row_for("Notes").count.text == "0"
+    header_texts = [e.text for e in panes.middle.descendants() if isinstance(e, Label)]
+    assert "# (12)" in header_texts

@@ -146,6 +146,7 @@ def _exclusive_available(header: str, target: str, taken: dict[str, str]) -> boo
 class _Row:
     header: str
     sample: ui.label
+    count: ui.label
     select: ui.select
     other_id_key: str
     status: Status
@@ -248,6 +249,9 @@ def render_mapping_table(
                 ui.label("Input").classes("text-xs font-bold").style(input_style)
                 ui.label("Mapping").classes("text-xs font-bold").style(mapping_style)
                 ui.label("Example").classes("w-48 text-xs font-bold")
+                ui.label(f"# ({summary.total_rows})").classes(
+                    "w-20 text-xs font-bold text-right"
+                )
             for i, header in enumerate(headers):
                 status = _initial_status(header, suggestion)
                 row_classes = "w-full items-center gap-1 pl-6 py-0 border-b"
@@ -275,11 +279,15 @@ def render_mapping_table(
                     )
                     if samples[header]:
                         sample.tooltip(samples[header])
+                    count = ui.label(str(summary.filled.get(header, 0))).classes(
+                        "w-20 text-xs text-right"
+                    )
 
                 screen.rows.append(
                     _Row(
                         header=header,
                         sample=sample,
+                        count=count,
                         select=select,
                         other_id_key=initial_keys[header],
                         status=status,
