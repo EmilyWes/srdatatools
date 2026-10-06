@@ -13,6 +13,7 @@ from app.gui.import_flow import (
     ImportView,
     import_csv,
     import_file,
+    import_nbib,
     import_ris,
     pick_file,
     render_import_view,
@@ -146,11 +147,11 @@ def test_import_file__dispatches_csv_to_import_csv(
 
 
 def test_import_file__unsupported_type_raises(session: Session, tmp_path: Path) -> None:
-    nbib_path = tmp_path / "export.nbib"
-    nbib_path.write_text("PMID- 1\n")
+    bibtex_path = tmp_path / "export.bib"
+    bibtex_path.write_text("@article{a}\n")
 
     with pytest.raises(ValueError, match="unsupported file type"):
-        import_file(session, nbib_path, "nbib", FieldMapping())
+        import_file(session, bibtex_path, "bibtex", FieldMapping())
 
 
 _RIS_TEXT = (
@@ -223,6 +224,80 @@ def test_render_import_view__ris_type_renders_mapping_and_enables_import(
     asyncio.run(view._select_file())
 
     view._set_type("ris")
+
+    assert view.mapping_screen is not None
+    assert view.import_button is not None
+    assert view.import_button.enabled is True
+
+
+_NBIB_TEXT = "PMID- 1\nTI  - Some Paper\nFAU - Smith, J\n\nTI  - Bad\n"
+
+
+def test_import_nbib__stores_records_and_skipped_rows(
+    session: Session, tmp_path: Path
+) -> None:
+    nbib_path = tmp_path / "export.nbib"
+    nbib_path.write_text(_NBIB_TEXT)
+    mapping = FieldMapping(targets={"TI": "title"})
+
+    source_file = import_nbib(session, nbib_path, mapping)
+    session.commit()
+
+    assert source_file.filename == "export.nbib"
+    assert source_file.format == "nbib"
+    assert source_file.row_count == 1
+    assert source_file.skipped_rows == [
+        {"row_number": 5, "reason": "record has no PMID tag"}
+    ]
+
+
+def test_import_file__dispatches_nbib_to_import_nbib(
+    session: Session, tmp_path: Path
+) -> None:
+    nbib_path = tmp_path / "export.nbib"
+    nbib_path.write_text(_NBIB_TEXT)
+
+    source_file = import_file(session, nbib_path, "nbib", FieldMapping())
+
+    assert source_file.format == "nbib"
+
+
+def test_render_mapping__nbib_lists_distinct_tags_without_delimiter_input(
+    tmp_path: Path,
+) -> None:
+    nbib_path = tmp_path / "export.nbib"
+    nbib_path.write_text(_NBIB_TEXT)
+    panes = shell()
+
+    screen = render_mapping(panes.middle, "nbib", nbib_path)
+
+    assert screen is not None
+    assert [row.header for row in screen.rows] == ["PMID", "TI", "FAU"]
+    assert screen.list_delimiter_input is None
+    assert screen.current_mapping().list_delimiter == "\n"
+
+
+def test_render_mapping__nbib_without_tags_notifies_and_returns_none(
+    tmp_path: Path,
+) -> None:
+    nbib_path = tmp_path / "empty.nbib"
+    nbib_path.write_text("")
+    panes = shell()
+
+    assert render_mapping(panes.middle, "nbib", nbib_path) is None
+
+
+def test_render_import_view__nbib_type_renders_mapping_and_enables_import(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    panes = shell()
+    nbib_path = tmp_path / "export.nbib"
+    nbib_path.write_text(_NBIB_TEXT)
+    _pick(monkeypatch, nbib_path)
+    view = render_import_view(panes.middle, on_import=lambda p, t, m: None)
+    asyncio.run(view._select_file())
+
+    view._set_type("nbib")
 
     assert view.mapping_screen is not None
     assert view.import_button is not None
