@@ -27,6 +27,7 @@ _SUGGESTION_ALIASES: dict[str, list[str]] = {
     "keywords": ["ot", "mh"],
     "date": ["dp"],
     "issn": ["is"],
+    "isbn": ["isbn"],
     "other_ids": ["pmc", "mid"],
 }
 
