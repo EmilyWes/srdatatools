@@ -69,49 +69,40 @@ _DATE_PATTERNS = [
 ]
 
 SCALAR_FIELDS = frozenset(
-    {
-        "title",
-        "abstract",
-        "journal",
-        "conference_name",
-        "volume",
-        "issue",
-        "pages",
-        "doi",
-        "pmid",
-        "issn",
-        "isbn",
-        "publication_type",
-        "language",
-        "publisher",
-        "url",
-        "notes",
-    }
+    name for name, info in Record.model_fields.items() if info.annotation == str | None
 )
+
+LIST_TARGETS = ("authors", "keywords")
+DATE_TARGETS = ("date", "year", "month", "day")
+OTHER_IDS_PREFIX = "other_ids."
 
 _EXTRA_FIELDS_KEY = "__extra__"
 
 
+def _is_valid_target(target: str) -> bool:
+    if target in SCALAR_FIELDS or target in LIST_TARGETS or target in DATE_TARGETS:
+        return True
+    return target.startswith(OTHER_IDS_PREFIX) and len(target) > len(OTHER_IDS_PREFIX)
+
+
 @dataclass
 class ColumnMapping:
-    fields: dict[str, str] = field(default_factory=dict)
-    authors_columns: list[str] = field(default_factory=list)
-    keywords_columns: list[str] = field(default_factory=list)
+    targets: dict[str, str] = field(default_factory=dict)
     list_delimiter: str = ";"
-    date_column: str | None = None
-    year_column: str | None = None
-    month_column: str | None = None
-    day_column: str | None = None
 
     def __post_init__(self) -> None:
-        for column, target in self.fields.items():
-            if target in SCALAR_FIELDS:
-                continue
-            if target.startswith("other_ids.") and len(target) > len("other_ids."):
-                continue
-            raise ValueError(
-                f"column {column!r} maps to unknown Record field {target!r}"
-            )
+        for column, target in self.targets.items():
+            if not _is_valid_target(target):
+                raise ValueError(
+                    f"column {column!r} maps to unknown Record field {target!r}"
+                )
+        for target in DATE_TARGETS:
+            columns = [c for c, t in self.targets.items() if t == target]
+            if len(columns) > 1:
+                raise ValueError(f"{target!r} is mapped from several columns {columns}")
+
+    def column_for(self, target: str) -> str | None:
+        return next((c for c, t in self.targets.items() if t == target), None)
 
 
 @dataclass
@@ -139,9 +130,7 @@ def _sniff_dialect(sample: str) -> type[csv.Dialect] | str:
         return "excel"
 
 
-def _split_list(value: str | None, delimiter: str) -> list[str]:
-    if value is None:
-        return []
+def _split_list(value: str, delimiter: str) -> list[str]:
     return [piece.strip() for piece in value.split(delimiter) if piece.strip()]
 
 
@@ -199,27 +188,15 @@ def _parse_date_string(value: str) -> PartialDate | None:
 def _parse_publication_date(
     raw_fields: dict[str, str], mapping: ColumnMapping
 ) -> PartialDate | None:
-    from_date: PartialDate | None = None
-    if mapping.date_column is not None:
-        raw_date = raw_fields.get(mapping.date_column)
-        if raw_date is not None and raw_date.strip():
-            from_date = _parse_date_string(raw_date)
+    def cell(target: str) -> str | None:
+        column = mapping.column_for(target)
+        return raw_fields.get(column) if column is not None else None
 
-    year = (
-        _parse_int_field(raw_fields.get(mapping.year_column), "year")
-        if mapping.year_column is not None
-        else None
-    )
-    month = (
-        _parse_month(raw_fields.get(mapping.month_column))
-        if mapping.month_column is not None
-        else None
-    )
-    day = (
-        _parse_int_field(raw_fields.get(mapping.day_column), "day")
-        if mapping.day_column is not None
-        else None
-    )
+    raw_date = cell("date")
+    from_date = _parse_date_string(raw_date) if raw_date and raw_date.strip() else None
+    year = _parse_int_field(cell("year"), "year")
+    month = _parse_month(cell("month"))
+    day = _parse_int_field(cell("day"), "day")
     if from_date is not None:
         year = year if year is not None else from_date.year
         month = month if month is not None else from_date.month
@@ -230,34 +207,28 @@ def _parse_publication_date(
 def _apply_mapping(raw_fields: dict[str, str], mapping: ColumnMapping) -> Record:
     values: dict[str, Any] = {}
     other_ids: dict[str, str] = {}
-    for column, target in mapping.fields.items():
-        value = raw_fields.get(column)
-        if value is None or not value.strip():
+    author_names: list[str] = []
+    keywords: list[str] = []
+    for column, target in mapping.targets.items():
+        value = (raw_fields.get(column) or "").strip()
+        if not value:
             continue
-        if target.startswith("other_ids."):
-            other_ids[target.removeprefix("other_ids.")] = value.strip()
-        else:
-            values[target] = value.strip()
-    if other_ids:
-        values["other_ids"] = other_ids
+        if target in SCALAR_FIELDS:
+            values[target] = value
+        elif target.startswith(OTHER_IDS_PREFIX):
+            other_ids[target.removeprefix(OTHER_IDS_PREFIX)] = value
+        elif target == "authors":
+            author_names.extend(_split_list(value, mapping.list_delimiter))
+        elif target == "keywords":
+            keywords.extend(_split_list(value, mapping.list_delimiter))
 
-    if mapping.authors_columns:
-        names: list[str] = []
-        for column in mapping.authors_columns:
-            names.extend(_split_list(raw_fields.get(column), mapping.list_delimiter))
-        values["authors"] = [Author(full_name=name) for name in names]
-
-    if mapping.keywords_columns:
-        keywords: list[str] = []
-        for column in mapping.keywords_columns:
-            keywords.extend(_split_list(raw_fields.get(column), mapping.list_delimiter))
-        values["keywords"] = keywords
-
-    publication_date = _parse_publication_date(raw_fields, mapping)
-    if publication_date is not None:
-        values["publication_date"] = publication_date
-
-    return Record(**values)
+    return Record(
+        **values,
+        other_ids=other_ids,
+        authors=[Author(full_name=name) for name in author_names],
+        keywords=keywords,
+        publication_date=_parse_publication_date(raw_fields, mapping),
+    )
 
 
 def parse_csv_text(text: str, mapping: ColumnMapping) -> CsvParseResult:
@@ -314,14 +285,19 @@ def read_csv_headers(path: Path) -> list[str]:
     return next(reader, [])
 
 
-def suggest_mapping(headers: list[str]) -> dict[str, str | None]:
+def default_other_id_key(header: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", header.strip().lower()).strip("_")
+    return slug or "id"
+
+
+def suggest_mapping(headers: list[str]) -> ColumnMapping:
     alias_to_target = {
         alias: target
         for target, aliases in _SUGGESTION_ALIASES.items()
         for alias in aliases
     }
 
-    suggestions: dict[str, str | None] = {}
+    targets: dict[str, str] = {}
     for header in headers:
         normalized = header.strip().lower()
         target = alias_to_target.get(normalized)
@@ -332,6 +308,12 @@ def suggest_mapping(headers: list[str]) -> dict[str, str | None]:
             target = alias_to_target[matches[0]] if matches else None
         if target is None and _ID_HEADER.search(header):
             target = "other_ids"
-        suggestions[header] = target
+        if target is None:
+            continue
+        if target == "other_ids":
+            target = OTHER_IDS_PREFIX + default_other_id_key(header)
+        if target in DATE_TARGETS and target in targets.values():
+            continue
+        targets[header] = target
 
-    return suggestions
+    return ColumnMapping(targets=targets)

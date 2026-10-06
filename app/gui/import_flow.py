@@ -43,9 +43,7 @@ def render_mapping(
             ui.notify(f"{path.name} has no columns to map", type="negative")
         return None
 
-    return render_csv_mapping(
-        container, headers, lambda _m: None, show_confirm_button=False
-    )
+    return render_csv_mapping(container, headers)
 
 
 def import_csv(session: Session, path: Path, mapping: ColumnMapping) -> SourceFile:
@@ -56,6 +54,7 @@ def import_csv(session: Session, path: Path, mapping: ColumnMapping) -> SourceFi
         path=str(path),
         format="csv",
         parsed_rows=[(row.record, row.raw_fields) for row in result.rows],
+        skipped_rows=[(row.row_number, row.reason) for row in result.skipped],
     )
 
 

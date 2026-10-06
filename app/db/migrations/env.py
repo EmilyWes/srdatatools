@@ -10,9 +10,11 @@ from app.db.session import default_db_path
 # access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
-if config.config_file_name is not None:
+# Only the alembic CLI should configure logging from alembic.ini; when the app
+# runs migrations, fileConfig would replace its handlers and disable its loggers.
+if config.config_file_name is not None and config.attributes.get(
+    "configure_logger", True
+):
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata

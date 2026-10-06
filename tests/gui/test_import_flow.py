@@ -107,7 +107,7 @@ def test_import_csv__stores_records_and_returns_source_file_with_row_count(
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\nOther Paper,10.1/abc\n")
-    mapping = ColumnMapping(fields={"Title": "title", "DOI": "doi"})
+    mapping = ColumnMapping(targets={"Title": "title", "DOI": "doi"})
 
     source_file = import_csv(session, csv_path, mapping)
     session.commit()
@@ -118,12 +118,25 @@ def test_import_csv__stores_records_and_returns_source_file_with_row_count(
     assert isinstance(source_file.imported_at, datetime.datetime)
 
 
+def test_import_csv__stores_skipped_rows_on_source_file(
+    session: Session, tmp_path: Path
+) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\n,\n")
+    mapping = ColumnMapping(targets={"Title": "title"})
+
+    source_file = import_csv(session, csv_path, mapping)
+
+    assert source_file.row_count == 1
+    assert source_file.skipped_rows == [{"row_number": 3, "reason": "row is blank"}]
+
+
 def test_import_file__dispatches_csv_to_import_csv(
     session: Session, tmp_path: Path
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title\nSome Paper\n")
-    mapping = ColumnMapping(fields={"Title": "title"})
+    mapping = ColumnMapping(targets={"Title": "title"})
 
     source_file = import_file(session, csv_path, "csv", mapping)
 
@@ -230,7 +243,7 @@ def test_render_import_view__import_reads_live_mapping_edits(
     view._import()
 
     assert calls == [
-        (csv_path, "csv", ColumnMapping(authors_columns=["Scopus Author ID"]))
+        (csv_path, "csv", ColumnMapping(targets={"Scopus Author ID": "authors"}))
     ]
 
 

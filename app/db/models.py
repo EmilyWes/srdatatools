@@ -1,4 +1,5 @@
 import datetime
+from typing import Any
 
 from sqlalchemy import JSON, ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -13,6 +14,7 @@ class Record(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str | None]
+    authors: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     abstract: Mapped[str | None]
     publication_year: Mapped[int | None]
     publication_month: Mapped[int | None]
@@ -34,9 +36,6 @@ class Record(Base):
     url: Mapped[str | None]
     notes: Mapped[str | None]
 
-    record_authors: Mapped[list["RecordAuthor"]] = relationship(
-        back_populates="record", cascade="all, delete-orphan"
-    )
     sources: Mapped[list["RecordSource"]] = relationship(
         back_populates="record", cascade="all, delete-orphan"
     )
@@ -51,6 +50,7 @@ class SourceFile(Base):
     format: Mapped[str]
     imported_at: Mapped[datetime.datetime]
     row_count: Mapped[int | None]
+    skipped_rows: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
 
     record_sources: Mapped[list["RecordSource"]] = relationship(
         back_populates="source_file", cascade="all, delete-orphan"
@@ -66,38 +66,9 @@ class RecordSource(Base):
         ForeignKey("source_file.id"), index=True
     )
     raw_fields: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
-    imported_at: Mapped[datetime.datetime]
 
     record: Mapped["Record"] = relationship(back_populates="sources")
     source_file: Mapped["SourceFile"] = relationship(back_populates="record_sources")
-
-
-class Author(Base):
-    __tablename__ = "author"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    family_name: Mapped[str | None]
-    given_name: Mapped[str | None]
-    full_name: Mapped[str | None]
-    orcid: Mapped[str | None] = mapped_column(index=True, unique=True)
-    other_ids: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
-
-    record_authors: Mapped[list["RecordAuthor"]] = relationship(back_populates="author")
-
-
-class RecordAuthor(Base):
-    __tablename__ = "record_author"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    record_id: Mapped[int] = mapped_column(ForeignKey("record.id"), index=True)
-    author_id: Mapped[int] = mapped_column(ForeignKey("author.id"), index=True)
-    author_order: Mapped[int]
-    affiliations: Mapped[list[dict[str, str | None]]] = mapped_column(
-        JSON, default=list
-    )
-
-    record: Mapped["Record"] = relationship(back_populates="record_authors")
-    author: Mapped["Author"] = relationship(back_populates="record_authors")
 
 
 class ActivityLog(Base):

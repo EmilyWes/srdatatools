@@ -5,15 +5,7 @@ import pytest
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.db.models import (
-    ActivityLog,
-    Author,
-    Base,
-    Record,
-    RecordAuthor,
-    RecordSource,
-    SourceFile,
-)
+from app.db.models import ActivityLog, Base, Record, RecordSource, SourceFile
 
 
 @pytest.fixture
@@ -40,35 +32,41 @@ def test_record__create_with_authors_and_source(session: Session) -> None:
         imported_at=datetime.datetime(2026, 1, 1),
         row_count=1,
     )
-    smith = Author(family_name="Smith", given_name="Jane", orcid="0000-0001-2345-6789")
-    doe = Author(family_name="Doe", given_name="John")
-    record = Record(title="A Study of Things", doi="10.1000/abc")
-    record.record_authors = [
-        RecordAuthor(
-            author=smith,
-            author_order=0,
-            affiliations=[{"name": "University of Example", "ror_id": "01abc23de"}],
-        ),
-        RecordAuthor(author=doe, author_order=1, affiliations=[]),
+    authors = [
+        {"family_name": "Smith", "orcid": "0000-0001-2345-6789"},
+        {"family_name": "Doe"},
     ]
+    record = Record(title="A Study of Things", doi="10.1000/abc", authors=authors)
     record.sources = [
-        RecordSource(
-            source_file=source_file,
-            raw_fields={"TI": "A Study of Things"},
-            imported_at=datetime.datetime(2026, 1, 1),
-        )
+        RecordSource(source_file=source_file, raw_fields={"TI": "A Study of Things"})
     ]
     session.add(record)
     session.commit()
 
     fetched = session.query(Record).one()
     assert fetched.title == "A Study of Things"
-    assert [ra.author.family_name for ra in fetched.record_authors] == ["Smith", "Doe"]
-    assert fetched.record_authors[0].affiliations == [
-        {"name": "University of Example", "ror_id": "01abc23de"}
-    ]
+    assert fetched.authors == authors
     assert fetched.sources[0].source_file.filename == "pubmed_export.nbib"
     assert fetched.sources[0].raw_fields == {"TI": "A Study of Things"}
+
+
+def test_record__authors_and_skipped_rows_default_to_empty_lists(
+    session: Session,
+) -> None:
+    session.add(Record(title="No Authors"))
+    session.add(
+        SourceFile(
+            filename="export.csv",
+            path=None,
+            format="csv",
+            imported_at=datetime.datetime(2026, 1, 1),
+            row_count=0,
+        )
+    )
+    session.commit()
+
+    assert session.query(Record).one().authors == []
+    assert session.query(SourceFile).one().skipped_rows == []
 
 
 def test_record__multiple_null_dois_allowed(session: Session) -> None:
