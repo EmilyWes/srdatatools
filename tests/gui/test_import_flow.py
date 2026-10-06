@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import datetime
 from pathlib import Path
 from typing import Any
@@ -13,12 +13,13 @@ from app.gui.import_flow import (
     ImportView,
     import_csv,
     import_file,
+    import_ris,
     pick_file,
     render_import_view,
     render_mapping,
 )
 from app.gui.layout import shell
-from app.parsers.csv_ import ColumnMapping
+from app.parsers.mapping import FieldMapping
 
 
 class _FakeWindow:
@@ -92,7 +93,7 @@ def test_render_mapping__notifies_and_returns_none_when_file_cannot_be_decoded(
     assert screen is None
 
 
-def test_render_mapping__returns_none_for_non_csv_type(tmp_path: Path) -> None:
+def test_render_mapping__returns_none_for_unknown_type(tmp_path: Path) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title\nSome Paper\n")
     panes = shell()
@@ -107,7 +108,7 @@ def test_import_csv__stores_records_and_returns_source_file_with_row_count(
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\nOther Paper,10.1/abc\n")
-    mapping = ColumnMapping(targets={"Title": "title", "DOI": "doi"})
+    mapping = FieldMapping(targets={"Title": "title", "DOI": "doi"})
 
     source_file = import_csv(session, csv_path, mapping)
     session.commit()
@@ -123,7 +124,7 @@ def test_import_csv__stores_skipped_rows_on_source_file(
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\n,\n")
-    mapping = ColumnMapping(targets={"Title": "title"})
+    mapping = FieldMapping(targets={"Title": "title"})
 
     source_file = import_csv(session, csv_path, mapping)
 
@@ -136,7 +137,7 @@ def test_import_file__dispatches_csv_to_import_csv(
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title\nSome Paper\n")
-    mapping = ColumnMapping(targets={"Title": "title"})
+    mapping = FieldMapping(targets={"Title": "title"})
 
     source_file = import_file(session, csv_path, "csv", mapping)
 
@@ -145,11 +146,87 @@ def test_import_file__dispatches_csv_to_import_csv(
 
 
 def test_import_file__unsupported_type_raises(session: Session, tmp_path: Path) -> None:
-    ris_path = tmp_path / "export.ris"
-    ris_path.write_text("TY  - JOUR\n")
+    nbib_path = tmp_path / "export.nbib"
+    nbib_path.write_text("PMID- 1\n")
 
     with pytest.raises(ValueError, match="unsupported file type"):
-        import_file(session, ris_path, "ris", ColumnMapping())
+        import_file(session, nbib_path, "nbib", FieldMapping())
+
+
+_RIS_TEXT = (
+    "TY  - JOUR\nTI  - Some Paper\nAU  - Smith, J\nER  - \n\nTI  - Bad\nER  - \n"
+)
+
+
+def test_import_ris__stores_records_and_skipped_rows(
+    session: Session, tmp_path: Path
+) -> None:
+    ris_path = tmp_path / "export.ris"
+    ris_path.write_text(_RIS_TEXT)
+    mapping = FieldMapping(targets={"TI": "title"})
+
+    source_file = import_ris(session, ris_path, mapping)
+    session.commit()
+
+    assert source_file.filename == "export.ris"
+    assert source_file.format == "ris"
+    assert source_file.row_count == 1
+    assert source_file.skipped_rows == [
+        {"row_number": 6, "reason": "record has no TY tag"}
+    ]
+
+
+def test_import_file__dispatches_ris_to_import_ris(
+    session: Session, tmp_path: Path
+) -> None:
+    ris_path = tmp_path / "export.ris"
+    ris_path.write_text(_RIS_TEXT)
+
+    source_file = import_file(session, ris_path, "ris", FieldMapping())
+
+    assert source_file.format == "ris"
+
+
+def test_render_mapping__ris_lists_distinct_tags_without_delimiter_input(
+    tmp_path: Path,
+) -> None:
+    ris_path = tmp_path / "export.ris"
+    ris_path.write_text(_RIS_TEXT)
+    panes = shell()
+
+    screen = render_mapping(panes.middle, "ris", ris_path)
+
+    assert screen is not None
+    assert [row.header for row in screen.rows] == ["TY", "TI", "AU"]
+    assert screen.list_delimiter_input is None
+    assert screen.current_mapping().list_delimiter == "\n"
+
+
+def test_render_mapping__ris_without_tags_notifies_and_returns_none(
+    tmp_path: Path,
+) -> None:
+    ris_path = tmp_path / "empty.ris"
+    ris_path.write_text("")
+    panes = shell()
+
+    assert render_mapping(panes.middle, "ris", ris_path) is None
+
+
+def test_render_import_view__ris_type_renders_mapping_and_enables_import(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    panes = shell()
+    ris_path = tmp_path / "export.ris"
+    ris_path.write_text(_RIS_TEXT)
+    _pick(monkeypatch, ris_path)
+    view = render_import_view(panes.middle, on_import=lambda p, t, m: None)
+    asyncio.run(view._select_file())
+
+    view._set_type("ris")
+
+    assert view.mapping_screen is not None
+    assert view.import_button is not None
+    assert view.import_button.enabled is True
 
 
 def _pick(monkeypatch: pytest.MonkeyPatch, path: Path | None) -> None:
@@ -231,7 +308,7 @@ def test_render_import_view__import_reads_live_mapping_edits(
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Scopus Author ID\nabc123\n")
     _pick(monkeypatch, csv_path)
-    calls: list[tuple[Path, str, ColumnMapping]] = []
+    calls: list[tuple[Path, str, FieldMapping]] = []
     view = render_import_view(
         panes.middle, on_import=lambda p, t, m: calls.append((p, t, m))
     )
@@ -243,7 +320,7 @@ def test_render_import_view__import_reads_live_mapping_edits(
     view._import()
 
     assert calls == [
-        (csv_path, "csv", ColumnMapping(targets={"Scopus Author ID": "authors"}))
+        (csv_path, "csv", FieldMapping(targets={"Scopus Author ID": "authors"}))
     ]
 
 
