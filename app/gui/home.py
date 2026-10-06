@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 
 from nicegui import ui
 
@@ -7,7 +7,7 @@ from app.db.session import get_engine, session_scope
 from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
 from app.gui.library_nav import render_left_panel
-from app.parsers.csv_ import ColumnMapping
+from app.parsers.mapping import FieldMapping
 
 _engine = get_engine()
 
@@ -25,7 +25,7 @@ def home() -> None:
             if select_key is not None:
                 nav.select(select_key)
 
-    def on_confirmed(path: Path, file_type: str, mapping: ColumnMapping) -> None:
+    def on_confirmed(path: Path, file_type: str, mapping: FieldMapping) -> None:
         with session_scope(_engine) as session:
             source_file = import_file(session, path, file_type, mapping)
             session.flush()

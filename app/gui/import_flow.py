@@ -1,4 +1,4 @@
-from collections.abc import Callable
+﻿from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
 from app.gui.csv_mapping import CsvMappingScreen, render_csv_mapping
-from app.parsers.csv_ import ColumnMapping, parse_csv_file, read_csv_headers
+from app.parsers.csv_ import parse_csv_file, read_csv_headers
+from app.parsers.mapping import FieldMapping
 
 _TYPE_UNKNOWN = "unknown"
 _TYPE_CSV = "csv"
@@ -46,7 +47,7 @@ def render_mapping(
     return render_csv_mapping(container, headers)
 
 
-def import_csv(session: Session, path: Path, mapping: ColumnMapping) -> SourceFile:
+def import_csv(session: Session, path: Path, mapping: FieldMapping) -> SourceFile:
     result = parse_csv_file(path, mapping)
     return store_parsed_rows(
         session,
@@ -59,7 +60,7 @@ def import_csv(session: Session, path: Path, mapping: ColumnMapping) -> SourceFi
 
 
 def import_file(
-    session: Session, path: Path, file_type: str, mapping: ColumnMapping
+    session: Session, path: Path, file_type: str, mapping: FieldMapping
 ) -> SourceFile:
     if file_type != _TYPE_CSV:
         raise ValueError(f"unsupported file type: {file_type!r}")
@@ -69,7 +70,7 @@ def import_file(
 @dataclass
 class ImportView:
     middle: Element
-    on_import: Callable[[Path, str, ColumnMapping], None]
+    on_import: Callable[[Path, str, FieldMapping], None]
     path: Path | None = None
     file_type: str = _TYPE_UNKNOWN
     mapping_screen: CsvMappingScreen | None = None
@@ -149,7 +150,7 @@ class ImportView:
 
 
 def render_import_view(
-    middle: Element, on_import: Callable[[Path, str, ColumnMapping], None]
+    middle: Element, on_import: Callable[[Path, str, FieldMapping], None]
 ) -> ImportView:
     view = ImportView(middle=middle, on_import=on_import)
     view.render()

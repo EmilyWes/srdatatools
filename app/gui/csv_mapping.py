@@ -1,16 +1,16 @@
-from dataclasses import dataclass, field
+﻿from dataclasses import dataclass, field
 
 from nicegui import ui
 from nicegui.element import Element
 
-from app.parsers.csv_ import (
-    DATE_TARGETS,
+from app.parsers.csv_ import suggest_mapping
+from app.parsers.mapping import (
+    EXCLUSIVE_TARGETS,
     LIST_TARGETS,
     OTHER_IDS_PREFIX,
     SCALAR_FIELDS,
-    ColumnMapping,
+    FieldMapping,
     default_other_id_key,
-    suggest_mapping,
 )
 
 _ROW_FIELD_CSS = """
@@ -33,7 +33,7 @@ _IGNORE = "ignore"
 _OTHER_IDS = "other_ids"
 
 _BASE_TARGET_KEYS = (_IGNORE, *sorted(SCALAR_FIELDS), *LIST_TARGETS, _OTHER_IDS)
-_ALL_TARGET_KEYS = (*_BASE_TARGET_KEYS, *DATE_TARGETS)
+_ALL_TARGET_KEYS = (*_BASE_TARGET_KEYS, *EXCLUSIVE_TARGETS)
 
 _LABELS: dict[str, str] = {
     "doi": "DOI",
@@ -75,13 +75,13 @@ class CsvMappingScreen:
     def _refresh_options(self) -> None:
         taken: dict[str, str] = {}
         for row in self.rows:
-            if row.select.value in DATE_TARGETS:
+            if row.select.value in EXCLUSIVE_TARGETS:
                 taken[row.select.value] = row.header
 
         for row in self.rows:
             keys = list(_BASE_TARGET_KEYS) + [
                 target
-                for target in DATE_TARGETS
+                for target in EXCLUSIVE_TARGETS
                 if _exclusive_available(row.header, target, taken)
             ]
             row.select.set_options({key: _option_label(key) for key in keys})
@@ -97,7 +97,7 @@ class CsvMappingScreen:
     def available_targets(self, header: str) -> set[str]:
         return set(self._row_for(header).select.options)
 
-    def current_mapping(self) -> ColumnMapping:
+    def current_mapping(self) -> FieldMapping:
         targets: dict[str, str] = {}
         for row in self.rows:
             target = row.select.value
@@ -111,7 +111,7 @@ class CsvMappingScreen:
         delimiter = (
             self.list_delimiter_input.value if self.list_delimiter_input else ";"
         )
-        return ColumnMapping(targets=targets, list_delimiter=delimiter or ";")
+        return FieldMapping(targets=targets, list_delimiter=delimiter or ";")
 
 
 def render_csv_mapping(middle: Element, headers: list[str]) -> CsvMappingScreen:

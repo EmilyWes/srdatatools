@@ -1,22 +1,21 @@
-from pathlib import Path
+﻿from pathlib import Path
 
 import pytest
 
 from app.parsers.csv_ import (
-    SCALAR_FIELDS,
-    ColumnMapping,
     parse_csv_file,
     parse_csv_text,
     read_csv_headers,
     suggest_mapping,
 )
+from app.parsers.mapping import FieldMapping
 
 CSV_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "csv"
 
 
 def test_parse_csv_text__maps_scalar_fields() -> None:
     text = "Title,DOI,Journal\nSome Paper,10.1/xyz,Nature\n"
-    mapping = ColumnMapping(
+    mapping = FieldMapping(
         targets={"Title": "title", "DOI": "doi", "Journal": "journal"}
     )
 
@@ -32,7 +31,7 @@ def test_parse_csv_text__maps_scalar_fields() -> None:
 
 def test_parse_csv_text__keeps_raw_fields_including_unmapped_columns() -> None:
     text = "Title,Extra\nSome Paper,unmapped value\n"
-    mapping = ColumnMapping(targets={"Title": "title"})
+    mapping = FieldMapping(targets={"Title": "title"})
 
     result = parse_csv_text(text, mapping)
 
@@ -44,7 +43,7 @@ def test_parse_csv_text__keeps_raw_fields_including_unmapped_columns() -> None:
 
 def test_parse_csv_text__normalizes_doi_via_record_validator() -> None:
     text = "DOI\nhttps://doi.org/10.1/XYZ\n"
-    mapping = ColumnMapping(targets={"DOI": "doi"})
+    mapping = FieldMapping(targets={"DOI": "doi"})
 
     result = parse_csv_text(text, mapping)
 
@@ -53,7 +52,7 @@ def test_parse_csv_text__normalizes_doi_via_record_validator() -> None:
 
 def test_parse_csv_text__skips_ragged_row_with_missing_fields() -> None:
     text = "Title,DOI,Journal\nOnly title\n"
-    mapping = ColumnMapping(targets={"Title": "title"})
+    mapping = FieldMapping(targets={"Title": "title"})
 
     result = parse_csv_text(text, mapping)
 
@@ -65,7 +64,7 @@ def test_parse_csv_text__skips_ragged_row_with_missing_fields() -> None:
 
 def test_parse_csv_text__skips_ragged_row_with_extra_fields() -> None:
     text = "Title,DOI\nSome Paper,10.1/x,extra,stuff\n"
-    mapping = ColumnMapping(targets={"Title": "title"})
+    mapping = FieldMapping(targets={"Title": "title"})
 
     result = parse_csv_text(text, mapping)
 
@@ -76,7 +75,7 @@ def test_parse_csv_text__skips_ragged_row_with_extra_fields() -> None:
 
 def test_parse_csv_text__skips_fully_blank_row() -> None:
     text = "Title,DOI\nSome Paper,10.1/x\n,\n"
-    mapping = ColumnMapping(targets={"Title": "title"})
+    mapping = FieldMapping(targets={"Title": "title"})
 
     result = parse_csv_text(text, mapping)
 
@@ -87,7 +86,7 @@ def test_parse_csv_text__skips_fully_blank_row() -> None:
 
 def test_parse_csv_text__imports_row_with_only_unmapped_data() -> None:
     text = "Title,Extra\n,has data\n"
-    mapping = ColumnMapping(targets={"Title": "title"})
+    mapping = FieldMapping(targets={"Title": "title"})
 
     result = parse_csv_text(text, mapping)
 
@@ -98,7 +97,7 @@ def test_parse_csv_text__imports_row_with_only_unmapped_data() -> None:
 
 def test_parse_csv_text__sniffs_semicolon_delimiter() -> None:
     text = "Title;DOI\nSome Paper;10.1/x\n"
-    mapping = ColumnMapping(targets={"Title": "title", "DOI": "doi"})
+    mapping = FieldMapping(targets={"Title": "title", "DOI": "doi"})
 
     result = parse_csv_text(text, mapping)
 
@@ -108,7 +107,7 @@ def test_parse_csv_text__sniffs_semicolon_delimiter() -> None:
 
 def test_parse_csv_text__splits_authors_on_delimiter() -> None:
     text = "Authors\nJane Smith; John Doe\n"
-    mapping = ColumnMapping(targets={"Authors": "authors"})
+    mapping = FieldMapping(targets={"Authors": "authors"})
 
     result = parse_csv_text(text, mapping)
 
@@ -118,7 +117,7 @@ def test_parse_csv_text__splits_authors_on_delimiter() -> None:
 
 def test_parse_csv_text__splits_keywords_on_delimiter() -> None:
     text = "Keywords\nmachine learning; nlp\n"
-    mapping = ColumnMapping(targets={"Keywords": "keywords"})
+    mapping = FieldMapping(targets={"Keywords": "keywords"})
 
     result = parse_csv_text(text, mapping)
 
@@ -127,7 +126,7 @@ def test_parse_csv_text__splits_keywords_on_delimiter() -> None:
 
 def test_parse_csv_text__uses_custom_list_delimiter() -> None:
     text = "Authors\nJane Smith| John Doe\n"
-    mapping = ColumnMapping(targets={"Authors": "authors"}, list_delimiter="|")
+    mapping = FieldMapping(targets={"Authors": "authors"}, list_delimiter="|")
 
     result = parse_csv_text(text, mapping)
 
@@ -137,7 +136,7 @@ def test_parse_csv_text__uses_custom_list_delimiter() -> None:
 
 def test_parse_csv_text__combines_multiple_author_columns_in_order() -> None:
     text = "First Author,Other Authors\nJane Smith,John Doe; Alice Lee\n"
-    mapping = ColumnMapping(
+    mapping = FieldMapping(
         targets={"First Author": "authors", "Other Authors": "authors"}
     )
 
@@ -153,7 +152,7 @@ def test_parse_csv_text__combines_multiple_author_columns_in_order() -> None:
 
 def test_parse_csv_text__combines_multiple_keyword_columns_in_order() -> None:
     text = "Author Keywords,Index Keywords\nmachine learning,nlp; llms\n"
-    mapping = ColumnMapping(
+    mapping = FieldMapping(
         targets={"Author Keywords": "keywords", "Index Keywords": "keywords"}
     )
 
@@ -164,7 +163,7 @@ def test_parse_csv_text__combines_multiple_keyword_columns_in_order() -> None:
 
 def test_parse_csv_text__empty_authors_column_gives_empty_list() -> None:
     text = "Title,Authors\nSome Paper,\n"
-    mapping = ColumnMapping(targets={"Title": "title", "Authors": "authors"})
+    mapping = FieldMapping(targets={"Title": "title", "Authors": "authors"})
 
     result = parse_csv_text(text, mapping)
 
@@ -185,7 +184,7 @@ def test_parse_csv_text__parses_single_date_column(
     date_value: str, expected: tuple[int, int | None, int | None]
 ) -> None:
     text = f"Date\n{date_value}\n"
-    mapping = ColumnMapping(targets={"Date": "date"})
+    mapping = FieldMapping(targets={"Date": "date"})
 
     result = parse_csv_text(text, mapping)
 
@@ -196,7 +195,7 @@ def test_parse_csv_text__parses_single_date_column(
 
 def test_parse_csv_text__parses_year_month_day_columns() -> None:
     text = "Year,Month,Day\n2020,5,14\n"
-    mapping = ColumnMapping(targets={"Year": "year", "Month": "month", "Day": "day"})
+    mapping = FieldMapping(targets={"Year": "year", "Month": "month", "Day": "day"})
 
     result = parse_csv_text(text, mapping)
 
@@ -207,7 +206,7 @@ def test_parse_csv_text__parses_year_month_day_columns() -> None:
 
 def test_parse_csv_text__accepts_month_abbreviation() -> None:
     text = "Year,Month\n2020,May\n"
-    mapping = ColumnMapping(targets={"Year": "year", "Month": "month"})
+    mapping = FieldMapping(targets={"Year": "year", "Month": "month"})
 
     result = parse_csv_text(text, mapping)
 
@@ -218,7 +217,7 @@ def test_parse_csv_text__accepts_month_abbreviation() -> None:
 
 def test_parse_csv_text__drops_day_when_month_missing() -> None:
     text = "Year,Day\n2020,14\n"
-    mapping = ColumnMapping(targets={"Year": "year", "Day": "day"})
+    mapping = FieldMapping(targets={"Year": "year", "Day": "day"})
 
     result = parse_csv_text(text, mapping)
 
@@ -229,7 +228,7 @@ def test_parse_csv_text__drops_day_when_month_missing() -> None:
 
 def test_parse_csv_text__routes_column_into_other_ids() -> None:
     text = "Title,EID\nSome Paper,2-s2.0-123\n"
-    mapping = ColumnMapping(targets={"Title": "title", "EID": "other_ids.eid"})
+    mapping = FieldMapping(targets={"Title": "title", "EID": "other_ids.eid"})
 
     result = parse_csv_text(text, mapping)
 
@@ -238,7 +237,7 @@ def test_parse_csv_text__routes_column_into_other_ids() -> None:
 
 def test_parse_csv_text__routes_multiple_columns_into_other_ids() -> None:
     text = "EID,Scopus Author ID\n2-s2.0-123,456\n"
-    mapping = ColumnMapping(
+    mapping = FieldMapping(
         targets={
             "EID": "other_ids.eid",
             "Scopus Author ID": "other_ids.scopus_author_id",
@@ -253,12 +252,7 @@ def test_parse_csv_text__routes_multiple_columns_into_other_ids() -> None:
     }
 
 
-def test_column_mapping__rejects_other_ids_target_without_key() -> None:
-    with pytest.raises(ValueError):
-        ColumnMapping(targets={"EID": "other_ids."})
-
-
-def _ymd(text: str, mapping: ColumnMapping) -> tuple[int | None, ...]:
+def _ymd(text: str, mapping: FieldMapping) -> tuple[int | None, ...]:
     date = parse_csv_text(text, mapping).rows[0].record.publication_date
     assert date is not None
     return (date.year, date.month, date.day)
@@ -266,7 +260,7 @@ def _ymd(text: str, mapping: ColumnMapping) -> tuple[int | None, ...]:
 
 def test_parse_csv_text__ymd_overrides_date_on_conflict() -> None:
     text = "Year,Month,Day,Created\n2019,3,7,2020-05-14\n"
-    mapping = ColumnMapping(
+    mapping = FieldMapping(
         targets={"Year": "year", "Month": "month", "Day": "day", "Created": "date"}
     )
 
@@ -275,34 +269,34 @@ def test_parse_csv_text__ymd_overrides_date_on_conflict() -> None:
 
 def test_parse_csv_text__fills_missing_parts_from_date_column() -> None:
     text = "Year,Created\n2020,2020-05-14\n"
-    mapping = ColumnMapping(targets={"Year": "year", "Created": "date"})
+    mapping = FieldMapping(targets={"Year": "year", "Created": "date"})
 
     assert _ymd(text, mapping) == (2020, 5, 14)
 
 
 def test_parse_csv_text__falls_back_to_date_when_ymd_cells_blank() -> None:
     text = "Year,Created\n,2020-05-14\n"
-    mapping = ColumnMapping(targets={"Year": "year", "Created": "date"})
+    mapping = FieldMapping(targets={"Year": "year", "Created": "date"})
 
     assert _ymd(text, mapping) == (2020, 5, 14)
 
 
 def test_parse_csv_text__unparseable_date_column_keeps_ymd() -> None:
     text = "Year,Created\n2020,sometime in May\n"
-    mapping = ColumnMapping(targets={"Year": "year", "Created": "date"})
+    mapping = FieldMapping(targets={"Year": "year", "Created": "date"})
 
     assert _ymd(text, mapping) == (2020, None, None)
 
 
 def test_parse_csv_text__maps_publication_year_and_create_date_together() -> None:
     text = "Publication Year,Create Date\n2018,2020-05-14\n"
-    mapping = ColumnMapping(targets={"Publication Year": "year", "Create Date": "date"})
+    mapping = FieldMapping(targets={"Publication Year": "year", "Create Date": "date"})
 
     assert _ymd(text, mapping) == (2018, 5, 14)
 
 
 def test_parse_csv_file__falls_back_to_cp1252_on_decode_error() -> None:
-    mapping = ColumnMapping(targets={"Title": "title", "Author": "notes"})
+    mapping = FieldMapping(targets={"Title": "title", "Author": "notes"})
 
     result = parse_csv_file(CSV_FIXTURES_DIR / "cp1252_encoded.csv", mapping)
 
@@ -341,6 +335,8 @@ def test_read_csv_headers__decodes_cp1252_file() -> None:
         ("DOI", "doi"),
         ("Document Type", "publication_type"),
         ("Year", "year"),
+        ("Page start", "page_start"),
+        ("Page end", "page_end"),
         ("PMID", "pmid"),
         ("PMCID", "other_ids.pmcid"),
         ("PMC ID", "other_ids.pmc_id"),
@@ -389,40 +385,3 @@ def test_suggest_mapping__keeps_only_first_column_per_date_part() -> None:
     suggestions = suggest_mapping(["Year", "Publication Year", "Date"])
 
     assert suggestions.targets == {"Year": "year", "Date": "date"}
-
-
-def test_column_mapping__rejects_date_part_mapped_from_two_columns() -> None:
-    with pytest.raises(ValueError, match="several columns"):
-        ColumnMapping(targets={"Year": "year", "Publication Year": "year"})
-
-
-def test_column_mapping__allows_list_target_from_several_columns() -> None:
-    mapping = ColumnMapping(targets={"A": "authors", "B": "authors"})
-
-    assert mapping.targets == {"A": "authors", "B": "authors"}
-
-
-def test_column_mapping__rejects_unknown_target_field() -> None:
-    with pytest.raises(ValueError):
-        ColumnMapping(targets={"Title": "not_a_real_field"})
-
-
-def test_scalar_fields__are_the_records_optional_string_fields() -> None:
-    assert SCALAR_FIELDS == {
-        "title",
-        "abstract",
-        "journal",
-        "conference_name",
-        "volume",
-        "issue",
-        "pages",
-        "doi",
-        "pmid",
-        "issn",
-        "isbn",
-        "publication_type",
-        "language",
-        "publisher",
-        "url",
-        "notes",
-    }

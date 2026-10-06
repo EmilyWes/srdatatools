@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import datetime
 from pathlib import Path
 from typing import Any
@@ -18,7 +18,7 @@ from app.gui.import_flow import (
     render_mapping,
 )
 from app.gui.layout import shell
-from app.parsers.csv_ import ColumnMapping
+from app.parsers.mapping import FieldMapping
 
 
 class _FakeWindow:
@@ -107,7 +107,7 @@ def test_import_csv__stores_records_and_returns_source_file_with_row_count(
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\nOther Paper,10.1/abc\n")
-    mapping = ColumnMapping(targets={"Title": "title", "DOI": "doi"})
+    mapping = FieldMapping(targets={"Title": "title", "DOI": "doi"})
 
     source_file = import_csv(session, csv_path, mapping)
     session.commit()
@@ -123,7 +123,7 @@ def test_import_csv__stores_skipped_rows_on_source_file(
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\n,\n")
-    mapping = ColumnMapping(targets={"Title": "title"})
+    mapping = FieldMapping(targets={"Title": "title"})
 
     source_file = import_csv(session, csv_path, mapping)
 
@@ -136,7 +136,7 @@ def test_import_file__dispatches_csv_to_import_csv(
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title\nSome Paper\n")
-    mapping = ColumnMapping(targets={"Title": "title"})
+    mapping = FieldMapping(targets={"Title": "title"})
 
     source_file = import_file(session, csv_path, "csv", mapping)
 
@@ -149,7 +149,7 @@ def test_import_file__unsupported_type_raises(session: Session, tmp_path: Path) 
     ris_path.write_text("TY  - JOUR\n")
 
     with pytest.raises(ValueError, match="unsupported file type"):
-        import_file(session, ris_path, "ris", ColumnMapping())
+        import_file(session, ris_path, "ris", FieldMapping())
 
 
 def _pick(monkeypatch: pytest.MonkeyPatch, path: Path | None) -> None:
@@ -231,7 +231,7 @@ def test_render_import_view__import_reads_live_mapping_edits(
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Scopus Author ID\nabc123\n")
     _pick(monkeypatch, csv_path)
-    calls: list[tuple[Path, str, ColumnMapping]] = []
+    calls: list[tuple[Path, str, FieldMapping]] = []
     view = render_import_view(
         panes.middle, on_import=lambda p, t, m: calls.append((p, t, m))
     )
@@ -243,7 +243,7 @@ def test_render_import_view__import_reads_live_mapping_edits(
     view._import()
 
     assert calls == [
-        (csv_path, "csv", ColumnMapping(targets={"Scopus Author ID": "authors"}))
+        (csv_path, "csv", FieldMapping(targets={"Scopus Author ID": "authors"}))
     ]
 
 

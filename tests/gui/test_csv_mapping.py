@@ -14,6 +14,15 @@ def test_render_csv_mapping__prefills_suggested_scalar_targets() -> None:
     assert screen._row_for("DOI").select.value == "doi"
 
 
+def test_render_csv_mapping__prefills_page_start_and_end() -> None:
+    screen = _render(["Page start", "Page end"])
+
+    assert screen.current_mapping().targets == {
+        "Page start": "page_start",
+        "Page end": "page_end",
+    }
+
+
 def test_render_csv_mapping__unrecognized_header_defaults_to_ignore() -> None:
     screen = _render(["Zzzqqqxx123"])
 
