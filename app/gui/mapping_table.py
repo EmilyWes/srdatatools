@@ -1,4 +1,5 @@
-﻿from dataclasses import dataclass, field
+﻿from collections.abc import Iterable
+from dataclasses import dataclass, field
 from typing import Literal
 
 from nicegui import ui
@@ -122,6 +123,11 @@ _INPUT_WIDTH_CH = (8, 28)
 _SELECT_CHROME_CH = 6
 
 
+def _sorted_options(keys: Iterable[str]) -> dict[str, str]:
+    options = {key: _option_label(key) for key in keys}
+    return dict(sorted(options.items(), key=lambda item: item[1].lower()))
+
+
 def _input_width_ch(headers: list[str]) -> int:
     low, high = _INPUT_WIDTH_CH
     return max(low, min(high, max(map(len, headers), default=0) + 1))
@@ -170,7 +176,7 @@ class MappingScreen:
                 for target in EXCLUSIVE_TARGETS
                 if _exclusive_available(row.header, target, taken)
             ]
-            row.select.set_options({key: _option_label(key) for key in keys})
+            row.select.set_options(_sorted_options(keys))
 
     def _refresh_colors(self) -> None:
         for row in self.rows:
@@ -248,7 +254,7 @@ def render_mapping_table(
                     ui.label(header).classes("truncate text-xs").style(input_style)
                     select = (
                         ui.select(
-                            {key: _option_label(key) for key in _ALL_TARGET_KEYS},
+                            _sorted_options(_ALL_TARGET_KEYS),
                             value=initial_targets[header],
                         )
                         .classes("mapping-field text-xs")

@@ -336,3 +336,15 @@ def test_input_width_ch__fits_longest_header_within_bounds(
     headers: list[str], expected: int
 ) -> None:
     assert _input_width_ch(headers) == expected
+
+
+def test_render_mapping_table__dropdown_options_are_sorted_alphabetically() -> None:
+    screen = _render(["Title", "Year"])
+
+    options = screen._row_for("Title").select.options
+    assert isinstance(options, dict)
+    labels = list(options.values())
+
+    assert labels == sorted(labels, key=str.lower)
+    assert "Ignore" in labels
+    assert "Date (full)" in labels
