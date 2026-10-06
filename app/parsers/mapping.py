@@ -52,11 +52,21 @@ LIST_TARGETS = ("authors", "keywords")
 DATE_TARGETS = ("date", "year", "month", "day")
 PAGE_TARGETS = ("page_start", "page_end")
 EXCLUSIVE_TARGETS = (*DATE_TARGETS, *PAGE_TARGETS)
+ISSN_ISBN_TARGET = "issn_isbn"
 OTHER_IDS_PREFIX = "other_ids."
+
+_ISSN_ISBN_SEPARATORS = re.compile(r"[\s;]+")
+_ISSN_LENGTH = 8
+_ISBN_LENGTHS = (10, 13)
 
 
 def _is_valid_target(target: str) -> bool:
-    if target in SCALAR_FIELDS or target in LIST_TARGETS or target in EXCLUSIVE_TARGETS:
+    if (
+        target in SCALAR_FIELDS
+        or target in LIST_TARGETS
+        or target in EXCLUSIVE_TARGETS
+        or target == ISSN_ISBN_TARGET
+    ):
         return True
     return target.startswith(OTHER_IDS_PREFIX) and len(target) > len(OTHER_IDS_PREFIX)
 
@@ -77,6 +87,22 @@ class FieldMapping:
 
     def key_for(self, target: str) -> str | None:
         return next((k for k, t in self.targets.items() if t == target), None)
+
+
+def _classify_issn_isbn(value: str) -> dict[str, str]:
+    """RIS keeps both in SN; tell them apart by length. First of each kind wins."""
+    found: dict[str, str] = {}
+    for piece in _ISSN_ISBN_SEPARATORS.split(value):
+        if not piece:
+            continue
+        length = len(piece.replace("-", ""))
+        if length in _ISBN_LENGTHS:
+            found.setdefault("isbn", piece)
+            continue
+        if length != _ISSN_LENGTH:
+            logger.warning("Value %r is neither an ISSN nor an ISBN", piece)
+        found.setdefault("issn", piece)
+    return found
 
 
 def _split_list(value: str, delimiter: str) -> list[str]:
@@ -174,6 +200,9 @@ def apply_mapping(raw_fields: dict[str, str], mapping: FieldMapping) -> Record:
             continue
         if target in SCALAR_FIELDS:
             values.setdefault(target, value)
+        elif target == ISSN_ISBN_TARGET:
+            for scalar, piece in _classify_issn_isbn(value).items():
+                values.setdefault(scalar, piece)
         elif target.startswith(OTHER_IDS_PREFIX):
             other_ids[target.removeprefix(OTHER_IDS_PREFIX)] = value
         elif target == "authors":
