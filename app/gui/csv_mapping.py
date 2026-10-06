@@ -85,10 +85,6 @@ def _suggestion_to_target(suggestion: str | None) -> str:
 
 
 def _exclusive_available(header: str, target: str, taken: dict[str, str]) -> bool:
-    if taken.get(_DATE) not in (None, header):
-        return False
-    if target == _DATE:
-        return all(taken.get(t) in (None, header) for t in (_YEAR, _MONTH, _DAY))
     return taken.get(target) in (None, header)
 
 
