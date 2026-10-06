@@ -7,15 +7,20 @@ from app.gui.mapping_table import (
     _input_width_ch,
     render_mapping_table,
 )
+from app.parsers.common import FileSummary
 from app.parsers.csv_ import suggest_mapping
 from app.parsers.ris import suggest_ris_mapping
+
+
+def _summary(samples: dict[str, str]) -> FileSummary:
+    return FileSummary(samples, dict.fromkeys(samples, 0), 0)
 
 
 def _render(headers: list[str]) -> MappingScreen:
     panes = shell()
     return render_mapping_table(
         panes.middle,
-        dict.fromkeys(headers, ""),
+        _summary(dict.fromkeys(headers, "")),
         suggest_mapping(headers),
         show_delimiter=True,
     )
@@ -25,7 +30,7 @@ def _render_ris(tags: list[str]) -> MappingScreen:
     panes = shell()
     return render_mapping_table(
         panes.middle,
-        dict.fromkeys(tags, ""),
+        _summary(dict.fromkeys(tags, "")),
         suggest_ris_mapping(tags),
         show_delimiter=False,
     )
@@ -144,7 +149,7 @@ def test_render_mapping_table__renders_table_and_delimiter_input_only() -> None:
 
     render_mapping_table(
         panes.middle,
-        dict.fromkeys(headers, ""),
+        _summary(dict.fromkeys(headers, "")),
         suggest_mapping(headers),
         show_delimiter=True,
     )
@@ -159,7 +164,7 @@ def test_render_mapping_table__ris_has_no_delimiter_input_and_keeps_newline() ->
 
     render_mapping_table(
         panes.middle,
-        dict.fromkeys(tags, ""),
+        _summary(dict.fromkeys(tags, "")),
         suggest_ris_mapping(tags),
         show_delimiter=False,
     )
@@ -196,7 +201,10 @@ def test_render_mapping_table__shows_sample_value_for_each_row() -> None:
     panes = shell()
 
     screen = render_mapping_table(
-        panes.middle, samples, suggest_mapping(list(samples)), show_delimiter=True
+        panes.middle,
+        _summary(samples),
+        suggest_mapping(list(samples)),
+        show_delimiter=True,
     )
 
     assert screen._row_for("Title").sample.text == "Some Paper"
@@ -210,7 +218,10 @@ def test_render_mapping_table__sample_has_full_value_tooltip_only_when_non_empty
     panes = shell()
 
     screen = render_mapping_table(
-        panes.middle, samples, suggest_mapping(list(samples)), show_delimiter=True
+        panes.middle,
+        _summary(samples),
+        suggest_mapping(list(samples)),
+        show_delimiter=True,
     )
 
     targets = {
@@ -356,7 +367,7 @@ def test_render_mapping_table__truncated_input_header_has_full_value_tooltip() -
 
     render_mapping_table(
         panes.middle,
-        {long_header: "", "Title": ""},
+        _summary({long_header: "", "Title": ""}),
         suggest_mapping([long_header, "Title"]),
         show_delimiter=True,
     )

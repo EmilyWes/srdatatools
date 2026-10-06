@@ -5,6 +5,7 @@ from typing import Literal
 from nicegui import ui
 from nicegui.element import Element
 
+from app.parsers.common import FileSummary
 from app.parsers.mapping import (
     EXCLUSIVE_TARGETS,
     ISSN_ISBN_TARGET,
@@ -214,12 +215,13 @@ class MappingScreen:
 
 def render_mapping_table(
     middle: Element,
-    samples: dict[str, str],
+    summary: FileSummary,
     suggestion: FieldMapping,
     *,
     show_delimiter: bool,
 ) -> MappingScreen:
     screen = MappingScreen(list_delimiter=suggestion.list_delimiter)
+    samples = summary.samples
     headers = _sorted_headers(list(samples), suggestion)
     input_width = _input_width_ch(headers)
     input_style = f"width: {input_width}ch"

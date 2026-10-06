@@ -3,7 +3,14 @@ import logging
 from io import StringIO
 from pathlib import Path
 
-from app.parsers.common import ParsedRow, ParseResult, SkippedRow, decode_file
+from app.parsers.common import (
+    FileSummary,
+    ParsedRow,
+    ParseResult,
+    SkippedRow,
+    SummaryBuilder,
+    decode_file,
+)
 from app.parsers.mapping import FieldMapping, apply_mapping
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
 
@@ -84,19 +91,19 @@ def parse_csv_file(path: Path, mapping: FieldMapping) -> ParseResult:
     return parse_csv_text(decode_file(path), mapping)
 
 
-def read_csv_headers(path: Path) -> dict[str, str]:
+def read_csv_headers(path: Path) -> FileSummary:
     text = decode_file(path)
     dialect = _sniff_dialect(text[:2048])
     reader = csv.reader(StringIO(text), dialect=dialect)
     headers = next(reader, [])
-    samples = dict.fromkeys(headers, "")
+    summary = SummaryBuilder(headers)
     for row in reader:
+        if not row:
+            continue
         for header, value in zip(headers, row, strict=False):
-            if not samples[header]:
-                samples[header] = value.strip()
-        if all(samples.values()):
-            break
-    return samples
+            summary.add(header, value)
+        summary.end_record()
+    return summary.build()
 
 
 def suggest_mapping(headers: list[str]) -> FieldMapping:
