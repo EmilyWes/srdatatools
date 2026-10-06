@@ -74,17 +74,17 @@ def test_render_csv_mapping__picking_year_removes_year_from_other_rows() -> None
 
 
 def test_render_csv_mapping__date_and_year_can_be_mapped_together() -> None:
-    confirmed, screen = _render(["Publication Year", "Create Date"])
+    confirmed, screen = _render(["Publication Year", "Publication Date"])
 
     assert screen._row_for("Publication Year").select.value == "year"
-    assert screen._row_for("Create Date").select.value == "date"
-    assert "date" in screen.available_targets("Create Date")
+    assert screen._row_for("Publication Date").select.value == "date"
+    assert "date" in screen.available_targets("Publication Date")
     assert "year" in screen.available_targets("Publication Year")
 
     screen.confirm()
 
     assert confirmed[0].year_column == "Publication Year"
-    assert confirmed[0].date_column == "Create Date"
+    assert confirmed[0].date_column == "Publication Date"
 
 
 def test_render_csv_mapping__conflicting_suggested_years_only_keeps_first() -> None:

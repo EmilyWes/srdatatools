@@ -38,10 +38,13 @@ _SUGGESTION_ALIASES: dict[str, list[str]] = {
     "month": ["month"],
     "day": ["day"],
     "date": ["date", "publication date", "coverdate"],
-    "other_ids": ["eid"],
+    "other_ids": ["eid", "pmcid", "pmc id"],
 }
 
-_SUGGESTION_CUTOFF = 0.6
+_SUGGESTION_CUTOFF = 0.7
+
+# Case-sensitive on purpose: "PMCID" is an ID header, "Valid" is not.
+_ID_HEADER = re.compile(r"(?<![A-Za-z])[Ii][Dd](?![A-Za-z])|[A-Z]ID(?![A-Za-z])")
 
 _MONTH_ABBREVIATIONS = {
     "jan": 1,
@@ -327,6 +330,8 @@ def suggest_mapping(headers: list[str]) -> dict[str, str | None]:
                 normalized, alias_to_target.keys(), n=1, cutoff=_SUGGESTION_CUTOFF
             )
             target = alias_to_target[matches[0]] if matches else None
+        if target is None and _ID_HEADER.search(header):
+            target = "other_ids"
         suggestions[header] = target
 
     return suggestions
