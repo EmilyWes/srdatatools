@@ -207,6 +207,8 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] Generic NBIB/MEDLINE tokenizer/parser
 - [x] Generic CSV reader (column-mapping logic)
 - [x] CSV column-mapping UI, embedded inline in the import view (live table below Source/Type, no separate screen/confirm step)
+- [ ] CSV column-mapping UI: visual indicators (different colors) per row for columns that are mapped directly (exact alias), mapped via fuzzy match or the ID fallback, or mapped multiple times to the same target
+- [ ] CSV column-mapping UI: show the first value of each column next to its row so the user can see what the column contains
 - [ ] PubMed profile (NBIB)
 - [ ] Scopus profile (CSV, RIS)
 - [ ] Web of Science profile (RIS)
