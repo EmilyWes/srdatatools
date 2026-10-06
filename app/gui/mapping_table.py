@@ -3,7 +3,6 @@
 from nicegui import ui
 from nicegui.element import Element
 
-from app.parsers.csv_ import suggest_mapping
 from app.parsers.mapping import (
     EXCLUSIVE_TARGETS,
     LIST_TARGETS,
@@ -61,8 +60,9 @@ class _Row:
 
 
 @dataclass
-class CsvMappingScreen:
+class MappingScreen:
     rows: list[_Row] = field(default_factory=list)
+    list_delimiter: str = ";"
     list_delimiter_input: ui.input | None = None
 
     def _row_for(self, header: str) -> _Row:
@@ -109,15 +109,23 @@ class CsvMappingScreen:
             targets[row.header] = target
 
         delimiter = (
-            self.list_delimiter_input.value if self.list_delimiter_input else ";"
+            self.list_delimiter_input.value
+            if self.list_delimiter_input
+            else self.list_delimiter
         )
         return FieldMapping(targets=targets, list_delimiter=delimiter or ";")
 
 
-def render_csv_mapping(middle: Element, headers: list[str]) -> CsvMappingScreen:
-    screen = CsvMappingScreen()
+def render_mapping_table(
+    middle: Element,
+    headers: list[str],
+    suggestion: FieldMapping,
+    *,
+    show_delimiter: bool,
+) -> MappingScreen:
+    screen = MappingScreen(list_delimiter=suggestion.list_delimiter)
 
-    suggested = suggest_mapping(headers).targets
+    suggested = suggestion.targets
     initial_targets: dict[str, str] = {}
     initial_keys: dict[str, str] = {}
     for header in headers:
@@ -162,9 +170,12 @@ def render_csv_mapping(middle: Element, headers: list[str]) -> CsvMappingScreen:
                 screen.rows.append(row)
                 select.on_value_change(lambda _e, row=row: screen._on_row_changed(row))
 
-        screen.list_delimiter_input = (
-            ui.input("List delimiter", value=";").classes("pl-6 text-xs").props("dense")
-        )
+        if show_delimiter:
+            screen.list_delimiter_input = (
+                ui.input("List delimiter", value=suggestion.list_delimiter)
+                .classes("pl-6 text-xs")
+                .props("dense")
+            )
 
     screen._refresh_options()
     return screen

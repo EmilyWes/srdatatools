@@ -8,13 +8,16 @@ from sqlalchemy.orm import Session
 
 from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
-from app.gui.csv_mapping import CsvMappingScreen, render_csv_mapping
-from app.parsers.csv_ import parse_csv_file, read_csv_headers
+from app.gui.mapping_table import MappingScreen, render_mapping_table
+from app.parsers.common import ParseResult
+from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
 from app.parsers.mapping import FieldMapping
+from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
 
 _TYPE_UNKNOWN = "unknown"
+_TYPE_RIS = "ris"
 _TYPE_CSV = "csv"
-_TYPE_OPTIONS = {_TYPE_UNKNOWN: "Unknown", _TYPE_CSV: "CSV"}
+_TYPE_OPTIONS = {_TYPE_UNKNOWN: "Unknown", _TYPE_RIS: "RIS", _TYPE_CSV: "CSV"}
 
 _SOURCE_UNKNOWN = "unknown"
 _SOURCE_OPTIONS = {_SOURCE_UNKNOWN: "Unknown"}
@@ -28,43 +31,62 @@ async def pick_file() -> Path | None:
 
 def render_mapping(
     container: Element, file_type: str, path: Path
-) -> CsvMappingScreen | None:
-    if file_type != _TYPE_CSV:
+) -> MappingScreen | None:
+    read_keys: Callable[[Path], list[str]]
+    suggest: Callable[[list[str]], FieldMapping]
+    if file_type == _TYPE_CSV:
+        read_keys, suggest, noun = read_csv_headers, suggest_mapping, "columns"
+    elif file_type == _TYPE_RIS:
+        read_keys, suggest, noun = read_ris_tags, suggest_ris_mapping, "tags"
+    else:
         return None
 
     try:
-        headers = read_csv_headers(path)
+        keys = read_keys(path)
     except ValueError as exc:
         with container:
             ui.notify(str(exc), type="negative")
         return None
 
-    if not headers:
+    if not keys:
         with container:
-            ui.notify(f"{path.name} has no columns to map", type="negative")
+            ui.notify(f"{path.name} has no {noun} to map", type="negative")
         return None
 
-    return render_csv_mapping(container, headers)
+    return render_mapping_table(
+        container, keys, suggest(keys), show_delimiter=file_type == _TYPE_CSV
+    )
 
 
-def import_csv(session: Session, path: Path, mapping: FieldMapping) -> SourceFile:
-    result = parse_csv_file(path, mapping)
+def _store(
+    session: Session, path: Path, file_format: str, result: ParseResult
+) -> SourceFile:
     return store_parsed_rows(
         session,
         filename=path.name,
         path=str(path),
-        format="csv",
+        format=file_format,
         parsed_rows=[(row.record, row.raw_fields) for row in result.rows],
         skipped_rows=[(row.row_number, row.reason) for row in result.skipped],
     )
 
 
+def import_csv(session: Session, path: Path, mapping: FieldMapping) -> SourceFile:
+    return _store(session, path, _TYPE_CSV, parse_csv_file(path, mapping))
+
+
+def import_ris(session: Session, path: Path, mapping: FieldMapping) -> SourceFile:
+    return _store(session, path, _TYPE_RIS, parse_ris_file(path, mapping))
+
+
 def import_file(
     session: Session, path: Path, file_type: str, mapping: FieldMapping
 ) -> SourceFile:
-    if file_type != _TYPE_CSV:
-        raise ValueError(f"unsupported file type: {file_type!r}")
-    return import_csv(session, path, mapping)
+    if file_type == _TYPE_CSV:
+        return import_csv(session, path, mapping)
+    if file_type == _TYPE_RIS:
+        return import_ris(session, path, mapping)
+    raise ValueError(f"unsupported file type: {file_type!r}")
 
 
 @dataclass
@@ -73,7 +95,7 @@ class ImportView:
     on_import: Callable[[Path, str, FieldMapping], None]
     path: Path | None = None
     file_type: str = _TYPE_UNKNOWN
-    mapping_screen: CsvMappingScreen | None = None
+    mapping_screen: MappingScreen | None = None
     import_button: ui.button | None = None
     stats_button: ui.button | None = None
 

@@ -1,7 +1,12 @@
-from pathlib import Path
+﻿from pathlib import Path
 
 from app.parsers.mapping import FieldMapping
-from app.parsers.ris import parse_ris_file, parse_ris_text, suggest_ris_mapping
+from app.parsers.ris import (
+    parse_ris_file,
+    parse_ris_text,
+    read_ris_tags,
+    suggest_ris_mapping,
+)
 
 RIS_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "ris"
 
@@ -261,3 +266,19 @@ def test_parse_ris_file__default_mapping_on_realistic_export() -> None:
         first.publication_date.month,
         first.publication_date.day,
     ) == (2020, 5, 14)
+
+
+def test_read_ris_tags__returns_distinct_tags_in_first_seen_order_without_er() -> None:
+    tags = read_ris_tags(RIS_FIXTURES_DIR / "scopus_style.ris")
+
+    assert tags == [
+        "TY", "AU", "TI", "T2", "PY", "DA", "VL", "IS", "SP", "EP",
+        "DO", "AB", "KW", "SN", "UR", "N1",
+    ]  # fmt: skip
+
+
+def test_read_ris_tags__empty_file_returns_empty_list(tmp_path: Path) -> None:
+    path = tmp_path / "empty.ris"
+    path.write_text("")
+
+    assert read_ris_tags(path) == []
