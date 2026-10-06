@@ -57,7 +57,7 @@ class _Row:
     header: str
     sample: ui.label
     select: ui.select
-    key_input: ui.input
+    other_id_key: str
 
 
 @dataclass
@@ -68,10 +68,6 @@ class MappingScreen:
 
     def _row_for(self, header: str) -> _Row:
         return next(row for row in self.rows if row.header == header)
-
-    def _on_row_changed(self, row: _Row) -> None:
-        row.key_input.set_visibility(row.select.value == _OTHER_IDS)
-        self._refresh_options()
 
     def _refresh_options(self) -> None:
         taken: dict[str, str] = {}
@@ -90,10 +86,7 @@ class MappingScreen:
     def set_target(self, header: str, target: str) -> None:
         row = self._row_for(header)
         row.select.value = target
-        self._on_row_changed(row)
-
-    def set_other_id_key(self, header: str, key: str) -> None:
-        self._row_for(header).key_input.value = key
+        self._refresh_options()
 
     def available_targets(self, header: str) -> set[str]:
         return set(self._row_for(header).select.options)
@@ -105,8 +98,7 @@ class MappingScreen:
             if target == _IGNORE:
                 continue
             if target == _OTHER_IDS:
-                key = row.key_input.value.strip() or default_other_id_key(row.header)
-                target = OTHER_IDS_PREFIX + key
+                target = OTHER_IDS_PREFIX + row.other_id_key
             targets[row.header] = target
 
         delimiter = (
@@ -146,19 +138,14 @@ def render_mapping_table(
             header_classes = "w-full items-center gap-1 pl-6 py-2 bg-grey-2 border-b"
             with ui.row().classes(header_classes):
                 ui.label("Input").classes("w-48 text-xs font-bold")
+                ui.label("Mapping").classes("w-40 text-xs font-bold")
                 ui.label("Example").classes("w-48 text-xs font-bold")
-                ui.label("Mapping").classes("flex-grow text-xs font-bold")
             for i, header in enumerate(headers):
                 row_classes = "w-full items-center gap-1 pl-6 py-0 border-b"
                 if i % 2 == 1:
                     row_classes += " bg-grey-1"
                 with ui.row().classes(row_classes):
                     ui.label(header).classes("w-48 truncate text-xs")
-                    sample = ui.label(samples[header]).classes(
-                        "w-48 truncate text-xs text-grey-7"
-                    )
-                    if samples[header]:
-                        sample.tooltip(samples[header])
                     select = (
                         ui.select(
                             {key: _option_label(key) for key in _ALL_TARGET_KEYS},
@@ -167,18 +154,21 @@ def render_mapping_table(
                         .classes("mapping-field w-40 text-xs")
                         .props("dense options-dense outlined")
                     )
-                    key_input = (
-                        ui.input(value=initial_keys[header])
-                        .classes("mapping-field w-32 text-xs")
-                        .props("dense")
+                    sample = ui.label(samples[header]).classes(
+                        "w-48 truncate text-xs text-grey-7"
                     )
-                    key_input.set_visibility(initial_targets[header] == _OTHER_IDS)
+                    if samples[header]:
+                        sample.tooltip(samples[header])
 
-                row = _Row(
-                    header=header, sample=sample, select=select, key_input=key_input
+                screen.rows.append(
+                    _Row(
+                        header=header,
+                        sample=sample,
+                        select=select,
+                        other_id_key=initial_keys[header],
+                    )
                 )
-                screen.rows.append(row)
-                select.on_value_change(lambda _e, row=row: screen._on_row_changed(row))
+                select.on_value_change(lambda _e: screen._refresh_options())
 
         if show_delimiter:
             screen.list_delimiter_input = (

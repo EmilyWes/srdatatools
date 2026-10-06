@@ -78,25 +78,20 @@ def test_render_mapping_table__combines_two_columns_mapped_to_keywords() -> None
     }
 
 
-def test_render_mapping_table__other_id_key_defaults_to_slug_and_is_editable() -> None:
+def test_render_mapping_table__other_id_key_is_slug_of_header() -> None:
     screen = _render(["Scopus Author ID"])
 
     screen.set_target("Scopus Author ID", "other_ids")
-    assert screen._row_for("Scopus Author ID").key_input.value == "scopus_author_id"
-
-    screen.set_other_id_key("Scopus Author ID", "custom_key")
 
     assert screen.current_mapping().targets == {
-        "Scopus Author ID": "other_ids.custom_key"
+        "Scopus Author ID": "other_ids.scopus_author_id"
     }
 
 
 def test_render_mapping_table__prefills_suggested_other_id_with_key() -> None:
     screen = _render(["PMCID"])
 
-    row = screen._row_for("PMCID")
-    assert row.select.value == "other_ids"
-    assert row.key_input.value == "pmcid"
+    assert screen._row_for("PMCID").select.value == "other_ids"
     assert screen.current_mapping().targets == {"PMCID": "other_ids.pmcid"}
 
 
