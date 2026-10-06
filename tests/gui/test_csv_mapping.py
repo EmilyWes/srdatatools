@@ -23,7 +23,7 @@ def test_render_csv_mapping__unrecognized_header_defaults_to_ignore() -> None:
 def test_render_csv_mapping__current_mapping_with_scalar_fields() -> None:
     screen = _render(["Title", "DOI", "Zzzqqqxx123"])
 
-    assert screen.current_mapping().fields == {"Title": "title", "DOI": "doi"}
+    assert screen.current_mapping().targets == {"Title": "title", "DOI": "doi"}
 
 
 def test_render_csv_mapping__combines_two_columns_mapped_to_authors() -> None:
@@ -32,10 +32,10 @@ def test_render_csv_mapping__combines_two_columns_mapped_to_authors() -> None:
     screen.set_target("First Author", "authors")
     screen.set_target("Other Authors", "authors")
 
-    assert screen.current_mapping().authors_columns == [
-        "First Author",
-        "Other Authors",
-    ]
+    assert screen.current_mapping().targets == {
+        "First Author": "authors",
+        "Other Authors": "authors",
+    }
 
 
 def test_render_csv_mapping__combines_two_columns_mapped_to_keywords() -> None:
@@ -44,23 +44,32 @@ def test_render_csv_mapping__combines_two_columns_mapped_to_keywords() -> None:
     screen.set_target("Author Keywords", "keywords")
     screen.set_target("Index Keywords", "keywords")
 
-    assert screen.current_mapping().keywords_columns == [
-        "Author Keywords",
-        "Index Keywords",
-    ]
+    assert screen.current_mapping().targets == {
+        "Author Keywords": "keywords",
+        "Index Keywords": "keywords",
+    }
 
 
 def test_render_csv_mapping__other_id_key_defaults_to_slug_and_is_editable() -> None:
     screen = _render(["Scopus Author ID"])
 
-    screen.set_target("Scopus Author ID", "other_id")
+    screen.set_target("Scopus Author ID", "other_ids")
     assert screen._row_for("Scopus Author ID").key_input.value == "scopus_author_id"
 
     screen.set_other_id_key("Scopus Author ID", "custom_key")
 
-    assert screen.current_mapping().fields == {
+    assert screen.current_mapping().targets == {
         "Scopus Author ID": "other_ids.custom_key"
     }
+
+
+def test_render_csv_mapping__prefills_suggested_other_id_with_key() -> None:
+    screen = _render(["PMCID"])
+
+    row = screen._row_for("PMCID")
+    assert row.select.value == "other_ids"
+    assert row.key_input.value == "pmcid"
+    assert screen.current_mapping().targets == {"PMCID": "other_ids.pmcid"}
 
 
 def test_render_csv_mapping__picking_year_removes_year_from_other_rows() -> None:
@@ -80,10 +89,10 @@ def test_render_csv_mapping__date_and_year_can_be_mapped_together() -> None:
     assert "date" in screen.available_targets("Publication Date")
     assert "year" in screen.available_targets("Publication Year")
 
-    mapping = screen.current_mapping()
-
-    assert mapping.year_column == "Publication Year"
-    assert mapping.date_column == "Publication Date"
+    assert screen.current_mapping().targets == {
+        "Publication Year": "year",
+        "Publication Date": "date",
+    }
 
 
 def test_render_csv_mapping__conflicting_suggested_years_only_keeps_first() -> None:
