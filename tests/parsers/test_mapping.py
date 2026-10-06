@@ -135,6 +135,26 @@ def test_apply_mapping__parses_ris_style_date(
     assert (date.year, date.month, date.day) == expected
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2020 May 14", (2020, 5, 14)),
+        ("2020 May", (2020, 5, None)),
+        ("2020 Jan-Feb", (2020, 1, None)),
+        ("2020 Oct 3", (2020, 10, 3)),
+    ],
+)
+def test_apply_mapping__parses_nbib_style_date(
+    value: str, expected: tuple[int, int | None, int | None]
+) -> None:
+    mapping = FieldMapping(targets={"DP": "date"})
+
+    date = apply_mapping({"DP": value}, mapping).publication_date
+
+    assert date is not None
+    assert (date.year, date.month, date.day) == expected
+
+
 def test_suggest_mapping__lenient_fuzzy_matches_and_falls_back_to_id() -> None:
     aliases = {"title": ["article title"]}
 
