@@ -238,7 +238,7 @@ def render_mapping_table(
             with ui.row().classes(header_classes):
                 ui.label("Input").classes("text-xs font-bold").style(input_style)
                 ui.label("Mapping").classes("text-xs font-bold").style(mapping_style)
-                ui.label("Example").classes("w-56 text-xs font-bold")
+                ui.label("Example").classes("w-48 text-xs font-bold")
             for i, header in enumerate(headers):
                 status = _initial_status(header, suggestion)
                 row_classes = "w-full items-center gap-1 pl-6 py-0 border-b"
@@ -259,7 +259,7 @@ def render_mapping_table(
                         )
                     )
                     sample = ui.label(samples[header]).classes(
-                        "w-56 truncate text-xs text-grey-7"
+                        "w-48 truncate text-xs text-grey-7"
                     )
                     if samples[header]:
                         sample.tooltip(samples[header])
