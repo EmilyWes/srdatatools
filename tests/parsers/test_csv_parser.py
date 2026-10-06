@@ -253,9 +253,50 @@ def test_column_mapping__rejects_other_ids_target_without_key() -> None:
         ColumnMapping(fields={"EID": "other_ids."})
 
 
-def test_column_mapping__rejects_date_column_with_year_column() -> None:
-    with pytest.raises(ValueError):
-        ColumnMapping(date_column="Date", year_column="Year")
+def _ymd(text: str, mapping: ColumnMapping) -> tuple[int | None, ...]:
+    date = parse_csv_text(text, mapping).rows[0].record.publication_date
+    assert date is not None
+    return (date.year, date.month, date.day)
+
+
+def test_parse_csv_text__ymd_overrides_date_on_conflict() -> None:
+    text = "Year,Month,Day,Created\n2019,3,7,2020-05-14\n"
+    mapping = ColumnMapping(
+        year_column="Year",
+        month_column="Month",
+        day_column="Day",
+        date_column="Created",
+    )
+
+    assert _ymd(text, mapping) == (2019, 3, 7)
+
+
+def test_parse_csv_text__fills_missing_parts_from_date_column() -> None:
+    text = "Year,Created\n2020,2020-05-14\n"
+    mapping = ColumnMapping(year_column="Year", date_column="Created")
+
+    assert _ymd(text, mapping) == (2020, 5, 14)
+
+
+def test_parse_csv_text__falls_back_to_date_when_ymd_cells_blank() -> None:
+    text = "Year,Created\n,2020-05-14\n"
+    mapping = ColumnMapping(year_column="Year", date_column="Created")
+
+    assert _ymd(text, mapping) == (2020, 5, 14)
+
+
+def test_parse_csv_text__unparseable_date_column_keeps_ymd() -> None:
+    text = "Year,Created\n2020,sometime in May\n"
+    mapping = ColumnMapping(year_column="Year", date_column="Created")
+
+    assert _ymd(text, mapping) == (2020, None, None)
+
+
+def test_parse_csv_text__maps_publication_year_and_create_date_together() -> None:
+    text = "Publication Year,Create Date\n2018,2020-05-14\n"
+    mapping = ColumnMapping(year_column="Publication Year", date_column="Create Date")
+
+    assert _ymd(text, mapping) == (2018, 5, 14)
 
 
 def test_parse_csv_file__falls_back_to_cp1252_on_decode_error() -> None:

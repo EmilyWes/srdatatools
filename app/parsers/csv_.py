@@ -109,15 +109,6 @@ class ColumnMapping:
             raise ValueError(
                 f"column {column!r} maps to unknown Record field {target!r}"
             )
-        if self.date_column is not None and (
-            self.year_column is not None
-            or self.month_column is not None
-            or self.day_column is not None
-        ):
-            raise ValueError(
-                "date_column cannot be combined with "
-                "year_column/month_column/day_column"
-            )
 
 
 @dataclass
@@ -205,18 +196,11 @@ def _parse_date_string(value: str) -> PartialDate | None:
 def _parse_publication_date(
     raw_fields: dict[str, str], mapping: ColumnMapping
 ) -> PartialDate | None:
+    from_date: PartialDate | None = None
     if mapping.date_column is not None:
         raw_date = raw_fields.get(mapping.date_column)
         if raw_date is not None and raw_date.strip():
-            return _parse_date_string(raw_date)
-        return None
-
-    if (
-        mapping.year_column is None
-        and mapping.month_column is None
-        and mapping.day_column is None
-    ):
-        return None
+            from_date = _parse_date_string(raw_date)
 
     year = (
         _parse_int_field(raw_fields.get(mapping.year_column), "year")
@@ -233,6 +217,10 @@ def _parse_publication_date(
         if mapping.day_column is not None
         else None
     )
+    if from_date is not None:
+        year = year if year is not None else from_date.year
+        month = month if month is not None else from_date.month
+        day = day if day is not None else from_date.day
     return _build_partial_date(year, month, day)
 
 
