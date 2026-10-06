@@ -339,6 +339,9 @@ def test_read_csv_headers__decodes_cp1252_file() -> None:
         ("DOI", "doi"),
         ("Document Type", "publication_type"),
         ("Year", "year"),
+        ("PMID", "pmid"),
+        ("PMCID", "other_ids"),
+        ("PMC ID", "other_ids"),
     ],
 )
 def test_suggest_mapping__matches_known_vendor_headers(
@@ -347,6 +350,24 @@ def test_suggest_mapping__matches_known_vendor_headers(
     suggestions = suggest_mapping([header])
 
     assert suggestions[header] == expected_target
+
+
+@pytest.mark.parametrize("header", ["Scopus Author ID", "Custom ID", "Zotero ID"])
+def test_suggest_mapping__unmatched_id_header_falls_back_to_other_ids(
+    header: str,
+) -> None:
+    suggestions = suggest_mapping([header])
+
+    assert suggestions[header] == "other_ids"
+
+
+@pytest.mark.parametrize("header", ["Valid", "Wide", "Identifier", "Provider"])
+def test_suggest_mapping__non_id_words_containing_id_stay_unmapped(
+    header: str,
+) -> None:
+    suggestions = suggest_mapping([header])
+
+    assert suggestions[header] is None
 
 
 def test_suggest_mapping__returns_none_for_unrecognized_header() -> None:
