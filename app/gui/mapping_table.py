@@ -118,6 +118,19 @@ def _option_label(key: str) -> str:
     return _LABELS.get(key, key.replace("_", " ").capitalize())
 
 
+_INPUT_WIDTH_CH = (8, 28)
+_SELECT_CHROME_CH = 6
+
+
+def _input_width_ch(headers: list[str]) -> int:
+    low, high = _INPUT_WIDTH_CH
+    return max(low, min(high, max(map(len, headers), default=0) + 1))
+
+
+def _mapping_width_ch() -> int:
+    return max(len(_option_label(key)) for key in _ALL_TARGET_KEYS) + _SELECT_CHROME_CH
+
+
 def _exclusive_available(header: str, target: str, taken: dict[str, str]) -> bool:
     return taken.get(target) in (None, header)
 
@@ -202,6 +215,8 @@ def render_mapping_table(
 ) -> MappingScreen:
     screen = MappingScreen(list_delimiter=suggestion.list_delimiter)
     headers = _sorted_headers(list(samples), suggestion)
+    input_style = f"width: {_input_width_ch(headers)}ch"
+    mapping_style = f"width: {_mapping_width_ch()}ch"
 
     suggested = suggestion.targets
     initial_targets: dict[str, str] = {}
@@ -221,29 +236,30 @@ def render_mapping_table(
         with ui.column().classes("gap-0 border rounded-borders"):
             header_classes = "w-full items-center gap-1 pl-6 py-2 bg-grey-2 border-b"
             with ui.row().classes(header_classes):
-                ui.label("Input").classes("w-48 text-xs font-bold")
-                ui.label("Mapping").classes("w-40 text-xs font-bold")
-                ui.label("Example").classes("w-48 text-xs font-bold")
+                ui.label("Input").classes("text-xs font-bold").style(input_style)
+                ui.label("Mapping").classes("text-xs font-bold").style(mapping_style)
+                ui.label("Example").classes("w-56 text-xs font-bold")
             for i, header in enumerate(headers):
                 status = _initial_status(header, suggestion)
                 row_classes = "w-full items-center gap-1 pl-6 py-0 border-b"
                 if i % 2 == 1:
                     row_classes += " bg-grey-1"
                 with ui.row().classes(row_classes):
-                    ui.label(header).classes("w-48 truncate text-xs")
+                    ui.label(header).classes("truncate text-xs").style(input_style)
                     select = (
                         ui.select(
                             {key: _option_label(key) for key in _ALL_TARGET_KEYS},
                             value=initial_targets[header],
                         )
-                        .classes("mapping-field w-40 text-xs")
+                        .classes("mapping-field text-xs")
+                        .style(mapping_style)
                         .props(
                             "dense options-dense outlined "
                             f"bg-color={_STATUS_COLORS[status]}"
                         )
                     )
                     sample = ui.label(samples[header]).classes(
-                        "w-48 truncate text-xs text-grey-7"
+                        "w-56 truncate text-xs text-grey-7"
                     )
                     if samples[header]:
                         sample.tooltip(samples[header])

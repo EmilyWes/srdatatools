@@ -1,7 +1,12 @@
-﻿from nicegui.elements.tooltip import Tooltip
+﻿import pytest
+from nicegui.elements.tooltip import Tooltip
 
 from app.gui.layout import shell
-from app.gui.mapping_table import MappingScreen, render_mapping_table
+from app.gui.mapping_table import (
+    MappingScreen,
+    _input_width_ch,
+    render_mapping_table,
+)
 from app.parsers.csv_ import suggest_mapping
 from app.parsers.ris import suggest_ris_mapping
 
@@ -317,3 +322,17 @@ def test_render_mapping_table__changing_a_row_does_not_reorder_rows() -> None:
     screen.set_target("DOI", "notes")
 
     assert [row.header for row in screen.rows] == ["DOI", "Title"]
+
+
+@pytest.mark.parametrize(
+    ("headers", "expected"),
+    [
+        (["ID"], 8),
+        (["Title", "Publication Year"], 17),
+        (["A very long column header that exceeds the cap"], 28),
+    ],
+)
+def test_input_width_ch__fits_longest_header_within_bounds(
+    headers: list[str], expected: int
+) -> None:
+    assert _input_width_ch(headers) == expected
