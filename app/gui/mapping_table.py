@@ -55,6 +55,7 @@ def _exclusive_available(header: str, target: str, taken: dict[str, str]) -> boo
 @dataclass
 class _Row:
     header: str
+    sample: ui.label
     select: ui.select
     key_input: ui.input
 
@@ -118,12 +119,13 @@ class MappingScreen:
 
 def render_mapping_table(
     middle: Element,
-    headers: list[str],
+    samples: dict[str, str],
     suggestion: FieldMapping,
     *,
     show_delimiter: bool,
 ) -> MappingScreen:
     screen = MappingScreen(list_delimiter=suggestion.list_delimiter)
+    headers = list(samples)
 
     suggested = suggestion.targets
     initial_targets: dict[str, str] = {}
@@ -144,6 +146,7 @@ def render_mapping_table(
             header_classes = "w-full items-center gap-1 pl-6 py-2 bg-grey-2 border-b"
             with ui.row().classes(header_classes):
                 ui.label("Input").classes("w-48 text-xs font-bold")
+                ui.label("Example").classes("w-48 text-xs font-bold")
                 ui.label("Mapping").classes("flex-grow text-xs font-bold")
             for i, header in enumerate(headers):
                 row_classes = "w-full items-center gap-1 pl-6 py-0 border-b"
@@ -151,6 +154,11 @@ def render_mapping_table(
                     row_classes += " bg-grey-1"
                 with ui.row().classes(row_classes):
                     ui.label(header).classes("w-48 truncate text-xs")
+                    sample = ui.label(samples[header]).classes(
+                        "w-48 truncate text-xs text-grey-7"
+                    )
+                    if samples[header]:
+                        sample.tooltip(samples[header])
                     select = (
                         ui.select(
                             {key: _option_label(key) for key in _ALL_TARGET_KEYS},
@@ -166,7 +174,9 @@ def render_mapping_table(
                     )
                     key_input.set_visibility(initial_targets[header] == _OTHER_IDS)
 
-                row = _Row(header=header, select=select, key_input=key_input)
+                row = _Row(
+                    header=header, sample=sample, select=select, key_input=key_input
+                )
                 screen.rows.append(row)
                 select.on_value_change(lambda _e, row=row: screen._on_row_changed(row))
 

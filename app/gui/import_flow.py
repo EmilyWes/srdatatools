@@ -51,19 +51,22 @@ def render_mapping(
         return None
 
     try:
-        keys = list(read_keys(path))
+        samples = read_keys(path)
     except ValueError as exc:
         with container:
             ui.notify(str(exc), type="negative")
         return None
 
-    if not keys:
+    if not samples:
         with container:
             ui.notify(f"{path.name} has no {noun} to map", type="negative")
         return None
 
     return render_mapping_table(
-        container, keys, suggest(keys), show_delimiter=file_type == _TYPE_CSV
+        container,
+        samples,
+        suggest(list(samples)),
+        show_delimiter=file_type == _TYPE_CSV,
     )
 
 
