@@ -33,6 +33,14 @@ def test_render_mapping_table__prefills_suggested_scalar_targets() -> None:
     assert screen._row_for("DOI").select.value == "doi"
 
 
+def test_render_mapping_table__ris_sn_prefills_issn_isbn_option() -> None:
+    screen = _render_ris(["SN"])
+
+    assert screen._row_for("SN").select.value == "issn_isbn"
+    assert "issn_isbn" in screen.available_targets("SN")
+    assert screen.current_mapping().targets == {"SN": "issn_isbn"}
+
+
 def test_render_mapping_table__prefills_page_start_and_end() -> None:
     screen = _render(["Page start", "Page end"])
 

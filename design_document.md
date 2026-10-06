@@ -222,6 +222,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Field-mapping UI, embedded inline in the import view (live table below Source/Type, no separate screen/confirm step)
 - [ ] Field-mapping UI: visual indicators (different colors) per row for columns that are mapped directly (exact alias), mapped via fuzzy match or the ID fallback, or mapped multiple times to the same target
 - [x] Field-mapping UI: show the first value of each column/tag next to its row so the user can see what it contains
+- [x] Field-mapping UI: "ISSN/ISBN" target that routes a single input (e.g. RIS `SN`) to `issn` or `isbn` by value length; NBIB `ISBN` tag mapped to `isbn`
 - [ ] NBIB: strip the print/electronic qualifier from `IS` values (e.g. `1234-5678 (Print)` -> `1234-5678`) before storing in `issn`
 - [ ] PubMed profile (NBIB)
 - [ ] Scopus profile (CSV, RIS)
