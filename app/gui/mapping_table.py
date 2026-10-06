@@ -84,11 +84,11 @@ _FIELD_ORDER = (
 Status = Literal["green", "orange", "red"]
 _STATUS_ORDER: tuple[Status, ...] = ("green", "orange", "red")
 _CHANGED = "blue"
-_STATUS_CLASSES = {
-    "green": "bg-green-2",
-    "orange": "bg-orange-2",
-    "red": "bg-red-2",
-    _CHANGED: "bg-blue-2",
+_STATUS_COLORS = {
+    "green": "green-2",
+    "orange": "orange-2",
+    "red": "red-2",
+    _CHANGED: "blue-2",
 }
 
 
@@ -130,7 +130,6 @@ class _Row:
     other_id_key: str
     status: Status
     initial_target: str
-    container: ui.row
 
     @property
     def display_status(self) -> str:
@@ -162,9 +161,7 @@ class MappingScreen:
 
     def _refresh_colors(self) -> None:
         for row in self.rows:
-            current = row.display_status
-            stale = " ".join(c for s, c in _STATUS_CLASSES.items() if s != current)
-            row.container.classes(add=_STATUS_CLASSES[current], remove=stale)
+            row.select.props(f"bg-color={_STATUS_COLORS[row.display_status]}")
 
     def on_target_change(self) -> None:
         self._refresh_options()
@@ -227,12 +224,12 @@ def render_mapping_table(
                 ui.label("Input").classes("w-48 text-xs font-bold")
                 ui.label("Mapping").classes("w-40 text-xs font-bold")
                 ui.label("Example").classes("w-48 text-xs font-bold")
-            for header in headers:
+            for i, header in enumerate(headers):
                 status = _initial_status(header, suggestion)
                 row_classes = "w-full items-center gap-1 pl-6 py-0 border-b"
-                with ui.row().classes(
-                    f"{row_classes} {_STATUS_CLASSES[status]}"
-                ) as container:
+                if i % 2 == 1:
+                    row_classes += " bg-grey-1"
+                with ui.row().classes(row_classes):
                     ui.label(header).classes("w-48 truncate text-xs")
                     select = (
                         ui.select(
@@ -240,7 +237,10 @@ def render_mapping_table(
                             value=initial_targets[header],
                         )
                         .classes("mapping-field w-40 text-xs")
-                        .props("dense options-dense outlined")
+                        .props(
+                            "dense options-dense outlined "
+                            f"bg-color={_STATUS_COLORS[status]}"
+                        )
                     )
                     sample = ui.label(samples[header]).classes(
                         "w-48 truncate text-xs text-grey-7"
@@ -256,7 +256,6 @@ def render_mapping_table(
                         other_id_key=initial_keys[header],
                         status=status,
                         initial_target=initial_targets[header],
-                        container=container,
                     )
                 )
                 select.on_value_change(lambda _e: screen.on_target_change())
