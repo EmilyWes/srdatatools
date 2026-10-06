@@ -232,7 +232,7 @@ def test_render_mapping_table__sample_has_full_value_tooltip_only_when_non_empty
     }
     title_sample = screen._row_for("Title").sample
     notes_sample = screen._row_for("Notes").sample
-    assert targets == {f"#{title_sample.html_id}": "Some Paper"}
+    assert targets[f"#{title_sample.html_id}"] == "Some Paper"
     assert f"#{notes_sample.html_id}" not in targets
 
 
@@ -374,19 +374,41 @@ def test_render_mapping_table__truncated_input_header_has_full_value_tooltip() -
     )
 
     tooltips = [t.text for t in panes.middle.descendants() if isinstance(t, Tooltip)]
-    assert tooltips == [long_header]
+    assert tooltips.count(long_header) == 1
+    assert "Title" not in tooltips
 
 
-def test_render_mapping_table__shows_filled_count_per_row_and_total_in_header() -> None:
-    samples = {"Title": "Some Paper", "Notes": ""}
-    summary = FileSummary(samples, {"Title": 7, "Notes": 0}, 12)
+def test_render_mapping_table__shows_filled_bar_per_row_with_count_tooltip() -> None:
+    samples = {"Title": "Some Paper", "Notes": "", "Year": "2020"}
+    summary = FileSummary(samples, {"Title": 12, "Notes": 0, "Year": 6}, 12)
     panes = shell()
 
     screen = render_mapping_table(
         panes.middle, summary, suggest_mapping(list(samples)), show_delimiter=True
     )
 
-    assert screen._row_for("Title").count.text == "7"
-    assert screen._row_for("Notes").count.text == "0"
+    title, notes, year = (screen._row_for(h).count for h in samples)
+    assert (title.value, notes.value, year.value) == (1.0, 0.0, 0.5)
+    assert "hsl(120," in title.props["color"]
+    assert "hsl(0," in notes.props["color"]
+    assert "hsl(60," in year.props["color"]
+    tooltips = {
+        c.props["target"]: c.text
+        for c in panes.middle.descendants()
+        if isinstance(c, Tooltip)
+    }
+    assert tooltips[f"#{title.html_id}"] == "12 of 12"
+    assert tooltips[f"#{notes.html_id}"] == "0 of 12"
     header_texts = [e.text for e in panes.middle.descendants() if isinstance(e, Label)]
-    assert "# (12)" in header_texts
+    assert "#" in header_texts
+
+
+def test_render_mapping_table__empty_file_bar_is_empty() -> None:
+    summary = FileSummary({"Title": ""}, {"Title": 0}, 0)
+    panes = shell()
+
+    screen = render_mapping_table(
+        panes.middle, summary, suggest_mapping(["Title"]), show_delimiter=True
+    )
+
+    assert screen._row_for("Title").count.value == 0.0

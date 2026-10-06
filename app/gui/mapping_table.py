@@ -146,7 +146,7 @@ def _exclusive_available(header: str, target: str, taken: dict[str, str]) -> boo
 class _Row:
     header: str
     sample: ui.label
-    count: ui.label
+    count: ui.linear_progress
     select: ui.select
     other_id_key: str
     status: Status
@@ -241,23 +241,40 @@ def render_mapping_table(
 
     ui.add_css(_ROW_FIELD_CSS)
 
+    count_cell_classes = "self-stretch flex items-center px-2 mr-1"
+    count_cell_style = "background: rgba(0, 0, 0, 0.04)"
+
     middle.clear()
     with middle:
         with ui.column().classes("gap-0 border rounded-borders"):
-            header_classes = "w-full items-center gap-1 pl-6 py-2 bg-grey-2 border-b"
+            header_classes = "w-full items-center gap-1 pl-0 py-2 bg-grey-2 border-b"
             with ui.row().classes(header_classes):
+                with (
+                    ui.element("div")
+                    .classes(count_cell_classes)
+                    .style(count_cell_style)
+                ):
+                    ui.label("#").classes("w-10 text-xs font-bold text-center")
                 ui.label("Input").classes("text-xs font-bold").style(input_style)
                 ui.label("Mapping").classes("text-xs font-bold").style(mapping_style)
-                ui.label("Example").classes("w-48 text-xs font-bold")
-                ui.label(f"# ({summary.total_rows})").classes(
-                    "w-20 text-xs font-bold text-right"
-                )
+                ui.label("Example").classes("w-48 text-xs font-bold text-center")
             for i, header in enumerate(headers):
                 status = _initial_status(header, suggestion)
-                row_classes = "w-full items-center gap-1 pl-6 py-0 border-b"
+                row_classes = "w-full items-center gap-1 pl-0 py-0 border-b"
                 if i % 2 == 1:
                     row_classes += " bg-grey-1"
                 with ui.row().classes(row_classes):
+                    filled = summary.filled.get(header, 0)
+                    ratio = filled / summary.total_rows if summary.total_rows else 0.0
+                    with (
+                        ui.element("div")
+                        .classes(count_cell_classes)
+                        .style(count_cell_style)
+                    ):
+                        count = ui.linear_progress(value=ratio, show_value=False)
+                        count.props(f'color="hsl({120 * ratio:.0f}, 70%, 45%)"')
+                        count.classes("w-10")
+                        count.tooltip(f"{filled} of {summary.total_rows}")
                     label = ui.label(header).classes("truncate text-xs")
                     label.style(input_style)
                     if len(header) >= input_width:
@@ -279,9 +296,6 @@ def render_mapping_table(
                     )
                     if samples[header]:
                         sample.tooltip(samples[header])
-                    count = ui.label(str(summary.filled.get(header, 0))).classes(
-                        "w-20 text-xs text-right"
-                    )
 
                 screen.rows.append(
                     _Row(

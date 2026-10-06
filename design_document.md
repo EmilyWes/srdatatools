@@ -223,7 +223,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Field-mapping UI: visual indicators (different colors) per row for columns that are mapped directly (exact alias), mapped via fuzzy match or the ID fallback, or mapped multiple times to the same target
 - [x] Field-mapping UI: show the first value of each column/tag next to its row so the user can see what it contains
 - [x] Field-mapping UI: "ISSN/ISBN" target that routes a single input (e.g. RIS `SN`) to `issn` or `isbn` by value length; NBIB `ISBN` tag mapped to `isbn`
-- [x] Field-mapping UI: per-column count of rows with a value, with the total row count in the column header, `# (total)`
+- [x] Field-mapping UI: per-column bar (`#` column) showing filled rows / total rows, colored green (all filled) to red (none), with `value of total` on hover
 - [ ] NBIB: strip the print/electronic qualifier from `IS` values (e.g. `1234-5678 (Print)` -> `1234-5678`) before storing in `issn`
 - [ ] PubMed profile (NBIB)
 - [ ] Scopus profile (CSV, RIS)
