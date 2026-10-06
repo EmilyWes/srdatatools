@@ -9,8 +9,8 @@ from app.parsers.mapping import suggest_mapping as _suggest_mapping
 
 logger = logging.getLogger(__name__)
 
-# AU (abbreviated authors) is left out on purpose: mapping it too would add every
-# author twice next to FAU.
+# AU is not an alias: mapping it next to FAU would add every author twice.
+# suggest_nbib_mapping falls back to it only when the file has no FAU.
 _SUGGESTION_ALIASES: dict[str, list[str]] = {
     "title": ["ti"],
     "authors": ["fau"],
@@ -119,4 +119,7 @@ def read_nbib_tags(path: Path) -> list[str]:
 
 def suggest_nbib_mapping(tags: list[str]) -> FieldMapping:
     mapping = _suggest_mapping(tags, _SUGGESTION_ALIASES, lenient=False)
-    return replace(mapping, list_delimiter="\n")
+    targets = dict(mapping.targets)
+    if "FAU" not in tags and "AU" in tags:
+        targets["AU"] = "authors"
+    return replace(mapping, targets=targets, list_delimiter="\n")

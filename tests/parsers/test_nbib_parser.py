@@ -224,8 +224,12 @@ def test_suggest_nbib_mapping__uses_newline_list_delimiter() -> None:
     assert suggest_nbib_mapping(["FAU"]).list_delimiter == "\n"
 
 
-def test_suggest_nbib_mapping__leaves_abbreviated_authors_unmapped() -> None:
-    assert suggest_nbib_mapping(["FAU", "AU"]).targets == {"FAU": "authors"}
+def test_suggest_nbib_mapping__prefers_fau_over_au_for_authors() -> None:
+    assert suggest_nbib_mapping(["AU", "FAU"]).targets == {"FAU": "authors"}
+
+
+def test_suggest_nbib_mapping__falls_back_to_au_without_fau() -> None:
+    assert suggest_nbib_mapping(["AU"]).targets == {"AU": "authors"}
 
 
 def test_suggest_nbib_mapping__maps_dp_to_date_and_keywords_from_ot_and_mh() -> None:
