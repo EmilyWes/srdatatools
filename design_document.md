@@ -43,6 +43,7 @@ Goal: support as many databases as possible, built in order of how widely used t
 | 4 | IEEE Xplore | CSV, RIS, BibTeX | CSV export is common for IEEE; RIS export exists but is less commonly used in practice |
 | 5 | Embase | RIS, CSV | Similar shape to PubMed/Medline records but with Embase-specific fields (e.g. Emtree terms) |
 | 6 | PsycINFO | RIS, CSV (via EBSCO or ProQuest platform) | Field set and export mechanics depend on which platform (EBSCO vs ProQuest) the library uses — may need two sub-profiles |
+| 7 | Zotero | RIS, CSV, BibTeX, CSL JSON | Reference manager rather than a database, so records may be incomplete or hand-edited; export fields and tags can vary with the item types in the user's library |
 
 **Design implication:** most of these export to RIS or CSV rather than a unique file format each. So the real challenge isn't "one parser per database" — it's that RIS tag usage and CSV column names vary by vendor. The parser architecture should be **format + vendor profile**, not just format: a shared RIS/CSV parsing core, with a per-database "profile" (tag/column mapping + quirks) layered on top. This makes adding a new database mostly a matter of writing a new profile rather than a new parser, and keeps the door open for scaling to "as many databases as possible" without the codebase growing linearly with the parser count.
 
@@ -243,6 +244,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] Import result summary also reports how many records had a date conflict (Year/Month/Day disagreeing with the full-date column, resolved in favour of Year/Month/Day), e.g. "998 imported, 2 skipped, 14 date conflicts"; not yet implemented
 - [ ] Activity log: write a plain-language `activity_log` row for each import (e.g. "Imported 998 records from scopus.csv, 2 skipped")
 - [ ] Source-file detail view: records currently in library from this file, skipped-row count, remove-this-source's-records action
+- [ ] Delete/wipe the database: action that removes all imported records and source files
 - [ ] Right panel: Dedup / Enrich / Snowball / Export buttons in order, gear-icon settings popups for Dedup/Enrich/Snowball, read-only activity log textbox beneath
 - [ ] Middle panel Library view: basic stats (total records, records per source, per year) + record table (sorting/filtering/search deferred)
 
@@ -286,6 +288,12 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] User docs / README + MIT LICENSE file for open-source release
   - Add a `[project.scripts]` entry point so `pip install` provides a `srdatatools` command (currently only the importable `app` package, launched via `python -m app.main`)
 - [ ] Broaden test coverage to integration tests across the full import → dedup → enrich → export pipeline
+
+**Phase 6 — Adding more input**
+
+- [ ] Zotero profile (RIS/CSV)
+- [ ] Zotero profile: generic BibTeX parser + Zotero BibTeX mapping
+- [ ] Zotero profile: generic CSL JSON parser + Zotero CSL JSON mapping
 
 **Backlog / stretch**
 
