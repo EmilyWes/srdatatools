@@ -82,6 +82,18 @@ def test_render_mapping__renders_mapping_screen_with_file_headers(
     assert len(header_rows) == 3  # column header labels row + one row per CSV column
 
 
+def test_render_mapping__shows_first_value_of_each_column(tmp_path: Path) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\n")
+    panes = shell()
+
+    screen = render_mapping(panes.middle, "csv", csv_path)
+
+    assert screen is not None
+    assert screen._row_for("Title").sample.text == "Some Paper"
+    assert screen._row_for("DOI").sample.text == "10.1/xyz"
+
+
 def test_render_mapping__notifies_and_returns_none_when_file_cannot_be_decoded(
     tmp_path: Path,
 ) -> None:

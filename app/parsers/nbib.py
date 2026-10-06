@@ -105,16 +105,19 @@ def parse_nbib_file(path: Path, mapping: FieldMapping) -> ParseResult:
     return parse_nbib_text(decode_file(path), mapping)
 
 
-def read_nbib_tags(path: Path) -> list[str]:
-    tags: dict[str, None] = {}
+def read_nbib_tags(path: Path) -> dict[str, str]:
+    samples: dict[str, str] = {}
     for line in decode_file(path).splitlines():
         match = _TAG_LINE.match(line)
         if match is None:
             continue
-        tags.setdefault(match["tag"])
-        if match["tag"] in _ID_TAGS and _doi_from_id(match["value"] or "") is not None:
-            tags.setdefault(_DOI_TAG)
-    return list(tags)
+        value = (match["value"] or "").strip()
+        if not samples.get(match["tag"]):
+            samples[match["tag"]] = value
+        if match["tag"] in _ID_TAGS and (doi := _doi_from_id(value)) is not None:
+            if not samples.get(_DOI_TAG):
+                samples[_DOI_TAG] = doi
+    return samples
 
 
 def suggest_nbib_mapping(tags: list[str]) -> FieldMapping:

@@ -1,4 +1,6 @@
-﻿from app.gui.layout import shell
+﻿from nicegui.elements.tooltip import Tooltip
+
+from app.gui.layout import shell
 from app.gui.mapping_table import MappingScreen, render_mapping_table
 from app.parsers.csv_ import suggest_mapping
 from app.parsers.ris import suggest_ris_mapping
@@ -7,14 +9,20 @@ from app.parsers.ris import suggest_ris_mapping
 def _render(headers: list[str]) -> MappingScreen:
     panes = shell()
     return render_mapping_table(
-        panes.middle, headers, suggest_mapping(headers), show_delimiter=True
+        panes.middle,
+        dict.fromkeys(headers, ""),
+        suggest_mapping(headers),
+        show_delimiter=True,
     )
 
 
 def _render_ris(tags: list[str]) -> MappingScreen:
     panes = shell()
     return render_mapping_table(
-        panes.middle, tags, suggest_ris_mapping(tags), show_delimiter=False
+        panes.middle,
+        dict.fromkeys(tags, ""),
+        suggest_ris_mapping(tags),
+        show_delimiter=False,
     )
 
 
@@ -70,25 +78,20 @@ def test_render_mapping_table__combines_two_columns_mapped_to_keywords() -> None
     }
 
 
-def test_render_mapping_table__other_id_key_defaults_to_slug_and_is_editable() -> None:
+def test_render_mapping_table__other_id_key_is_slug_of_header() -> None:
     screen = _render(["Scopus Author ID"])
 
     screen.set_target("Scopus Author ID", "other_ids")
-    assert screen._row_for("Scopus Author ID").key_input.value == "scopus_author_id"
-
-    screen.set_other_id_key("Scopus Author ID", "custom_key")
 
     assert screen.current_mapping().targets == {
-        "Scopus Author ID": "other_ids.custom_key"
+        "Scopus Author ID": "other_ids.scopus_author_id"
     }
 
 
 def test_render_mapping_table__prefills_suggested_other_id_with_key() -> None:
     screen = _render(["PMCID"])
 
-    row = screen._row_for("PMCID")
-    assert row.select.value == "other_ids"
-    assert row.key_input.value == "pmcid"
+    assert screen._row_for("PMCID").select.value == "other_ids"
     assert screen.current_mapping().targets == {"PMCID": "other_ids.pmcid"}
 
 
@@ -127,7 +130,10 @@ def test_render_mapping_table__renders_table_and_delimiter_input_only() -> None:
     headers = ["Title"]
 
     render_mapping_table(
-        panes.middle, headers, suggest_mapping(headers), show_delimiter=True
+        panes.middle,
+        dict.fromkeys(headers, ""),
+        suggest_mapping(headers),
+        show_delimiter=True,
     )
 
     middle_children = panes.middle.default_slot.children
@@ -139,7 +145,10 @@ def test_render_mapping_table__ris_has_no_delimiter_input_and_keeps_newline() ->
     tags = ["TI", "AU"]
 
     render_mapping_table(
-        panes.middle, tags, suggest_ris_mapping(tags), show_delimiter=False
+        panes.middle,
+        dict.fromkeys(tags, ""),
+        suggest_ris_mapping(tags),
+        show_delimiter=False,
     )
 
     assert len(panes.middle.default_slot.children) == 1  # table only
@@ -167,3 +176,36 @@ def test_render_mapping_table__picking_page_start_removes_it_from_other_rows() -
 
     assert "page_start" not in screen.available_targets("Other")
     assert "page_start" in screen.available_targets("Start")
+
+
+def test_render_mapping_table__shows_sample_value_for_each_row() -> None:
+    samples = {"Title": "Some Paper", "DOI": "10.1/xyz"}
+    panes = shell()
+
+    screen = render_mapping_table(
+        panes.middle, samples, suggest_mapping(list(samples)), show_delimiter=True
+    )
+
+    assert screen._row_for("Title").sample.text == "Some Paper"
+    assert screen._row_for("DOI").sample.text == "10.1/xyz"
+
+
+def test_render_mapping_table__sample_has_full_value_tooltip_only_when_non_empty() -> (
+    None
+):
+    samples = {"Title": "Some Paper", "Notes": ""}
+    panes = shell()
+
+    screen = render_mapping_table(
+        panes.middle, samples, suggest_mapping(list(samples)), show_delimiter=True
+    )
+
+    targets = {
+        tooltip.props["target"]: tooltip.text
+        for tooltip in panes.middle.descendants()
+        if isinstance(tooltip, Tooltip)
+    }
+    title_sample = screen._row_for("Title").sample
+    notes_sample = screen._row_for("Notes").sample
+    assert targets == {f"#{title_sample.html_id}": "Some Paper"}
+    assert f"#{notes_sample.html_id}" not in targets

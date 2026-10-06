@@ -86,13 +86,14 @@ def parse_ris_file(path: Path, mapping: FieldMapping) -> ParseResult:
     return parse_ris_text(decode_file(path), mapping)
 
 
-def read_ris_tags(path: Path) -> list[str]:
-    tags: dict[str, None] = {}
+def read_ris_tags(path: Path) -> dict[str, str]:
+    samples: dict[str, str] = {}
     for line in decode_file(path).splitlines():
         match = _TAG_LINE.match(line)
         if match is not None and match["tag"] != _END_TAG:
-            tags.setdefault(match["tag"])
-    return list(tags)
+            if not samples.get(match["tag"]):
+                samples[match["tag"]] = (match["value"] or "").strip()
+    return samples
 
 
 def suggest_ris_mapping(tags: list[str]) -> FieldMapping:
