@@ -217,3 +217,64 @@ def test_render_mapping_table__sample_has_full_value_tooltip_only_when_non_empty
     notes_sample = screen._row_for("Notes").sample
     assert targets == {f"#{title_sample.html_id}": "Some Paper"}
     assert f"#{notes_sample.html_id}" not in targets
+
+
+def _statuses(screen: MappingScreen) -> list[tuple[str, str]]:
+    return [(row.header, row.status) for row in screen.rows]
+
+
+def test_render_mapping_table__exact_match_is_green() -> None:
+    screen = _render(["DOI"])
+
+    assert _statuses(screen) == [("DOI", "green")]
+
+
+def test_render_mapping_table__fuzzy_and_id_fallback_are_orange() -> None:
+    screen = _render(["Titles", "Scopus Author ID"])
+
+    assert {status for _, status in _statuses(screen)} == {"orange"}
+
+
+def test_render_mapping_table__several_keys_on_same_target_are_orange() -> None:
+    screen = _render(["Author Keywords", "Index Keywords", "DOI"])
+
+    assert dict(_statuses(screen)) == {
+        "DOI": "green",
+        "Author Keywords": "orange",
+        "Index Keywords": "orange",
+    }
+
+
+def test_render_mapping_table__ignored_is_red() -> None:
+    screen = _render(["Zzzqqqxx123"])
+
+    assert _statuses(screen) == [("Zzzqqqxx123", "red")]
+
+
+def test_render_mapping_table__sorts_green_then_orange_then_red() -> None:
+    screen = _render(["Zzzqqqxx123", "Scopus Author ID", "DOI"])
+
+    assert [status for _, status in _statuses(screen)] == ["green", "orange", "red"]
+
+
+def test_render_mapping_table__sorts_within_status_by_field_sequence() -> None:
+    screen = _render(["Notes", "Title", "Authors", "DOI"])
+
+    assert [row.header for row in screen.rows] == ["DOI", "Title", "Authors", "Notes"]
+
+
+def test_render_mapping_table__sort_keeps_file_order_for_ties() -> None:
+    screen = _render(["Zzzqqqxx123", "Aaaa111", "Author Keywords", "Index Keywords"])
+
+    assert [row.header for row in screen.rows] == [
+        "Author Keywords",
+        "Index Keywords",
+        "Zzzqqqxx123",
+        "Aaaa111",
+    ]
+
+
+def test_render_mapping_table__other_ids_sort_between_url_and_notes() -> None:
+    screen = _render(["Notes", "PMCID", "Title"])
+
+    assert [row.header for row in screen.rows] == ["Title", "PMCID", "Notes"]

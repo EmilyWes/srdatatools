@@ -1,4 +1,5 @@
 ﻿from dataclasses import dataclass, field
+from typing import Literal
 
 from nicegui import ui
 from nicegui.element import Element
@@ -51,6 +52,61 @@ _LABELS: dict[str, str] = {
 }
 
 
+_FIELD_ORDER = (
+    "doi",
+    "pmid",
+    "title",
+    "authors",
+    "keywords",
+    "abstract",
+    "publisher",
+    "journal",
+    "conference_name",
+    "publication_type",
+    "date",
+    "year",
+    "month",
+    "day",
+    ISSN_ISBN_TARGET,
+    "issn",
+    "isbn",
+    "volume",
+    "issue",
+    "pages",
+    "page_start",
+    "page_end",
+    "language",
+    "url",
+    _OTHER_IDS,
+    "notes",
+)
+
+Status = Literal["green", "orange", "red"]
+_STATUS_ORDER: tuple[Status, ...] = ("green", "orange", "red")
+
+
+def _initial_status(header: str, suggestion: FieldMapping) -> Status:
+    target = suggestion.targets.get(header)
+    if target is None:
+        return "red"
+    shared = sum(t == target for t in suggestion.targets.values()) > 1
+    if shared or suggestion.match_kinds.get(header) != "exact":
+        return "orange"
+    return "green"
+
+
+def _sorted_headers(headers: list[str], suggestion: FieldMapping) -> list[str]:
+    def sort_key(header: str) -> tuple[int, int]:
+        status = _initial_status(header, suggestion)
+        target = suggestion.targets.get(header, "")
+        if target.startswith(OTHER_IDS_PREFIX):
+            target = _OTHER_IDS
+        position = _FIELD_ORDER.index(target) if status != "red" else 0
+        return _STATUS_ORDER.index(status), position
+
+    return sorted(headers, key=sort_key)
+
+
 def _option_label(key: str) -> str:
     return _LABELS.get(key, key.replace("_", " ").capitalize())
 
@@ -65,6 +121,7 @@ class _Row:
     sample: ui.label
     select: ui.select
     other_id_key: str
+    status: Status
 
 
 @dataclass
@@ -124,7 +181,7 @@ def render_mapping_table(
     show_delimiter: bool,
 ) -> MappingScreen:
     screen = MappingScreen(list_delimiter=suggestion.list_delimiter)
-    headers = list(samples)
+    headers = _sorted_headers(list(samples), suggestion)
 
     suggested = suggestion.targets
     initial_targets: dict[str, str] = {}
@@ -173,6 +230,7 @@ def render_mapping_table(
                         sample=sample,
                         select=select,
                         other_id_key=initial_keys[header],
+                        status=_initial_status(header, suggestion),
                     )
                 )
                 select.on_value_change(lambda _e: screen._refresh_options())
