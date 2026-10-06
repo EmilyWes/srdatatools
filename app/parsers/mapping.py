@@ -2,7 +2,7 @@ import difflib
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import ValidationError
 
@@ -71,10 +71,14 @@ def _is_valid_target(target: str) -> bool:
     return target.startswith(OTHER_IDS_PREFIX) and len(target) > len(OTHER_IDS_PREFIX)
 
 
+MatchKind = Literal["exact", "fuzzy", "id_fallback"]
+
+
 @dataclass
 class FieldMapping:
     targets: dict[str, str] = field(default_factory=dict)
     list_delimiter: str = ";"
+    match_kinds: dict[str, MatchKind] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         for key, target in self.targets.items():
@@ -241,36 +245,41 @@ def suggest_mapping(
         alias: target for target, names in aliases.items() for alias in names
     }
 
-    candidates: list[tuple[str, str, int]] = []
+    candidates: list[tuple[str, str, int, MatchKind]] = []
     for key in keys:
         normalized = key.strip().lower()
+        kind: MatchKind = "exact"
         alias = normalized if normalized in alias_to_target else None
         if alias is None and lenient:
             matches = difflib.get_close_matches(
                 normalized, alias_to_target.keys(), n=1, cutoff=_SUGGESTION_CUTOFF
             )
             alias = matches[0] if matches else None
+            kind = "fuzzy"
         if alias is not None:
             target = alias_to_target[alias]
             rank = aliases[target].index(alias)
         elif lenient and _ID_HEADER.search(key):
-            target, rank = "other_ids", 0
+            target, rank, kind = "other_ids", 0, "id_fallback"
         else:
             continue
         if target == "other_ids":
             target = OTHER_IDS_PREFIX + default_other_id_key(key)
-        candidates.append((key, target, rank))
+        candidates.append((key, target, rank, kind))
 
     best: dict[str, tuple[str, int]] = {}
-    for key, target, rank in candidates:
+    for key, target, rank, _ in candidates:
         if target in EXCLUSIVE_TARGETS and (
             target not in best or rank < best[target][1]
         ):
             best[target] = (key, rank)
 
-    targets = {
-        key: target
-        for key, target, _ in candidates
+    kept = [
+        (key, target, kind)
+        for key, target, _, kind in candidates
         if target not in EXCLUSIVE_TARGETS or best[target][0] == key
-    }
-    return FieldMapping(targets=targets)
+    ]
+    return FieldMapping(
+        targets={key: target for key, target, _ in kept},
+        match_kinds={key: kind for key, _, kind in kept},
+    )

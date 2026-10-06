@@ -124,6 +124,10 @@ def read_nbib_tags(path: Path) -> dict[str, str]:
 def suggest_nbib_mapping(tags: list[str]) -> FieldMapping:
     mapping = _suggest_mapping(tags, _SUGGESTION_ALIASES, lenient=False)
     targets = dict(mapping.targets)
+    match_kinds = dict(mapping.match_kinds)
     if "FAU" not in tags and "AU" in tags:
         targets["AU"] = "authors"
-    return replace(mapping, targets=targets, list_delimiter="\n")
+        match_kinds["AU"] = "exact"
+    return replace(
+        mapping, targets=targets, list_delimiter="\n", match_kinds=match_kinds
+    )
