@@ -61,28 +61,40 @@ Goal: support as many databases as possible, built in order of how widely used t
 | Packaging | PyInstaller | One-click executable per OS (Windows/macOS/Linux), no Python install required for end users |
 | HTTP client | httpx | Async-friendly calls to OpenAlex (other enrichment APIs later) |
 
-**Module layout (proposed):**
+**Module layout** (`(planned)` marks modules not built yet):
 
 ```
 app/
+  models/
+    record.py        # pydantic Record schema every parser normalizes to
   parsers/
-    ris.py           # generic RIS tokenizer
-    nbib.py          # generic NBIB/MEDLINE tokenizer
-    csv_.py          # generic CSV reader + column-mapping UI hook
-    profiles/        # per-database tag/column mappings + quirks
+    csv_.py          # generic CSV reader + column-mapping suggestions
+    ris.py           # (planned) generic RIS tokenizer
+    nbib.py          # (planned) generic NBIB/MEDLINE tokenizer
+    profiles/        # (planned) per-database tag/column mappings + quirks
       pubmed.py
       scopus.py
       web_of_science.py
       ieee_xplore.py
       embase.py
       psycinfo.py
-  db/                # SQLAlchemy models, migrations (Alembic), queries
-  dedup/             # matching strategies (DOI, fuzzy title+author+year)
-  enrich/            # OpenAlex client, field-merging logic
-  snowball/          # reference/citation graph traversal via OpenAlex
-  export/            # writers back to RIS/CSV/NBIB
-  activity_log/      # records every action for the transparency/audit view
-  gui/               # NiceGUI pages: Import, Library, Dedup review, Enrich, Snowball, Export, Stats, Activity log
+  db/
+    models.py        # SQLAlchemy models
+    session.py       # engine/session setup, runs Alembic migrations
+    store.py         # writes parsed records to the database
+    queries.py       # read queries for the GUI
+    migrations/      # Alembic
+  dedup/             # (planned) matching strategies (DOI, fuzzy title+author+year)
+  enrich/            # (planned) OpenAlex client, field-merging logic
+  snowball/          # (planned) reference/citation graph traversal via OpenAlex
+  export/            # (planned) writers back to RIS/CSV/NBIB
+  activity_log/      # (planned) records every action for the transparency/audit view
+  gui/
+    home.py          # the single page, wires the panes together
+    layout.py        # three-pane shell
+    library_nav.py   # left panel navigation
+    import_flow.py   # import view in the middle panel
+    csv_mapping.py   # column-mapping table
   main.py            # launches pywebview + NiceGUI server
 ```
 
@@ -90,20 +102,20 @@ Keeping parsers/dedup/enrich/export as independent modules with a shared interna
 
 ## Data model
 
-Core tables, kept normalized so the same paper found via two sources becomes one `record` linked to two `record_source` rows rather than two records.
+Core tables, kept normalized so the same paper found via two sources becomes one `record` linked to two `record_source` rows rather than two records. Tables marked *(planned)* don't exist yet.
 
 | Table | Purpose |
 | --- | --- |
-| `record` | One row per unique paper after dedup: title, abstract, year, DOI, canonical id, merged/enriched fields |
+| `record` | One row per imported record (pre-dedup), one per unique paper after dedup: title, abstract, publication year/month/day, DOI, PMID and other ids, merged/enriched fields |
 | `record_source` | Raw import: which file/source a record came from, its original raw fields, import timestamp |
 | `author` / `record_author` | Authors, many-to-many with order and affiliation |
 | `source_file` | Metadata about each imported file: path/name, format, import date, row count |
-| `dedup_link` | Which raw `record_source` rows were merged into which `record`, match method used, confidence score, blocking key used |
-| `enrichment_log` | What was fetched from OpenAlex for a record, when, and which fields it filled or overwrote |
-| `citation_edge` | Snowballing results: `record_id` cites/is cited by `record_id` (or an external id not yet imported) |
+| `dedup_link` *(planned, Phase 2)* | Which raw `record_source` rows were merged into which `record`, match method used, confidence score, blocking key used |
+| `enrichment_log` *(planned, Phase 3)* | What was fetched from OpenAlex for a record, when, and which fields it filled or overwrote |
+| `citation_edge` *(planned, Phase 4)* | Snowballing results: `record_id` cites/is cited by `record_id` (or an external id not yet imported) |
 | `activity_log` | Append-only log of every user- or system-triggered action, for the transparency view |
-| `field_merge_policy` | The default conflict-resolution chain, plus named field-group overrides and which fields belong to each |
-| `app_settings` | Simple key/value local settings store — OpenAlex polite-pool email, merge-policy defaults, etc. |
+| `field_merge_policy` *(planned, Phase 2)* | The default conflict-resolution chain, plus named field-group overrides and which fields belong to each |
+| `app_settings` *(planned, Phase 3)* | Simple key/value local settings store — OpenAlex polite-pool email, merge-policy defaults, etc. |
 
 **Key design choice:** never destroy the originally imported data. `record_source` keeps the raw parsed fields forever, so *what was imported* is never lost — this is for transparency and audit, not for in-app undo. There is no built-in undo/rollback for merges or enrichment: the safety net is that the app makes it clear, before running dedup, that the user should **export the current library first** if they want a restore point. This keeps the merge engine and its data model simpler, at the cost of relying on the user's own exported backup rather than an in-app history.
 
@@ -124,6 +136,8 @@ flowchart LR
   E -.logs.-> H
   F -.logs.-> H
 ```
+
+**Dedup is optional, not a required step.** The pipeline is Import → Parse → *(optional)* Dedup → Store → *(optional)* Enrich/Snowball → Export, and each optional stage can be skipped. This means the app is equally useful for simpler jobs: exploring a single file to understand what's in it, or converting one file straight from one format to another (e.g. NBIB to CSV) — no need to run merge/dedup when there's nothing to merge.
 
 **Import & parsing.** Each format (RIS, NBIB, CSV) has its own parser that maps fields into the common `Record` schema, with a per-database vendor profile layered on top where one applies. CSV needs a column-mapping step in the GUI since headers vary by export source (Scopus, Web of Science, etc. all name columns differently). Import accepts multiple files per action (all sharing one source/type selection) and auto-detects type/source from file extension + content sniffing to prefill the source/type dropdowns; see GUI & UX design below for the full import flow. Import writes directly to both `record_source` (raw parsed fields) and `record` (one row per imported record, pre-dedup) — dedup is a separate, on-demand step the user triggers later over the whole `record` table, not something that happens automatically at import time.
 
@@ -189,8 +203,6 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 
 **Takeaway:** this project's niche is being local-first and general-purpose (not locked into a screening/PRISMA workflow) while still treating import → combined storage → configurable dedup → enrichment → snowballing → export as one transparent pipeline.
 
-**Dedup is optional, not a required step.** The pipeline is Import → Parse → *(optional)* Dedup → Store → *(optional)* Enrich/Snowball → Export, and each optional stage can be skipped. This means the app is equally useful for simpler jobs: exploring a single file to understand what's in it, or converting one file straight from one format to another (e.g. NBIB to CSV) — no need to run merge/dedup when there's nothing to merge.
-
 ## Feature to-do list
 
 **Phase 0 — Foundation**
@@ -225,6 +237,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] "Get stats" dry-run preview: record count, per-field completeness, malformed/skipped-row preview, re-runnable per dropdown change, no DB write
 - [ ] Import action: writes `record_source` + `record`, per-file "N imported, M skipped" summary
 - [ ] Import result summary also reports how many records had a date conflict (Year/Month/Day disagreeing with the full-date column, resolved in favour of Year/Month/Day), e.g. "998 imported, 2 skipped, 14 date conflicts"; not yet implemented
+- [ ] Activity log: write a plain-language `activity_log` row for each import (e.g. "Imported 998 records from scopus.csv, 2 skipped")
 - [ ] Source-file detail view: records currently in library from this file, skipped-row count, remove-this-source's-records action
 - [ ] Right panel: Dedup / Enrich / Snowball / Export buttons in order, gear-icon settings popups for Dedup/Enrich/Snowball, read-only activity log textbox beneath
 - [ ] Middle panel Library view: basic stats (total records, records per source, per year) + record table (sorting/filtering/search deferred)
@@ -242,7 +255,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] Fuzzy dedup within blocks (title + author + year similarity)
 - [ ] Manual dedup review screen (accept/reject/edit candidate merges)
 - [ ] One-time "export first?" reminder before running dedup, since merges can't be undone in-app
-- [ ] Activity log: record every import/merge/export action
+- [ ] Activity log: record every merge/export action
 
 **Phase 3 — Enrichment**
 
