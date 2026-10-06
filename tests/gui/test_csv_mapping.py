@@ -73,26 +73,18 @@ def test_render_csv_mapping__picking_year_removes_year_from_other_rows() -> None
     assert "year" in screen.available_targets("Year")
 
 
-def test_render_csv_mapping__picking_date_removes_year_month_day_from_other_rows() -> (
-    None
-):
-    _, screen = _render(["Date", "Other Column"])
+def test_render_csv_mapping__date_and_year_can_be_mapped_together() -> None:
+    confirmed, screen = _render(["Publication Year", "Create Date"])
 
-    screen.set_target("Date", "date")
+    assert screen._row_for("Publication Year").select.value == "year"
+    assert screen._row_for("Create Date").select.value == "date"
+    assert "date" in screen.available_targets("Create Date")
+    assert "year" in screen.available_targets("Publication Year")
 
-    assert screen.available_targets("Other Column") & {"year", "month", "day"} == set()
-    # the row holding "date" may still switch itself to year/month/day
-    assert {"year", "month", "day"} <= screen.available_targets("Date")
+    screen.confirm()
 
-
-def test_render_csv_mapping__picking_year_removes_date_from_other_rows() -> None:
-    _, screen = _render(["Year", "Other Column"])
-
-    screen.set_target("Year", "year")
-
-    assert "date" not in screen.available_targets("Other Column")
-    # the row holding "year" may still switch itself to date
-    assert "date" in screen.available_targets("Year")
+    assert confirmed[0].year_column == "Publication Year"
+    assert confirmed[0].date_column == "Create Date"
 
 
 def test_render_csv_mapping__conflicting_suggested_years_only_keeps_first() -> None:
