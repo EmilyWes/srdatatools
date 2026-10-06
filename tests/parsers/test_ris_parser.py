@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from app.parsers.mapping import FieldMapping
-from app.parsers.ris import parse_ris_file, parse_ris_text
+from app.parsers.ris import parse_ris_file, parse_ris_text, suggest_ris_mapping
 
 RIS_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "ris"
 
@@ -183,3 +183,81 @@ def test_parse_ris_file__strips_utf8_bom(tmp_path: Path) -> None:
 
     assert result.skipped == []
     assert result.rows[0].record.title == "Some Paper"
+
+
+def test_suggest_ris_mapping__maps_common_tags() -> None:
+    tags = ["TY", "TI", "AU", "T2", "VL", "IS", "SP", "EP", "DO", "KW", "AB", "UR"]
+
+    suggestions = suggest_ris_mapping(tags)
+
+    assert suggestions.targets == {
+        "TY": "publication_type",
+        "TI": "title",
+        "AU": "authors",
+        "T2": "journal",
+        "VL": "volume",
+        "IS": "issue",
+        "SP": "page_start",
+        "EP": "page_end",
+        "DO": "doi",
+        "KW": "keywords",
+        "AB": "abstract",
+        "UR": "url",
+    }
+
+
+def test_suggest_ris_mapping__uses_newline_list_delimiter() -> None:
+    assert suggest_ris_mapping(["AU"]).list_delimiter == "\n"
+
+
+def test_suggest_ris_mapping__prefers_da_over_py_for_date() -> None:
+    suggestions = suggest_ris_mapping(["PY", "DA", "Y1"])
+
+    assert suggestions.targets == {"DA": "date"}
+
+
+def test_suggest_ris_mapping__falls_back_to_py_without_da() -> None:
+    suggestions = suggest_ris_mapping(["PY"])
+
+    assert suggestions.targets == {"PY": "date"}
+
+
+def test_suggest_ris_mapping__first_of_alternate_title_tags_wins_in_parse() -> None:
+    suggestions = suggest_ris_mapping(["T1", "TI"])
+    text = "TY  - JOUR\nT1  - Primary\nTI  - Other\nER  - \n"
+
+    result = parse_ris_text(text, suggestions)
+
+    assert result.rows[0].record.title == "Primary"
+
+
+def test_suggest_ris_mapping__routes_accession_number_to_other_ids() -> None:
+    suggestions = suggest_ris_mapping(["AN"])
+
+    assert suggestions.targets == {"AN": "other_ids.an"}
+
+
+def test_suggest_ris_mapping__leaves_sn_and_unknown_tags_unmapped() -> None:
+    assert suggest_ris_mapping(["SN", "ZZ", "TZ"]).targets == {}
+
+
+def test_parse_ris_file__default_mapping_on_realistic_export() -> None:
+    path = RIS_FIXTURES_DIR / "scopus_style.ris"
+    tags = ["TY", "AU", "TI", "T2", "PY", "DA", "VL", "IS", "SP", "EP", "DO"]
+
+    result = parse_ris_file(path, suggest_ris_mapping(tags))
+
+    first = result.rows[0].record
+    assert first.publication_type == "JOUR"
+    assert [author.full_name for author in first.authors] == [
+        "Smith, John A.",
+        "Doe, Jane",
+    ]
+    assert first.pages == "100-110"
+    assert first.doi == "10.1016/j.jbi.2020.1"
+    assert first.publication_date is not None
+    assert (
+        first.publication_date.year,
+        first.publication_date.month,
+        first.publication_date.day,
+    ) == (2020, 5, 14)

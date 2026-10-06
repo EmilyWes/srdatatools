@@ -35,6 +35,8 @@ _DATE_PATTERNS = [
     re.compile(r"^(?P<year>\d{4})-(?P<month>\d{1,2})$"),
     re.compile(r"^(?P<year>\d{4})-(?P<month>\d{1,2})-(?P<day>\d{1,2})$"),
     re.compile(r"^(?P<year>\d{4})/(?P<month>\d{1,2})/(?P<day>\d{1,2})$"),
+    # RIS: YYYY/MM/DD/other, where every part after the year may be empty
+    re.compile(r"^(?P<year>\d{4})/(?P<month>\d{1,2})?/(?P<day>\d{1,2})?/.*$"),
 ]
 
 SCALAR_FIELDS = frozenset(
@@ -196,28 +198,45 @@ def default_other_id_key(header: str) -> str:
 def suggest_mapping(
     keys: list[str], aliases: dict[str, list[str]], *, lenient: bool
 ) -> FieldMapping:
-    """lenient adds fuzzy matching and an ID-header fallback, for free-text headers."""
+    """lenient adds fuzzy matching and an ID-header fallback, for free-text headers.
+
+    When several keys suggest the same exclusive target, the one whose alias comes
+    earliest in that target's alias list wins (ties: first key).
+    """
     alias_to_target = {
         alias: target for target, names in aliases.items() for alias in names
     }
 
-    targets: dict[str, str] = {}
+    candidates: list[tuple[str, str, int]] = []
     for key in keys:
         normalized = key.strip().lower()
-        target = alias_to_target.get(normalized)
-        if target is None and lenient:
+        alias = normalized if normalized in alias_to_target else None
+        if alias is None and lenient:
             matches = difflib.get_close_matches(
                 normalized, alias_to_target.keys(), n=1, cutoff=_SUGGESTION_CUTOFF
             )
-            target = alias_to_target[matches[0]] if matches else None
-            if target is None and _ID_HEADER.search(key):
-                target = "other_ids"
-        if target is None:
+            alias = matches[0] if matches else None
+        if alias is not None:
+            target = alias_to_target[alias]
+            rank = aliases[target].index(alias)
+        elif lenient and _ID_HEADER.search(key):
+            target, rank = "other_ids", 0
+        else:
             continue
         if target == "other_ids":
             target = OTHER_IDS_PREFIX + default_other_id_key(key)
-        if target in EXCLUSIVE_TARGETS and target in targets.values():
-            continue
-        targets[key] = target
+        candidates.append((key, target, rank))
 
+    best: dict[str, tuple[str, int]] = {}
+    for key, target, rank in candidates:
+        if target in EXCLUSIVE_TARGETS and (
+            target not in best or rank < best[target][1]
+        ):
+            best[target] = (key, rank)
+
+    targets = {
+        key: target
+        for key, target, _ in candidates
+        if target not in EXCLUSIVE_TARGETS or best[target][0] == key
+    }
     return FieldMapping(targets=targets)

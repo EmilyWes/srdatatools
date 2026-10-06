@@ -98,6 +98,43 @@ def test_suggest_mapping__strict_matches_exact_aliases_only() -> None:
     assert suggestions.targets == {"TI": "title"}
 
 
+def test_suggest_mapping__exclusive_target_prefers_alias_rank_over_file_order() -> None:
+    aliases = {"date": ["da", "py", "y1"]}
+
+    suggestions = suggest_mapping(["PY", "Y1", "DA"], aliases, lenient=False)
+
+    assert suggestions.targets == {"DA": "date"}
+
+
+def test_suggest_mapping__exclusive_target_tie_keeps_first_in_file() -> None:
+    aliases = {"year": ["year"]}
+
+    suggestions = suggest_mapping(["Year", "YEAR"], aliases, lenient=False)
+
+    assert suggestions.targets == {"Year": "year"}
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2020///", (2020, None, None)),
+        ("2020/05//", (2020, 5, None)),
+        ("2020/05/14/", (2020, 5, 14)),
+        ("2020/05/14/Spring", (2020, 5, 14)),
+        ("2020///Spring", (2020, None, None)),
+    ],
+)
+def test_apply_mapping__parses_ris_style_date(
+    value: str, expected: tuple[int, int | None, int | None]
+) -> None:
+    mapping = FieldMapping(targets={"DA": "date"})
+
+    date = apply_mapping({"DA": value}, mapping).publication_date
+
+    assert date is not None
+    assert (date.year, date.month, date.day) == expected
+
+
 def test_suggest_mapping__lenient_fuzzy_matches_and_falls_back_to_id() -> None:
     aliases = {"title": ["article title"]}
 

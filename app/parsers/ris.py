@@ -1,11 +1,34 @@
 import logging
 import re
+from dataclasses import replace
 from pathlib import Path
 
 from app.parsers.common import ParsedRow, ParseResult, SkippedRow, decode_file
 from app.parsers.mapping import FieldMapping, apply_mapping
+from app.parsers.mapping import suggest_mapping as _suggest_mapping
 
 logger = logging.getLogger(__name__)
+
+# Order matters for exclusive targets: DA carries the most date detail.
+_SUGGESTION_ALIASES: dict[str, list[str]] = {
+    "title": ["ti", "t1"],
+    "authors": ["au", "a1"],
+    "abstract": ["ab", "n2"],
+    "journal": ["jo", "jf", "t2"],
+    "volume": ["vl"],
+    "issue": ["is"],
+    "page_start": ["sp"],
+    "page_end": ["ep"],
+    "doi": ["do"],
+    "publication_type": ["ty"],
+    "language": ["la"],
+    "publisher": ["pb"],
+    "url": ["ur"],
+    "notes": ["n1"],
+    "keywords": ["kw"],
+    "date": ["da", "py", "y1"],
+    "other_ids": ["an"],
+}
 
 _TAG_LINE = re.compile(r"^(?P<tag>[A-Z][A-Z0-9])  -(?: (?P<value>.*))?$")
 _END_TAG = "ER"
@@ -61,3 +84,8 @@ def parse_ris_text(text: str, mapping: FieldMapping) -> ParseResult:
 
 def parse_ris_file(path: Path, mapping: FieldMapping) -> ParseResult:
     return parse_ris_text(decode_file(path), mapping)
+
+
+def suggest_ris_mapping(tags: list[str]) -> FieldMapping:
+    mapping = _suggest_mapping(tags, _SUGGESTION_ALIASES, lenient=False)
+    return replace(mapping, list_delimiter="\n")
