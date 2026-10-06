@@ -69,7 +69,7 @@ app/
     record.py        # pydantic Record schema every parser normalizes to
   parsers/
     common.py        # result types shared by all parsers + file decoding
-    mapping.py       # generic input-key -> Record field mapping (CSV columns, RIS tags)
+    mapping.py       # generic input-key -> Record field mapping (CSV columns, RIS/NBIB tags)
     csv_.py          # generic CSV reader + column-mapping suggestions
     ris.py           # generic RIS tokenizer + tag-mapping suggestions
     nbib.py          # generic NBIB/MEDLINE tokenizer + tag-mapping suggestions
