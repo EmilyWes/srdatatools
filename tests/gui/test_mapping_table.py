@@ -329,7 +329,7 @@ def test_render_mapping_table__changing_a_row_does_not_reorder_rows() -> None:
     [
         (["ID"], 8),
         (["Title", "Publication Year"], 17),
-        (["A very long column header that exceeds the cap"], 28),
+        (["A very long column header that exceeds the cap"], 24),
     ],
 )
 def test_input_width_ch__fits_longest_header_within_bounds(
@@ -348,3 +348,18 @@ def test_render_mapping_table__dropdown_options_are_sorted_alphabetically() -> N
     assert labels == sorted(labels, key=str.lower)
     assert "Ignore" in labels
     assert "Date (full)" in labels
+
+
+def test_render_mapping_table__truncated_input_header_has_full_value_tooltip() -> None:
+    long_header = "A very long column header that exceeds the cap"
+    panes = shell()
+
+    render_mapping_table(
+        panes.middle,
+        {long_header: "", "Title": ""},
+        suggest_mapping([long_header, "Title"]),
+        show_delimiter=True,
+    )
+
+    tooltips = [t.text for t in panes.middle.descendants() if isinstance(t, Tooltip)]
+    assert tooltips == [long_header]

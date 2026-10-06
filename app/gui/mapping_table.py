@@ -119,7 +119,7 @@ def _option_label(key: str) -> str:
     return _LABELS.get(key, key.replace("_", " ").capitalize())
 
 
-_INPUT_WIDTH_CH = (8, 28)
+_INPUT_WIDTH_CH = (8, 24)
 _SELECT_CHROME_CH = 6
 
 
@@ -221,7 +221,8 @@ def render_mapping_table(
 ) -> MappingScreen:
     screen = MappingScreen(list_delimiter=suggestion.list_delimiter)
     headers = _sorted_headers(list(samples), suggestion)
-    input_style = f"width: {_input_width_ch(headers)}ch"
+    input_width = _input_width_ch(headers)
+    input_style = f"width: {input_width}ch"
     mapping_style = f"width: {_mapping_width_ch()}ch"
 
     suggested = suggestion.targets
@@ -251,7 +252,10 @@ def render_mapping_table(
                 if i % 2 == 1:
                     row_classes += " bg-grey-1"
                 with ui.row().classes(row_classes):
-                    ui.label(header).classes("truncate text-xs").style(input_style)
+                    label = ui.label(header).classes("truncate text-xs")
+                    label.style(input_style)
+                    if len(header) >= input_width:
+                        label.tooltip(header)
                     select = (
                         ui.select(
                             _sorted_options(_ALL_TARGET_KEYS),
