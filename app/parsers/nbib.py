@@ -51,6 +51,8 @@ _AUID_TAG = "AUID"
 _AD_TAG = "AD"
 _ORCID_SCHEME = "ORCID"
 _ORCID_URL = re.compile(r"^https?://orcid\.org/")
+_MH_TAG = "MH"
+_MESH_PREFIX = "[MeSH] "
 
 
 def _doi_from_id(value: str) -> str | None:
@@ -146,6 +148,10 @@ def parse_nbib_text(text: str, mapping: FieldMapping) -> ParseResult:
         mapping_fields = dict(raw_fields)
         if (issn := _issn_from_is(values.get(_IS_TAG, []))) is not None:
             mapping_fields[_IS_TAG] = issn
+        if mapping.targets.get(_MH_TAG) == "keywords" and _MH_TAG in values:
+            mapping_fields[_MH_TAG] = "\n".join(
+                _MESH_PREFIX + value for value in values[_MH_TAG] if value
+            )
         record = apply_mapping(mapping_fields, mapping)
         author_tags = {k for k, t in mapping.targets.items() if t == "authors"}
         if author_tags:

@@ -63,6 +63,15 @@ def test_pubmed_small_nbib__applies_profile_fixes(
     assert nbib_records["28590685"].publication_type == "Review"
 
 
+def test_pubmed_small_nbib__mesh_keywords_are_prefixed(
+    nbib_records: dict[str, Record],
+) -> None:
+    keywords = nbib_records["41672119"].keywords
+
+    assert "[MeSH] *Materia Medica/standards/history" in keywords
+    assert "Adulteration" in keywords
+
+
 def test_pubmed_small_nbib__authors_have_orcids_and_affiliations(
     nbib_records: dict[str, Record],
 ) -> None:
