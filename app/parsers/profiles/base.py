@@ -11,6 +11,7 @@ FixRecord = Callable[[dict[str, str], Record], Record]
 class FormatProfile:
     aliases: dict[str, list[str]]
     fix_record: FixRecord
+    list_delimiter: str | None = None
 
 
 @dataclass(frozen=True)

@@ -11,7 +11,7 @@ from app.parsers.common import (
     SummaryBuilder,
     decode_file,
 )
-from app.parsers.mapping import FieldMapping, apply_mapping
+from app.parsers.mapping import FieldMapping, apply_mapping, override_aliases
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
 
 logger = logging.getLogger(__name__)
@@ -106,5 +106,8 @@ def read_csv_headers(path: Path) -> FileSummary:
     return summary.build()
 
 
-def suggest_mapping(headers: list[str]) -> FieldMapping:
-    return _suggest_mapping(headers, _SUGGESTION_ALIASES, lenient=True)
+def suggest_mapping(
+    headers: list[str], alias_overrides: dict[str, list[str]] | None = None
+) -> FieldMapping:
+    aliases = override_aliases(_SUGGESTION_ALIASES, alias_overrides or {})
+    return _suggest_mapping(headers, aliases, lenient=True)

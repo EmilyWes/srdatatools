@@ -1,6 +1,12 @@
+import csv
+from dataclasses import replace
+from io import StringIO
+
 import pytest
 
-from app.models.record import Record
+from app.models.record import PartialDate, Record
+from app.parsers.csv_ import parse_csv_text, suggest_mapping
+from app.parsers.mapping import FieldMapping
 from app.parsers.nbib import parse_nbib_text, suggest_nbib_mapping
 from app.parsers.profiles import apply_profile
 from app.parsers.profiles.pubmed import PUBMED, expand_page_range
@@ -11,6 +17,24 @@ def _parse_nbib(text: str) -> Record:
     profile = PUBMED.formats["nbib"]
     mapping = suggest_nbib_mapping(tags, profile.aliases)
     result = apply_profile(parse_nbib_text(text, mapping), profile)
+    return result.rows[0].record
+
+
+def _suggest_csv(headers: list[str]) -> FieldMapping:
+    profile = PUBMED.formats["csv"]
+    assert profile.list_delimiter is not None
+    mapping = suggest_mapping(headers, profile.aliases)
+    return replace(mapping, list_delimiter=profile.list_delimiter)
+
+
+def _parse_csv(row: dict[str, str]) -> Record:
+    out = StringIO()
+    writer = csv.DictWriter(out, fieldnames=list(row))
+    writer.writeheader()
+    writer.writerow(row)
+    profile = PUBMED.formats["csv"]
+    mapping = _suggest_csv(list(row))
+    result = apply_profile(parse_csv_text(out.getvalue(), mapping), profile)
     return result.rows[0].record
 
 
@@ -91,3 +115,137 @@ def test_pubmed_nbib__leaves_ordinary_record_unchanged() -> None:
     assert record.pages == "589-594"
     assert record.publication_type == "Letter"
     assert record.isbn == "978-3-319-28801-7"
+
+
+def test_pubmed_csv__suggests_exact_journal_and_nbib_id_keys() -> None:
+    mapping = _suggest_csv(["Journal/Book", "PMCID", "NIHMS ID"])
+
+    assert mapping.targets == {
+        "Journal/Book": "journal",
+        "PMCID": "other_ids.pmc",
+        "NIHMS ID": "other_ids.mid",
+    }
+    assert mapping.match_kinds["Journal/Book"] == "exact"
+
+
+def test_pubmed_csv__suggests_comma_list_delimiter() -> None:
+    assert _suggest_csv(["Authors"]).list_delimiter == ","
+
+
+def test_pubmed_csv__strips_trailing_period_from_last_author() -> None:
+    record = _parse_csv({"PMID": "1", "Authors": "Romano M, Novacek MJ."})
+
+    assert [a.full_name for a in record.authors] == ["Romano M", "Novacek MJ"]
+
+
+def test_pubmed_csv__drops_et_al() -> None:
+    record = _parse_csv({"PMID": "1", "Authors": "Rhodes CJ, Walsworth AK, et al."})
+
+    assert [a.full_name for a in record.authors] == ["Rhodes CJ", "Walsworth AK"]
+
+
+def test_pubmed_csv__citation_fills_volume_issue_pages_and_month() -> None:
+    record = _parse_csv(
+        {
+            "PMID": "1",
+            "Citation": "Nature. 2023 Aug;620(7974):589-594. doi: x. Epub 2023.",
+            "Publication Year": "2023",
+        }
+    )
+
+    assert record.volume == "620"
+    assert record.issue == "7974"
+    assert record.pages == "589-594"
+    assert record.publication_date == PartialDate(year=2023, month=8)
+
+
+def test_pubmed_csv__citation_without_issue_fills_day() -> None:
+    record = _parse_csv(
+        {
+            "PMID": "1",
+            "Citation": "J Ethnopharmacol. 2026 May 10;362:121354. doi: 10.1016/x.",
+            "Publication Year": "2026",
+        }
+    )
+
+    assert record.volume == "362"
+    assert record.issue is None
+    assert record.pages == "121354"
+    assert record.publication_date == PartialDate(year=2026, month=5, day=10)
+
+
+def test_pubmed_csv__citation_pages_are_expanded() -> None:
+    record = _parse_csv(
+        {"PMID": "1", "Citation": "Rev Med Liege. 2001 Jul;56(7):521-2."}
+    )
+
+    assert record.pages == "521-522"
+
+
+def test_pubmed_csv__citation_keeps_page_suffix() -> None:
+    record = _parse_csv(
+        {"PMID": "1", "Citation": "Curr Biol. 2021 Aug 23;31(16):3687-3693.e5. doi: x."}
+    )
+
+    assert record.pages == "3687-3693.e5"
+
+
+def test_pubmed_csv__citation_volume_may_contain_text() -> None:
+    record = _parse_csv(
+        {
+            "PMID": "1",
+            "Citation": "Med Sci (Paris). 2016 Nov;32 Hors série n°2:57-59. doi: x.",
+        }
+    )
+
+    assert record.volume == "32 Hors série n°2"
+    assert record.pages == "57-59"
+
+
+def test_pubmed_csv__citation_without_year_column_sets_full_date() -> None:
+    record = _parse_csv(
+        {"PMID": "1", "Citation": "Nature. 2023 Aug;620(7974):589-594."}
+    )
+
+    assert record.publication_date == PartialDate(year=2023, month=8)
+
+
+def test_pubmed_csv__citation_date_of_other_year_is_ignored() -> None:
+    record = _parse_csv(
+        {
+            "PMID": "1",
+            "Citation": "Nature. 2023 Aug;620(7974):589-594.",
+            "Publication Year": "2024",
+        }
+    )
+
+    assert record.publication_date == PartialDate(year=2024)
+
+
+def test_pubmed_csv__citation_does_not_overwrite_mapped_fields() -> None:
+    record = _parse_csv(
+        {
+            "PMID": "1",
+            "Citation": "Nature. 2023 Aug;620(7974):589-594.",
+            "Volume": "99",
+        }
+    )
+
+    assert record.volume == "99"
+    assert record.issue == "7974"
+
+
+@pytest.mark.parametrize(
+    "citation",
+    [
+        "2016 May 3. In: Buzsáki G, Christen Y, editors. Micro-, Meso- and "
+        "Macro-Dynamics of the Brain [Internet]. Cham (CH): Springer; 2016.",
+        "Res Sq [Preprint]. 2023 Oct 3:rs.3.rs-3382427. doi: 10.21203/x.",
+    ],
+)
+def test_pubmed_csv__non_journal_citation_is_ignored(citation: str) -> None:
+    record = _parse_csv({"PMID": "1", "Citation": citation})
+
+    assert record.volume is None
+    assert record.pages is None
+    assert record.publication_date is None
