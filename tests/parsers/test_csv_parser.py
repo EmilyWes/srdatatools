@@ -4,6 +4,7 @@ import pytest
 
 from app.parsers.csv_ import (
     parse_csv_file,
+    parse_csv_record,
     parse_csv_text,
     read_csv_headers,
     suggest_mapping,
@@ -470,3 +471,14 @@ def test_read_csv_headers__header_only_and_empty_files_have_zero_rows(
     assert read_csv_headers(header_only).filled == {"Title": 0, "DOI": 0}
     assert read_csv_headers(header_only).total_rows == 0
     assert read_csv_headers(empty).total_rows == 0
+
+
+def test_parse_csv_record__applies_mapping() -> None:
+    mapping = FieldMapping(targets={"Title": "title", "Authors": "authors"})
+    raw_fields = {"Title": "Some Paper", "Authors": "Smith, J; Doe, J"}
+
+    row = parse_csv_record(raw_fields, mapping)
+
+    assert row.record.title == "Some Paper"
+    assert [a.full_name for a in row.record.authors] == ["Smith, J", "Doe, J"]
+    assert row.raw_fields == raw_fields

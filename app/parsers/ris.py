@@ -43,6 +43,14 @@ _END_TAG = "ER"
 _TYPE_TAG = "TY"
 
 
+def parse_ris_record(lines: list[tuple[str, str]], mapping: FieldMapping) -> ParsedRow:
+    values: dict[str, list[str]] = {}
+    for tag, value in lines:
+        values.setdefault(tag, []).append(value)
+    raw_fields = {t: "\n".join(v for v in vs if v) for t, vs in values.items()}
+    return ParsedRow(record=apply_mapping(raw_fields, mapping), raw_fields=raw_fields)
+
+
 def parse_ris_text(text: str, mapping: FieldMapping) -> ParseResult:
     rows: list[ParsedRow] = []
     skipped: list[SkippedRow] = []
@@ -51,40 +59,35 @@ def parse_ris_text(text: str, mapping: FieldMapping) -> ParseResult:
         skipped.append(SkippedRow(line_number, reason))
         logger.warning("Skipping RIS record at line %d: %s", line_number, reason)
 
-    values: dict[str, list[str]] = {}
+    lines: list[tuple[str, str]] = []
     start_line = 0
-    last_tag: str | None = None
 
     for line_number, line in enumerate(text.splitlines(), start=1):
         match = _TAG_LINE.match(line)
         if match is None:
             if not line.strip():
                 continue
-            if last_tag is None:
+            if not lines:
                 skip(line_number, "text outside a record")
             else:
-                values[last_tag][-1] += "\n" + line.strip()
+                tag, value = lines[-1]
+                lines[-1] = (tag, value + "\n" + line.strip())
             continue
 
         tag = match["tag"]
         if tag == _END_TAG:
-            if values and _TYPE_TAG not in values:
+            if lines and all(t != _TYPE_TAG for t, _ in lines):
                 skip(start_line, "record has no TY tag")
-            elif values:
-                raw_fields = {
-                    t: "\n".join(v for v in vs if v) for t, vs in values.items()
-                }
-                record = apply_mapping(raw_fields, mapping)
-                rows.append(ParsedRow(record=record, raw_fields=raw_fields))
-            values, last_tag = {}, None
+            elif lines:
+                rows.append(parse_ris_record(lines, mapping))
+            lines = []
             continue
 
-        if last_tag is None:
+        if not lines:
             start_line = line_number
-        values.setdefault(tag, []).append((match["value"] or "").strip())
-        last_tag = tag
+        lines.append((tag, (match["value"] or "").strip()))
 
-    if values:
+    if lines:
         skip(start_line, "record is missing its ER terminator")
 
     return ParseResult(rows=rows, skipped=skipped)

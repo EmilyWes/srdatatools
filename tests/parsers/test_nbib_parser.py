@@ -4,6 +4,7 @@ from app.models.record import Author
 from app.parsers.mapping import FieldMapping
 from app.parsers.nbib import (
     parse_nbib_file,
+    parse_nbib_record,
     parse_nbib_text,
     read_nbib_tags,
     suggest_nbib_mapping,
@@ -693,3 +694,31 @@ def test_parse_nbib_text__author_after_editor_gets_its_own_ad() -> None:
 
     assert [a.full_name for a in authors] == ["Smith, John"]
     assert [a.name for a in authors[0].affiliations] == ["Department A."]
+
+
+def test_parse_nbib_record__strips_is_qualifier() -> None:
+    mapping = FieldMapping(targets={"IS": "issn"}, list_delimiter="\n")
+
+    row = parse_nbib_record([("IS", "1234-5678 (Print)")], mapping)
+
+    assert row.record.issn == "1234-5678"
+    assert row.raw_fields == {"IS": "1234-5678 (Print)"}
+
+
+def test_parse_nbib_record__attaches_auid_and_ad_to_preceding_fau() -> None:
+    mapping = FieldMapping(
+        targets={"FAU": "authors", "AUID": "authors", "AD": "authors"},
+        list_delimiter="\n",
+    )
+    lines = [
+        ("FAU", "Smith, John"),
+        ("AUID", "ORCID: 0000-0001-2345-6789"),
+        ("AD", "University X"),
+    ]
+
+    row = parse_nbib_record(lines, mapping)
+
+    [author] = row.record.authors
+    assert author.family_name == "Smith"
+    assert author.orcid == "0000-0001-2345-6789"
+    assert [a.name for a in author.affiliations] == ["University X"]
