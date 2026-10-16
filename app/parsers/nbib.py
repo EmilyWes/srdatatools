@@ -121,6 +121,37 @@ def _authors_from_lines(
     return authors
 
 
+def parse_nbib_record(lines: list[tuple[str, str]], mapping: FieldMapping) -> ParsedRow:
+    values: dict[str, list[str]] = {}
+    for tag, value in lines:
+        values.setdefault(tag, []).append(value)
+    raw_fields = {t: "\n".join(v for v in vs if v) for t, vs in values.items()}
+    doi = next(
+        (
+            doi
+            for tag in _ID_TAGS
+            for value in values.get(tag, [])
+            if (doi := _doi_from_id(value)) is not None
+        ),
+        None,
+    )
+    if doi is not None:
+        raw_fields[_DOI_TAG] = doi
+    mapping_fields = dict(raw_fields)
+    if (issn := _issn_from_is(values.get(_IS_TAG, []))) is not None:
+        mapping_fields[_IS_TAG] = issn
+    if mapping.targets.get(_MH_TAG) == "keywords" and _MH_TAG in values:
+        mapping_fields[_MH_TAG] = "\n".join(
+            _MESH_PREFIX + value for value in values[_MH_TAG] if value
+        )
+    record = apply_mapping(mapping_fields, mapping)
+    author_tags = {k for k, t in mapping.targets.items() if t == "authors"}
+    if author_tags:
+        authors = _authors_from_lines(lines, author_tags)
+        record = record.model_copy(update={"authors": authors})
+    return ParsedRow(record=record, raw_fields=raw_fields)
+
+
 def parse_nbib_text(text: str, mapping: FieldMapping) -> ParseResult:
     rows: list[ParsedRow] = []
     skipped: list[SkippedRow] = []
@@ -129,64 +160,35 @@ def parse_nbib_text(text: str, mapping: FieldMapping) -> ParseResult:
         skipped.append(SkippedRow(line_number, reason))
         logger.warning("Skipping NBIB record at line %d: %s", line_number, reason)
 
-    values: dict[str, list[str]] = {}
-    order: list[tuple[str, int]] = []
+    lines: list[tuple[str, str]] = []
     start_line = 0
-    last_tag: str | None = None
 
     def finish_record() -> None:
-        if not values:
+        if not lines:
             return
-        if _REQUIRED_TAG not in values:
+        if all(tag != _REQUIRED_TAG for tag, _ in lines):
             skip(start_line, f"record has no {_REQUIRED_TAG} tag")
             return
-        raw_fields = {t: "\n".join(v for v in vs if v) for t, vs in values.items()}
-        doi = next(
-            (
-                doi
-                for tag in _ID_TAGS
-                for value in values.get(tag, [])
-                if (doi := _doi_from_id(value)) is not None
-            ),
-            None,
-        )
-        if doi is not None:
-            raw_fields[_DOI_TAG] = doi
-        mapping_fields = dict(raw_fields)
-        if (issn := _issn_from_is(values.get(_IS_TAG, []))) is not None:
-            mapping_fields[_IS_TAG] = issn
-        if mapping.targets.get(_MH_TAG) == "keywords" and _MH_TAG in values:
-            mapping_fields[_MH_TAG] = "\n".join(
-                _MESH_PREFIX + value for value in values[_MH_TAG] if value
-            )
-        record = apply_mapping(mapping_fields, mapping)
-        author_tags = {k for k, t in mapping.targets.items() if t == "authors"}
-        if author_tags:
-            lines = [(tag, values[tag][i]) for tag, i in order]
-            authors = _authors_from_lines(lines, author_tags)
-            record = record.model_copy(update={"authors": authors})
-        rows.append(ParsedRow(record=record, raw_fields=raw_fields))
+        rows.append(parse_nbib_record(lines, mapping))
 
     for line_number, line in enumerate(text.splitlines(), start=1):
         if not line.strip():
             finish_record()
-            values, order, last_tag = {}, [], None
+            lines = []
             continue
 
         match = _TAG_LINE.match(line)
         if match is None:
-            if last_tag is None:
+            if not lines:
                 skip(line_number, "text outside a record")
             else:
-                values[last_tag][-1] += " " + line.strip()
+                tag, value = lines[-1]
+                lines[-1] = (tag, value + " " + line.strip())
             continue
 
-        tag = match["tag"]
-        if last_tag is None:
+        if not lines:
             start_line = line_number
-        values.setdefault(tag, []).append((match["value"] or "").strip())
-        order.append((tag, len(values[tag]) - 1))
-        last_tag = tag
+        lines.append((match["tag"], (match["value"] or "").strip()))
 
     finish_record()
     return ParseResult(rows=rows, skipped=skipped)

@@ -3,6 +3,7 @@
 from app.parsers.mapping import FieldMapping
 from app.parsers.ris import (
     parse_ris_file,
+    parse_ris_record,
     parse_ris_text,
     read_ris_tags,
     suggest_ris_mapping,
@@ -347,3 +348,13 @@ def test_read_ris_tags__empty_file_has_zero_rows(tmp_path: Path) -> None:
     path.write_text("")
 
     assert read_ris_tags(path).total_rows == 0
+
+
+def test_parse_ris_record__joins_repeated_tags() -> None:
+    lines = [("AU", "Smith, John"), ("AU", "Doe, Jane"), ("TI", "Some Paper")]
+
+    row = parse_ris_record(lines, _MAPPING)
+
+    assert [a.full_name for a in row.record.authors] == ["Smith, John", "Doe, Jane"]
+    assert row.record.title == "Some Paper"
+    assert row.raw_fields["AU"] == "Smith, John\nDoe, Jane"

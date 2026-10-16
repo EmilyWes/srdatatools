@@ -54,6 +54,10 @@ def _sniff_dialect(sample: str) -> type[csv.Dialect] | str:
         return "excel"
 
 
+def parse_csv_record(raw_fields: dict[str, str], mapping: FieldMapping) -> ParsedRow:
+    return ParsedRow(record=apply_mapping(raw_fields, mapping), raw_fields=raw_fields)
+
+
 def parse_csv_text(text: str, mapping: FieldMapping) -> ParseResult:
     dialect = _sniff_dialect(text[:2048])
     reader = csv.DictReader(
@@ -81,8 +85,7 @@ def parse_csv_text(text: str, mapping: FieldMapping) -> ParseResult:
             logger.warning("Skipping row %d: blank", row_number)
             continue
 
-        record = apply_mapping(raw_fields, mapping)
-        rows.append(ParsedRow(record=record, raw_fields=raw_fields))
+        rows.append(parse_csv_record(raw_fields, mapping))
 
     return ParseResult(rows=rows, skipped=skipped)
 
