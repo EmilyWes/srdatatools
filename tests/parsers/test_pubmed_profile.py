@@ -161,3 +161,21 @@ def test_pubmed_csv__citation_is_not_parsed() -> None:
 
     assert (record.volume, record.issue, record.pages) == (None, None, None)
     assert record.publication_date == PartialDate(year=2023)
+
+
+def test_pubmed_nbib__matches_nlm_owned_records() -> None:
+    assert PUBMED.formats["nbib"].matches("PMID- 1\nOWN - NLM\nTI  - Title\n")
+
+
+def test_pubmed_nbib__does_not_match_without_own_nlm() -> None:
+    assert not PUBMED.formats["nbib"].matches("PMID- 1\nOWN - OTHER\nTI  - Title\n")
+
+
+def test_pubmed_csv__matches_pubmed_headers() -> None:
+    text = "PMID,Title,Citation,Journal/Book,DOI\n1,A,B,C,D\n"
+
+    assert PUBMED.formats["csv"].matches(text)
+
+
+def test_pubmed_csv__does_not_match_generic_headers() -> None:
+    assert not PUBMED.formats["csv"].matches("PMID,Title,DOI\n1,A,D\n")

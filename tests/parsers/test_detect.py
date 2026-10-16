@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.parsers.detect import detect_type
+from app.parsers.detect import detect_source, detect_type
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
 
@@ -83,3 +83,24 @@ def test_detect_type__unrecognised_content_and_extension_returns_none(
     path = _write(tmp_path, "notes.txt", "just some notes\n")
 
     assert detect_type(path) is None
+
+
+def test_detect_source__pubmed_nbib() -> None:
+    assert detect_source(_DATA_DIR / "nbib" / "pubmed_style.nbib", "nbib") == "pubmed"
+
+
+def test_detect_source__pubmed_csv(tmp_path: Path) -> None:
+    path = _write(tmp_path, "pubmed.csv", "PMID,Title,Citation,Journal/Book\n1,A,B,C\n")
+
+    assert detect_source(path, "csv") == "pubmed"
+
+
+def test_detect_source__no_matching_profile_returns_none() -> None:
+    assert detect_source(_DATA_DIR / "ris" / "scopus_style.ris", "ris") is None
+
+
+def test_detect_source__undecodable_file_returns_none(tmp_path: Path) -> None:
+    path = tmp_path / "broken.nbib"
+    path.write_bytes(b"\x81\x8d\x8f\x90\x9d")
+
+    assert detect_source(path, "nbib") is None

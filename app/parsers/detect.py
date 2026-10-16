@@ -4,6 +4,7 @@ from io import StringIO
 from pathlib import Path
 
 from app.parsers.common import decode_file
+from app.parsers.profiles import PROFILES
 
 _RIS_FIRST_LINE = re.compile(r"^TY  -")
 _NBIB_FIRST_LINE = re.compile(r"^PMID ?-")
@@ -39,3 +40,15 @@ def detect_type(path: Path) -> str | None:
     except ValueError:
         file_type = None
     return file_type or _EXTENSION_TYPES.get(path.suffix.lower())
+
+
+def detect_source(path: Path, file_type: str) -> str | None:
+    try:
+        text = decode_file(path)
+    except ValueError:
+        return None
+    for key, profile in PROFILES.items():
+        format_profile = profile.formats.get(file_type)
+        if format_profile is not None and format_profile.matches(text):
+            return key
+    return None

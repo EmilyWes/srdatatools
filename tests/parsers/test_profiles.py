@@ -27,6 +27,7 @@ def test_apply_profile__fixes_records_and_keeps_raw_fields_and_skipped() -> None
     profile = FormatProfile(
         aliases={},
         fix_record=lambda raw, record: record.model_copy(update={"title": raw["X"]}),
+        matches=lambda text: False,
     )
     skipped = [SkippedRow(3, "bad")]
     result = ParseResult(

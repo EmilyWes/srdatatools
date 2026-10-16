@@ -5,12 +5,14 @@ from app.models.record import Record
 from app.parsers.common import ParseResult
 
 FixRecord = Callable[[dict[str, str], Record], Record]
+MatchesText = Callable[[str], bool]
 
 
 @dataclass(frozen=True)
 class FormatProfile:
     aliases: dict[str, list[str]]
     fix_record: FixRecord
+    matches: MatchesText
     list_delimiter: str | None = None
 
 

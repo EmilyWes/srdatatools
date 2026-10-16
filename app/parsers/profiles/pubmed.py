@@ -1,4 +1,6 @@
+import csv
 import re
+from io import StringIO
 
 from app.models.record import Record
 from app.parsers.profiles.base import FormatProfile, Profile
@@ -8,6 +10,10 @@ _TRANSLATED_TITLE_TAG = "TT"
 _PAGE_RANGE = re.compile(r"^(?P<start>\d+)-(?P<end>\d+)$")
 
 _ET_AL = "et al."
+
+_NBIB_PMID_LINE = re.compile(r"^PMID ?- ", re.MULTILINE)
+_NBIB_OWN_NLM_LINE = re.compile(r"^OWN ?- NLM\s*$", re.MULTILINE)
+_CSV_HEADERS = {"pmid", "citation", "journal/book"}
 
 
 def expand_page_range(pages: str) -> str:
@@ -45,12 +51,23 @@ def _fix_csv_record(raw_fields: dict[str, str], record: Record) -> Record:
     return record.model_copy(update={"authors": authors})
 
 
+def _matches_nbib(text: str) -> bool:
+    return bool(_NBIB_PMID_LINE.search(text) and _NBIB_OWN_NLM_LINE.search(text))
+
+
+def _matches_csv(text: str) -> bool:
+    header = next(csv.reader(StringIO(text)), [])
+    return _CSV_HEADERS <= {column.strip().lower() for column in header}
+
+
 PUBMED = Profile(
     key="pubmed",
     label="PubMed",
     formats={
         "nbib": FormatProfile(
-            aliases={"journal": ["jt", "bti"]}, fix_record=_fix_nbib_record
+            aliases={"journal": ["jt", "bti"]},
+            fix_record=_fix_nbib_record,
+            matches=_matches_nbib,
         ),
         "csv": FormatProfile(
             aliases={
@@ -59,6 +76,7 @@ PUBMED = Profile(
                 "other_ids.mid": ["nihms id"],
             },
             fix_record=_fix_csv_record,
+            matches=_matches_csv,
             list_delimiter=",",
         ),
     },
