@@ -233,6 +233,19 @@ def default_other_id_key(header: str) -> str:
     return slug or "id"
 
 
+def override_aliases(
+    aliases: dict[str, list[str]], overrides: dict[str, list[str]]
+) -> dict[str, list[str]]:
+    """An overridden alias is also removed from the target it had before."""
+    taken = {alias for names in overrides.values() for alias in names}
+    merged = {
+        target: [alias for alias in names if alias not in taken]
+        for target, names in aliases.items()
+    }
+    merged.update(overrides)
+    return merged
+
+
 def suggest_mapping(
     keys: list[str], aliases: dict[str, list[str]], *, lenient: bool
 ) -> FieldMapping:

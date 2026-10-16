@@ -4,6 +4,7 @@ from app.parsers.mapping import (
     SCALAR_FIELDS,
     FieldMapping,
     apply_mapping,
+    override_aliases,
     suggest_mapping,
 )
 
@@ -153,6 +154,26 @@ def test_suggest_mapping__strict_matches_exact_aliases_only() -> None:
     suggestions = suggest_mapping(["TI", "tj", "Custom ID"], aliases, lenient=False)
 
     assert suggestions.targets == {"TI": "title"}
+
+
+def test_suggest_mapping__alias_may_target_a_named_other_id() -> None:
+    aliases = {"other_ids.pmc": ["pmcid"]}
+
+    suggestions = suggest_mapping(["PMCID"], aliases, lenient=True)
+
+    assert suggestions.targets == {"PMCID": "other_ids.pmc"}
+
+
+def test_override_aliases__replaces_alias_list_of_overridden_target() -> None:
+    merged = override_aliases({"journal": ["jt", "ta"]}, {"journal": ["jt"]})
+
+    assert merged == {"journal": ["jt"]}
+
+
+def test_override_aliases__moves_alias_away_from_its_old_target() -> None:
+    merged = override_aliases({"other_ids": ["pmc", "mid"]}, {"other_ids.pmc": ["pmc"]})
+
+    assert merged == {"other_ids": ["mid"], "other_ids.pmc": ["pmc"]}
 
 
 def test_suggest_mapping__exclusive_target_prefers_alias_rank_over_file_order() -> None:
