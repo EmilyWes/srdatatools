@@ -334,8 +334,6 @@ def test_render_import_view__initial_state_has_no_file_and_disabled_buttons() ->
     assert view.mapping_screen is None
     assert view.import_button is not None
     assert view.import_button.enabled is False
-    assert view.stats_button is not None
-    assert view.stats_button.enabled is False
 
 
 def test_render_import_view__selecting_file_updates_label(
@@ -354,17 +352,6 @@ def test_render_import_view__selecting_file_updates_label(
     outer_column = panes.middle.default_slot.children[0]
     file_row = outer_column.default_slot.children[0]
     assert file_row.default_slot.children[0].text == "export.csv"  # type: ignore[attr-defined]
-
-
-def test_render_import_view__setting_type_enables_stats_button() -> None:
-    panes = shell()
-    view = render_import_view(panes.middle, on_import=lambda p, t, m: None)
-
-    view._set_type("csv")
-
-    assert view.file_type == "csv"
-    assert view.stats_button is not None
-    assert view.stats_button.enabled is True
 
 
 def test_render_import_view__mapping_renders_inline_and_enables_import_without_confirm(
@@ -433,13 +420,6 @@ def test_render_import_view__selecting_new_file_rerenders_mapping_from_new_heade
     assert [row.header for row in view.mapping_screen.rows] == ["DOI"]
     assert view.import_button is not None
     assert view.import_button.enabled is True
-
-
-def test_render_import_view__get_stats_click_notifies_not_implemented() -> None:
-    panes = shell()
-    view = render_import_view(panes.middle, on_import=lambda p, t, m: None)
-
-    view._get_stats()  # must not raise; dry-run logic isn't implemented yet
 
 
 def test_render_import_view__import_disabled_when_csv_file_cannot_be_decoded(

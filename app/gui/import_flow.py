@@ -115,7 +115,6 @@ class ImportView:
     file_type: str = _TYPE_UNKNOWN
     mapping_screen: MappingScreen | None = None
     import_button: ui.button | None = None
-    stats_button: ui.button | None = None
 
     async def _select_file(self) -> None:
         picked = await pick_file()
@@ -131,9 +130,6 @@ class ImportView:
         assert self.path is not None
         assert self.mapping_screen is not None
         self.on_import(self.path, self.file_type, self.mapping_screen.current_mapping())
-
-    def _get_stats(self) -> None:
-        ui.notify("Get stats is not implemented yet")
 
     def render(self) -> None:
         type_known = self.file_type != _TYPE_UNKNOWN
@@ -180,13 +176,6 @@ class ImportView:
                         self.import_button.tooltip("please select the type")
                     elif not has_mapping:
                         self.import_button.tooltip("file has no mapping available")
-
-                    self.stats_button = ui.button(
-                        "Get stats", on_click=self._get_stats
-                    ).props("dense")
-                    self.stats_button.set_enabled(type_known)
-                    if not type_known:
-                        self.stats_button.tooltip("please select the type")
 
 
 def render_import_view(
