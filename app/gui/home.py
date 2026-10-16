@@ -25,9 +25,11 @@ def home() -> None:
             if select_key is not None:
                 nav.select(select_key)
 
-    def on_confirmed(path: Path, file_type: str, mapping: FieldMapping) -> None:
+    def on_confirmed(
+        path: Path, file_type: str, mapping: FieldMapping, source: str
+    ) -> None:
         with session_scope(_engine) as session:
-            source_file = import_file(session, path, file_type, mapping)
+            source_file = import_file(session, path, file_type, mapping, source)
             session.flush()
             key = f"source_file:{source_file.id}"
         refresh(select_key=key)
