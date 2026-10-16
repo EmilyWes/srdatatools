@@ -341,32 +341,33 @@ def test_render_import_view__selecting_file_updates_label(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     panes = shell()
-    csv_path = tmp_path / "export.csv"
-    _pick(monkeypatch, csv_path)
+    txt_path = tmp_path / "export.txt"
+    txt_path.write_text("Title\nSome Paper\n")
+    _pick(monkeypatch, txt_path)
     view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
 
     asyncio.run(view._select_file())
 
-    assert view.path == csv_path
-    # type is still unknown, so no mapping renders yet
+    assert view.path == txt_path
+    # type is not detected, so no mapping renders yet
     assert view.mapping_screen is None
     outer_column = panes.middle.default_slot.children[0]
     file_row = outer_column.default_slot.children[0]
-    assert file_row.default_slot.children[0].text == "export.csv"  # type: ignore[attr-defined]
+    assert file_row.default_slot.children[0].text == "export.txt"  # type: ignore[attr-defined]
 
 
 def test_render_import_view__mapping_renders_inline_and_enables_import_without_confirm(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     panes = shell()
-    csv_path = tmp_path / "export.csv"
-    csv_path.write_text("Title\nSome Paper\n")
-    _pick(monkeypatch, csv_path)
+    txt_path = tmp_path / "export.txt"
+    txt_path.write_text("Title\nSome Paper\n")
+    _pick(monkeypatch, txt_path)
     view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
     asyncio.run(view._select_file())
 
     assert view.import_button is not None
-    assert view.import_button.enabled is False  # type still unknown
+    assert view.import_button.enabled is False  # type not detected
     assert view.mapping_screen is None
 
     view._set_type("csv")
@@ -374,6 +375,43 @@ def test_render_import_view__mapping_renders_inline_and_enables_import_without_c
     # mapping table rendered automatically, no "Check Mapping"/confirm click needed
     assert view.mapping_screen is not None
     assert view.import_button.enabled is True
+
+
+def test_render_import_view__selecting_file_prefills_detected_type_and_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    panes = shell()
+    txt_path = tmp_path / "pubmed.txt"
+    txt_path.write_text("PMID- 1\nOWN - NLM\nTI  - A title\n")
+    _pick(monkeypatch, txt_path)
+    view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
+
+    asyncio.run(view._select_file())
+
+    assert view.file_type == "nbib"
+    assert view.source == "pubmed"
+    assert view.mapping_screen is not None
+    assert view.import_button is not None
+    assert view.import_button.enabled is True
+
+
+def test_render_import_view__undetected_file_resets_type_and_source_to_unknown(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    panes = shell()
+    txt_path = tmp_path / "notes.txt"
+    txt_path.write_text("just some notes\n")
+    _pick(monkeypatch, txt_path)
+    view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
+    view._set_type("csv")
+    view._set_source("pubmed")
+
+    asyncio.run(view._select_file())
+
+    assert view.file_type == "unknown"
+    assert view.source == "unknown"
+    assert view.import_button is not None
+    assert view.import_button.enabled is False
 
 
 def test_render_import_view__import_reads_live_mapping_edits(
