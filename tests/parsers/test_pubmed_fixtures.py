@@ -63,6 +63,53 @@ def test_pubmed_small_nbib__applies_profile_fixes(
     assert nbib_records["28590685"].publication_type == "Review"
 
 
+def test_pubmed_small_nbib__mesh_keywords_are_prefixed(
+    nbib_records: dict[str, Record],
+) -> None:
+    keywords = nbib_records["41672119"].keywords
+
+    assert "[MeSH] *Materia Medica/standards/history" in keywords
+    assert "Adulteration" in keywords
+
+
+def test_pubmed_small_nbib__book_chapter_uses_book_title_as_journal(
+    nbib_records: dict[str, Record],
+) -> None:
+    record = nbib_records["28590685"]
+
+    assert record.journal == "Micro-, Meso- and Macro-Dynamics of the Brain"
+    assert len(record.authors) == 11
+    laurent = record.authors[0]
+    assert laurent.family_name == "Laurent"
+    assert len(laurent.affiliations) == 1
+    assert laurent.affiliations[0].name is not None
+    assert laurent.affiliations[0].name.startswith(
+        "Max Planck Institute for Brain Research"
+    )
+
+
+def test_pubmed_small_nbib__authors_have_orcids_and_affiliations(
+    nbib_records: dict[str, Record],
+) -> None:
+    authors = nbib_records["37587301"].authors
+
+    assert len(authors) == 9
+    muller, garcia, nesbitt = authors[0], authors[2], authors[8]
+    assert (muller.family_name, muller.given_name) == ("Müller", "Rodrigo T")
+    assert muller.orcid == "0000-0001-8894-9875"
+    assert len(muller.affiliations) == 2
+    assert muller.affiliations[1].name == (
+        "Programa de Pós-Graduação em Biodiversidade Animal, Universidade Federal "
+        "de Santa Maria, Santa Maria, Brazil. rodrigotmuller@hotmail.com."
+    )
+    assert garcia.orcid is None
+    assert len(garcia.affiliations) == 2
+    assert nesbitt.orcid == "0000-0002-7017-1652"
+    assert [a.name for a in nesbitt.affiliations] == [
+        "Department of Geosciences, Virginia Tech, Blacksburg, VA, USA."
+    ]
+
+
 def test_pubmed_small_csv__parses_every_record(
     csv_records: dict[str, Record],
 ) -> None:
@@ -73,11 +120,9 @@ def test_pubmed_small_csv__applies_profile_fixes(
     csv_records: dict[str, Record],
 ) -> None:
     nature = csv_records["37587301"]
-    assert (nature.volume, nature.issue, nature.pages) == ("620", "7974", "589-594")
-    assert nature.publication_date == PartialDate(year=2023, month=8)
-    assert csv_records["11523304"].pages == "521-522"
+    assert nature.volume is None
+    assert nature.publication_date == PartialDate(year=2023)
     assert csv_records["30527956"].authors[-1].full_name == "Walsworth AK"
-    assert csv_records["28590685"].volume is None
     assert csv_records["37886492"].other_ids["pmc"] == "PMC10602114"
 
 

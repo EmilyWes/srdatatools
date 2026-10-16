@@ -227,6 +227,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Field-mapping UI: per-column bar (`#` column) showing filled rows / total rows, colored green (all filled) to red (none), with `value of total` on hover
 - [x] NBIB: strip the print/electronic qualifier from `IS` values (e.g. `1234-5678 (Print)` -> `1234-5678`) before storing in `issn`
 - [x] PubMed profile (NBIB, CSV)
+- [x] PubMed quirks
 - [ ] Scopus profile (CSV, RIS)
 - [ ] Web of Science profile (RIS)
 - [ ] IEEE Xplore profile (CSV)
