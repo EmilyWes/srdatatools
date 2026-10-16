@@ -10,12 +10,28 @@ from sqlalchemy.orm import Session
 from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
 from app.gui.mapping_table import MappingScreen, render_mapping_table
-from app.parsers.common import FileSummary, ParseResult
-from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
+from app.models.record import Record
+from app.parsers.common import FileSummary, ParsedRow, ParseResult
+from app.parsers.csv_ import (
+    parse_csv_file,
+    parse_csv_record,
+    read_csv_headers,
+    suggest_mapping,
+)
 from app.parsers.mapping import FieldMapping
-from app.parsers.nbib import parse_nbib_file, read_nbib_tags, suggest_nbib_mapping
+from app.parsers.nbib import (
+    parse_nbib_file,
+    parse_nbib_record,
+    read_nbib_tags,
+    suggest_nbib_mapping,
+)
 from app.parsers.profiles import PROFILES, apply_profile, profile_for
-from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
+from app.parsers.ris import (
+    parse_ris_file,
+    parse_ris_record,
+    read_ris_tags,
+    suggest_ris_mapping,
+)
 
 _TYPE_UNKNOWN = "unknown"
 _TYPE_RIS = "ris"
@@ -41,6 +57,10 @@ async def pick_file() -> Path | None:
     return Path(selected[0]) if selected else None
 
 
+def _parse_csv_lines(lines: list[tuple[str, str]], mapping: FieldMapping) -> ParsedRow:
+    return parse_csv_record(dict(lines), mapping)
+
+
 def render_mapping(
     container: Element, file_type: str, path: Path, source: str = _SOURCE_UNKNOWN
 ) -> MappingScreen | None:
@@ -48,14 +68,18 @@ def render_mapping(
     overrides = profile.aliases if profile is not None else None
     read_keys: Callable[[Path], FileSummary]
     suggest: Callable[[list[str]], FieldMapping]
+    parse_record: Callable[[list[tuple[str, str]], FieldMapping], ParsedRow]
     if file_type == _TYPE_CSV:
         read_keys, noun = read_csv_headers, "columns"
         suggest = partial(suggest_mapping, alias_overrides=overrides)
+        parse_record = _parse_csv_lines
     elif file_type == _TYPE_RIS:
         read_keys, suggest, noun = read_ris_tags, suggest_ris_mapping, "tags"
+        parse_record = parse_ris_record
     elif file_type == _TYPE_NBIB:
         read_keys, noun = read_nbib_tags, "tags"
         suggest = partial(suggest_nbib_mapping, alias_overrides=overrides)
+        parse_record = parse_nbib_record
     else:
         return None
 
@@ -74,8 +98,19 @@ def render_mapping(
     suggestion = suggest(list(summary.samples))
     if profile is not None and profile.list_delimiter is not None:
         suggestion = replace(suggestion, list_delimiter=profile.list_delimiter)
+
+    def preview(mapping: FieldMapping) -> Record:
+        row = parse_record(list(summary.samples.items()), mapping)
+        if profile is None:
+            return row.record
+        return profile.fix_record(row.raw_fields, row.record)
+
     return render_mapping_table(
-        container, summary, suggestion, show_delimiter=file_type == _TYPE_CSV
+        container,
+        summary,
+        suggestion,
+        show_delimiter=file_type == _TYPE_CSV,
+        preview=preview,
     )
 
 

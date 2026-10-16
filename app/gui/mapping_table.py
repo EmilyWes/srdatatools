@@ -1,16 +1,19 @@
-﻿from collections.abc import Iterable
+﻿from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Literal
 
 from nicegui import ui
 from nicegui.element import Element
 
+from app.models.record import Author, PartialDate, Record
 from app.parsers.common import FileSummary
 from app.parsers.mapping import (
+    DATE_TARGETS,
     EXCLUSIVE_TARGETS,
     ISSN_ISBN_TARGET,
     LIST_TARGETS,
     OTHER_IDS_PREFIX,
+    PAGE_TARGETS,
     SCALAR_FIELDS,
     FieldMapping,
     default_other_id_key,
@@ -142,10 +145,54 @@ def _exclusive_available(header: str, target: str, taken: dict[str, str]) -> boo
     return taken.get(target) in (None, header)
 
 
+_LIST_SEPARATOR = " | "
+_NOT_PARSED = "not parsed"
+_RESULT_CLASSES = "w-48 truncate text-xs"
+
+
+def _author_text(author: Author) -> str:
+    details = [f"ORCID {author.orcid}"] if author.orcid else []
+    details += [
+        affiliation.name for affiliation in author.affiliations if affiliation.name
+    ]
+    name = author.full_name or ""
+    return f"{name} ({'; '.join(details)})" if details else name
+
+
+def _date_text(date: PartialDate | None) -> str:
+    if date is None:
+        return ""
+    parts = [
+        str(date.year) if date.year is not None else "",
+        f"{date.month:02}" if date.month is not None else "",
+        f"{date.day:02}" if date.day is not None else "",
+    ]
+    return "-".join(part for part in parts if part)
+
+
+def _result_text(target: str, record: Record) -> str:
+    if target in DATE_TARGETS:
+        return _date_text(record.publication_date)
+    if target in PAGE_TARGETS:
+        return record.pages or ""
+    if target == ISSN_ISBN_TARGET:
+        ids = (("ISSN", record.issn), ("ISBN", record.isbn))
+        return _LIST_SEPARATOR.join(f"{label} {value}" for label, value in ids if value)
+    if target.startswith(OTHER_IDS_PREFIX):
+        return record.other_ids.get(target.removeprefix(OTHER_IDS_PREFIX), "")
+    if target == "authors":
+        return _LIST_SEPARATOR.join(map(_author_text, record.authors))
+    if target == "keywords":
+        return _LIST_SEPARATOR.join(record.keywords)
+    value: str | None = getattr(record, target)
+    return value or ""
+
+
 @dataclass
 class _Row:
     header: str
     sample: ui.label
+    result: ui.label
     count: ui.linear_progress
     select: ui.select
     other_id_key: str
@@ -159,6 +206,7 @@ class _Row:
 
 @dataclass
 class MappingScreen:
+    preview: Callable[[FieldMapping], Record]
     rows: list[_Row] = field(default_factory=list)
     list_delimiter: str = ";"
     list_delimiter_input: ui.input | None = None
@@ -184,9 +232,25 @@ class MappingScreen:
         for row in self.rows:
             row.select.props(f"bg-color={_STATUS_COLORS[row.display_status]}")
 
+    def _refresh_results(self) -> None:
+        mapping = self.current_mapping()
+        record = self.preview(mapping)
+        for row in self.rows:
+            target = mapping.targets.get(row.header)
+            text = _result_text(target, record) if target else ""
+            not_parsed = bool(target and row.sample.text and not text)
+            row.result.set_text(_NOT_PARSED if not_parsed else text)
+            color = "text-negative" if not_parsed else "text-grey-7"
+            row.result.classes(replace=f"{_RESULT_CLASSES} {color}")
+            row.result.clear()
+            if text:
+                with row.result:
+                    ui.tooltip(text)
+
     def on_target_change(self) -> None:
         self._refresh_options()
         self._refresh_colors()
+        self._refresh_results()
 
     def set_target(self, header: str, target: str) -> None:
         row = self._row_for(header)
@@ -220,8 +284,9 @@ def render_mapping_table(
     suggestion: FieldMapping,
     *,
     show_delimiter: bool,
+    preview: Callable[[FieldMapping], Record],
 ) -> MappingScreen:
-    screen = MappingScreen(list_delimiter=suggestion.list_delimiter)
+    screen = MappingScreen(preview=preview, list_delimiter=suggestion.list_delimiter)
     samples = summary.samples
     headers = _sorted_headers(list(samples), suggestion)
     input_width = _input_width_ch(headers)
@@ -258,6 +323,7 @@ def render_mapping_table(
                 ui.label("Input").classes("text-xs font-bold").style(input_style)
                 ui.label("Mapping").classes("text-xs font-bold").style(mapping_style)
                 ui.label("Example").classes("w-48 text-xs font-bold text-center")
+                ui.label("Result").classes("w-48 text-xs font-bold text-center")
             for i, header in enumerate(headers):
                 status = _initial_status(header, suggestion)
                 row_classes = "w-full items-center gap-1 pl-0 py-0 border-b"
@@ -296,11 +362,13 @@ def render_mapping_table(
                     )
                     if samples[header]:
                         sample.tooltip(samples[header])
+                    result = ui.label().classes(_RESULT_CLASSES)
 
                 screen.rows.append(
                     _Row(
                         header=header,
                         sample=sample,
+                        result=result,
                         count=count,
                         select=select,
                         other_id_key=initial_keys[header],
@@ -316,6 +384,10 @@ def render_mapping_table(
                 .classes("pl-6 text-xs")
                 .props("dense")
             )
+            screen.list_delimiter_input.on_value_change(
+                lambda _e: screen._refresh_results()
+            )
 
     screen._refresh_options()
+    screen._refresh_results()
     return screen

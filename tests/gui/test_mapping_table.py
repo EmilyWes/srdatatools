@@ -8,13 +8,46 @@ from app.gui.mapping_table import (
     _input_width_ch,
     render_mapping_table,
 )
+from app.models.record import Record
 from app.parsers.common import FileSummary
-from app.parsers.csv_ import suggest_mapping
-from app.parsers.ris import suggest_ris_mapping
+from app.parsers.csv_ import parse_csv_record, suggest_mapping
+from app.parsers.mapping import FieldMapping
+from app.parsers.ris import parse_ris_record, suggest_ris_mapping
 
 
 def _summary(samples: dict[str, str]) -> FileSummary:
     return FileSummary(samples, dict.fromkeys(samples, 0), 0)
+
+
+def _no_preview(mapping: FieldMapping) -> Record:
+    return Record()
+
+
+def _render_samples(samples: dict[str, str]) -> MappingScreen:
+    panes = shell()
+    return render_mapping_table(
+        panes.middle,
+        _summary(samples),
+        suggest_mapping(list(samples)),
+        show_delimiter=True,
+        preview=lambda mapping: parse_csv_record(samples, mapping).record,
+    )
+
+
+def _render_ris_samples(samples: dict[str, str]) -> MappingScreen:
+    panes = shell()
+    return render_mapping_table(
+        panes.middle,
+        _summary(samples),
+        suggest_ris_mapping(list(samples)),
+        show_delimiter=False,
+        preview=lambda mapping: parse_ris_record(list(samples.items()), mapping).record,
+    )
+
+
+def _result(screen: MappingScreen, header: str) -> str:
+    text: str = screen._row_for(header).result.text
+    return text
 
 
 def _render(headers: list[str]) -> MappingScreen:
@@ -24,6 +57,7 @@ def _render(headers: list[str]) -> MappingScreen:
         _summary(dict.fromkeys(headers, "")),
         suggest_mapping(headers),
         show_delimiter=True,
+        preview=_no_preview,
     )
 
 
@@ -34,6 +68,7 @@ def _render_ris(tags: list[str]) -> MappingScreen:
         _summary(dict.fromkeys(tags, "")),
         suggest_ris_mapping(tags),
         show_delimiter=False,
+        preview=_no_preview,
     )
 
 
@@ -153,6 +188,7 @@ def test_render_mapping_table__renders_table_and_delimiter_input_only() -> None:
         _summary(dict.fromkeys(headers, "")),
         suggest_mapping(headers),
         show_delimiter=True,
+        preview=_no_preview,
     )
 
     middle_children = panes.middle.default_slot.children
@@ -168,6 +204,7 @@ def test_render_mapping_table__ris_has_no_delimiter_input_and_keeps_newline() ->
         _summary(dict.fromkeys(tags, "")),
         suggest_ris_mapping(tags),
         show_delimiter=False,
+        preview=_no_preview,
     )
 
     assert len(panes.middle.default_slot.children) == 1  # table only
@@ -206,6 +243,7 @@ def test_render_mapping_table__shows_sample_value_for_each_row() -> None:
         _summary(samples),
         suggest_mapping(list(samples)),
         show_delimiter=True,
+        preview=_no_preview,
     )
 
     assert screen._row_for("Title").sample.text == "Some Paper"
@@ -223,6 +261,7 @@ def test_render_mapping_table__sample_has_full_value_tooltip_only_when_non_empty
         _summary(samples),
         suggest_mapping(list(samples)),
         show_delimiter=True,
+        preview=_no_preview,
     )
 
     targets = {
@@ -371,6 +410,7 @@ def test_render_mapping_table__truncated_input_header_has_full_value_tooltip() -
         _summary({long_header: "", "Title": ""}),
         suggest_mapping([long_header, "Title"]),
         show_delimiter=True,
+        preview=_no_preview,
     )
 
     tooltips = [t.text for t in panes.middle.descendants() if isinstance(t, Tooltip)]
@@ -384,7 +424,11 @@ def test_render_mapping_table__shows_filled_bar_per_row_with_count_tooltip() -> 
     panes = shell()
 
     screen = render_mapping_table(
-        panes.middle, summary, suggest_mapping(list(samples)), show_delimiter=True
+        panes.middle,
+        summary,
+        suggest_mapping(list(samples)),
+        show_delimiter=True,
+        preview=_no_preview,
     )
 
     title, notes, year = (screen._row_for(h).count for h in samples)
@@ -408,7 +452,96 @@ def test_render_mapping_table__empty_file_bar_is_empty() -> None:
     panes = shell()
 
     screen = render_mapping_table(
-        panes.middle, summary, suggest_mapping(["Title"]), show_delimiter=True
+        panes.middle,
+        summary,
+        suggest_mapping(["Title"]),
+        show_delimiter=True,
+        preview=_no_preview,
     )
 
     assert screen._row_for("Title").count.value == 0.0
+
+
+def test_render_mapping_table__result_shows_parsed_scalar() -> None:
+    screen = _render_samples({"Title": "Some Paper", "DOI": "https://doi.org/10.1/XYZ"})
+
+    assert _result(screen, "Title") == "Some Paper"
+    assert _result(screen, "DOI") == "10.1/xyz"
+
+
+def test_render_mapping_table__result_updates_when_target_changes() -> None:
+    screen = _render_samples({"Title": "Some Paper"})
+
+    screen._row_for("Title").select.value = "notes"
+
+    assert _result(screen, "Title") == "Some Paper"
+    screen._row_for("Title").select.value = "year"
+    assert _result(screen, "Title") == "not parsed"
+
+
+def test_render_mapping_table__result_is_blank_for_ignored_and_empty_rows() -> None:
+    screen = _render_samples({"Zzzqqqxx123": "something", "Title": ""})
+
+    assert _result(screen, "Zzzqqqxx123") == ""
+    assert _result(screen, "Title") == ""
+
+
+def test_render_mapping_table__result_combines_page_start_and_end() -> None:
+    screen = _render_samples({"Page start": "12", "Page end": "15"})
+
+    assert _result(screen, "Page start") == "12-15"
+    assert _result(screen, "Page end") == "12-15"
+
+
+def test_render_mapping_table__result_combines_date_and_year() -> None:
+    screen = _render_samples({"Date": "2020-03-15", "Year": "2021"})
+
+    assert _result(screen, "Date") == "2021-03-15"
+    assert _result(screen, "Year") == "2021-03-15"
+
+
+def test_render_mapping_table__unparseable_result_is_red_not_parsed() -> None:
+    screen = _render_samples({"Date": "sometime"})
+
+    result = screen._row_for("Date").result
+    assert result.text == "not parsed"
+    assert "text-negative" in result.classes
+
+
+def test_render_mapping_table__result_splits_list_with_delimiter_input() -> None:
+    screen = _render_samples({"Authors": "Smith, J; Doe, J"})
+    assert _result(screen, "Authors") == "Smith, J | Doe, J"
+
+    assert screen.list_delimiter_input is not None
+    screen.list_delimiter_input.value = ","
+
+    assert _result(screen, "Authors") == "Smith | J; Doe | J"
+
+
+def test_render_mapping_table__result_labels_issn_and_isbn() -> None:
+    screen = _render_ris_samples({"SN": "1234-5678; 978-3-16-148410-0"})
+
+    assert _result(screen, "SN") == "ISSN 1234-5678 | ISBN 978-3-16-148410-0"
+
+
+def _result_tooltips(screen: MappingScreen, header: str) -> list[str]:
+    result = screen._row_for(header).result
+    return [t.text for t in result.descendants() if isinstance(t, Tooltip)]
+
+
+def test_render_mapping_table__result_has_full_value_tooltip_only_when_non_empty() -> (
+    None
+):
+    screen = _render_samples({"Title": "Some Paper", "Notes": ""})
+
+    assert _result_tooltips(screen, "Title") == ["Some Paper"]
+    assert _result_tooltips(screen, "Notes") == []
+
+
+def test_render_mapping_table__result_tooltip_is_replaced_on_refresh() -> None:
+    screen = _render_samples({"Title": "Some Paper"})
+
+    screen._row_for("Title").select.value = "year"
+    assert _result_tooltips(screen, "Title") == []
+    screen._row_for("Title").select.value = "notes"
+    assert _result_tooltips(screen, "Title") == ["Some Paper"]
