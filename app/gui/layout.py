@@ -18,7 +18,7 @@ def shell() -> ShellPanes:
         with left:
             ui.label("Navigation")
 
-        middle = ui.column().classes("flex-grow")
+        middle = ui.column().classes("flex-grow min-w-0")
         with middle:
             ui.label("Content")
 

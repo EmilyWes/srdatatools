@@ -311,9 +311,10 @@ def render_mapping_table(
 
     middle.clear()
     with middle:
-        with ui.column().classes("gap-0 border rounded-borders"):
-            header_classes = "w-full items-center gap-1 pl-0 py-2 bg-grey-2 border-b"
-            with ui.row().classes(header_classes):
+        table_classes = "gap-0 border rounded-borders max-w-full overflow-x-auto"
+        with ui.column().classes(table_classes):
+            row_base = "w-full min-w-max no-wrap items-center gap-1 pl-0 border-b"
+            with ui.row().classes(f"{row_base} py-2 bg-grey-2"):
                 with (
                     ui.element("div")
                     .classes(count_cell_classes)
@@ -326,7 +327,7 @@ def render_mapping_table(
                 ui.label("Result").classes("w-48 text-xs font-bold text-center")
             for i, header in enumerate(headers):
                 status = _initial_status(header, suggestion)
-                row_classes = "w-full items-center gap-1 pl-0 py-0 border-b"
+                row_classes = f"{row_base} py-0"
                 if i % 2 == 1:
                     row_classes += " bg-grey-1"
                 with ui.row().classes(row_classes):
