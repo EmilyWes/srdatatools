@@ -150,108 +150,14 @@ def test_pubmed_csv__drops_et_al() -> None:
     assert [a.full_name for a in record.authors] == ["Rhodes CJ", "Walsworth AK"]
 
 
-def test_pubmed_csv__citation_fills_volume_issue_pages_and_month() -> None:
+def test_pubmed_csv__citation_is_not_parsed() -> None:
     record = _parse_csv(
         {
             "PMID": "1",
-            "Citation": "Nature. 2023 Aug;620(7974):589-594. doi: x. Epub 2023.",
+            "Citation": "Nature. 2023 Aug;620(7974):589-594. doi: x.",
             "Publication Year": "2023",
         }
     )
 
-    assert record.volume == "620"
-    assert record.issue == "7974"
-    assert record.pages == "589-594"
-    assert record.publication_date == PartialDate(year=2023, month=8)
-
-
-def test_pubmed_csv__citation_without_issue_fills_day() -> None:
-    record = _parse_csv(
-        {
-            "PMID": "1",
-            "Citation": "J Ethnopharmacol. 2026 May 10;362:121354. doi: 10.1016/x.",
-            "Publication Year": "2026",
-        }
-    )
-
-    assert record.volume == "362"
-    assert record.issue is None
-    assert record.pages == "121354"
-    assert record.publication_date == PartialDate(year=2026, month=5, day=10)
-
-
-def test_pubmed_csv__citation_pages_are_expanded() -> None:
-    record = _parse_csv(
-        {"PMID": "1", "Citation": "Rev Med Liege. 2001 Jul;56(7):521-2."}
-    )
-
-    assert record.pages == "521-522"
-
-
-def test_pubmed_csv__citation_keeps_page_suffix() -> None:
-    record = _parse_csv(
-        {"PMID": "1", "Citation": "Curr Biol. 2021 Aug 23;31(16):3687-3693.e5. doi: x."}
-    )
-
-    assert record.pages == "3687-3693.e5"
-
-
-def test_pubmed_csv__citation_volume_may_contain_text() -> None:
-    record = _parse_csv(
-        {
-            "PMID": "1",
-            "Citation": "Med Sci (Paris). 2016 Nov;32 Hors série n°2:57-59. doi: x.",
-        }
-    )
-
-    assert record.volume == "32 Hors série n°2"
-    assert record.pages == "57-59"
-
-
-def test_pubmed_csv__citation_without_year_column_sets_full_date() -> None:
-    record = _parse_csv(
-        {"PMID": "1", "Citation": "Nature. 2023 Aug;620(7974):589-594."}
-    )
-
-    assert record.publication_date == PartialDate(year=2023, month=8)
-
-
-def test_pubmed_csv__citation_date_of_other_year_is_ignored() -> None:
-    record = _parse_csv(
-        {
-            "PMID": "1",
-            "Citation": "Nature. 2023 Aug;620(7974):589-594.",
-            "Publication Year": "2024",
-        }
-    )
-
-    assert record.publication_date == PartialDate(year=2024)
-
-
-def test_pubmed_csv__citation_does_not_overwrite_mapped_fields() -> None:
-    record = _parse_csv(
-        {
-            "PMID": "1",
-            "Citation": "Nature. 2023 Aug;620(7974):589-594.",
-            "Volume": "99",
-        }
-    )
-
-    assert record.volume == "99"
-    assert record.issue == "7974"
-
-
-@pytest.mark.parametrize(
-    "citation",
-    [
-        "2016 May 3. In: Buzsáki G, Christen Y, editors. Micro-, Meso- and "
-        "Macro-Dynamics of the Brain [Internet]. Cham (CH): Springer; 2016.",
-        "Res Sq [Preprint]. 2023 Oct 3:rs.3.rs-3382427. doi: 10.21203/x.",
-    ],
-)
-def test_pubmed_csv__non_journal_citation_is_ignored(citation: str) -> None:
-    record = _parse_csv({"PMID": "1", "Citation": citation})
-
-    assert record.volume is None
-    assert record.pages is None
-    assert record.publication_date is None
+    assert (record.volume, record.issue, record.pages) == (None, None, None)
+    assert record.publication_date == PartialDate(year=2023)
