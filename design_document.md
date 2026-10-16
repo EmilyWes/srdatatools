@@ -224,7 +224,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Field-mapping UI: visual indicators (different colors) per row for columns that are mapped directly (exact alias), mapped via fuzzy match or the ID fallback, or mapped multiple times to the same target
 - [x] Field-mapping UI: show the first value of each column/tag next to its row so the user can see what it contains
 - [x] Field-mapping UI: "ISSN/ISBN" target that routes a single input (e.g. RIS `SN`) to `issn` or `isbn` by value length; NBIB `ISBN` tag mapped to `isbn`
-- [x] Field-mapping UI: per-column bar (`#` column) showing filled rows / total rows, colored green (all filled) to red (none), with `value of total` on hover
+- [x] Field-mapping UI: per-column bar (`#` column) showing filled rows / total rows, colored green (≥ 2/3 filled), orange (≥ 1/3) or red (< 1/3), with `value of total` on hover
 - [x] Field-mapping UI: "Result" column showing how each example value parses under the selected source/type, with green text when the result differs from the example and red when it doesn't parse
 - [x] NBIB: strip the print/electronic qualifier from `IS` values (e.g. `1234-5678 (Print)` -> `1234-5678`) before storing in `issn`
 - [x] PubMed profile (NBIB, CSV)
@@ -239,7 +239,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Left panel: Library entry + list of imported source files (from `source_file`), selecting an entry drives the middle panel; Import button
 - [x] Import flow: single-file picker (native file dialog) through to storing records
 - [ ] Import flow: multi-file picker (one source/type per import action), warning when selected files' content looks like it spans more than one source
-- [ ] Auto-detection of type/source from file extension + content sniffing, prefilling the Source/Type dropdowns
+- [x] Auto-detection of type/source from file extension + content sniffing, prefilling the Source/Type dropdowns
 - [ ] Source/Type dropdowns: implemented profiles/formats + "Unknown"; Type required (Import disabled with a tooltip while Unknown); mismatched Source/Type combination falls back to the default parser with an inline notice
 - [ ] Import action: writes `record_source` + `record`, per-file "N imported, M skipped" summary
 - [ ] Import result summary also reports how many records had a date conflict (Year/Month/Day disagreeing with the full-date column, resolved in favour of Year/Month/Day), e.g. "998 imported, 2 skipped, 14 date conflicts"; not yet implemented

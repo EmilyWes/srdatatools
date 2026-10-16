@@ -18,6 +18,7 @@ from app.parsers.csv_ import (
     read_csv_headers,
     suggest_mapping,
 )
+from app.parsers.detect import detect_source, detect_type
 from app.parsers.mapping import FieldMapping
 from app.parsers.nbib import (
     parse_nbib_file,
@@ -177,6 +178,10 @@ class ImportView:
         picked = await pick_file()
         if picked is not None:
             self.path = picked
+            self.file_type = detect_type(picked) or _TYPE_UNKNOWN
+            self.source = _SOURCE_UNKNOWN
+            if self.file_type != _TYPE_UNKNOWN:
+                self.source = detect_source(picked, self.file_type) or _SOURCE_UNKNOWN
             self.render()
 
     def _set_type(self, file_type: str) -> None:
