@@ -151,6 +151,14 @@ _RESULT_CLASSES = "w-48 truncate text-xs"
 _RESULT_TEXT_COLORS = {"green": "text-positive", "red": "text-negative"}
 
 
+def _fill_color(filled: int, total: int) -> str:
+    if 3 * filled >= 2 * total and total:
+        return "green"
+    if 3 * filled >= total and total:
+        return "orange"
+    return "red"
+
+
 def _result_status(text: str, sample: str, not_parsed: bool) -> Status | None:
     if not_parsed:
         return "red"
@@ -349,7 +357,7 @@ def render_mapping_table(
                         .style(count_cell_style)
                     ):
                         count = ui.linear_progress(value=ratio, show_value=False)
-                        count.props(f'color="hsl({120 * ratio:.0f}, 70%, 45%)"')
+                        count.props(f"color={_fill_color(filled, summary.total_rows)}")
                         count.classes("w-10")
                         count.tooltip(f"{filled} of {summary.total_rows}")
                     label = ui.label(header).classes("truncate text-xs")

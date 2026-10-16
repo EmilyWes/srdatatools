@@ -433,9 +433,6 @@ def test_render_mapping_table__shows_filled_bar_per_row_with_count_tooltip() -> 
 
     title, notes, year = (screen._row_for(h).count for h in samples)
     assert (title.value, notes.value, year.value) == (1.0, 0.0, 0.5)
-    assert "hsl(120," in title.props["color"]
-    assert "hsl(0," in notes.props["color"]
-    assert "hsl(60," in year.props["color"]
     tooltips = {
         c.props["target"]: c.text
         for c in panes.middle.descendants()
@@ -445,6 +442,27 @@ def test_render_mapping_table__shows_filled_bar_per_row_with_count_tooltip() -> 
     assert tooltips[f"#{notes.html_id}"] == "0 of 12"
     header_texts = [e.text for e in panes.middle.descendants() if isinstance(e, Label)]
     assert "#" in header_texts
+
+
+@pytest.mark.parametrize(
+    ("filled", "color"),
+    [(12, "green"), (8, "green"), (7, "orange"), (4, "orange"), (3, "red"), (0, "red")],
+)
+def test_render_mapping_table__filled_bar_color_by_thirds(
+    filled: int, color: str
+) -> None:
+    summary = FileSummary({"Title": "Some Paper"}, {"Title": filled}, 12)
+    panes = shell()
+
+    screen = render_mapping_table(
+        panes.middle,
+        summary,
+        suggest_mapping(["Title"]),
+        show_delimiter=True,
+        preview=_no_preview,
+    )
+
+    assert screen._row_for("Title").count.props["color"] == color
 
 
 def test_render_mapping_table__empty_file_bar_is_empty() -> None:
