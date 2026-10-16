@@ -54,3 +54,5 @@ no_implicit_optional = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not big'"
+markers = ["big: parses the local big vendor exports (run with -m big)"]

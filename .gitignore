@@ -24,3 +24,5 @@ tests/data/output/*
 /.mypy_cache/
 /.ruff_cache/
 /.pytest_cache/
+# local-only vendor exports (licensed data)
+tests/data/vendors/
