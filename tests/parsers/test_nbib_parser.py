@@ -572,3 +572,32 @@ def test_suggest_nbib_mapping__maps_auid_and_ad_to_authors() -> None:
         "AUID": "authors",
         "AD": "authors",
     }
+
+
+def test_parse_nbib_text__fau_is_split_into_family_and_given_name() -> None:
+    author = _parse_authors("PMID- 1\nFAU - Agnolín, Federico L\n")[0]
+
+    assert (author.family_name, author.given_name) == ("Agnolín", "Federico L")
+    assert author.full_name == "Agnolín, Federico L"
+
+
+def test_parse_nbib_text__fau_suffix_stays_in_given_name() -> None:
+    author = _parse_authors("PMID- 1\nFAU - Smith, John A Jr\n")[0]
+
+    assert (author.family_name, author.given_name) == ("Smith", "John A Jr")
+
+
+def test_parse_nbib_text__name_without_comma_is_not_split() -> None:
+    author = _parse_authors("PMID- 1\nFAU - Madonna\n")[0]
+
+    assert (author.family_name, author.given_name) == (None, None)
+    assert author.full_name == "Madonna"
+
+
+def test_parse_nbib_text__au_fallback_name_is_not_split() -> None:
+    mapping = FieldMapping(targets={"AU": "authors"}, list_delimiter="\n")
+
+    author = _parse_authors("PMID- 1\nAU  - Müller RT\n", mapping)[0]
+
+    assert (author.family_name, author.given_name) == (None, None)
+    assert author.full_name == "Müller RT"

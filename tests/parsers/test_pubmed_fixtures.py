@@ -70,6 +70,7 @@ def test_pubmed_small_nbib__authors_have_orcids_and_affiliations(
 
     assert len(authors) == 9
     muller, garcia, nesbitt = authors[0], authors[2], authors[8]
+    assert (muller.family_name, muller.given_name) == ("Müller", "Rodrigo T")
     assert muller.orcid == "0000-0001-8894-9875"
     assert len(muller.affiliations) == 2
     assert muller.affiliations[1].name == (

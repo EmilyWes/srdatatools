@@ -85,6 +85,14 @@ def _add_auid(author: Author, value: str) -> None:
         author.other_ids[scheme.lower()] = identifier
 
 
+def _author_from_name(name: str) -> Author:
+    """FAU is "Family, Given"; AU ("Müller RT") and mononyms have no comma."""
+    family, separator, given = name.partition(", ")
+    if not separator:
+        return Author(full_name=name)
+    return Author(full_name=name, family_name=family, given_name=given)
+
+
 def _authors_from_lines(
     lines: list[tuple[str, str]], author_tags: set[str]
 ) -> list[Author]:
@@ -100,7 +108,7 @@ def _authors_from_lines(
             if authors:
                 authors[-1].affiliations.append(Affiliation(name=value))
         else:
-            authors.append(Author(full_name=value))
+            authors.append(_author_from_name(value))
     return authors
 
 
