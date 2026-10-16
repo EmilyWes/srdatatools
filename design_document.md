@@ -37,7 +37,7 @@ Goal: support as many databases as possible, built in order of how widely used t
 
 | Priority | Database | Native export format(s) | Notes / quirks |
 | --- | --- | --- | --- |
-| 1 | PubMed | NBIB, MEDLINE (.txt) | Well-structured tags; NBIB parser already planned |
+| 1 | PubMed | NBIB, MEDLINE (.txt), CSV | Well-structured tags; CSV export has fewer fields and packs volume/issue/pages into a Citation column |
 | 2 | Scopus | CSV, RIS | CSV column names differ from other vendors; export field set is configurable by the user in Scopus itself, so mapping must be flexible, not fixed |
 | 3 | Web of Science | RIS, "Plain Text" tagged format | WoS's own tagged format uses different two-letter tags than standard RIS in places; RIS export is more standard and likely the safer first target |
 | 4 | IEEE Xplore | CSV, RIS, BibTeX | CSV export is common for IEEE; RIS export exists but is less commonly used in practice |
@@ -74,7 +74,8 @@ app/
     csv_.py          # generic CSV reader + column-mapping suggestions
     ris.py           # generic RIS tokenizer + tag-mapping suggestions
     nbib.py          # generic NBIB/MEDLINE tokenizer + tag-mapping suggestions
-    profiles/        # (planned) per-database tag/column mappings + quirks
+    profiles/        # per-database tag/column mappings + quirks
+      base.py        # Profile/FormatProfile types + apply_profile
       pubmed.py
       scopus.py
       web_of_science.py
@@ -225,7 +226,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Field-mapping UI: "ISSN/ISBN" target that routes a single input (e.g. RIS `SN`) to `issn` or `isbn` by value length; NBIB `ISBN` tag mapped to `isbn`
 - [x] Field-mapping UI: per-column bar (`#` column) showing filled rows / total rows, colored green (all filled) to red (none), with `value of total` on hover
 - [x] NBIB: strip the print/electronic qualifier from `IS` values (e.g. `1234-5678 (Print)` -> `1234-5678`) before storing in `issn`
-- [ ] PubMed profile (NBIB)
+- [x] PubMed profile (NBIB, CSV)
 - [ ] Scopus profile (CSV, RIS)
 - [ ] Web of Science profile (RIS)
 - [ ] IEEE Xplore profile (CSV)
