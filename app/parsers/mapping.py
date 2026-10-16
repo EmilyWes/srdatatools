@@ -148,7 +148,7 @@ def _build_partial_date(
         return PartialDate(year=year, month=month, day=None)
 
 
-def _parse_date_string(value: str) -> PartialDate | None:
+def parse_date_string(value: str) -> PartialDate | None:
     stripped = value.strip()
     for pattern in _DATE_PATTERNS:
         match = pattern.match(stripped)
@@ -172,7 +172,7 @@ def _parse_publication_date(
         return raw_fields.get(key) if key is not None else None
 
     raw_date = cell("date")
-    from_date = _parse_date_string(raw_date) if raw_date and raw_date.strip() else None
+    from_date = parse_date_string(raw_date) if raw_date and raw_date.strip() else None
     year = _parse_int_field(cell("year"), "year")
     month = _parse_month(cell("month"))
     day = _parse_int_field(cell("day"), "day")
@@ -231,6 +231,19 @@ def apply_mapping(raw_fields: dict[str, str], mapping: FieldMapping) -> Record:
 def default_other_id_key(header: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", header.strip().lower()).strip("_")
     return slug or "id"
+
+
+def override_aliases(
+    aliases: dict[str, list[str]], overrides: dict[str, list[str]]
+) -> dict[str, list[str]]:
+    """An overridden alias is also removed from the target it had before."""
+    taken = {alias for names in overrides.values() for alias in names}
+    merged = {
+        target: [alias for alias in names if alias not in taken]
+        for target, names in aliases.items()
+    }
+    merged.update(overrides)
+    return merged
 
 
 def suggest_mapping(

@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.db.models import Base
+from app.db.models import Base, Record
 from app.gui import import_flow
 from app.gui.import_flow import (
     ImportView,
@@ -232,7 +232,7 @@ def test_render_import_view__ris_type_renders_mapping_and_enables_import(
     ris_path = tmp_path / "export.ris"
     ris_path.write_text(_RIS_TEXT)
     _pick(monkeypatch, ris_path)
-    view = render_import_view(panes.middle, on_import=lambda p, t, m: None)
+    view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
     asyncio.run(view._select_file())
 
     view._set_type("ris")
@@ -306,7 +306,7 @@ def test_render_import_view__nbib_type_renders_mapping_and_enables_import(
     nbib_path = tmp_path / "export.nbib"
     nbib_path.write_text(_NBIB_TEXT)
     _pick(monkeypatch, nbib_path)
-    view = render_import_view(panes.middle, on_import=lambda p, t, m: None)
+    view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
     asyncio.run(view._select_file())
 
     view._set_type("nbib")
@@ -327,7 +327,7 @@ def _pick(monkeypatch: pytest.MonkeyPatch, path: Path | None) -> None:
 def test_render_import_view__initial_state_has_no_file_and_disabled_buttons() -> None:
     panes = shell()
 
-    view = render_import_view(panes.middle, on_import=lambda p, t, m: None)
+    view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
 
     assert view.path is None
     assert view.file_type == "unknown"
@@ -342,7 +342,7 @@ def test_render_import_view__selecting_file_updates_label(
     panes = shell()
     csv_path = tmp_path / "export.csv"
     _pick(monkeypatch, csv_path)
-    view = render_import_view(panes.middle, on_import=lambda p, t, m: None)
+    view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
 
     asyncio.run(view._select_file())
 
@@ -361,7 +361,7 @@ def test_render_import_view__mapping_renders_inline_and_enables_import_without_c
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title\nSome Paper\n")
     _pick(monkeypatch, csv_path)
-    view = render_import_view(panes.middle, on_import=lambda p, t, m: None)
+    view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
     asyncio.run(view._select_file())
 
     assert view.import_button is not None
@@ -382,9 +382,9 @@ def test_render_import_view__import_reads_live_mapping_edits(
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Scopus Author ID\nabc123\n")
     _pick(monkeypatch, csv_path)
-    calls: list[tuple[Path, str, FieldMapping]] = []
+    calls: list[tuple[Path, str, FieldMapping, str]] = []
     view = render_import_view(
-        panes.middle, on_import=lambda p, t, m: calls.append((p, t, m))
+        panes.middle, on_import=lambda p, t, m, s: calls.append((p, t, m, s))
     )
     asyncio.run(view._select_file())
     view._set_type("csv")
@@ -394,7 +394,12 @@ def test_render_import_view__import_reads_live_mapping_edits(
     view._import()
 
     assert calls == [
-        (csv_path, "csv", FieldMapping(targets={"Scopus Author ID": "authors"}))
+        (
+            csv_path,
+            "csv",
+            FieldMapping(targets={"Scopus Author ID": "authors"}),
+            "unknown",
+        )
     ]
 
 
@@ -405,7 +410,7 @@ def test_render_import_view__selecting_new_file_rerenders_mapping_from_new_heade
     first_csv = tmp_path / "export.csv"
     first_csv.write_text("Title\nSome Paper\n")
     _pick(monkeypatch, first_csv)
-    view = render_import_view(panes.middle, on_import=lambda p, t, m: None)
+    view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
     asyncio.run(view._select_file())
     view._set_type("csv")
     assert view.mapping_screen is not None
@@ -428,7 +433,7 @@ def test_render_import_view__import_disabled_when_csv_file_cannot_be_decoded(
     panes = shell()
     csv_path = tmp_path / "export.csv"
     csv_path.write_bytes(b"\x81")  # undefined in both utf-8-sig and cp1252
-    view = ImportView(middle=panes.middle, on_import=lambda p, t, m: None)
+    view = ImportView(middle=panes.middle, on_import=lambda p, t, m, s: None)
     view.path = csv_path
 
     view._set_type("csv")  # must not raise
@@ -436,3 +441,97 @@ def test_render_import_view__import_disabled_when_csv_file_cannot_be_decoded(
     assert view.mapping_screen is None
     assert view.import_button is not None
     assert view.import_button.enabled is False
+
+
+_PUBMED_NBIB_TEXT = (
+    "PMID- 1\nTI  - [Not Available].\nTT  - Original.\nPG  - 521-2\n"
+    "TA  - Nature\nJT  - Nature reviews\n"
+)
+
+
+def test_render_mapping__pubmed_nbib_suggests_jt_not_ta(tmp_path: Path) -> None:
+    nbib_path = tmp_path / "pubmed.nbib"
+    nbib_path.write_text(_PUBMED_NBIB_TEXT)
+    panes = shell()
+
+    screen = render_mapping(panes.middle, "nbib", nbib_path, "pubmed")
+
+    assert screen is not None
+    targets = screen.current_mapping().targets
+    assert targets["JT"] == "journal"
+    assert "TA" not in targets
+
+
+def test_render_mapping__pubmed_csv_uses_comma_delimiter(tmp_path: Path) -> None:
+    csv_path = tmp_path / "pubmed.csv"
+    csv_path.write_text('PMID,Authors\n1,"Romano M, Novacek MJ."\n')
+    panes = shell()
+
+    screen = render_mapping(panes.middle, "csv", csv_path, "pubmed")
+
+    assert screen is not None
+    assert screen.current_mapping().list_delimiter == ","
+
+
+def test_import_file__pubmed_applies_profile_and_stores_source(
+    session: Session, tmp_path: Path
+) -> None:
+    nbib_path = tmp_path / "pubmed.nbib"
+    nbib_path.write_text(_PUBMED_NBIB_TEXT)
+    mapping = FieldMapping(targets={"TI": "title", "PG": "pages"})
+
+    source_file = import_file(session, nbib_path, "nbib", mapping, "pubmed")
+    session.commit()
+
+    assert source_file.source == "pubmed"
+    record = session.query(Record).one()
+    assert record.title == "Original."
+    assert record.pages == "521-522"
+
+
+def test_import_file__pubmed_ris_imports_generically_and_stores_source(
+    session: Session, tmp_path: Path
+) -> None:
+    ris_path = tmp_path / "export.ris"
+    ris_path.write_text(_RIS_TEXT)
+
+    source_file = import_file(session, ris_path, "ris", FieldMapping(), "pubmed")
+
+    assert source_file.source == "pubmed"
+    assert source_file.row_count == 1
+
+
+def test_import_file__unknown_source_stores_no_source(
+    session: Session, tmp_path: Path
+) -> None:
+    nbib_path = tmp_path / "pubmed.nbib"
+    nbib_path.write_text(_PUBMED_NBIB_TEXT)
+    mapping = FieldMapping(targets={"PG": "pages"})
+
+    source_file = import_file(session, nbib_path, "nbib", mapping, "unknown")
+    session.commit()
+
+    assert source_file.source is None
+    assert session.query(Record).one().pages == "521-2"
+
+
+def test_render_import_view__source_change_rerenders_mapping_and_is_passed_on(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    panes = shell()
+    nbib_path = tmp_path / "pubmed.nbib"
+    nbib_path.write_text(_PUBMED_NBIB_TEXT)
+    _pick(monkeypatch, nbib_path)
+    calls: list[str] = []
+    view = render_import_view(
+        panes.middle, on_import=lambda p, t, m, s: calls.append(s)
+    )
+    asyncio.run(view._select_file())
+    view._set_type("nbib")
+
+    view._set_source("pubmed")
+
+    assert view.mapping_screen is not None
+    assert "TA" not in view.mapping_screen.current_mapping().targets
+    view._import()
+    assert calls == ["pubmed"]

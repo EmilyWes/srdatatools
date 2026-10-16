@@ -1,5 +1,6 @@
 ﻿from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import partial
 from pathlib import Path
 
 from nicegui import app, ui
@@ -13,6 +14,7 @@ from app.parsers.common import FileSummary, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
 from app.parsers.mapping import FieldMapping
 from app.parsers.nbib import parse_nbib_file, read_nbib_tags, suggest_nbib_mapping
+from app.parsers.profiles import PROFILES, apply_profile, profile_for
 from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
 
 _TYPE_UNKNOWN = "unknown"
@@ -27,7 +29,10 @@ _TYPE_OPTIONS = {
 }
 
 _SOURCE_UNKNOWN = "unknown"
-_SOURCE_OPTIONS = {_SOURCE_UNKNOWN: "Unknown"}
+_SOURCE_OPTIONS = {
+    _SOURCE_UNKNOWN: "Unknown",
+    **{key: profile.label for key, profile in PROFILES.items()},
+}
 
 
 async def pick_file() -> Path | None:
@@ -37,16 +42,20 @@ async def pick_file() -> Path | None:
 
 
 def render_mapping(
-    container: Element, file_type: str, path: Path
+    container: Element, file_type: str, path: Path, source: str = _SOURCE_UNKNOWN
 ) -> MappingScreen | None:
+    profile = profile_for(source, file_type)
+    overrides = profile.aliases if profile is not None else None
     read_keys: Callable[[Path], FileSummary]
     suggest: Callable[[list[str]], FieldMapping]
     if file_type == _TYPE_CSV:
-        read_keys, suggest, noun = read_csv_headers, suggest_mapping, "columns"
+        read_keys, noun = read_csv_headers, "columns"
+        suggest = partial(suggest_mapping, alias_overrides=overrides)
     elif file_type == _TYPE_RIS:
         read_keys, suggest, noun = read_ris_tags, suggest_ris_mapping, "tags"
     elif file_type == _TYPE_NBIB:
-        read_keys, suggest, noun = read_nbib_tags, suggest_nbib_mapping, "tags"
+        read_keys, noun = read_nbib_tags, "tags"
+        suggest = partial(suggest_nbib_mapping, alias_overrides=overrides)
     else:
         return None
 
@@ -62,57 +71,70 @@ def render_mapping(
             ui.notify(f"{path.name} has no {noun} to map", type="negative")
         return None
 
+    suggestion = suggest(list(summary.samples))
+    if profile is not None and profile.list_delimiter is not None:
+        suggestion = replace(suggestion, list_delimiter=profile.list_delimiter)
     return render_mapping_table(
-        container,
-        summary,
-        suggest(list(summary.samples)),
-        show_delimiter=file_type == _TYPE_CSV,
+        container, summary, suggestion, show_delimiter=file_type == _TYPE_CSV
     )
 
 
 def _store(
-    session: Session, path: Path, file_format: str, result: ParseResult
+    session: Session, path: Path, file_type: str, result: ParseResult, source: str
 ) -> SourceFile:
+    result = apply_profile(result, profile_for(source, file_type))
     return store_parsed_rows(
         session,
         filename=path.name,
         path=str(path),
-        format=file_format,
+        format=file_type,
+        source=source if source != _SOURCE_UNKNOWN else None,
         parsed_rows=[(row.record, row.raw_fields) for row in result.rows],
         skipped_rows=[(row.row_number, row.reason) for row in result.skipped],
     )
 
 
-def import_csv(session: Session, path: Path, mapping: FieldMapping) -> SourceFile:
-    return _store(session, path, _TYPE_CSV, parse_csv_file(path, mapping))
+def import_csv(
+    session: Session, path: Path, mapping: FieldMapping, source: str = _SOURCE_UNKNOWN
+) -> SourceFile:
+    return _store(session, path, _TYPE_CSV, parse_csv_file(path, mapping), source)
 
 
-def import_ris(session: Session, path: Path, mapping: FieldMapping) -> SourceFile:
-    return _store(session, path, _TYPE_RIS, parse_ris_file(path, mapping))
+def import_ris(
+    session: Session, path: Path, mapping: FieldMapping, source: str = _SOURCE_UNKNOWN
+) -> SourceFile:
+    return _store(session, path, _TYPE_RIS, parse_ris_file(path, mapping), source)
 
 
-def import_nbib(session: Session, path: Path, mapping: FieldMapping) -> SourceFile:
-    return _store(session, path, _TYPE_NBIB, parse_nbib_file(path, mapping))
+def import_nbib(
+    session: Session, path: Path, mapping: FieldMapping, source: str = _SOURCE_UNKNOWN
+) -> SourceFile:
+    return _store(session, path, _TYPE_NBIB, parse_nbib_file(path, mapping), source)
 
 
 def import_file(
-    session: Session, path: Path, file_type: str, mapping: FieldMapping
+    session: Session,
+    path: Path,
+    file_type: str,
+    mapping: FieldMapping,
+    source: str = _SOURCE_UNKNOWN,
 ) -> SourceFile:
     if file_type == _TYPE_CSV:
-        return import_csv(session, path, mapping)
+        return import_csv(session, path, mapping, source)
     if file_type == _TYPE_RIS:
-        return import_ris(session, path, mapping)
+        return import_ris(session, path, mapping, source)
     if file_type == _TYPE_NBIB:
-        return import_nbib(session, path, mapping)
+        return import_nbib(session, path, mapping, source)
     raise ValueError(f"unsupported file type: {file_type!r}")
 
 
 @dataclass
 class ImportView:
     middle: Element
-    on_import: Callable[[Path, str, FieldMapping], None]
+    on_import: Callable[[Path, str, FieldMapping, str], None]
     path: Path | None = None
     file_type: str = _TYPE_UNKNOWN
+    source: str = _SOURCE_UNKNOWN
     mapping_screen: MappingScreen | None = None
     import_button: ui.button | None = None
 
@@ -126,10 +148,19 @@ class ImportView:
         self.file_type = file_type
         self.render()
 
+    def _set_source(self, source: str) -> None:
+        self.source = source
+        self.render()
+
     def _import(self) -> None:
         assert self.path is not None
         assert self.mapping_screen is not None
-        self.on_import(self.path, self.file_type, self.mapping_screen.current_mapping())
+        self.on_import(
+            self.path,
+            self.file_type,
+            self.mapping_screen.current_mapping(),
+            self.source,
+        )
 
     def render(self) -> None:
         type_known = self.file_type != _TYPE_UNKNOWN
@@ -145,9 +176,12 @@ class ImportView:
                     ui.button("Select file", on_click=self._select_file).props("dense")
 
                 with ui.row().classes("items-center gap-2"):
-                    ui.select(
-                        _SOURCE_OPTIONS, value=_SOURCE_UNKNOWN, label="Source"
-                    ).props("dense outlined").classes("w-48")
+                    source_select = (
+                        ui.select(_SOURCE_OPTIONS, value=self.source, label="Source")
+                        .props("dense outlined")
+                        .classes("w-48")
+                    )
+                    source_select.on_value_change(lambda e: self._set_source(e.value))
 
                     type_select = (
                         ui.select(_TYPE_OPTIONS, value=self.file_type, label="Type")
@@ -159,7 +193,7 @@ class ImportView:
                 mapping_container = ui.column().classes("items-center w-full")
                 if self.path is not None:
                     self.mapping_screen = render_mapping(
-                        mapping_container, self.file_type, self.path
+                        mapping_container, self.file_type, self.path, self.source
                     )
                 else:
                     self.mapping_screen = None
@@ -179,7 +213,7 @@ class ImportView:
 
 
 def render_import_view(
-    middle: Element, on_import: Callable[[Path, str, FieldMapping], None]
+    middle: Element, on_import: Callable[[Path, str, FieldMapping, str], None]
 ) -> ImportView:
     view = ImportView(middle=middle, on_import=on_import)
     view.render()

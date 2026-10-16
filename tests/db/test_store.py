@@ -52,6 +52,29 @@ def test_store_parsed_rows__creates_source_file_with_row_count(
     assert source_file.imported_at == datetime.datetime(2026, 1, 1)
 
 
+def test_store_parsed_rows__stores_source(session: Session) -> None:
+    store_parsed_rows(
+        session,
+        filename="pubmed_export.nbib",
+        path=None,
+        format="nbib",
+        source="pubmed",
+        parsed_rows=[],
+    )
+    session.commit()
+
+    assert session.query(SourceFile).one().source == "pubmed"
+
+
+def test_store_parsed_rows__source_defaults_to_none(session: Session) -> None:
+    store_parsed_rows(
+        session, filename="export.ris", path=None, format="ris", parsed_rows=[]
+    )
+    session.commit()
+
+    assert session.query(SourceFile).one().source is None
+
+
 def test_store_parsed_rows__creates_record_with_mapped_scalar_fields(
     session: Session,
 ) -> None:

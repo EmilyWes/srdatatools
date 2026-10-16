@@ -224,6 +224,12 @@ def test_suggest_nbib_mapping__uses_newline_list_delimiter() -> None:
     assert suggest_nbib_mapping(["FAU"]).list_delimiter == "\n"
 
 
+def test_suggest_nbib_mapping__alias_overrides_replace_defaults() -> None:
+    suggestions = suggest_nbib_mapping(["TA", "JT"], {"journal": ["jt"]})
+
+    assert suggestions.targets == {"JT": "journal"}
+
+
 def test_suggest_nbib_mapping__prefers_fau_over_au_for_authors() -> None:
     assert suggest_nbib_mapping(["AU", "FAU"]).targets == {"FAU": "authors"}
 
