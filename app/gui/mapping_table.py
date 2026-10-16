@@ -148,6 +148,15 @@ def _exclusive_available(header: str, target: str, taken: dict[str, str]) -> boo
 _LIST_SEPARATOR = " | "
 _NOT_PARSED = "not parsed"
 _RESULT_CLASSES = "w-48 truncate text-xs"
+_RESULT_TEXT_COLORS = {"green": "text-positive", "red": "text-negative"}
+
+
+def _result_status(text: str, sample: str, not_parsed: bool) -> Status | None:
+    if not_parsed:
+        return "red"
+    if not text or text == sample:
+        return None
+    return "green"
 
 
 def _author_text(author: Author) -> str:
@@ -240,7 +249,8 @@ class MappingScreen:
             text = _result_text(target, record) if target else ""
             not_parsed = bool(target and row.sample.text and not text)
             row.result.set_text(_NOT_PARSED if not_parsed else text)
-            color = "text-negative" if not_parsed else "text-grey-7"
+            status = _result_status(text, row.sample.text, not_parsed)
+            color = _RESULT_TEXT_COLORS[status] if status else "text-grey-7"
             row.result.classes(replace=f"{_RESULT_CLASSES} {color}")
             row.result.clear()
             if text:

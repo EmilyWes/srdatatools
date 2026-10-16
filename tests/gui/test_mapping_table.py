@@ -508,6 +508,42 @@ def test_render_mapping_table__unparseable_result_is_red_not_parsed() -> None:
     assert "text-negative" in result.classes
 
 
+def _result_color(screen: MappingScreen, header: str) -> list[str]:
+    return [
+        c
+        for c in screen._row_for(header).result.classes
+        if c in ("text-grey-7", "text-positive", "text-negative")
+    ]
+
+
+def test_render_mapping_table__unchanged_result_is_grey() -> None:
+    screen = _render_samples({"Title": "Some Paper"})
+
+    assert _result_color(screen, "Title") == ["text-grey-7"]
+
+
+def test_render_mapping_table__changed_result_is_green() -> None:
+    screen = _render_samples({"DOI": "10.1/XYZ", "Page start": "12", "Page end": "15"})
+
+    assert _result_color(screen, "DOI") == ["text-positive"]
+    assert _result_color(screen, "Page start") == ["text-positive"]
+
+
+def test_render_mapping_table__blank_result_is_grey() -> None:
+    screen = _render_samples({"Zzzqqqxx123": "something", "Title": ""})
+
+    assert _result_color(screen, "Zzzqqqxx123") == ["text-grey-7"]
+    assert _result_color(screen, "Title") == ["text-grey-7"]
+
+
+def test_render_mapping_table__result_color_updates_when_target_changes() -> None:
+    screen = _render_samples({"Title": "Some Paper"})
+
+    screen._row_for("Title").select.value = "year"
+
+    assert _result_color(screen, "Title") == ["text-negative"]
+
+
 def test_render_mapping_table__result_splits_list_with_delimiter_input() -> None:
     screen = _render_samples({"Authors": "Smith, J; Doe, J"})
     assert _result(screen, "Authors") == "Smith, J | Doe, J"
