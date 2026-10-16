@@ -43,6 +43,9 @@ _ID_TAGS = ("AID", "LID")
 _DOI_SUFFIX = " [doi]"
 _DOI_TAG = "DOI"
 _REQUIRED_TAG = "PMID"
+_IS_TAG = "IS"
+_ELECTRONIC = "Electronic"
+_IS_QUALIFIER = re.compile(r"\s*\((?P<qualifier>[^)]*)\)$")
 
 
 def _doi_from_id(value: str) -> str | None:
@@ -50,6 +53,19 @@ def _doi_from_id(value: str) -> str | None:
     if not stripped.endswith(_DOI_SUFFIX):
         return None
     return stripped.removesuffix(_DOI_SUFFIX).strip() or None
+
+
+def _issn_from_is(values: list[str]) -> str | None:
+    """PubMed writes one IS line per medium, e.g. "1234-5678 (Print)"."""
+    issns: list[tuple[str, str | None]] = []
+    for value in values:
+        match = _IS_QUALIFIER.search(value)
+        issn = (value[: match.start()] if match else value).strip()
+        if issn:
+            issns.append((issn, match["qualifier"] if match else None))
+    if not issns:
+        return None
+    return next((i for i, q in issns if q == _ELECTRONIC), issns[0][0])
 
 
 def parse_nbib_text(text: str, mapping: FieldMapping) -> ParseResult:
@@ -82,7 +98,10 @@ def parse_nbib_text(text: str, mapping: FieldMapping) -> ParseResult:
         )
         if doi is not None:
             raw_fields[_DOI_TAG] = doi
-        record = apply_mapping(raw_fields, mapping)
+        mapping_fields = dict(raw_fields)
+        if (issn := _issn_from_is(values.get(_IS_TAG, []))) is not None:
+            mapping_fields[_IS_TAG] = issn
+        record = apply_mapping(mapping_fields, mapping)
         rows.append(ParsedRow(record=record, raw_fields=raw_fields))
 
     for line_number, line in enumerate(text.splitlines(), start=1):

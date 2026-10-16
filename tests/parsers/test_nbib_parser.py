@@ -255,8 +255,45 @@ def test_parse_nbib_text__isbn_tag_fills_isbn() -> None:
 
     record = parse_nbib_text(text, suggest_nbib_mapping(["IS", "ISBN"])).rows[0].record
 
-    assert record.issn == "1234-5678 (Print)"
+    assert record.issn == "1234-5678"
     assert record.isbn == "978-3-16-148410-0"
+
+
+def _parse_issn(text: str) -> str | None:
+    return parse_nbib_text(text, suggest_nbib_mapping(["IS"])).rows[0].record.issn
+
+
+def test_parse_nbib_text__is_strips_print_electronic_qualifier() -> None:
+    assert _parse_issn("PMID- 1\nIS  - 1234-5678 (Print)\n") == "1234-5678"
+
+
+def test_parse_nbib_text__multiple_is_lines_prefer_electronic() -> None:
+    text = (
+        "PMID- 1\n"
+        "IS  - 1234-5678 (Print)\n"
+        "IS  - 8765-4321 (Electronic)\n"
+        "IS  - 1234-5678 (Linking)\n"
+    )
+
+    assert _parse_issn(text) == "8765-4321"
+
+
+def test_parse_nbib_text__multiple_is_lines_without_electronic_keep_first() -> None:
+    text = "PMID- 1\nIS  - 1234-5678 (Print)\nIS  - 1111-2222 (Linking)\n"
+
+    assert _parse_issn(text) == "1234-5678"
+
+
+def test_parse_nbib_text__is_raw_fields_keep_qualifiers() -> None:
+    text = "PMID- 1\nIS  - 1234-5678 (Print)\nIS  - 8765-4321 (Electronic)\n"
+
+    row = parse_nbib_text(text, suggest_nbib_mapping(["IS"])).rows[0]
+
+    assert row.raw_fields["IS"] == "1234-5678 (Print)\n8765-4321 (Electronic)"
+
+
+def test_parse_nbib_text__is_without_qualifier_unchanged() -> None:
+    assert _parse_issn("PMID- 1\nIS  - 1234-5678\n") == "1234-5678"
 
 
 def test_suggest_nbib_mapping__leaves_unknown_tags_unmapped() -> None:
@@ -279,6 +316,7 @@ def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
     assert first.pages == "100-110"
     assert first.doi == "10.1016/j.jbi.2020.1"
     assert first.other_ids == {"pmc": "PMC7000001"}
+    assert first.issn == "1532-0480"
     assert first.publication_date is not None
     assert (
         first.publication_date.year,
