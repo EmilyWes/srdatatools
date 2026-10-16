@@ -44,6 +44,22 @@ def test_run_migrations__creates_all_tables_at_given_path(tmp_path: Path) -> Non
     assert EXPECTED_TABLES <= tables
 
 
+def test_run_migrations__source_file_has_source_column(tmp_path: Path) -> None:
+    db_path = tmp_path / "migration_test.db"
+
+    run_migrations(db_path)
+
+    connection = sqlite3.connect(db_path)
+    try:
+        columns = {
+            row[1] for row in connection.execute("pragma table_info(source_file)")
+        }
+    finally:
+        connection.close()
+
+    assert "source" in columns
+
+
 def test_run_migrations__leaves_app_logging_configuration_alone(
     tmp_path: Path,
 ) -> None:

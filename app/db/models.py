@@ -48,6 +48,7 @@ class SourceFile(Base):
     filename: Mapped[str]
     path: Mapped[str | None]
     format: Mapped[str]
+    source: Mapped[str | None]
     imported_at: Mapped[datetime.datetime]
     row_count: Mapped[int | None]
     skipped_rows: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
