@@ -72,6 +72,22 @@ def test_pubmed_small_nbib__mesh_keywords_are_prefixed(
     assert "Adulteration" in keywords
 
 
+def test_pubmed_small_nbib__book_chapter_uses_book_title_as_journal(
+    nbib_records: dict[str, Record],
+) -> None:
+    record = nbib_records["28590685"]
+
+    assert record.journal == "Micro-, Meso- and Macro-Dynamics of the Brain"
+    assert len(record.authors) == 11
+    laurent = record.authors[0]
+    assert laurent.family_name == "Laurent"
+    assert len(laurent.affiliations) == 1
+    assert laurent.affiliations[0].name is not None
+    assert laurent.affiliations[0].name.startswith(
+        "Max Planck Institute for Brain Research"
+    )
+
+
 def test_pubmed_small_nbib__authors_have_orcids_and_affiliations(
     nbib_records: dict[str, Record],
 ) -> None:

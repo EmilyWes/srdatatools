@@ -641,3 +641,55 @@ def test_parse_nbib_text__mh_raw_fields_keep_original_values() -> None:
     row = parse_nbib_text(text, _KEYWORD_MAPPING).rows[0]
 
     assert row.raw_fields["MH"] == "*Dinosaurs\nAnimals"
+
+
+def test_suggest_nbib_mapping__maps_bti_to_journal() -> None:
+    assert suggest_nbib_mapping(["BTI"]).targets == {"BTI": "journal"}
+
+
+def test_parse_nbib_text__bti_fills_journal() -> None:
+    text = "PMID- 1\nBTI - Micro-, Meso- and Macro-Dynamics of the Brain\n"
+
+    record = parse_nbib_text(text, suggest_nbib_mapping(["BTI"])).rows[0].record
+
+    assert record.journal == "Micro-, Meso- and Macro-Dynamics of the Brain"
+
+
+def test_parse_nbib_text__editor_ad_after_author_is_not_attached() -> None:
+    text = (
+        "PMID- 1\n"
+        "FAU - Smith, John\n"
+        "AD  - Department A.\n"
+        "FED - Doe, Jane\n"
+        "AD  - Department B.\n"
+    )
+
+    author = _parse_authors(text)[0]
+
+    assert [a.name for a in author.affiliations] == ["Department A."]
+
+
+def test_parse_nbib_text__editor_auid_is_not_attached() -> None:
+    text = (
+        "PMID- 1\n"
+        "FAU - Smith, John\n"
+        "ED  - Doe J\n"
+        "AUID- ORCID: 0000-0002-6000-6450\n"
+    )
+
+    assert _parse_authors(text)[0].orcid is None
+
+
+def test_parse_nbib_text__author_after_editor_gets_its_own_ad() -> None:
+    text = (
+        "PMID- 1\n"
+        "FED - Doe, Jane\n"
+        "AD  - Department B.\n"
+        "FAU - Smith, John\n"
+        "AD  - Department A.\n"
+    )
+
+    authors = _parse_authors(text)
+
+    assert [a.full_name for a in authors] == ["Smith, John"]
+    assert [a.name for a in authors[0].affiliations] == ["Department A."]

@@ -84,7 +84,9 @@ PUBMED = Profile(
     key="pubmed",
     label="PubMed",
     formats={
-        "nbib": FormatProfile(aliases={"journal": ["jt"]}, fix_record=_fix_nbib_record),
+        "nbib": FormatProfile(
+            aliases={"journal": ["jt", "bti"]}, fix_record=_fix_nbib_record
+        ),
         "csv": FormatProfile(
             aliases={
                 "journal": ["journal/book"],

@@ -23,7 +23,7 @@ _SUGGESTION_ALIASES: dict[str, list[str]] = {
     "title": ["ti"],
     "authors": ["fau", "auid", "ad"],
     "abstract": ["ab"],
-    "journal": ["jt", "ta"],
+    "journal": ["jt", "ta", "bti"],
     "volume": ["vi"],
     "issue": ["ip"],
     "pages": ["pg"],
@@ -53,6 +53,7 @@ _ORCID_SCHEME = "ORCID"
 _ORCID_URL = re.compile(r"^https?://orcid\.org/")
 _MH_TAG = "MH"
 _MESH_PREFIX = "[MeSH] "
+_EDITOR_TAGS = ("FED", "ED")
 
 
 def _doi_from_id(value: str) -> str | None:
@@ -98,19 +99,25 @@ def _author_from_name(name: str) -> Author:
 def _authors_from_lines(
     lines: list[tuple[str, str]], author_tags: set[str]
 ) -> list[Author]:
-    """AUID and AD lines belong to the author name line before them."""
+    """AUID and AD lines belong to the author or editor name line before them."""
     authors: list[Author] = []
+    current: Author | None = None
     for tag, value in lines:
-        if tag not in author_tags or not value:
+        if tag not in author_tags:
+            if tag in _EDITOR_TAGS:
+                current = None
+            continue
+        if not value:
             continue
         if tag == _AUID_TAG:
-            if authors:
-                _add_auid(authors[-1], value)
+            if current is not None:
+                _add_auid(current, value)
         elif tag == _AD_TAG:
-            if authors:
-                authors[-1].affiliations.append(Affiliation(name=value))
+            if current is not None:
+                current.affiliations.append(Affiliation(name=value))
         else:
-            authors.append(_author_from_name(value))
+            current = _author_from_name(value)
+            authors.append(current)
     return authors
 
 

@@ -63,6 +63,12 @@ def test_pubmed_nbib__journal_uses_jt_not_ta() -> None:
     assert record.journal == "Nature reviews"
 
 
+def test_pubmed_nbib__book_title_fills_journal() -> None:
+    record = _parse_nbib("PMID- 1\nBTI - Micro-, Meso- and Macro-Dynamics\n")
+
+    assert record.journal == "Micro-, Meso- and Macro-Dynamics"
+
+
 def test_pubmed_nbib__not_available_title_uses_tt() -> None:
     record = _parse_nbib(
         "PMID- 1\nTI  - [Not Available].\nTT  - Clin d'oeil du Dinosaure.\n"
