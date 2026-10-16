@@ -63,6 +63,27 @@ def test_pubmed_small_nbib__applies_profile_fixes(
     assert nbib_records["28590685"].publication_type == "Review"
 
 
+def test_pubmed_small_nbib__authors_have_orcids_and_affiliations(
+    nbib_records: dict[str, Record],
+) -> None:
+    authors = nbib_records["37587301"].authors
+
+    assert len(authors) == 9
+    muller, garcia, nesbitt = authors[0], authors[2], authors[8]
+    assert muller.orcid == "0000-0001-8894-9875"
+    assert len(muller.affiliations) == 2
+    assert muller.affiliations[1].name == (
+        "Programa de Pós-Graduação em Biodiversidade Animal, Universidade Federal "
+        "de Santa Maria, Santa Maria, Brazil. rodrigotmuller@hotmail.com."
+    )
+    assert garcia.orcid is None
+    assert len(garcia.affiliations) == 2
+    assert nesbitt.orcid == "0000-0002-7017-1652"
+    assert [a.name for a in nesbitt.affiliations] == [
+        "Department of Geosciences, Virginia Tech, Blacksburg, VA, USA."
+    ]
+
+
 def test_pubmed_small_csv__parses_every_record(
     csv_records: dict[str, Record],
 ) -> None:

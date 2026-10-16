@@ -3,6 +3,7 @@ import re
 from dataclasses import replace
 from pathlib import Path
 
+from app.models.record import Affiliation, Author
 from app.parsers.common import (
     FileSummary,
     ParsedRow,
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 # suggest_nbib_mapping falls back to it only when the file has no FAU.
 _SUGGESTION_ALIASES: dict[str, list[str]] = {
     "title": ["ti"],
-    "authors": ["fau"],
+    "authors": ["fau", "auid", "ad"],
     "abstract": ["ab"],
     "journal": ["jt", "ta"],
     "volume": ["vi"],
@@ -46,6 +47,10 @@ _REQUIRED_TAG = "PMID"
 _IS_TAG = "IS"
 _ELECTRONIC = "Electronic"
 _IS_QUALIFIER = re.compile(r"\s*\((?P<qualifier>[^)]*)\)$")
+_AUID_TAG = "AUID"
+_AD_TAG = "AD"
+_ORCID_SCHEME = "ORCID"
+_ORCID_URL = re.compile(r"^https?://orcid\.org/")
 
 
 def _doi_from_id(value: str) -> str | None:
@@ -68,6 +73,37 @@ def _issn_from_is(values: list[str]) -> str | None:
     return next((i for i, q in issns if q == _ELECTRONIC), issns[0][0])
 
 
+def _add_auid(author: Author, value: str) -> None:
+    """AUID values look like "ORCID: 0000-0001-8894-9875"."""
+    scheme, _, identifier = value.partition(":")
+    scheme, identifier = scheme.strip(), identifier.strip()
+    if not identifier:
+        return
+    if scheme.upper() == _ORCID_SCHEME:
+        author.orcid = _ORCID_URL.sub("", identifier)
+    else:
+        author.other_ids[scheme.lower()] = identifier
+
+
+def _authors_from_lines(
+    lines: list[tuple[str, str]], author_tags: set[str]
+) -> list[Author]:
+    """AUID and AD lines belong to the author name line before them."""
+    authors: list[Author] = []
+    for tag, value in lines:
+        if tag not in author_tags or not value:
+            continue
+        if tag == _AUID_TAG:
+            if authors:
+                _add_auid(authors[-1], value)
+        elif tag == _AD_TAG:
+            if authors:
+                authors[-1].affiliations.append(Affiliation(name=value))
+        else:
+            authors.append(Author(full_name=value))
+    return authors
+
+
 def parse_nbib_text(text: str, mapping: FieldMapping) -> ParseResult:
     rows: list[ParsedRow] = []
     skipped: list[SkippedRow] = []
@@ -77,6 +113,7 @@ def parse_nbib_text(text: str, mapping: FieldMapping) -> ParseResult:
         logger.warning("Skipping NBIB record at line %d: %s", line_number, reason)
 
     values: dict[str, list[str]] = {}
+    order: list[tuple[str, int]] = []
     start_line = 0
     last_tag: str | None = None
 
@@ -102,12 +139,17 @@ def parse_nbib_text(text: str, mapping: FieldMapping) -> ParseResult:
         if (issn := _issn_from_is(values.get(_IS_TAG, []))) is not None:
             mapping_fields[_IS_TAG] = issn
         record = apply_mapping(mapping_fields, mapping)
+        author_tags = {k for k, t in mapping.targets.items() if t == "authors"}
+        if author_tags:
+            lines = [(tag, values[tag][i]) for tag, i in order]
+            authors = _authors_from_lines(lines, author_tags)
+            record = record.model_copy(update={"authors": authors})
         rows.append(ParsedRow(record=record, raw_fields=raw_fields))
 
     for line_number, line in enumerate(text.splitlines(), start=1):
         if not line.strip():
             finish_record()
-            values, last_tag = {}, None
+            values, order, last_tag = {}, [], None
             continue
 
         match = _TAG_LINE.match(line)
@@ -122,6 +164,7 @@ def parse_nbib_text(text: str, mapping: FieldMapping) -> ParseResult:
         if last_tag is None:
             start_line = line_number
         values.setdefault(tag, []).append((match["value"] or "").strip())
+        order.append((tag, len(values[tag]) - 1))
         last_tag = tag
 
     finish_record()
