@@ -4,6 +4,7 @@ from io import StringIO
 import pytest
 
 from app.models.record import Affiliation, Author, Record
+from app.parsers.bibtex import parse_bibtex_text, suggest_bibtex_mapping
 from app.parsers.csv_ import parse_csv_text, suggest_mapping
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles import apply_profile
@@ -12,6 +13,7 @@ from app.parsers.ris import parse_ris_text, suggest_ris_mapping
 
 _CSV_PROFILE = SCOPUS.formats["csv"]
 _RIS_PROFILE = SCOPUS.formats["ris"]
+_BIBTEX_PROFILE = SCOPUS.formats["bibtex"]
 
 
 def _suggest_csv(headers: list[str]) -> FieldMapping:
@@ -227,3 +229,81 @@ def test_scopus_ris__matches_db_line() -> None:
 
 def test_scopus_ris__does_not_match_without_db_line() -> None:
     assert not _RIS_PROFILE.matches("TY  - JOUR\nTI  - Scopus\nER  - \n")
+
+
+def _parse_bibtex(fields: str, mapping: FieldMapping | None = None) -> Record:
+    text = f"@ARTICLE{{key1,\n{fields}}}\n"
+    if mapping is None:
+        keys = [
+            "@type",
+            "@key",
+            *(line.split("=")[0].strip() for line in fields.splitlines()),
+        ]
+        mapping = suggest_bibtex_mapping(keys, _BIBTEX_PROFILE.aliases)
+    result = apply_profile(parse_bibtex_text(text, mapping), _BIBTEX_PROFILE)
+    return result.rows[0].record
+
+
+def test_scopus_bibtex__suggests_scopus_fields() -> None:
+    keys = ["@type", "type", "pmid", "author_keywords", "keywords"]
+
+    mapping = suggest_bibtex_mapping(keys, _BIBTEX_PROFILE.aliases)
+
+    assert mapping.targets == {
+        "type": "publication_type",
+        "pmid": "pmid",
+        "author_keywords": "keywords",
+        "keywords": "keywords",
+    }
+
+
+def test_scopus_bibtex__document_type_and_pmid() -> None:
+    record = _parse_bibtex("type = {Erratum},\npmid = {41826489},\n")
+
+    assert record.publication_type == "Erratum"
+    assert record.pmid == "41826489"
+
+
+def test_scopus_bibtex__prefixes_cleaned_author_keywords_only() -> None:
+    record = _parse_bibtex(
+        'author_keywords = {Gr{\\"o}nland; Asia},\nkeywords = {R\\&D; Thermal},\n'
+    )
+
+    assert record.keywords == ["[Author] Grönland", "[Author] Asia", "R&D", "Thermal"]
+
+
+def test_scopus_bibtex__unmapped_keywords_stay_empty() -> None:
+    record = _parse_bibtex(
+        "author_keywords = {Asia},\nkeywords = {Thermal},\n", FieldMapping(targets={})
+    )
+
+    assert record.keywords == []
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.scopus.com/pages/publications/105040180364?origin=resultslist",
+        "https://www.scopus.com/inward/record.uri?eid=2-s2.0-105040180364&partnerID=40",
+    ],
+)
+def test_scopus_bibtex__eid_from_url(url: str) -> None:
+    record = _parse_bibtex(f"url = {{{url}}},\n")
+
+    assert record.other_ids == {"eid": "2-s2.0-105040180364"}
+
+
+def test_scopus_bibtex__non_scopus_url_gives_no_eid() -> None:
+    record = _parse_bibtex("url = {https://example.org/publications/123},\n")
+
+    assert record.other_ids == {}
+
+
+def test_scopus_bibtex__matches_source_field() -> None:
+    assert _BIBTEX_PROFILE.matches(
+        "@ARTICLE{k,\n\ttitle = {T},\n\tsource = {Scopus},\n}\n"
+    )
+
+
+def test_scopus_bibtex__does_not_match_without_source_field() -> None:
+    assert not _BIBTEX_PROFILE.matches("@ARTICLE{k,\n\ttitle = {Scopus}\n}\n")

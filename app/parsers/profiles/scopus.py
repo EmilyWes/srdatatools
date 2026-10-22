@@ -5,6 +5,7 @@ from io import StringIO
 
 from app.models.record import Affiliation, Author, Record
 from app.parsers.authors import author_from_name
+from app.parsers.bibtex import clean_value
 from app.parsers.profiles.base import FormatProfile, Profile
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,18 @@ _RIS_NOTES_TAG = "N1"
 _RIS_EID_NOTE = "EID: "
 _RIS_CONFERENCE_NOTE = "Conference name: "
 _RIS_DB_LINE = re.compile(r"^DB  - Scopus\s*$", re.MULTILINE)
+
+_BIBTEX_AUTHOR_KEYWORDS = "author_keywords"
+_BIBTEX_INDEX_KEYWORDS = "keywords"
+_BIBTEX_URL = "url"
+_BIBTEX_SOURCE_FIELD = re.compile(
+    r"^\s*source\s*=\s*\{Scopus\}", re.MULTILINE | re.IGNORECASE
+)
+_EID_PREFIX = "2-s2.0-"
+# Current exports link .../pages/publications/<n>; older ones .../record.uri?eid=...
+_URL_EID = re.compile(
+    r"scopus\.com/(?:pages/publications/|inward/record\.uri\?.*?\beid=2-s2\.0-)(\d+)"
+)
 
 # "Teng, Yu (60652739200)": the Scopus author id is appended to each full name.
 _NAME_WITH_ID = re.compile(r"^(?P<name>.*?)\s*\((?P<id>\d+)\)$")
@@ -93,9 +106,9 @@ def _scopus_csv_authors(raw_fields: dict[str, str]) -> list[Author]:
     return fixed
 
 
-def _scopus_csv_keywords(raw_fields: dict[str, str]) -> list[str]:
-    author_keywords = _split(raw_fields.get(_CSV_AUTHOR_KEYWORDS))
-    index_keywords = _split(raw_fields.get(_CSV_INDEX_KEYWORDS))
+def _prefixed_keywords(author: str | None, index: str | None) -> list[str]:
+    author_keywords = _split(author)
+    index_keywords = _split(index)
     return [_AUTHOR_KEYWORD_PREFIX + kw for kw in author_keywords if kw] + [
         kw for kw in index_keywords if kw
     ]
@@ -106,7 +119,9 @@ def _fix_csv_record(raw_fields: dict[str, str], record: Record) -> Record:
     if record.authors:
         update["authors"] = _scopus_csv_authors(raw_fields)
     if record.keywords:
-        update["keywords"] = _scopus_csv_keywords(raw_fields)
+        update["keywords"] = _prefixed_keywords(
+            raw_fields.get(_CSV_AUTHOR_KEYWORDS), raw_fields.get(_CSV_INDEX_KEYWORDS)
+        )
     return record.model_copy(update=update)
 
 
@@ -137,6 +152,27 @@ def _matches_ris(text: str) -> bool:
     return bool(_RIS_DB_LINE.search(text))
 
 
+def _clean_bibtex(raw_fields: dict[str, str], field: str) -> str:
+    return clean_value(field, raw_fields.get(field, ""))
+
+
+def _fix_bibtex_record(raw_fields: dict[str, str], record: Record) -> Record:
+    update: dict[str, object] = {}
+    if record.keywords:
+        update["keywords"] = _prefixed_keywords(
+            _clean_bibtex(raw_fields, _BIBTEX_AUTHOR_KEYWORDS),
+            _clean_bibtex(raw_fields, _BIBTEX_INDEX_KEYWORDS),
+        )
+    match = _URL_EID.search(raw_fields.get(_BIBTEX_URL, ""))
+    if match:
+        update["other_ids"] = {**record.other_ids, "eid": _EID_PREFIX + match[1]}
+    return record.model_copy(update=update)
+
+
+def _matches_bibtex(text: str) -> bool:
+    return bool(_BIBTEX_SOURCE_FIELD.search(text))
+
+
 SCOPUS = Profile(
     key="scopus",
     label="Scopus",
@@ -165,6 +201,15 @@ SCOPUS = Profile(
             aliases={"publication_type": ["m3"], "pmid": ["c2"]},
             fix_record=_fix_ris_record,
             matches=_matches_ris,
+        ),
+        "bibtex": FormatProfile(
+            aliases={
+                "publication_type": ["type"],
+                "pmid": ["pmid"],
+                "keywords": ["author_keywords", "keywords"],
+            },
+            fix_record=_fix_bibtex_record,
+            matches=_matches_bibtex,
         ),
     },
 )
