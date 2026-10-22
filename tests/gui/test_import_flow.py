@@ -607,6 +607,19 @@ def test_render_mapping__scopus_csv_leaves_ignored_columns_unmapped(
     assert "Conference date" not in targets
 
 
+def test_render_mapping__scopus_ris_uses_profile_aliases(tmp_path: Path) -> None:
+    ris_path = tmp_path / "scopus.ris"
+    ris_path.write_text("TY  - JOUR\nM3  - Article\nDB  - Scopus\nER  - \n")
+    panes = shell()
+
+    screen = render_mapping(panes.middle, "ris", ris_path, "scopus")
+
+    assert screen is not None
+    targets = screen.current_mapping().targets
+    assert targets["M3"] == "publication_type"
+    assert "TY" not in targets
+
+
 def test_import_file__pubmed_applies_profile_and_stores_source(
     session: Session, tmp_path: Path
 ) -> None:

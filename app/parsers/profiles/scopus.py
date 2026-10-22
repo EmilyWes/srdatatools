@@ -23,6 +23,11 @@ _CSV_AUTHOR_KEYWORDS = "Author Keywords"
 _CSV_INDEX_KEYWORDS = "Index Keywords"
 _CSV_EID_HEADER = "eid"
 
+_RIS_NOTES_TAG = "N1"
+_RIS_EID_NOTE = "EID: "
+_RIS_CONFERENCE_NOTE = "Conference name: "
+_RIS_DB_LINE = re.compile(r"^DB  - Scopus\s*$", re.MULTILINE)
+
 # "Teng, Yu (60652739200)": the Scopus author id is appended to each full name.
 _NAME_WITH_ID = re.compile(r"^(?P<name>.*?)\s*\((?P<id>\d+)\)$")
 
@@ -110,6 +115,28 @@ def _matches_csv(text: str) -> bool:
     return _CSV_EID_HEADER in {column.strip().lower() for column in header}
 
 
+def _ris_note(raw_fields: dict[str, str], prefix: str) -> str | None:
+    """Scopus packs labelled values into N1 lines, e.g. "EID: 2-s2.0-105040180364"."""
+    for line in raw_fields.get(_RIS_NOTES_TAG, "").splitlines():
+        if line.startswith(prefix):
+            return line.removeprefix(prefix).strip() or None
+    return None
+
+
+def _fix_ris_record(raw_fields: dict[str, str], record: Record) -> Record:
+    update: dict[str, object] = {}
+    eid = _ris_note(raw_fields, _RIS_EID_NOTE)
+    if eid is not None:
+        update["other_ids"] = {**record.other_ids, "eid": eid}
+    if record.conference_name is None:
+        update["conference_name"] = _ris_note(raw_fields, _RIS_CONFERENCE_NOTE)
+    return record.model_copy(update=update)
+
+
+def _matches_ris(text: str) -> bool:
+    return bool(_RIS_DB_LINE.search(text))
+
+
 SCOPUS = Profile(
     key="scopus",
     label="Scopus",
@@ -133,6 +160,11 @@ SCOPUS = Profile(
                     "publication stage",
                 }
             ),
+        ),
+        "ris": FormatProfile(
+            aliases={"publication_type": ["m3"], "pmid": ["c2"]},
+            fix_record=_fix_ris_record,
+            matches=_matches_ris,
         ),
     },
 )

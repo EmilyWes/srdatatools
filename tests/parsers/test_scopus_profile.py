@@ -8,8 +8,10 @@ from app.parsers.csv_ import parse_csv_text, suggest_mapping
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles import apply_profile
 from app.parsers.profiles.scopus import SCOPUS
+from app.parsers.ris import parse_ris_text, suggest_ris_mapping
 
 _CSV_PROFILE = SCOPUS.formats["csv"]
+_RIS_PROFILE = SCOPUS.formats["ris"]
 
 
 def _suggest_csv(headers: list[str]) -> FieldMapping:
@@ -173,3 +175,55 @@ def test_scopus_csv__matches_header_with_eid() -> None:
 
 def test_scopus_csv__does_not_match_header_without_eid() -> None:
     assert not _CSV_PROFILE.matches("PMID,Title,Citation,Journal/Book\n1,A,B,C\n")
+
+
+def _parse_ris(body: str) -> Record:
+    text = f"TY  - JOUR\n{body}ER  - \n"
+    tags = list(dict.fromkeys(line[:2] for line in text.splitlines()))
+    mapping = suggest_ris_mapping(tags, _RIS_PROFILE.aliases)
+    result = apply_profile(parse_ris_text(text, mapping), _RIS_PROFILE)
+    return result.rows[0].record
+
+
+def test_scopus_ris__publication_type_from_m3_not_ty() -> None:
+    mapping = suggest_ris_mapping(["TY", "M3"], _RIS_PROFILE.aliases)
+
+    assert mapping.targets == {"M3": "publication_type"}
+
+
+def test_scopus_ris__document_type_and_pmid() -> None:
+    record = _parse_ris("M3  - Retracted\nC2  - 32161388\n")
+
+    assert record.publication_type == "Retracted"
+    assert record.pmid == "32161388"
+
+
+def test_scopus_ris__takes_eid_and_conference_name_from_notes() -> None:
+    notes = (
+        "N1  - EID: 2-s2.0-105040180364\nN1  - Cited By: 0\n"
+        "N1  - Conference name: 5th Conference on Control Engineering\n"
+    )
+
+    record = _parse_ris(notes)
+
+    assert record.other_ids == {"eid": "2-s2.0-105040180364"}
+    assert record.conference_name == "5th Conference on Control Engineering"
+    assert record.notes == (
+        "EID: 2-s2.0-105040180364\nCited By: 0\n"
+        "Conference name: 5th Conference on Control Engineering"
+    )
+
+
+def test_scopus_ris__record_without_labelled_notes_is_unchanged() -> None:
+    record = _parse_ris("TI  - Some Paper\nN1  - Export Date: 22 October 2026\n")
+
+    assert record.other_ids == {}
+    assert record.conference_name is None
+
+
+def test_scopus_ris__matches_db_line() -> None:
+    assert _RIS_PROFILE.matches("TY  - JOUR\nTI  - T\nDB  - Scopus\nER  - \n")
+
+
+def test_scopus_ris__does_not_match_without_db_line() -> None:
+    assert not _RIS_PROFILE.matches("TY  - JOUR\nTI  - Scopus\nER  - \n")
