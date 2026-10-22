@@ -52,9 +52,12 @@ csv.field_size_limit(_MAX_FIELD_SIZE)
 
 def _sniff_dialect(sample: str) -> type[csv.Dialect] | str:
     try:
-        return csv.Sniffer().sniff(sample, delimiters=",;\t")
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
     except csv.Error:
         return "excel"
+    # The sniffer guesses doublequote=False when its sample has no "" escape.
+    dialect.doublequote = True
+    return dialect
 
 
 def parse_csv_record(raw_fields: dict[str, str], mapping: FieldMapping) -> ParsedRow:

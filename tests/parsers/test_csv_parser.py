@@ -129,6 +129,19 @@ def test_parse_csv_text__sniffs_semicolon_delimiter() -> None:
     assert result.rows[0].record.doi == "10.1/x"
 
 
+def test_parse_csv_text__doubled_quote_after_sniff_sample_is_an_escape() -> None:
+    plain_rows = "".join(
+        f'"Paper {n}","Plain abstract, no quotes"\n' for n in range(80)
+    )
+    text = f'"Title","Abstract"\n{plain_rows}"Late","The ""deep-water"" model, again"\n'
+    mapping = FieldMapping(targets={"Title": "title", "Abstract": "abstract"})
+
+    result = parse_csv_text(text, mapping)
+
+    assert result.skipped == []
+    assert result.rows[-1].record.abstract == 'The "deep-water" model, again'
+
+
 def test_parse_csv_text__splits_authors_on_delimiter() -> None:
     text = "Authors\nJane Smith; John Doe\n"
     mapping = FieldMapping(targets={"Authors": "authors"})
