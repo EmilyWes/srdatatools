@@ -13,6 +13,7 @@ from app.db.models import Base, Record
 from app.gui import import_flow
 from app.gui.import_flow import (
     ImportView,
+    import_bibtex,
     import_csv,
     import_file,
     import_nbib,
@@ -162,11 +163,11 @@ def test_import_file__dispatches_csv_to_import_csv(
 
 
 def test_import_file__unsupported_type_raises(session: Session, tmp_path: Path) -> None:
-    bibtex_path = tmp_path / "export.bib"
-    bibtex_path.write_text("@article{a}\n")
+    xml_path = tmp_path / "export.xml"
+    xml_path.write_text("<records/>\n")
 
     with pytest.raises(ValueError, match="unsupported file type"):
-        import_file(session, bibtex_path, "bibtex", FieldMapping())
+        import_file(session, xml_path, "endnote_xml", FieldMapping())
 
 
 _RIS_TEXT = (
@@ -314,6 +315,83 @@ def test_render_import_view__nbib_type_renders_mapping_and_enables_import(
 
     view._set_type("nbib")
 
+    assert view.mapping_screen is not None
+    assert view.import_button is not None
+    assert view.import_button.enabled is True
+
+
+_BIBTEX_TEXT = (
+    "@article{key1, title = {Some Paper}, author = {Smith, J}}\n"
+    "@article{title = {No key}}\n"
+)
+
+
+def test_import_bibtex__stores_records_and_skipped_rows(
+    session: Session, tmp_path: Path
+) -> None:
+    bibtex_path = tmp_path / "export.bib"
+    bibtex_path.write_text(_BIBTEX_TEXT)
+    mapping = FieldMapping(targets={"title": "title"})
+
+    source_file = import_bibtex(session, bibtex_path, mapping)
+    session.commit()
+
+    assert source_file.filename == "export.bib"
+    assert source_file.format == "bibtex"
+    assert source_file.row_count == 1
+    assert source_file.skipped_rows == [
+        {"row_number": 2, "reason": "entry has no citation key"}
+    ]
+
+
+def test_import_file__dispatches_bibtex_to_import_bibtex(
+    session: Session, tmp_path: Path
+) -> None:
+    bibtex_path = tmp_path / "export.bib"
+    bibtex_path.write_text(_BIBTEX_TEXT)
+
+    source_file = import_file(session, bibtex_path, "bibtex", FieldMapping())
+
+    assert source_file.format == "bibtex"
+
+
+def test_render_mapping__bibtex_lists_fields_with_delimiter_input(
+    tmp_path: Path,
+) -> None:
+    bibtex_path = tmp_path / "export.bib"
+    bibtex_path.write_text(_BIBTEX_TEXT)
+    panes = shell()
+
+    screen = render_mapping(panes.middle, "bibtex", bibtex_path)
+
+    assert screen is not None
+    assert [row.header for row in screen.rows] == ["title", "author", "@type", "@key"]
+    assert screen.list_delimiter_input is not None
+    assert screen.current_mapping().list_delimiter == ";"
+
+
+def test_render_mapping__bibtex_without_entries_notifies_and_returns_none(
+    tmp_path: Path,
+) -> None:
+    bibtex_path = tmp_path / "empty.bib"
+    bibtex_path.write_text("")
+    panes = shell()
+
+    assert render_mapping(panes.middle, "bibtex", bibtex_path) is None
+
+
+def test_render_import_view__bibtex_file_is_detected_and_enables_import(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    panes = shell()
+    bibtex_path = tmp_path / "export.bib"
+    bibtex_path.write_text(_BIBTEX_TEXT)
+    _pick(monkeypatch, bibtex_path)
+    view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
+
+    asyncio.run(view._select_file())
+
+    assert view.file_type == "bibtex"
     assert view.mapping_screen is not None
     assert view.import_button is not None
     assert view.import_button.enabled is True
