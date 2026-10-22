@@ -130,7 +130,10 @@ def read_csv_headers(path: Path) -> FileSummary:
 
 
 def suggest_mapping(
-    headers: list[str], alias_overrides: dict[str, list[str]] | None = None
+    headers: list[str],
+    alias_overrides: dict[str, list[str]] | None = None,
+    ignored_keys: frozenset[str] = frozenset(),
 ) -> FieldMapping:
     aliases = override_aliases(_SUGGESTION_ALIASES, alias_overrides or {})
-    return _suggest_mapping(headers, aliases, lenient=True)
+    kept = [h for h in headers if h.strip().lower() not in ignored_keys]
+    return _suggest_mapping(kept, aliases, lenient=True)

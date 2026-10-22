@@ -450,6 +450,15 @@ def test_suggest_mapping__non_id_words_containing_id_stay_unmapped(
     assert suggestions.targets == {}
 
 
+def test_suggest_mapping__ignored_keys_stay_unmapped() -> None:
+    mapping = suggest_mapping(
+        ["Conference name", "Conference date"],
+        ignored_keys=frozenset({"conference date"}),
+    )
+
+    assert mapping.targets == {"Conference name": "conference_name"}
+
+
 def test_suggest_mapping__leaves_unrecognized_header_out() -> None:
     suggestions = suggest_mapping(["Zzzqqqxx123"])
 

@@ -11,7 +11,7 @@ from app.parsers.common import (
     SummaryBuilder,
     decode_file,
 )
-from app.parsers.mapping import FieldMapping, apply_mapping
+from app.parsers.mapping import FieldMapping, apply_mapping, override_aliases
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
 
 logger = logging.getLogger(__name__)
@@ -110,6 +110,9 @@ def read_ris_tags(path: Path) -> FileSummary:
     return summary.build()
 
 
-def suggest_ris_mapping(tags: list[str]) -> FieldMapping:
-    mapping = _suggest_mapping(tags, _SUGGESTION_ALIASES, lenient=False)
+def suggest_ris_mapping(
+    tags: list[str], alias_overrides: dict[str, list[str]] | None = None
+) -> FieldMapping:
+    aliases = override_aliases(_SUGGESTION_ALIASES, alias_overrides or {})
+    mapping = _suggest_mapping(tags, aliases, lenient=False)
     return replace(mapping, list_delimiter="\n")

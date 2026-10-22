@@ -247,6 +247,14 @@ def test_suggest_ris_mapping__maps_sn_to_issn_isbn() -> None:
     assert suggest_ris_mapping(["SN"]).targets == {"SN": "issn_isbn"}
 
 
+def test_suggest_ris_mapping__applies_alias_overrides() -> None:
+    mapping = suggest_ris_mapping(
+        ["TY", "M3"], alias_overrides={"publication_type": ["m3"]}
+    )
+
+    assert mapping.targets == {"M3": "publication_type"}
+
+
 def test_suggest_ris_mapping__leaves_unknown_tags_unmapped() -> None:
     assert suggest_ris_mapping(["ZZ", "TZ"]).targets == {}
 
