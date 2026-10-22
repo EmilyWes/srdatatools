@@ -89,6 +89,7 @@ app/
     session.py       # engine/session setup, runs Alembic migrations
     store.py         # writes parsed records to the database
     queries.py       # read queries for the GUI
+    settings.py      # app_settings key/value read/write
     migrations/      # Alembic
   dedup/             # (planned) matching strategies (DOI, fuzzy title+author+year)
   enrich/            # (planned) OpenAlex client, field-merging logic
@@ -100,6 +101,8 @@ app/
     layout.py        # three-pane shell
     library_nav.py   # left panel navigation
     import_flow.py   # import view in the middle panel
+    library_overview.py # Library overview stats in the middle panel
+    record_table.py  # Library record table + its column settings view
     action_panel.py  # right panel actions + activity log
     mapping_table.py # field-mapping table (CSV columns, RIS/NBIB tags, BibTeX fields)
   main.py            # launches pywebview + NiceGUI server
@@ -121,7 +124,7 @@ Core tables, kept normalized so the same paper found via two sources becomes one
 | `citation_edge` *(planned, Phase 4)* | Snowballing results: `record_id` cites/is cited by `record_id` (or an external id not yet imported) |
 | `activity_log` | Append-only log of every user- or system-triggered action, for the transparency view |
 | `field_merge_policy` *(planned, Phase 2)* | The default conflict-resolution chain, plus named field-group overrides and which fields belong to each |
-| `app_settings` *(planned, Phase 3)* | Simple key/value local settings store — OpenAlex polite-pool email, merge-policy defaults, etc. |
+| `app_settings` | Simple key/value local settings store — record-table column selection; later OpenAlex polite-pool email, merge-policy defaults, etc. |
 
 **Key design choice:** never destroy the originally imported data. `record_source` keeps the raw parsed fields forever, so *what was imported* is never lost — this is for transparency and audit, not for in-app undo. There is no built-in undo/rollback for merges or enrichment: the safety net is that the app makes it clear, before running dedup, that the user should **export the current library first** if they want a restore point. This keeps the merge engine and its data model simpler, at the cost of relying on the user's own exported backup rather than an in-app history.
 
@@ -172,9 +175,11 @@ flowchart LR
 
 **Layout:** a single-window, three-pane shell — no tabs, not a step-by-step wizard, since real usage jumps between actions rather than following one fixed order.
 
-- **Left panel** — navigation: a **Library** entry (the full combined record set) followed by a list of imported source files, one per `source_file` row. Selecting an entry drives what the middle panel shows. An **Import** button sits at the top of this panel.
+- **Left panel** — navigation: a **Library** heading with two entries for the full combined record set, **Overview** and **Table** (Table has a gear icon that opens its settings), followed by a list of imported source files, one per `source_file` row. Selecting an entry drives what the middle panel shows; Overview is selected on app start. An **Import** button sits at the top of this panel.
 - **Middle panel** — content for whatever is selected on the left:
-  - **Library** selected: overview stats (total records, records per source, per year) plus a table of records. Table sorting/filtering/search is deferred past this pass (see to-do list).
+  - **Overview** selected: total records, plus small tables of records per source (vendor, with Unknown), per imported file, and per year (Unknown last).
+  - **Table** selected: all records in one unpaginated grid (horizontal scrolling for wide column sets), with column sorting and per-column header filters. Rows are selected by clicking or via checkboxes; the header checkbox selects all rows passing the current filters. Above the grid: total rows, rows in filter (with *Clear all filters*) and rows in selection (with *Clear selection*). The selection is kept for the session (for the right-panel actions to run on later), not between sessions.
+  - **Table settings** (gear beside Table): choose which record fields are shown as columns, with *Restore defaults* (DOI, title, authors, year, journal, sources). The choice is remembered between sessions in `app_settings`.
   - **A source file** selected: that file's info — rows currently in the library from this file, how many rows were skipped on import (and why), and an option to remove all of this file's records from the library (see open question on how this interacts with records already merged via dedup).
   - **Import** clicked: the middle panel is replaced by the import flow (below) until the user confirms or cancels.
 - **Right panel** — one button per cross-cutting action, top to bottom: **Deduplicate**, **Enrich**, **Snowball**, **Export**. Each has a small gear icon beside it that opens that action's settings in the middle panel (merge-settings for Deduplicate; polite-pool email/overwrite policy for Enrich; pre-fetch size-warning threshold for Snowball; export options for Export). Below the four buttons, a read-only textbox shows the activity log, oldest first and scrolled to the newest entry — always visible, no separate tab needed. Actions refresh it after doing work that may have written to the log.
@@ -251,7 +256,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] Source-file detail view: records currently in library from this file, skipped-row count, remove-this-source's-records action
 - [ ] Delete/wipe the database: action that removes all imported records and source files
 - [x] Right panel: Dedup / Enrich / Snowball / Export buttons in order, each with a gear icon opening its settings in the middle panel, read-only activity log textbox beneath
-- [ ] Middle panel Library view: basic stats (total records, records per source, per year) + record table (sorting/filtering/search deferred)
+- [x] Middle panel Library view: Overview (total records, records per source, per file, per year) + record table with sorting, column filters, row selection and persisted column settings
 
 **Phase 2 — Export & dedup**
 
