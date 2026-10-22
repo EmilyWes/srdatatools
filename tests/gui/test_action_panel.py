@@ -39,7 +39,7 @@ def test_render_right_panel__action_buttons_in_order_and_disabled() -> None:
 
     action_buttons = [buttons[0] for buttons in _row_buttons(panes.right)]
     assert [button.text for button in action_buttons] == [
-        "Dedup",
+        "Deduplicate",
         "Enrich",
         "Snowball",
         "Export",

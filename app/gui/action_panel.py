@@ -7,7 +7,7 @@ from nicegui.element import Element
 
 from app.db.models import ActivityLog
 
-_ACTIONS = ["Dedup", "Enrich", "Snowball", "Export"]
+_ACTIONS = ["Deduplicate", "Enrich", "Snowball", "Export"]
 
 
 @dataclass
@@ -47,7 +47,7 @@ def render_right_panel(
 
     right.clear()
     with right:
-        with ui.column().classes("w-full items-center gap-2 pt-4"):
+        with ui.column().classes("w-full items-center gap-6 pt-6 pb-12"):
             for action in _ACTIONS:
                 with ui.row().classes("items-center gap-1 no-wrap"):
                     button = (
@@ -64,8 +64,8 @@ def render_right_panel(
                     ).props("flat dense round size=sm")
         log = (
             ui.textarea("Activity log")
-            .props("readonly outlined")
-            .classes("w-full flex-grow px-2 pb-2 text-xs")
+            .props("readonly outlined input-style='height: 40vh'")
+            .classes("w-full px-2 text-xs")
         )
 
     return ActionPanel(right=right, log=log)
