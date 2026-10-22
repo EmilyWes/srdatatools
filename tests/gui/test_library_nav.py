@@ -138,3 +138,14 @@ def test_render_left_panel__import_button_uses_on_import_callback_when_given(
 
     assert calls == [None]
     assert nav.selected_key == "import"  # import button is highlighted while busy
+
+
+def test_render_left_panel__clear_selection_removes_highlight() -> None:
+    panes = shell()
+    nav = render_left_panel(panes.left, panes.middle, [])
+    nav.select("library")
+
+    nav.clear_selection()
+
+    assert nav.selected_key is None
+    assert _SELECTED_CLASS not in nav.buttons["library"].classes
