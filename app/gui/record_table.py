@@ -1,5 +1,5 @@
 import json
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -10,11 +10,12 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Record
 from app.db.settings import delete_setting, get_setting, set_setting
-from app.gui.library_overview import source_label
+from app.gui.library_overview import format_count, source_label
 
 _COLUMNS_KEY = "table_columns"
 _NUMBER_COLUMNS = {"publication_year", "publication_month", "publication_day"}
 _WIDE_COLUMNS = {"title", "abstract", "notes"}
+_SELECTION_TIMEOUT = 10.0
 
 COLUMNS: dict[str, str] = {
     "doi": "DOI",
@@ -48,8 +49,8 @@ DEFAULT_COLUMNS = ["doi", "title", "authors", "publication_year", "journal", "so
 class RecordSelection:
     ids: set[int] = field(default_factory=set)
 
-    def replace(self, rows: Sequence[dict[str, Any]]) -> None:
-        self.ids = {row["id"] for row in rows}
+    def replace(self, ids: Iterable[int]) -> None:
+        self.ids = set(ids)
 
 
 def _in_display_order(columns: Collection[str]) -> list[str]:
@@ -126,16 +127,22 @@ def render_record_table(
 ) -> None:
     selection.ids &= {record.id for record in records}
 
-    def count_text() -> str:
-        return f"{len(selection.ids)} selected"
+    def count_line(text: str, count: int) -> ui.label:
+        ui.label(f"{text}:").classes("text-sm")
+        return ui.label(format_count(count)).classes("text-sm")
 
     middle.clear()
     with middle:
         with ui.column().classes("w-full h-screen p-4 gap-2 no-wrap"):
-            with ui.row().classes("items-center gap-2"):
-                select_filtered = ui.button("Select all filtered", color=None)
-                clear = ui.button("Clear selection", color=None)
-                count = ui.label(count_text()).classes("text-sm text-grey-7")
+            with ui.grid(columns="max-content 5rem max-content").classes(
+                "items-center gap-x-2 gap-y-1"
+            ):
+                count_line("Total number of rows", len(records))
+                ui.element("div")
+                filter_count = count_line("Rows in filter", len(records))
+                clear_filters = ui.button("Clear all filters", color=None)
+                selection_count = count_line("Rows in selection", len(selection.ids))
+                clear_selection = ui.button("Clear selection", color=None)
             grid = ui.aggrid(
                 {
                     "columnDefs": [_column_def(key) for key in columns],
@@ -145,8 +152,10 @@ def render_record_table(
                     "rowSelection": {
                         "mode": "multiRow",
                         "checkboxes": True,
-                        "headerCheckbox": False,
-                        "enableClickSelection": False,
+                        "headerCheckbox": True,
+                        "selectAll": "filtered",
+                        "enableClickSelection": True,
+                        "enableSelectionWithoutKeys": True,
                     },
                     "initialState": {
                         "rowSelection": [str(id_) for id_ in sorted(selection.ids)]
@@ -155,16 +164,27 @@ def render_record_table(
                 auto_size_columns=False,
             ).classes("w-full flex-grow")
 
-    for button in (select_filtered, clear):
-        button.classes("text-sm").props("dense")
-    select_filtered.on_click(lambda: grid.run_grid_method("selectAll", "filtered"))
-    clear.on_click(lambda: grid.run_grid_method("deselectAll"))
+    for button in (clear_filters, clear_selection):
+        button.classes("text-sm").props("dense no-caps")
+    clear_filters.on_click(lambda: grid.run_grid_method("setFilterModel", None))
+    clear_selection.on_click(lambda: grid.run_grid_method("deselectAll"))
 
     async def sync_selection(_: GenericEventArguments) -> None:
-        selection.replace(await grid.get_selected_rows())
-        count.text = count_text()
+        # Only ids are fetched: full row data for thousands of rows times out.
+        ids = await grid.client.run_javascript(
+            f"return getElement({grid.id}).api.getSelectedNodes()"
+            ".map((node) => Number(node.id))",
+            timeout=_SELECTION_TIMEOUT,
+        )
+        selection.replace(ids)
+        selection_count.text = format_count(len(selection.ids))
+
+    async def sync_filter_count(_: GenericEventArguments) -> None:
+        count = await grid.run_grid_method("getDisplayedRowCount")
+        filter_count.text = format_count(count)
 
     grid.on("selectionChanged", sync_selection)
+    grid.on("filterChanged", sync_filter_count)
 
 
 def render_table_settings(

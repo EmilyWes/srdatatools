@@ -2,11 +2,11 @@ import asyncio
 import datetime
 
 import pytest
-from nicegui import background_tasks, core
+from nicegui import background_tasks, core, ui
 
 from app.db.models import SourceFile
 from app.gui.layout import shell
-from app.gui.library_nav import render_left_panel
+from app.gui.library_nav import LeftPanelNav, render_left_panel
 
 _SELECTED_CLASS = "bg-blue-100"
 
@@ -33,8 +33,9 @@ def test_render_left_panel__adds_import_and_library_with_no_source_files() -> No
 
     nav = render_left_panel(panes.left, panes.middle, [])
 
-    assert len(panes.left.default_slot.children) == 3  # Import, separator, Library
-    assert list(nav.buttons) == ["import", "library"]
+    # Import, separator, "Library" label, Overview, Table row
+    assert len(panes.left.default_slot.children) == 5
+    assert list(nav.buttons) == ["import", "library:overview", "library:table"]
 
 
 def test_render_left_panel__adds_one_entry_per_source_file() -> None:
@@ -46,11 +47,13 @@ def test_render_left_panel__adds_one_entry_per_source_file() -> None:
 
     nav = render_left_panel(panes.left, panes.middle, source_files)
 
-    # Import, sep, Library, sep, "Imported files" label, source_file:1, source_file:2
-    assert len(panes.left.default_slot.children) == 7
+    # Import, sep, "Library" label, Overview, Table row, sep, "Imported files" label,
+    # source_file:1, source_file:2
+    assert len(panes.left.default_slot.children) == 9
     assert list(nav.buttons) == [
         "import",
-        "library",
+        "library:overview",
+        "library:table",
         "source_file:1",
         "source_file:2",
     ]
@@ -75,10 +78,10 @@ def test_render_left_panel__switching_selection_removes_previous_highlight() -> 
     source_files = [_source_file(1, "pubmed_export.nbib")]
     nav = render_left_panel(panes.left, panes.middle, source_files)
 
-    nav.select("library")
+    nav.select("library:overview")
     nav.select("source_file:1")
 
-    assert _SELECTED_CLASS not in nav.buttons["library"].classes
+    assert _SELECTED_CLASS not in nav.buttons["library:overview"].classes
     assert _SELECTED_CLASS in nav.buttons["source_file:1"].classes
 
 
@@ -143,9 +146,69 @@ def test_render_left_panel__import_button_uses_on_import_callback_when_given(
 def test_render_left_panel__clear_selection_removes_highlight() -> None:
     panes = shell()
     nav = render_left_panel(panes.left, panes.middle, [])
-    nav.select("library")
+    nav.select("library:overview")
 
     nav.clear_selection()
 
     assert nav.selected_key is None
-    assert _SELECTED_CLASS not in nav.buttons["library"].classes
+    assert _SELECTED_CLASS not in nav.buttons["library:overview"].classes
+
+
+def _click(button: ui.button) -> None:
+    click_listener = next(iter(button._event_listeners.values()))
+    assert click_listener.handler is not None
+    click_listener.handler(None)
+
+
+def _table_gear(nav: LeftPanelNav) -> ui.button:
+    table_row = nav.buttons["library:table"].parent_slot
+    assert table_row is not None
+    return [c for c in table_row.children if isinstance(c, ui.button)][1]
+
+
+def test_render_left_panel__library_heading_above_overview_and_table() -> None:
+    panes = shell()
+
+    render_left_panel(panes.left, panes.middle, [])
+
+    heading = panes.left.default_slot.children[2]
+    assert isinstance(heading, ui.label)
+    assert heading.text == "Library"
+
+
+def test_render_left_panel__selecting_overview_and_table_calls_their_views() -> None:
+    panes = shell()
+    calls: list[str] = []
+    nav = render_left_panel(
+        panes.left,
+        panes.middle,
+        [],
+        on_overview=lambda: calls.append("overview"),
+        on_table=lambda: calls.append("table"),
+    )
+
+    _click(nav.buttons["library:overview"])
+    _click(nav.buttons["library:table"])
+
+    assert calls == ["overview", "table"]
+    assert nav.selected_key == "library:table"
+
+
+def test_render_left_panel__table_gear_opens_settings_with_table_highlighted() -> None:
+    panes = shell()
+    calls: list[str] = []
+    nav = render_left_panel(
+        panes.left,
+        panes.middle,
+        [],
+        on_table=lambda: calls.append("table"),
+        on_table_settings=lambda: calls.append("settings"),
+    )
+    nav.select("library:overview")
+
+    _click(_table_gear(nav))
+
+    assert calls == ["settings"]
+    assert nav.selected_key == "library:table"
+    assert _SELECTED_CLASS in nav.buttons["library:table"].classes
+    assert _SELECTED_CLASS not in nav.buttons["library:overview"].classes

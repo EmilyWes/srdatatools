@@ -8,6 +8,10 @@ from app.parsers.profiles import PROFILES
 _UNKNOWN = "Unknown"
 
 
+def format_count(count: int) -> str:
+    return f"{count:,}".replace(",", ".")
+
+
 def source_label(source: str | None) -> str:
     if source is None:
         return _UNKNOWN
@@ -23,7 +27,7 @@ def _count_table(title: str, heading: str, rows: list[tuple[str, int]]) -> None:
                 {"name": "name", "label": heading, "field": "name", "align": "left"},
                 {"name": "count", "label": "Records", "field": "count"},
             ],
-            rows=[{"name": name, "count": count} for name, count in rows],
+            rows=[{"name": name, "count": format_count(count)} for name, count in rows],
             pagination=0,
         ).props("dense flat bordered hide-bottom").classes("min-w-48")
 
@@ -40,7 +44,7 @@ def render_library_overview(
         with ui.column().classes("w-full p-4 gap-4"):
             with ui.column().classes("gap-0"):
                 ui.label("Total records").classes("text-sm text-grey-7")
-                ui.label(str(total)).classes("text-3xl")
+                ui.label(format_count(total)).classes("text-3xl")
             with ui.row().classes("gap-6 items-start"):
                 _count_table(
                     "Records per source",

@@ -1,13 +1,30 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 from nicegui import ui
 
-from app.db.queries import list_activity_log, list_source_files
+from app.db.queries import (
+    count_records,
+    count_records_per_file,
+    count_records_per_source,
+    count_records_per_year,
+    list_activity_log,
+    list_records,
+    list_source_files,
+)
 from app.db.session import get_engine, session_scope
 from app.gui.action_panel import render_right_panel
 from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
 from app.gui.library_nav import LeftPanelNav, render_left_panel
+from app.gui.library_overview import render_library_overview
+from app.gui.record_table import (
+    RecordSelection,
+    load_columns,
+    render_record_table,
+    render_table_settings,
+    reset_columns,
+    save_columns,
+)
 from app.parsers.mapping import FieldMapping
 
 _engine = get_engine()
@@ -17,6 +34,7 @@ _engine = get_engine()
 def home() -> None:
     panes = shell()
     nav: LeftPanelNav | None = None
+    selection = RecordSelection()
 
     def clear_nav_selection() -> None:
         if nav is not None:
@@ -30,15 +48,55 @@ def home() -> None:
         with session_scope(_engine) as session:
             actions.show_log(list_activity_log(session))
 
-    def refresh(select_key: str | None = None) -> None:
+    def show_overview() -> None:
+        with session_scope(_engine) as session:
+            render_library_overview(
+                panes.middle,
+                count_records(session),
+                count_records_per_source(session),
+                count_records_per_file(session),
+                count_records_per_year(session),
+            )
+
+    def show_table() -> None:
+        with session_scope(_engine) as session:
+            render_record_table(
+                panes.middle, list_records(session), load_columns(session), selection
+            )
+
+    def save_table_columns(columns: list[str]) -> None:
+        with session_scope(_engine) as session:
+            save_columns(session, columns)
+
+    def restore_table_columns() -> None:
+        with session_scope(_engine) as session:
+            reset_columns(session)
+        show_table_settings()
+
+    def show_table_settings() -> None:
+        with session_scope(_engine) as session:
+            columns = load_columns(session)
+        render_table_settings(
+            panes.middle,
+            columns,
+            on_change=save_table_columns,
+            on_restore=restore_table_columns,
+            on_back=show_table,
+        )
+
+    def refresh(select_key: str = "library:overview") -> None:
         nonlocal nav
         with session_scope(_engine) as session:
-            source_files = list_source_files(session)
             nav = render_left_panel(
-                panes.left, panes.middle, source_files, on_import=start_import
+                panes.left,
+                panes.middle,
+                list_source_files(session),
+                on_import=start_import,
+                on_overview=show_overview,
+                on_table=show_table,
+                on_table_settings=show_table_settings,
             )
-            if select_key is not None:
-                nav.select(select_key)
+        nav.select(select_key)
         refresh_log()
 
     def on_confirmed(

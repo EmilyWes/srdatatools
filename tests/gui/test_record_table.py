@@ -178,10 +178,10 @@ def test_render_record_table__restores_existing_selection() -> None:
     assert _grid(panes.middle).options["initialState"]["rowSelection"] == ["1"]
 
 
-def test_record_selection__replace_with_rows() -> None:
+def test_record_selection__replace_with_ids() -> None:
     selection = RecordSelection(ids={5})
 
-    selection.replace([{"id": 1}, {"id": 2}])
+    selection.replace([1, 2])
 
     assert selection.ids == {1, 2}
 
@@ -239,3 +239,71 @@ def test_render_table_settings__restore_and_back_buttons_call_back() -> None:
     _click(_button(panes.middle, "Back to table"))
 
     assert calls == ["restore", "back"]
+
+
+def test_render_record_table__shows_row_filter_and_selection_counts() -> None:
+    panes = shell()
+
+    render_record_table(
+        panes.middle,
+        [_record(1), _record(2), _record(3)],
+        DEFAULT_COLUMNS,
+        RecordSelection(ids={2}),
+    )
+
+    labels = [
+        element.text
+        for element in panes.middle.descendants()
+        if isinstance(element, ui.label)
+    ]
+    assert labels == [
+        "Total number of rows:",
+        "3",
+        "Rows in filter:",
+        "3",
+        "Rows in selection:",
+        "1",
+    ]
+
+
+def test_render_record_table__header_checkbox_selects_filtered_rows() -> None:
+    panes = shell()
+
+    render_record_table(panes.middle, [_record(1)], DEFAULT_COLUMNS, RecordSelection())
+
+    row_selection = _grid(panes.middle).options["rowSelection"]
+    assert row_selection["headerCheckbox"] is True
+    assert row_selection["selectAll"] == "filtered"
+
+
+def test_render_record_table__clear_buttons_not_all_caps() -> None:
+    panes = shell()
+
+    render_record_table(panes.middle, [_record(1)], DEFAULT_COLUMNS, RecordSelection())
+
+    for text in ("Clear all filters", "Clear selection"):
+        assert "no-caps" in _button(panes.middle, text).props
+
+
+def test_render_record_table__row_click_toggles_selection() -> None:
+    panes = shell()
+
+    render_record_table(panes.middle, [_record(1)], DEFAULT_COLUMNS, RecordSelection())
+
+    row_selection = _grid(panes.middle).options["rowSelection"]
+    assert row_selection["enableClickSelection"] is True
+    assert row_selection["enableSelectionWithoutKeys"] is True
+
+
+def test_render_record_table__counts_use_dot_thousands_separator() -> None:
+    panes = shell()
+    records = [_record(id_) for id_ in range(1, 1235)]
+
+    render_record_table(panes.middle, records, ["doi"], RecordSelection())
+
+    labels = [
+        element.text
+        for element in panes.middle.descendants()
+        if isinstance(element, ui.label)
+    ]
+    assert labels[1] == "1.234"
