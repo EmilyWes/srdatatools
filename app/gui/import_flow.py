@@ -11,6 +11,12 @@ from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
 from app.gui.mapping_table import MappingScreen, render_mapping_table
 from app.models.record import Record
+from app.parsers.bibtex import (
+    parse_bibtex_file,
+    parse_bibtex_record,
+    read_bibtex_fields,
+    suggest_bibtex_mapping,
+)
 from app.parsers.common import FileSummary, ParsedRow, ParseResult
 from app.parsers.csv_ import (
     parse_csv_file,
@@ -38,11 +44,13 @@ _TYPE_UNKNOWN = "unknown"
 _TYPE_RIS = "ris"
 _TYPE_NBIB = "nbib"
 _TYPE_CSV = "csv"
+_TYPE_BIBTEX = "bibtex"
 _TYPE_OPTIONS = {
     _TYPE_UNKNOWN: "Unknown",
     _TYPE_RIS: "RIS",
     _TYPE_NBIB: "NBIB",
     _TYPE_CSV: "CSV",
+    _TYPE_BIBTEX: "BibTeX",
 }
 
 _SOURCE_UNKNOWN = "unknown"
@@ -81,6 +89,10 @@ def render_mapping(
         read_keys, noun = read_nbib_tags, "tags"
         suggest = partial(suggest_nbib_mapping, alias_overrides=overrides)
         parse_record = parse_nbib_record
+    elif file_type == _TYPE_BIBTEX:
+        read_keys, noun = read_bibtex_fields, "fields"
+        suggest = partial(suggest_bibtex_mapping, alias_overrides=overrides)
+        parse_record = parse_bibtex_record
     else:
         return None
 
@@ -110,7 +122,7 @@ def render_mapping(
         container,
         summary,
         suggestion,
-        show_delimiter=file_type == _TYPE_CSV,
+        show_delimiter=file_type in (_TYPE_CSV, _TYPE_BIBTEX),
         preview=preview,
     )
 
@@ -148,6 +160,12 @@ def import_nbib(
     return _store(session, path, _TYPE_NBIB, parse_nbib_file(path, mapping), source)
 
 
+def import_bibtex(
+    session: Session, path: Path, mapping: FieldMapping, source: str = _SOURCE_UNKNOWN
+) -> SourceFile:
+    return _store(session, path, _TYPE_BIBTEX, parse_bibtex_file(path, mapping), source)
+
+
 def import_file(
     session: Session,
     path: Path,
@@ -161,6 +179,8 @@ def import_file(
         return import_ris(session, path, mapping, source)
     if file_type == _TYPE_NBIB:
         return import_nbib(session, path, mapping, source)
+    if file_type == _TYPE_BIBTEX:
+        return import_bibtex(session, path, mapping, source)
     raise ValueError(f"unsupported file type: {file_type!r}")
 
 

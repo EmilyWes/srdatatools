@@ -8,7 +8,12 @@ from app.parsers.profiles import PROFILES
 
 _RIS_FIRST_LINE = re.compile(r"^TY  -")
 _NBIB_FIRST_LINE = re.compile(r"^PMID ?-")
-_EXTENSION_TYPES = {".ris": "ris", ".nbib": "nbib", ".csv": "csv"}
+# Searched, not matched on the first line: exports may start with a free-text header.
+_BIBTEX_ENTRY = re.compile(
+    r"^[ \t]*@(?!(?:comment|string|preamble)\b)[A-Za-z]+[ \t]*[{(]",
+    re.MULTILINE | re.IGNORECASE,
+)
+_EXTENSION_TYPES = {".ris": "ris", ".nbib": "nbib", ".csv": "csv", ".bib": "bibtex"}
 _CSV_SAMPLE_SIZE = 2048
 
 
@@ -29,6 +34,8 @@ def _type_from_content(text: str) -> str | None:
         return "ris"
     if _NBIB_FIRST_LINE.match(first_line):
         return "nbib"
+    if _BIBTEX_ENTRY.search(text):
+        return "bibtex"
     if _looks_like_csv(text):
         return "csv"
     return None

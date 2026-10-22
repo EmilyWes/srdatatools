@@ -23,6 +23,23 @@ def test_detect_type__cp1252_csv_content() -> None:
     assert detect_type(_DATA_DIR / "cp1252_encoded.csv") == "csv"
 
 
+def test_detect_type__bibtex_content() -> None:
+    assert detect_type(_DATA_DIR / "bibtex_style.bib") == "bibtex"
+
+
+def test_detect_type__bibtex_after_free_text_header(tmp_path: Path) -> None:
+    text = "Scopus\nEXPORT DATE: 22 October 2026\n\n@ARTICLE{key1,\n\ttitle = {T}\n}\n"
+    path = _write(tmp_path, "export.txt", text)
+
+    assert detect_type(path) == "bibtex"
+
+
+def test_detect_type__only_comment_entries_is_not_bibtex(tmp_path: Path) -> None:
+    path = _write(tmp_path, "notes.txt", "@comment{note}\n@string{a = {b}}\n")
+
+    assert detect_type(path) is None
+
+
 def test_detect_type__nbib_in_txt_file(tmp_path: Path) -> None:
     path = _write(tmp_path, "pubmed.txt", "\nPMID- 1\nOWN - NLM\nTI  - Title\n")
 
@@ -66,6 +83,12 @@ def test_detect_type__falls_back_to_extension_for_unrecognised_content(
     path = _write(tmp_path, "empty.RIS", "")
 
     assert detect_type(path) == "ris"
+
+
+def test_detect_type__falls_back_to_bib_extension(tmp_path: Path) -> None:
+    path = _write(tmp_path, "empty.bib", "")
+
+    assert detect_type(path) == "bibtex"
 
 
 def test_detect_type__falls_back_to_extension_for_undecodable_file(
