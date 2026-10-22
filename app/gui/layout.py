@@ -22,7 +22,7 @@ def shell() -> ShellPanes:
         with middle:
             ui.label("Content")
 
-        right = ui.column().classes("w-52 border-l bg-grey-2")
+        right = ui.column().classes("w-56 border-l bg-grey-2")
         with right:
             ui.label("Actions")
 

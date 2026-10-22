@@ -24,9 +24,13 @@ class LeftPanelNav:
         with self.middle:
             ui.label(label)
 
-    def select(self, key: str) -> None:
+    def clear_selection(self) -> None:
         if self.selected_key is not None:
             self.buttons[self.selected_key].classes(remove=_SELECTED_CLASS)
+        self.selected_key = None
+
+    def select(self, key: str) -> None:
+        self.clear_selection()
         self.buttons[key].classes(add=_SELECTED_CLASS)
         self.selected_key = key
         self.show_placeholder(self.labels[key])

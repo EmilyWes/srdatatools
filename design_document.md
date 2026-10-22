@@ -100,6 +100,7 @@ app/
     layout.py        # three-pane shell
     library_nav.py   # left panel navigation
     import_flow.py   # import view in the middle panel
+    action_panel.py  # right panel actions + activity log
     mapping_table.py # field-mapping table (CSV columns, RIS/NBIB tags, BibTeX fields)
   main.py            # launches pywebview + NiceGUI server
 ```
@@ -176,7 +177,7 @@ flowchart LR
   - **Library** selected: overview stats (total records, records per source, per year) plus a table of records. Table sorting/filtering/search is deferred past this pass (see to-do list).
   - **A source file** selected: that file's info — rows currently in the library from this file, how many rows were skipped on import (and why), and an option to remove all of this file's records from the library (see open question on how this interacts with records already merged via dedup).
   - **Import** clicked: the middle panel is replaced by the import flow (below) until the user confirms or cancels.
-- **Right panel** — one button per cross-cutting action, top to bottom: **Dedup**, **Enrich**, **Snowball**, **Export**. Dedup, Enrich, and Snowball each have a small gear icon beside them opening a popup with that action's settings (merge-settings for Dedup; polite-pool email/overwrite policy for Enrich; pre-fetch size-warning threshold for Snowball). Below the four buttons, a read-only textbox shows the live activity log — always visible, no separate tab needed.
+- **Right panel** — one button per cross-cutting action, top to bottom: **Deduplicate**, **Enrich**, **Snowball**, **Export**. Each has a small gear icon beside it that opens that action's settings in the middle panel (merge-settings for Deduplicate; polite-pool email/overwrite policy for Enrich; pre-fetch size-warning threshold for Snowball; export options for Export). Below the four buttons, a read-only textbox shows the activity log, oldest first and scrolled to the newest entry — always visible, no separate tab needed. Actions refresh it after doing work that may have written to the log.
 
 **Import flow.**
 
@@ -249,7 +250,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] Activity log: write a plain-language `activity_log` row for each import (e.g. "Imported 998 records from scopus.csv, 2 skipped")
 - [ ] Source-file detail view: records currently in library from this file, skipped-row count, remove-this-source's-records action
 - [ ] Delete/wipe the database: action that removes all imported records and source files
-- [ ] Right panel: Dedup / Enrich / Snowball / Export buttons in order, gear-icon settings popups for Dedup/Enrich/Snowball, read-only activity log textbox beneath
+- [x] Right panel: Dedup / Enrich / Snowball / Export buttons in order, each with a gear icon opening its settings in the middle panel, read-only activity log textbox beneath
 - [ ] Middle panel Library view: basic stats (total records, records per source, per year) + record table (sorting/filtering/search deferred)
 
 **Phase 2 — Export & dedup**

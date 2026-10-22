@@ -5,8 +5,8 @@ import pytest
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.db.models import Base, SourceFile
-from app.db.queries import list_source_files
+from app.db.models import ActivityLog, Base, SourceFile
+from app.db.queries import list_activity_log, list_source_files
 
 
 @pytest.fixture
@@ -55,3 +55,29 @@ def test_list_source_files__returns_files_ordered_by_import_time(
         "pubmed_export.nbib",
         "scopus_export.csv",
     ]
+
+
+def test_list_activity_log__empty_when_nothing_logged(session: Session) -> None:
+    assert list_activity_log(session) == []
+
+
+def test_list_activity_log__returns_entries_oldest_first(session: Session) -> None:
+    session.add_all(
+        [
+            ActivityLog(
+                timestamp=datetime.datetime(2026, 2, 1),
+                action_type="import",
+                message="second",
+            ),
+            ActivityLog(
+                timestamp=datetime.datetime(2026, 1, 1),
+                action_type="import",
+                message="first",
+            ),
+        ]
+    )
+    session.commit()
+
+    result = list_activity_log(session)
+
+    assert [entry.message for entry in result] == ["first", "second"]
