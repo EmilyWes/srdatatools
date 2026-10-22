@@ -80,3 +80,10 @@ class ActivityLog(Base):
     action_type: Mapped[str]
     message: Mapped[str]
     record_id: Mapped[int | None] = mapped_column(ForeignKey("record.id"), index=True)
+
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(primary_key=True)
+    value: Mapped[str]
