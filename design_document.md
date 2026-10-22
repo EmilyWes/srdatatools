@@ -2,7 +2,7 @@
 
 2026-09-18 · Emily
 
-**srdatatools** is a local, open-source (MIT licensed), single-user desktop application for importing, merging, deduplicating, enriching, and exporting collections of academic paper metadata from multiple sources (RIS, NBIB, CSV, OpenAlex).
+**srdatatools** is a local, open-source (MIT licensed), single-user desktop application for importing, merging, deduplicating, enriching, and exporting collections of academic paper metadata from multiple sources (RIS, NBIB, CSV, BibTeX, OpenAlex).
 
 ## Goals & scope
 
@@ -10,7 +10,7 @@
 
 **v1 goals:**
 
-- Import bibliographic records from RIS, NBIB (PubMed), and CSV files
+- Import bibliographic records from RIS, NBIB (PubMed), CSV, and BibTeX files
 - Store everything in one local database so multiple source files can be combined without duplicate entries
 - Deduplicate records across sources (same paper appearing in e.g. both a PubMed and a Scopus export)
 - Export the combined, cleaned collection to a new file (RIS/CSV at minimum)
@@ -38,7 +38,7 @@ Goal: support as many databases as possible, built in order of how widely used t
 | Priority | Database | Native export format(s) | Notes / quirks |
 | --- | --- | --- | --- |
 | 1 | PubMed | NBIB, MEDLINE (.txt), CSV | Well-structured tags; CSV export has fewer fields and packs volume/issue/pages into a Citation column |
-| 2 | Scopus | CSV, RIS | CSV column names differ from other vendors; export field set is configurable by the user in Scopus itself, so mapping must be flexible, not fixed |
+| 2 | Scopus | CSV, RIS, BibTeX | CSV column names differ from other vendors; export field set is configurable by the user in Scopus itself, so mapping must be flexible, not fixed |
 | 3 | Web of Science | RIS, "Plain Text" tagged format | WoS's own tagged format uses different two-letter tags than standard RIS in places; RIS export is more standard and likely the safer first target |
 | 4 | IEEE Xplore | CSV, RIS, BibTeX | CSV export is common for IEEE; RIS export exists but is less commonly used in practice |
 | 5 | Embase | RIS, CSV | Similar shape to PubMed/Medline records but with Embase-specific fields (e.g. Emtree terms) |
@@ -70,10 +70,12 @@ app/
     record.py        # pydantic Record schema every parser normalizes to
   parsers/
     common.py        # result types shared by all parsers + file decoding
-    mapping.py       # generic input-key -> Record field mapping (CSV columns, RIS/NBIB tags)
+    mapping.py       # generic input-key -> Record field mapping (CSV columns, RIS/NBIB tags, BibTeX fields)
+    authors.py       # author-name parsing shared by the parsers
     csv_.py          # generic CSV reader + column-mapping suggestions
     ris.py           # generic RIS tokenizer + tag-mapping suggestions
     nbib.py          # generic NBIB/MEDLINE tokenizer + tag-mapping suggestions
+    bibtex.py        # generic BibTeX tokenizer + field-mapping suggestions
     profiles/        # per-database tag/column mappings + quirks
       base.py        # Profile/FormatProfile types + apply_profile
       pubmed.py
@@ -98,7 +100,7 @@ app/
     layout.py        # three-pane shell
     library_nav.py   # left panel navigation
     import_flow.py   # import view in the middle panel
-    mapping_table.py # field-mapping table (CSV columns, RIS/NBIB tags)
+    mapping_table.py # field-mapping table (CSV columns, RIS/NBIB tags, BibTeX fields)
   main.py            # launches pywebview + NiceGUI server
 ```
 
@@ -126,7 +128,7 @@ Core tables, kept normalized so the same paper found via two sources becomes one
 
 ```mermaid
 flowchart LR
-  A[Import file<br/>RIS/NBIB/CSV] --> B[Parse to<br/>common schema]
+  A[Import file<br/>RIS/NBIB/CSV/BibTeX] --> B[Parse to<br/>common schema]
   B --> C[Dedup engine<br/>optional]
   B -.skip dedup.-> D[record table]
   C --> D
@@ -142,7 +144,7 @@ flowchart LR
 
 **Dedup is optional, not a required step.** The pipeline is Import → Parse → *(optional)* Dedup → Store → *(optional)* Enrich/Snowball → Export, and each optional stage can be skipped. This means the app is equally useful for simpler jobs: exploring a single file to understand what's in it, or converting one file straight from one format to another (e.g. NBIB to CSV) — no need to run merge/dedup when there's nothing to merge.
 
-**Import & parsing.** Each format (RIS, NBIB, CSV) has its own parser that maps fields into the common `Record` schema, with a per-database vendor profile layered on top where one applies. CSV needs a column-mapping step in the GUI since headers vary by export source (Scopus, Web of Science, etc. all name columns differently). Import accepts multiple files per action (all sharing one source/type selection) and auto-detects type/source from file extension + content sniffing to prefill the source/type dropdowns; see GUI & UX design below for the full import flow. Import writes directly to both `record_source` (raw parsed fields) and `record` (one row per imported record, pre-dedup) — dedup is a separate, on-demand step the user triggers later over the whole `record` table, not something that happens automatically at import time.
+**Import & parsing.** Each format (RIS, NBIB, CSV, BibTeX) has its own parser that maps fields into the common `Record` schema, with a per-database vendor profile layered on top where one applies. CSV needs a column-mapping step in the GUI since headers vary by export source (Scopus, Web of Science, etc. all name columns differently). Import accepts multiple files per action (all sharing one source/type selection) and auto-detects type/source from file extension + content sniffing to prefill the source/type dropdowns; see GUI & UX design below for the full import flow. Import writes directly to both `record_source` (raw parsed fields) and `record` (one row per imported record, pre-dedup) — dedup is a separate, on-demand step the user triggers later over the whole `record` table, not something that happens automatically at import time.
 
 **Deduplication.** At tens-of-thousands scale, comparing every record against every other (all-pairs) is too slow for fuzzy matching, so dedup uses **blocking**: records are first grouped into small candidate buckets (e.g. by normalized publication year + first few characters of first-author surname, or a title n-gram key), and expensive fuzzy comparison only runs *within* a bucket, not across the whole library. Layered checks, cheapest first: (1) exact DOI match (no blocking needed — indexed lookup), (2) exact PubMed/other id match, (3) blocked fuzzy match on normalized title + year + author overlap (e.g. rapidfuzz). The fuzzy-match confidence threshold is **user-adjustable**, defaulting to effectively requiring an exact match — so out of the box the tool only merges what it's certain about, and the user explicitly loosens the threshold if they want it to catch more near-duplicates (trading some risk of false merges for fewer missed ones). Matches below the active threshold are queued for manual review in the GUI rather than auto-merged — this is the main way the tool avoids silently corrupting data.
 
@@ -180,11 +182,11 @@ flowchart LR
 
 1. The user clicks **Import** in the left panel and picks one or more files via a native file-selector popup. All files in one Import action must share the same source/type; if the selected files' content looks like it spans more than one source, the user gets a warning to re-select.
 2. The middle panel switches to the import view: two dropdowns, **Source** and **Type**, each listing that dropdown's implemented options plus an **Unknown** choice.
-   - **Type** = file format (RIS / NBIB / CSV, tied to the generic parsers). Type is required — while it's Unknown, **Import** is disabled, with a "please select the type" tooltip.
+   - **Type** = file format (RIS / NBIB / CSV / BibTeX, tied to the generic parsers). Type is required — while it's Unknown, **Import** is disabled, with a "please select the type" tooltip.
    - **Source** = vendor profile (PubMed, Scopus, Web of Science, IEEE Xplore, Embase, PsycINFO). Source may stay **Unknown**, meaning no vendor-specific field mapping is applied.
    - On upload, the app tries to auto-detect both from file extension + content sniffing and prefills the dropdowns (exact per-format/per-profile detection heuristics are an implementation detail, not specced here). A failed detection leaves a dropdown at Unknown rather than blocking the flow, except Type, which blocks per above.
    - The two dropdowns work independently — picking a Source doesn't filter Type's options or vice versa. If the chosen combination isn't one the source actually exports (e.g. PubMed + CSV), the app falls back to the default parser for the chosen Type with no vendor mapping, and shows an inline note next to Source: *"No profile for this source/type combination — using the default parser."*
-3. Once a file and Type with a mapping renderer are set, a field-mapping table appears inline in the import view itself, directly below the Source/Type dropdowns — no separate screen or confirm step. It's pre-filled with suggested field mappings and stays editable; **Import** always reads whatever the table currently shows at the moment it's clicked. (Today CSV, RIS and NBIB share the same mapping table: CSV rows are the file's columns, RIS rows are the tags found in the file (except `ER`), NBIB rows are the tags found in the file plus a derived `DOI` row (taken from the `AID`/`LID` entry ending `[doi]`), pre-filled from a default tag mapping. The list-delimiter input only shows for CSV, since RIS and NBIB repeat a tag per value. Each row also shows an Example: the first non-empty value of that column or tag, truncated, with the full value on hover.)
+3. Once a file and Type with a mapping renderer are set, a field-mapping table appears inline in the import view itself, directly below the Source/Type dropdowns — no separate screen or confirm step. It's pre-filled with suggested field mappings and stays editable; **Import** always reads whatever the table currently shows at the moment it's clicked. (Today CSV, RIS, NBIB and BibTeX share the same mapping table: CSV rows are the file's columns, RIS rows are the tags found in the file (except `ER`), NBIB rows are the tags found in the file plus a derived `DOI` row (taken from the `AID`/`LID` entry ending `[doi]`), BibTeX rows are the fields found in the file plus `@type` (entry type) and `@key` (citation key), pre-filled from a default tag mapping. The list-delimiter input only shows for CSV and BibTeX, since RIS and NBIB repeat a tag per value; BibTeX authors are always split on `and`, so there the delimiter only applies to keywords. Each row also shows an Example: the first non-empty value of that column or tag, truncated, with the full value on hover.)
 4. **Import** parses for real and writes both `record_source` (raw fields) and `record` (one row per imported record, pre-dedup). Malformed rows are skipped, logged, and rolled into a result summary ("998 imported, 2 skipped"), consistent with the general malformed-record handling.
    - **CSV dates:** a full-date column and Year/Month/Day columns may both be mapped. Each of year, month and day comes from its Year/Month/Day column when the row has a value there; missing parts are filled from the full-date column. When the two disagree, Year/Month/Day wins.
 
@@ -219,6 +221,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 
 - [x] Generic RIS tokenizer/parser
 - [x] Generic NBIB/MEDLINE tokenizer/parser
+- [x] Generic BibTeX tokenizer/parser
 - [x] Generic CSV reader (column-mapping logic)
 - [x] Field-mapping UI, embedded inline in the import view (live table below Source/Type, no separate screen/confirm step)
 - [x] Field-mapping UI: visual indicators (different colors) per row for columns that are mapped directly (exact alias), mapped via fuzzy match or the ID fallback, or mapped multiple times to the same target
@@ -229,7 +232,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] NBIB: strip the print/electronic qualifier from `IS` values (e.g. `1234-5678 (Print)` -> `1234-5678`) before storing in `issn`
 - [x] PubMed profile (NBIB, CSV)
 - [x] PubMed quirks
-- [ ] Scopus profile (CSV, RIS)
+- [ ] Scopus profile (CSV, RIS, BibTeX)
 - [ ] Web of Science profile (RIS)
 - [ ] IEEE Xplore profile (CSV)
 - [ ] Embase profile (RIS/CSV)
@@ -293,12 +296,12 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 **Phase 6 — Adding more input**
 
 - [ ] Zotero profile (RIS/CSV)
-- [ ] Zotero profile: generic BibTeX parser + Zotero BibTeX mapping
+- [ ] Zotero profile: Zotero BibTeX mapping
 - [ ] Zotero profile: generic CSL JSON parser + Zotero CSL JSON mapping
 
 **Backlog / stretch**
 
-- [ ] Additional import formats/profiles as usage grows, roughly in order of commonality: BibTeX next, then EndNote XML, then further databases beyond the starting six
+- [ ] Additional import formats/profiles as usage grows, roughly in order of commonality: EndNote XML next, then further databases beyond the starting six
 - [ ] Tagging / notes on records
 - [ ] Export filtering (by tag, year range, source)
 - [ ] Additional enrichment sources beyond OpenAlex (Crossref, Semantic Scholar) as fallbacks or supplements
