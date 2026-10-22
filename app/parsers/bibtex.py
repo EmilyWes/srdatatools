@@ -5,14 +5,45 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.parsers.common import ParsedRow, ParseResult, SkippedRow, decode_file
-from app.parsers.mapping import FieldMapping, apply_mapping
+from app.models.record import Author
+from app.parsers.authors import author_from_name
+from app.parsers.common import (
+    FileSummary,
+    ParsedRow,
+    ParseResult,
+    SkippedRow,
+    SummaryBuilder,
+    decode_file,
+)
+from app.parsers.mapping import FieldMapping, apply_mapping, override_aliases
+from app.parsers.mapping import suggest_mapping as _suggest_mapping
 
 logger = logging.getLogger(__name__)
 
 # Pseudo-keys: "@" can't start a real field name, so these never collide with one.
 TYPE_KEY = "@type"
 CITATION_KEY = "@key"
+
+_SUGGESTION_ALIASES: dict[str, list[str]] = {
+    "title": ["title"],
+    "authors": ["author"],
+    "abstract": ["abstract"],
+    "journal": ["journal", "booktitle"],
+    "volume": ["volume"],
+    "issue": ["number"],
+    "pages": ["pages"],
+    "doi": ["doi"],
+    "issn": ["issn"],
+    "isbn": ["isbn"],
+    "year": ["year"],
+    "month": ["month"],
+    "keywords": ["keywords"],
+    "publisher": ["publisher"],
+    "url": ["url"],
+    "notes": ["note"],
+    "language": ["language"],
+    "publication_type": [TYPE_KEY],
+}
 
 _IGNORED_ENTRY_TYPES = frozenset({"comment", "string", "preamble"})
 _ENTRY_START = re.compile(
@@ -23,6 +54,11 @@ _CLOSERS = {"{": "}", "(": ")"}
 _PAGES_FIELD = "pages"
 _PAGE_DASHES = re.compile(r"\s*-+\s*")
 _LITERAL_DASH_FIELDS = frozenset({"url", "doi"})
+
+_AUTHOR_SEPARATOR = re.compile(r"\s+and\s+", re.IGNORECASE)
+_AUTHOR_FIELD = "author"
+# BibTeX names are "Family, Given" or "Given Family"; only the first is split.
+_NAME_SEPARATOR = ","
 
 _COMBINING_ACCENTS = {
     '"': "\u0308",
@@ -161,12 +197,41 @@ def _iter_entries(text: str) -> Iterator[_Entry | _MalformedEntry]:
             yield _parse_entry(match["type"], segment[:close], line_number)
 
 
+def _split_authors(value: str) -> list[str]:
+    """Only an "and" outside braces separates names: {Barnes and Noble} is one."""
+    names: list[str] = []
+    depth, position, start = 0, 0, 0
+    for match in _AUTHOR_SEPARATOR.finditer(value):
+        between = value[position : match.start()]
+        depth += between.count("{") - between.count("}")
+        position = match.start()
+        if depth == 0:
+            names.append(value[start : match.start()])
+            start = match.end()
+    names.append(value[start:])
+    return names
+
+
+def _authors_from_fields(raw_fields: dict[str, str], keys: list[str]) -> list[Author]:
+    return [
+        author_from_name(name, _NAME_SEPARATOR)
+        for key in keys
+        for raw_name in _split_authors(raw_fields.get(key, ""))
+        if (name := _clean_value(_AUTHOR_FIELD, raw_name))
+    ]
+
+
 def parse_bibtex_record(
     lines: list[tuple[str, str]], mapping: FieldMapping
 ) -> ParsedRow:
     raw_fields = dict(lines)
     cleaned = {key: _clean_value(key, value) for key, value in raw_fields.items()}
-    return ParsedRow(record=apply_mapping(cleaned, mapping), raw_fields=raw_fields)
+    record = apply_mapping(cleaned, mapping)
+    author_keys = [k for k, t in mapping.targets.items() if t == "authors"]
+    if author_keys:
+        authors = _authors_from_fields(raw_fields, author_keys)
+        record = record.model_copy(update={"authors": authors})
+    return ParsedRow(record=record, raw_fields=raw_fields)
 
 
 def parse_bibtex_text(text: str, mapping: FieldMapping) -> ParseResult:
@@ -185,3 +250,20 @@ def parse_bibtex_text(text: str, mapping: FieldMapping) -> ParseResult:
 
 def parse_bibtex_file(path: Path, mapping: FieldMapping) -> ParseResult:
     return parse_bibtex_text(decode_file(path), mapping)
+
+
+def read_bibtex_fields(path: Path) -> FileSummary:
+    summary = SummaryBuilder()
+    for entry in _iter_entries(decode_file(path)):
+        if isinstance(entry, _Entry):
+            for key, value in entry.fields:
+                summary.add(key, value)
+            summary.end_record()
+    return summary.build()
+
+
+def suggest_bibtex_mapping(
+    keys: list[str], alias_overrides: dict[str, list[str]] | None = None
+) -> FieldMapping:
+    aliases = override_aliases(_SUGGESTION_ALIASES, alias_overrides or {})
+    return _suggest_mapping(keys, aliases, lenient=False)

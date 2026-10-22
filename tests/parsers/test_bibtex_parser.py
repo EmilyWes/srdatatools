@@ -1,7 +1,14 @@
 from pathlib import Path
 
-from app.parsers.bibtex import parse_bibtex_file, parse_bibtex_text
+from app.parsers.bibtex import (
+    parse_bibtex_file,
+    parse_bibtex_record,
+    parse_bibtex_text,
+    read_bibtex_fields,
+    suggest_bibtex_mapping,
+)
 from app.parsers.mapping import FieldMapping
+from tests.vendor_data import vendor_file
 
 BIBTEX_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "general"
 
@@ -17,6 +24,7 @@ _MAPPING = FieldMapping(
         "year": "year",
         "month": "month",
         "note": "notes",
+        "author": "authors",
     },
 )
 
@@ -300,3 +308,147 @@ def test_parse_bibtex_file__reads_realistic_export() -> None:
     assert second.publication_type == "inproceedings"
     assert second.title == "R&D in Café Networks"
     assert second.pages == "7-9"
+
+
+def test_parse_bibtex_text__splits_authors_on_and() -> None:
+    text = "@article{key1, author = {Smith, John and Doe, Jane AND Roe, Rick}}"
+
+    authors = parse_bibtex_text(text, _MAPPING).rows[0].record.authors
+
+    assert [a.full_name for a in authors] == ["Smith, John", "Doe, Jane", "Roe, Rick"]
+
+
+def test_parse_bibtex_text__and_inside_braces_stays_one_author() -> None:
+    text = "@article{key1, author = {{Barnes and Noble} and Doe, Jane}}"
+
+    authors = parse_bibtex_text(text, _MAPPING).rows[0].record.authors
+
+    assert [a.full_name for a in authors] == ["Barnes and Noble", "Doe, Jane"]
+
+
+def test_parse_bibtex_text__family_given_author_is_split() -> None:
+    text = '@article{key1, author = {M{\\"u}ller, Hans R.}}'
+
+    author = parse_bibtex_text(text, _MAPPING).rows[0].record.authors[0]
+
+    assert author.full_name == "Müller, Hans R."
+    assert author.family_name == "Müller"
+    assert author.given_name == "Hans R."
+
+
+def test_parse_bibtex_text__given_family_author_keeps_full_name_only() -> None:
+    text = "@article{key1, author = {Jane Doe}}"
+
+    author = parse_bibtex_text(text, _MAPPING).rows[0].record.authors[0]
+
+    assert author.full_name == "Jane Doe"
+    assert author.family_name is None
+    assert author.given_name is None
+
+
+def test_parse_bibtex_text__authors_ignore_list_delimiter() -> None:
+    text = "@article{key1, author = {Smith; Jr., John and Doe, Jane}}"
+
+    authors = parse_bibtex_text(text, _MAPPING).rows[0].record.authors
+
+    assert [a.full_name for a in authors] == ["Smith; Jr., John", "Doe, Jane"]
+
+
+def test_parse_bibtex_record__unmapped_author_field_adds_no_authors() -> None:
+    mapping = FieldMapping(targets={"title": "title"})
+
+    row = parse_bibtex_record([("title", "T"), ("author", "Doe, Jane")], mapping)
+
+    assert row.record.authors == []
+
+
+def test_read_bibtex_fields__collects_samples_and_fill_counts(tmp_path: Path) -> None:
+    path = tmp_path / "export.bib"
+    path.write_text(
+        "@article{key1, title = {First {DNA}}, volume = {}}\n"
+        "@article{key2, title = {Second}, volume = {3}, year = 2024}\n"
+        "@article{key3, title = {Broken}\n",
+        encoding="utf-8",
+    )
+
+    summary = read_bibtex_fields(path)
+
+    assert summary.samples == {
+        "@type": "article",
+        "@key": "key1",
+        "title": "First {DNA}",
+        "volume": "3",
+        "year": "2024",
+    }
+    assert summary.filled == {"@type": 2, "@key": 2, "title": 2, "volume": 1, "year": 1}
+    assert summary.total_rows == 2
+
+
+def test_suggest_bibtex_mapping__maps_common_fields() -> None:
+    keys = ["@type", "@key", "author", "title", "journal", "year", "month", "number"]
+
+    mapping = suggest_bibtex_mapping(keys)
+
+    assert mapping.targets == {
+        "@type": "publication_type",
+        "author": "authors",
+        "title": "title",
+        "journal": "journal",
+        "year": "year",
+        "month": "month",
+        "number": "issue",
+    }
+    assert mapping.list_delimiter == ";"
+
+
+def test_suggest_bibtex_mapping__booktitle_maps_to_journal() -> None:
+    mapping = suggest_bibtex_mapping(["booktitle"])
+
+    assert mapping.targets == {"booktitle": "journal"}
+
+
+def test_suggest_bibtex_mapping__applies_alias_overrides() -> None:
+    mapping = suggest_bibtex_mapping(
+        ["type", "@type"], alias_overrides={"publication_type": ["type"]}
+    )
+
+    assert mapping.targets == {"type": "publication_type"}
+
+
+def test_parse_bibtex_file__default_mapping_on_realistic_export() -> None:
+    path = BIBTEX_FIXTURES_DIR / "bibtex_style.bib"
+    mapping = suggest_bibtex_mapping(list(read_bibtex_fields(path).samples))
+
+    first, second = (row.record for row in parse_bibtex_file(path, mapping).rows)
+
+    assert [a.full_name for a in first.authors] == [
+        "Smith, John A.",
+        "Müller, Hans",
+        "Barnes and Noble",
+    ]
+    assert first.issue == "3"
+    assert first.doi == "10.1016/j.jbi.2024.101"
+    assert first.publication_date is not None
+    assert (first.publication_date.year, first.publication_date.month) == (2024, 3)
+    assert second.journal == "Proceedings of the 5th Conference"
+    assert [a.full_name for a in second.authors] == ["Jane Doe"]
+
+
+def test_parse_bibtex_file__reads_scopus_export() -> None:
+    path = vendor_file("scopus", "small", ".bib")
+    mapping = suggest_bibtex_mapping(list(read_bibtex_fields(path).samples))
+
+    result = parse_bibtex_file(path, mapping)
+
+    assert result.skipped == []
+    assert len(result.rows) == 10
+    olsen = next(r.record for r in result.rows if r.raw_fields["@key"] == "Olsen202619")
+    assert olsen.publication_type == "article"
+    assert [a.family_name for a in olsen.authors] == ["Olsen", "McDonald", "Kinney"]
+    assert olsen.journal == "GSA Field Guides"
+    assert olsen.volume == "77"
+    assert olsen.pages == "19-65"
+    assert olsen.doi == "10.1130/2026.0077(02)"
+    assert olsen.issn == "23330937"
+    assert olsen.language == "English"
+    assert olsen.notes == "Cited by: 0"
