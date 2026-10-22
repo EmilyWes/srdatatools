@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from nicegui.elements.icon import Icon
+from nicegui.elements.tooltip import Tooltip
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -618,3 +620,63 @@ def test_render_mapping__nbib_result_combines_fau_auid_and_ad(tmp_path: Path) ->
     assert screen is not None
     expected = "Smith, John (ORCID 0000-0001-2345-6789; University X)"
     assert [_result(screen, tag) for tag in ("FAU", "AUID", "AD")] == [expected] * 3
+
+
+def test_render_import_view__unknown_type_shows_select_type_tooltip() -> None:
+    panes = shell()
+
+    view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
+
+    assert view.import_button is not None
+    tooltips = [
+        t.text
+        for t in panes.middle.descendants()
+        if isinstance(t, Tooltip)
+        and t.props["target"] == f"#{view.import_button.html_id}"
+    ]
+    assert tooltips == ["please select the type"]
+
+
+_NO_PROFILE_NOTICE = (
+    "No profile for this source/type combination — using the default parser."
+)
+
+
+def _visible_notices(middle: Any) -> list[str]:
+    icons = [
+        icon
+        for icon in middle.descendants()
+        if isinstance(icon, Icon) and "invisible" not in icon.classes
+    ]
+    return [
+        tooltip.text
+        for tooltip in middle.descendants()
+        if isinstance(tooltip, Tooltip)
+        and any(tooltip.props["target"] == f"#{icon.html_id}" for icon in icons)
+    ]
+
+
+def test_render_import_view__mismatched_source_and_type_shows_notice() -> None:
+    panes = shell()
+    view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
+
+    view._set_source("pubmed")
+    view._set_type("ris")
+
+    assert _visible_notices(panes.middle) == [_NO_PROFILE_NOTICE]
+
+
+@pytest.mark.parametrize(
+    ("source", "file_type"),
+    [("pubmed", "nbib"), ("unknown", "ris"), ("pubmed", "unknown")],
+)
+def test_render_import_view__no_notice_unless_both_set_without_profile(
+    source: str, file_type: str
+) -> None:
+    panes = shell()
+    view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
+
+    view._set_source(source)
+    view._set_type(file_type)
+
+    assert _visible_notices(panes.middle) == []

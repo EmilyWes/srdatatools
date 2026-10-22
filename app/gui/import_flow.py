@@ -216,6 +216,8 @@ class ImportView:
                     ui.button("Select file", on_click=self._select_file).props("dense")
 
                 with ui.row().classes("items-center gap-2"):
+                    # Mirrors the warning icon's slot so the dropdowns stay centred.
+                    ui.icon("warning", size="sm").classes("invisible")
                     source_select = (
                         ui.select(_SOURCE_OPTIONS, value=self.source, label="Source")
                         .props("dense outlined")
@@ -229,6 +231,19 @@ class ImportView:
                         .classes("w-48")
                     )
                     type_select.on_value_change(lambda e: self._set_type(e.value))
+
+                    notice = ui.icon("warning", size="sm").classes("text-orange-7")
+                    if (
+                        self.source != _SOURCE_UNKNOWN
+                        and type_known
+                        and profile_for(self.source, self.file_type) is None
+                    ):
+                        notice.tooltip(
+                            "No profile for this source/type combination"
+                            " — using the default parser."
+                        )
+                    else:
+                        notice.classes("invisible")
 
                 mapping_container = ui.column().classes("items-center w-full")
                 if self.path is not None:
