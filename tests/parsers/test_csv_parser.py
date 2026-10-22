@@ -85,6 +85,29 @@ def test_parse_csv_text__skips_fully_blank_row() -> None:
     assert result.skipped[0].reason == "row is blank"
 
 
+def test_parse_csv_text__reads_cell_over_default_csv_limit() -> None:
+    abstract = "x" * 200_000
+    text = f"Title,Abstract\nSome Paper,{abstract}\n"
+    mapping = FieldMapping(targets={"Title": "title", "Abstract": "abstract"})
+
+    result = parse_csv_text(text, mapping)
+
+    assert result.skipped == []
+    assert result.rows[0].record.abstract == abstract
+
+
+def test_parse_csv_text__skips_row_with_cell_over_limit() -> None:
+    text = f"Title,Abstract\nA,{'x' * 1_000_001}\nB,short\n"
+    mapping = FieldMapping(targets={"Title": "title"})
+
+    result = parse_csv_text(text, mapping)
+
+    assert [row.record.title for row in result.rows] == ["B"]
+    assert len(result.skipped) == 1
+    assert result.skipped[0].row_number == 2
+    assert "field limit" in result.skipped[0].reason
+
+
 def test_parse_csv_text__imports_row_with_only_unmapped_data() -> None:
     text = "Title,Extra\n,has data\n"
     mapping = FieldMapping(targets={"Title": "title"})
@@ -352,6 +375,16 @@ def test_read_csv_headers__short_row_leaves_missing_cells_for_later_rows(
     csv_path.write_text("Title,DOI\nA\nB,10.1/xyz\n")
 
     assert read_csv_headers(csv_path).samples == {"Title": "A", "DOI": "10.1/xyz"}
+
+
+def test_read_csv_headers__skips_row_with_cell_over_limit(tmp_path: Path) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text(f"Title,Abstract\nA,{'x' * 1_000_001}\nB,short\n")
+
+    summary = read_csv_headers(csv_path)
+
+    assert summary.samples == {"Title": "B", "Abstract": "short"}
+    assert summary.total_rows == 1
 
 
 def test_read_csv_headers__empty_file_returns_empty_dict(tmp_path: Path) -> None:

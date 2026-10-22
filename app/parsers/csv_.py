@@ -45,6 +45,9 @@ _SUGGESTION_ALIASES: dict[str, list[str]] = {
 }
 
 _EXTRA_FIELDS_KEY = "__extra__"
+# Scopus References cells exceed the csv module's default 131072-character limit.
+_MAX_FIELD_SIZE = 1_000_000
+csv.field_size_limit(_MAX_FIELD_SIZE)
 
 
 def _sniff_dialect(sample: str) -> type[csv.Dialect] | str:
@@ -67,7 +70,17 @@ def parse_csv_text(text: str, mapping: FieldMapping) -> ParseResult:
 
     rows: list[ParsedRow] = []
     skipped: list[SkippedRow] = []
-    for row_number, raw_row in enumerate(reader, start=2):
+    row_number = 1
+    while True:
+        row_number += 1
+        try:
+            raw_row = next(reader)
+        except StopIteration:
+            break
+        except csv.Error as exc:
+            skipped.append(SkippedRow(row_number, str(exc)))
+            logger.warning("Skipping row %d: %s", row_number, exc)
+            continue
         if _EXTRA_FIELDS_KEY in raw_row:
             reason = f"row has more fields than the {len(fieldnames)}-column header"
             skipped.append(SkippedRow(row_number, reason))
@@ -100,7 +113,14 @@ def read_csv_headers(path: Path) -> FileSummary:
     reader = csv.reader(StringIO(text), dialect=dialect)
     headers = next(reader, [])
     summary = SummaryBuilder(headers)
-    for row in reader:
+    while True:
+        try:
+            row = next(reader)
+        except StopIteration:
+            break
+        except csv.Error as exc:
+            logger.warning("Skipping row at line %d: %s", reader.line_num, exc)
+            continue
         if not row:
             continue
         for header, value in zip(headers, row, strict=False):
