@@ -240,7 +240,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Import flow: single-file picker (native file dialog) through to storing records
 - [ ] Import flow: multi-file picker (one source/type per import action), warning when selected files' content looks like it spans more than one source
 - [x] Auto-detection of type/source from file extension + content sniffing, prefilling the Source/Type dropdowns
-- [ ] Source/Type dropdowns: implemented profiles/formats + "Unknown"; Type required (Import disabled with a tooltip while Unknown); mismatched Source/Type combination falls back to the default parser with an inline notice
+- [x] Source/Type dropdowns: implemented profiles/formats + "Unknown"; Type required (Import disabled with a tooltip while Unknown); mismatched Source/Type combination falls back to the default parser with an inline notice
 - [ ] Import action: writes `record_source` + `record`, per-file "N imported, M skipped" summary
 - [ ] Import result summary also reports how many records had a date conflict (Year/Month/Day disagreeing with the full-date column, resolved in favour of Year/Month/Day), e.g. "998 imported, 2 skipped, 14 date conflicts"; not yet implemented
 - [ ] Activity log: write a plain-language `activity_log` row for each import (e.g. "Imported 998 records from scopus.csv, 2 skipped")
