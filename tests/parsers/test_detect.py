@@ -118,6 +118,25 @@ def test_detect_source__pubmed_csv(tmp_path: Path) -> None:
     assert detect_source(path, "csv") == "pubmed"
 
 
+def test_detect_source__scopus_csv(tmp_path: Path) -> None:
+    path = _write(tmp_path, "scopus.csv", '"Authors","Title","EID"\n"A","T","E"\n')
+
+    assert detect_source(path, "csv") == "scopus"
+
+
+def test_detect_source__scopus_ris(tmp_path: Path) -> None:
+    path = _write(tmp_path, "scopus.ris", "TY  - JOUR\nDB  - Scopus\nER  - \n")
+
+    assert detect_source(path, "ris") == "scopus"
+
+
+def test_detect_source__scopus_bibtex(tmp_path: Path) -> None:
+    text = "Scopus\n\n@ARTICLE{k,\n\ttitle = {T},\n\tsource = {Scopus}\n}\n"
+    path = _write(tmp_path, "scopus.bib", text)
+
+    assert detect_source(path, "bibtex") == "scopus"
+
+
 def test_detect_source__no_matching_profile_returns_none() -> None:
     assert detect_source(_DATA_DIR / "scopus_style.ris", "ris") is None
 

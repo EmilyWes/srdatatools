@@ -592,6 +592,34 @@ def test_render_mapping__pubmed_csv_uses_comma_delimiter(tmp_path: Path) -> None
     assert screen.current_mapping().list_delimiter == ","
 
 
+def test_render_mapping__scopus_csv_leaves_ignored_columns_unmapped(
+    tmp_path: Path,
+) -> None:
+    csv_path = tmp_path / "scopus.csv"
+    csv_path.write_text("Conference name,Conference date,EID\nC,D,2-s2.0-1\n")
+    panes = shell()
+
+    screen = render_mapping(panes.middle, "csv", csv_path, "scopus")
+
+    assert screen is not None
+    targets = screen.current_mapping().targets
+    assert targets["Conference name"] == "conference_name"
+    assert "Conference date" not in targets
+
+
+def test_render_mapping__scopus_ris_uses_profile_aliases(tmp_path: Path) -> None:
+    ris_path = tmp_path / "scopus.ris"
+    ris_path.write_text("TY  - JOUR\nM3  - Article\nDB  - Scopus\nER  - \n")
+    panes = shell()
+
+    screen = render_mapping(panes.middle, "ris", ris_path, "scopus")
+
+    assert screen is not None
+    targets = screen.current_mapping().targets
+    assert targets["M3"] == "publication_type"
+    assert "TY" not in targets
+
+
 def test_import_file__pubmed_applies_profile_and_stores_source(
     session: Session, tmp_path: Path
 ) -> None:

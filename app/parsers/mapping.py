@@ -94,10 +94,13 @@ class FieldMapping:
 
 
 def _classify_issn_isbn(value: str) -> dict[str, str]:
-    """RIS keeps both in SN; tell them apart by length. First of each kind wins."""
+    """RIS keeps both in SN; tell them apart by length. First of each kind wins.
+
+    Qualifiers like Scopus's "(ISSN)" / "(ISBN)" are skipped.
+    """
     found: dict[str, str] = {}
     for piece in _ISSN_ISBN_SEPARATORS.split(value):
-        if not piece:
+        if not piece or (piece.startswith("(") and piece.endswith(")")):
             continue
         length = len(piece.replace("-", ""))
         if length in _ISBN_LENGTHS:

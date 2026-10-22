@@ -14,6 +14,7 @@ class FormatProfile:
     fix_record: FixRecord
     matches: MatchesText
     list_delimiter: str | None = None
+    ignored_keys: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

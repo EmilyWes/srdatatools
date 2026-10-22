@@ -85,6 +85,29 @@ def test_parse_csv_text__skips_fully_blank_row() -> None:
     assert result.skipped[0].reason == "row is blank"
 
 
+def test_parse_csv_text__reads_cell_over_default_csv_limit() -> None:
+    abstract = "x" * 200_000
+    text = f"Title,Abstract\nSome Paper,{abstract}\n"
+    mapping = FieldMapping(targets={"Title": "title", "Abstract": "abstract"})
+
+    result = parse_csv_text(text, mapping)
+
+    assert result.skipped == []
+    assert result.rows[0].record.abstract == abstract
+
+
+def test_parse_csv_text__skips_row_with_cell_over_limit() -> None:
+    text = f"Title,Abstract\nA,{'x' * 1_000_001}\nB,short\n"
+    mapping = FieldMapping(targets={"Title": "title"})
+
+    result = parse_csv_text(text, mapping)
+
+    assert [row.record.title for row in result.rows] == ["B"]
+    assert len(result.skipped) == 1
+    assert result.skipped[0].row_number == 2
+    assert "field limit" in result.skipped[0].reason
+
+
 def test_parse_csv_text__imports_row_with_only_unmapped_data() -> None:
     text = "Title,Extra\n,has data\n"
     mapping = FieldMapping(targets={"Title": "title"})
@@ -104,6 +127,19 @@ def test_parse_csv_text__sniffs_semicolon_delimiter() -> None:
 
     assert result.rows[0].record.title == "Some Paper"
     assert result.rows[0].record.doi == "10.1/x"
+
+
+def test_parse_csv_text__doubled_quote_after_sniff_sample_is_an_escape() -> None:
+    plain_rows = "".join(
+        f'"Paper {n}","Plain abstract, no quotes"\n' for n in range(80)
+    )
+    text = f'"Title","Abstract"\n{plain_rows}"Late","The ""deep-water"" model, again"\n'
+    mapping = FieldMapping(targets={"Title": "title", "Abstract": "abstract"})
+
+    result = parse_csv_text(text, mapping)
+
+    assert result.skipped == []
+    assert result.rows[-1].record.abstract == 'The "deep-water" model, again'
 
 
 def test_parse_csv_text__splits_authors_on_delimiter() -> None:
@@ -354,6 +390,16 @@ def test_read_csv_headers__short_row_leaves_missing_cells_for_later_rows(
     assert read_csv_headers(csv_path).samples == {"Title": "A", "DOI": "10.1/xyz"}
 
 
+def test_read_csv_headers__skips_row_with_cell_over_limit(tmp_path: Path) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text(f"Title,Abstract\nA,{'x' * 1_000_001}\nB,short\n")
+
+    summary = read_csv_headers(csv_path)
+
+    assert summary.samples == {"Title": "B", "Abstract": "short"}
+    assert summary.total_rows == 1
+
+
 def test_read_csv_headers__empty_file_returns_empty_dict(tmp_path: Path) -> None:
     csv_path = tmp_path / "empty.csv"
     csv_path.write_text("")
@@ -415,6 +461,15 @@ def test_suggest_mapping__non_id_words_containing_id_stay_unmapped(
     suggestions = suggest_mapping([header])
 
     assert suggestions.targets == {}
+
+
+def test_suggest_mapping__ignored_keys_stay_unmapped() -> None:
+    mapping = suggest_mapping(
+        ["Conference name", "Conference date"],
+        ignored_keys=frozenset({"conference date"}),
+    )
+
+    assert mapping.targets == {"Conference name": "conference_name"}
 
 
 def test_suggest_mapping__leaves_unrecognized_header_out() -> None:

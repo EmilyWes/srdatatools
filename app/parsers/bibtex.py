@@ -101,7 +101,7 @@ def _decode_accent(match: re.Match[str]) -> str:
     return unicodedata.normalize("NFC", (match["braced"] or match["bare"]) + accent)
 
 
-def _clean_value(field: str, value: str) -> str:
+def clean_value(field: str, value: str) -> str:
     if field == _PAGES_FIELD:
         value = _PAGE_DASHES.sub("-", value)
     value = _DOTLESS_I.sub("i", value)
@@ -217,7 +217,7 @@ def _authors_from_fields(raw_fields: dict[str, str], keys: list[str]) -> list[Au
         author_from_name(name, _NAME_SEPARATOR)
         for key in keys
         for raw_name in _split_authors(raw_fields.get(key, ""))
-        if (name := _clean_value(_AUTHOR_FIELD, raw_name))
+        if (name := clean_value(_AUTHOR_FIELD, raw_name))
     ]
 
 
@@ -225,7 +225,7 @@ def parse_bibtex_record(
     lines: list[tuple[str, str]], mapping: FieldMapping
 ) -> ParsedRow:
     raw_fields = dict(lines)
-    cleaned = {key: _clean_value(key, value) for key, value in raw_fields.items()}
+    cleaned = {key: clean_value(key, value) for key, value in raw_fields.items()}
     record = apply_mapping(cleaned, mapping)
     author_keys = [k for k, t in mapping.targets.items() if t == "authors"]
     if author_keys:

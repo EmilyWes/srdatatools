@@ -80,10 +80,15 @@ def render_mapping(
     parse_record: Callable[[list[tuple[str, str]], FieldMapping], ParsedRow]
     if file_type == _TYPE_CSV:
         read_keys, noun = read_csv_headers, "columns"
-        suggest = partial(suggest_mapping, alias_overrides=overrides)
+        suggest = partial(
+            suggest_mapping,
+            alias_overrides=overrides,
+            ignored_keys=profile.ignored_keys if profile is not None else frozenset(),
+        )
         parse_record = _parse_csv_lines
     elif file_type == _TYPE_RIS:
-        read_keys, suggest, noun = read_ris_tags, suggest_ris_mapping, "tags"
+        read_keys, noun = read_ris_tags, "tags"
+        suggest = partial(suggest_ris_mapping, alias_overrides=overrides)
         parse_record = parse_ris_record
     elif file_type == _TYPE_NBIB:
         read_keys, noun = read_nbib_tags, "tags"

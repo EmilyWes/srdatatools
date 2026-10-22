@@ -142,6 +142,27 @@ def test_apply_mapping__issn_isbn_unrecognised_value_goes_to_issn_and_warns(
     assert "12345" in caplog.text
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("23330937 (ISSN)", ("23330937", None)),
+        ("979-840072171-7 (ISBN)", (None, "979-840072171-7")),
+    ],
+)
+def test_apply_mapping__issn_isbn_ignores_parenthesised_qualifier(
+    value: str,
+    expected: tuple[str | None, str | None],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    mapping = FieldMapping(targets={"SN": "issn_isbn"})
+
+    with caplog.at_level("WARNING"):
+        record = apply_mapping({"SN": value}, mapping)
+
+    assert (record.issn, record.isbn) == expected
+    assert caplog.text == ""
+
+
 def test_apply_mapping__issn_isbn_empty_value_sets_nothing() -> None:
     record = apply_mapping({"SN": "  "}, FieldMapping(targets={"SN": "issn_isbn"}))
 
