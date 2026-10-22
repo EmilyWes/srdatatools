@@ -11,7 +11,7 @@ from app.parsers.csv_ import (
 )
 from app.parsers.mapping import FieldMapping
 
-CSV_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "csv"
+CSV_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "general"
 
 
 def test_parse_csv_text__maps_scalar_fields() -> None:

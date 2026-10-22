@@ -1,5 +1,5 @@
 {
   "permissions": {
-    "deny": ["Read(./tests/data/vendors/big/**)"]
+    "deny": ["Read(./tests/data/*/*_big_*)"]
   }
 }

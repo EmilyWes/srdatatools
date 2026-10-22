@@ -2,7 +2,7 @@ from pathlib import Path
 
 from app.parsers.detect import detect_source, detect_type
 
-_DATA_DIR = Path(__file__).parent.parent / "data"
+_DATA_DIR = Path(__file__).parent.parent / "data" / "general"
 
 
 def _write(tmp_path: Path, name: str, text: str) -> Path:
@@ -12,15 +12,15 @@ def _write(tmp_path: Path, name: str, text: str) -> Path:
 
 
 def test_detect_type__ris_content() -> None:
-    assert detect_type(_DATA_DIR / "ris" / "scopus_style.ris") == "ris"
+    assert detect_type(_DATA_DIR / "scopus_style.ris") == "ris"
 
 
 def test_detect_type__nbib_content() -> None:
-    assert detect_type(_DATA_DIR / "nbib" / "pubmed_style.nbib") == "nbib"
+    assert detect_type(_DATA_DIR / "pubmed_style.nbib") == "nbib"
 
 
 def test_detect_type__cp1252_csv_content() -> None:
-    assert detect_type(_DATA_DIR / "csv" / "cp1252_encoded.csv") == "csv"
+    assert detect_type(_DATA_DIR / "cp1252_encoded.csv") == "csv"
 
 
 def test_detect_type__nbib_in_txt_file(tmp_path: Path) -> None:
@@ -86,7 +86,7 @@ def test_detect_type__unrecognised_content_and_extension_returns_none(
 
 
 def test_detect_source__pubmed_nbib() -> None:
-    assert detect_source(_DATA_DIR / "nbib" / "pubmed_style.nbib", "nbib") == "pubmed"
+    assert detect_source(_DATA_DIR / "pubmed_style.nbib", "nbib") == "pubmed"
 
 
 def test_detect_source__pubmed_csv(tmp_path: Path) -> None:
@@ -96,7 +96,7 @@ def test_detect_source__pubmed_csv(tmp_path: Path) -> None:
 
 
 def test_detect_source__no_matching_profile_returns_none() -> None:
-    assert detect_source(_DATA_DIR / "ris" / "scopus_style.ris", "ris") is None
+    assert detect_source(_DATA_DIR / "scopus_style.ris", "ris") is None
 
 
 def test_detect_source__undecodable_file_returns_none(tmp_path: Path) -> None:

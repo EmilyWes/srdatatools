@@ -9,7 +9,7 @@ from app.parsers.ris import (
     suggest_ris_mapping,
 )
 
-RIS_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "ris"
+RIS_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "general"
 
 _MAPPING = FieldMapping(
     targets={

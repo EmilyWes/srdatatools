@@ -10,7 +10,7 @@ from app.parsers.nbib import (
     suggest_nbib_mapping,
 )
 
-NBIB_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "nbib"
+NBIB_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "general"
 
 _MAPPING = FieldMapping(
     targets={
