@@ -27,20 +27,20 @@ def _parse(path: Path, file_format: str) -> ParseResult:
     return apply_profile(parse_csv_file(path, mapping), profile)
 
 
-def _records_by_pmid(name: str, file_format: str) -> dict[str, Record]:
-    result = _parse(vendor_file("small", "pubmed", name), file_format)
+def _records_by_pmid(suffix: str, file_format: str) -> dict[str, Record]:
+    result = _parse(vendor_file("pubmed", "small", suffix), file_format)
     assert result.skipped == []
     return {row.record.pmid: row.record for row in result.rows if row.record.pmid}
 
 
 @pytest.fixture
 def nbib_records() -> dict[str, Record]:
-    return _records_by_pmid("small_261016.txt", "nbib")
+    return _records_by_pmid(".txt", "nbib")
 
 
 @pytest.fixture
 def csv_records() -> dict[str, Record]:
-    return _records_by_pmid("small_261016.csv", "csv")
+    return _records_by_pmid(".csv", "csv")
 
 
 def test_pubmed_small_nbib__parses_every_record(
@@ -136,7 +136,7 @@ def test_pubmed_small__nbib_and_csv_agree_on_ids(
 
 @pytest.mark.big
 def test_pubmed_big__every_file_parses_without_skips() -> None:
-    for path in vendor_files("big", "pubmed"):
+    for path in vendor_files("pubmed", "big"):
         result = _parse(path, _FORMAT_BY_SUFFIX[path.suffix.lower()])
         assert result.rows, path.name
         assert result.skipped == [], path.name
