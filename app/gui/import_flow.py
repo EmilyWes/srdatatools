@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
+from app.gui.activity_log import log_import
 from app.gui.mapping_table import MappingScreen, render_mapping_table
 from app.models.record import Record
 from app.parsers.bibtex import (
@@ -136,7 +137,7 @@ def _store(
     session: Session, path: Path, file_type: str, result: ParseResult, source: str
 ) -> SourceFile:
     result = apply_profile(result, profile_for(source, file_type))
-    return store_parsed_rows(
+    source_file = store_parsed_rows(
         session,
         filename=path.name,
         path=str(path),
@@ -145,6 +146,8 @@ def _store(
         parsed_rows=[(row.record, row.raw_fields) for row in result.rows],
         skipped_rows=[(row.row_number, row.reason) for row in result.skipped],
     )
+    log_import(session, source_file)
+    return source_file
 
 
 def import_csv(
