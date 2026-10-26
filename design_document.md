@@ -95,7 +95,6 @@ app/
   enrich/            # (planned) OpenAlex client, field-merging logic
   snowball/          # (planned) reference/citation graph traversal via OpenAlex
   export/            # (planned) writers back to RIS/CSV/NBIB
-  activity_log/      # (planned) records every action for the transparency/audit view
   gui/
     home.py          # the single page, wires the panes together
     layout.py        # three-pane shell
@@ -105,6 +104,7 @@ app/
     record_table.py  # Library record table + its column settings view
     action_panel.py  # right panel actions + activity log
     mapping_table.py # field-mapping table (CSV columns, RIS/NBIB tags, BibTeX fields)
+    activity_log.py  # writes plain-language activity_log rows
   main.py            # launches pywebview + NiceGUI server
 ```
 
@@ -250,9 +250,9 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] Import flow: multi-file picker (one source/type per import action), warning when selected files' content looks like it spans more than one source
 - [x] Auto-detection of type/source from file extension + content sniffing, prefilling the Source/Type dropdowns
 - [x] Source/Type dropdowns: implemented profiles/formats + "Unknown"; Type required (Import disabled with a tooltip while Unknown); mismatched Source/Type combination falls back to the default parser with an inline notice
-- [ ] Import action: writes `record_source` + `record`, per-file "N imported, M skipped" summary
+- [x] Import action: writes `record_source` + `record`, per-file "N imported, M skipped" summary
 - [ ] Import result summary also reports how many records had a date conflict (Year/Month/Day disagreeing with the full-date column, resolved in favour of Year/Month/Day), e.g. "998 imported, 2 skipped, 14 date conflicts"; not yet implemented
-- [ ] Activity log: write a plain-language `activity_log` row for each import (e.g. "Imported 998 records from scopus.csv, 2 skipped")
+- [x] Activity log: write a plain-language `activity_log` row for each import (e.g. "Imported 998 records from scopus.csv, 2 skipped")
 - [ ] Source-file detail view: records currently in library from this file, skipped-row count, remove-this-source's-records action
 - [ ] Delete/wipe the database: action that removes all imported records and source files
 - [x] Right panel: Dedup / Enrich / Snowball / Export buttons in order, each with a gear icon opening its settings in the middle panel, read-only activity log textbox beneath

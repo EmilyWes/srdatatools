@@ -8,17 +8,21 @@ from nicegui.element import Element
 from app.db.models import ActivityLog
 
 _ACTIONS = ["Deduplicate", "Enrich", "Snowball", "Export"]
+_STATUS_CLASSES = {"ok": "text-green-7", "warning": "text-orange-7"}
 
 
 @dataclass
 class ActionPanel:
     right: Element
-    log: ui.textarea
+    log: ui.column
 
     def show_log(self, entries: Sequence[ActivityLog]) -> None:
-        self.log.value = "\n".join(
-            f"{entry.timestamp:%Y-%m-%d %H:%M}  {entry.message}" for entry in entries
-        )
+        self.log.clear()
+        with self.log:
+            for entry in entries:
+                ui.label(f"{entry.timestamp:%Y-%m-%d %H:%M}:\n{entry.message}").classes(
+                    f"whitespace-pre-line {_STATUS_CLASSES[entry.status]}"
+                )
         # Deferred: a once-timer waits for the browser connection before running.
         with self.right:
             ui.timer(0, self._scroll_log_to_bottom, once=True)
@@ -26,7 +30,7 @@ class ActionPanel:
     def _scroll_log_to_bottom(self) -> None:
         ui.run_javascript(
             "requestAnimationFrame(() => {"
-            f" const t = getHtmlElement({self.log.id}).querySelector('textarea');"
+            f" const t = getHtmlElement({self.log.id});"
             " t.scrollTop = t.scrollHeight; })"
         )
 
@@ -62,10 +66,14 @@ def render_right_panel(
                         color=None,
                         on_click=lambda action=action: show_settings(action),
                     ).props("flat dense round size=sm")
-        log = (
-            ui.textarea("Activity log")
-            .props("readonly outlined input-style='height: 40vh'")
-            .classes("w-full px-2 text-xs")
-        )
+        with ui.column().classes("w-full px-2 gap-1"):
+            ui.label("Activity log").classes("text-xs text-grey-7")
+            log = (
+                ui.column()
+                .classes(
+                    "w-full gap-2 p-2 text-xs no-wrap overflow-auto border rounded"
+                )
+                .style("height: 40vh")
+            )
 
     return ActionPanel(right=right, log=log)

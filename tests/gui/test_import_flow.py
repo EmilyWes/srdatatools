@@ -9,7 +9,7 @@ from nicegui.elements.tooltip import Tooltip
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.db.models import Base, Record
+from app.db.models import ActivityLog, Base, Record
 from app.gui import import_flow
 from app.gui.import_flow import (
     ImportView,
@@ -160,6 +160,18 @@ def test_import_file__dispatches_csv_to_import_csv(
 
     assert source_file.format == "csv"
     assert source_file.row_count == 1
+
+
+def test_import_file__writes_activity_log_row(session: Session, tmp_path: Path) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\n,\nOther Paper,10.1/abc\n")
+    mapping = FieldMapping(targets={"Title": "title"})
+
+    import_file(session, csv_path, "csv", mapping)
+    session.commit()
+
+    entry = session.query(ActivityLog).one()
+    assert entry.message == "Imported from:\nexport.csv\nProcessed: 2\nSkipped: 1"
 
 
 def test_import_file__unsupported_type_raises(session: Session, tmp_path: Path) -> None:

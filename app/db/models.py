@@ -79,6 +79,7 @@ class ActivityLog(Base):
     timestamp: Mapped[datetime.datetime]
     action_type: Mapped[str]
     message: Mapped[str]
+    status: Mapped[str] = mapped_column(default="ok", server_default="ok")
     record_id: Mapped[int | None] = mapped_column(ForeignKey("record.id"), index=True)
 
 

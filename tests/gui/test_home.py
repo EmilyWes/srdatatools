@@ -54,7 +54,10 @@ def test_home__shows_activity_log_entries_in_right_panel(
 
     home()
 
-    assert panels[0].log.value == "2026-01-01 09:05  Imported 5 records"
+    labels = panels[0].log.default_slot.children
+    assert [label.text for label in labels] == [  # type: ignore[attr-defined]
+        "2026-01-01 09:05:\nImported 5 records"
+    ]
 
 
 def test_home__shows_library_overview_on_start(monkeypatch: pytest.MonkeyPatch) -> None:

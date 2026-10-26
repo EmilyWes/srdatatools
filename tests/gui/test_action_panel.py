@@ -4,7 +4,7 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import ActivityLog
-from app.gui.action_panel import render_right_panel
+from app.gui.action_panel import ActionPanel, render_right_panel
 from app.gui.layout import shell
 
 
@@ -22,8 +22,20 @@ def _click(element: ui.button) -> None:
     click_listener.handler(None)
 
 
-def _entry(timestamp: datetime.datetime, message: str) -> ActivityLog:
-    return ActivityLog(timestamp=timestamp, action_type="import", message=message)
+def _entry(
+    timestamp: datetime.datetime, message: str, status: str = "ok"
+) -> ActivityLog:
+    return ActivityLog(
+        timestamp=timestamp, action_type="import", message=message, status=status
+    )
+
+
+def _log_labels(actions: ActionPanel) -> list[ui.label]:
+    return [
+        child
+        for child in actions.log.default_slot.children
+        if isinstance(child, ui.label)
+    ]
 
 
 def test_render_right_panel__builds_without_raising() -> None:
@@ -73,16 +85,15 @@ def test_render_right_panel__gear_shows_settings_in_middle_and_calls_back() -> N
     assert labels[0].text == "Enrich settings"  # type: ignore[attr-defined]
 
 
-def test_render_right_panel__log_textbox_is_readonly_and_empty() -> None:
+def test_render_right_panel__log_is_empty() -> None:
     panes = shell()
 
     actions = render_right_panel(panes.right, panes.middle)
 
-    assert "readonly" in actions.log.props
-    assert actions.log.value == ""
+    assert _log_labels(actions) == []
 
 
-def test_action_panel__show_log_lists_entries_one_per_line() -> None:
+def test_action_panel__show_log_puts_timestamp_on_its_own_line() -> None:
     panes = shell()
     actions = render_right_panel(panes.right, panes.middle)
 
@@ -93,19 +104,36 @@ def test_action_panel__show_log_lists_entries_one_per_line() -> None:
         ]
     )
 
-    assert actions.log.value == (
-        "2026-01-01 09:05  Imported 5 records\n2026-01-02 14:30  Imported 10 records"
+    assert [label.text for label in _log_labels(actions)] == [
+        "2026-01-01 09:05:\nImported 5 records",
+        "2026-01-02 14:30:\nImported 10 records",
+    ]
+
+
+def test_action_panel__show_log_colours_entries_by_status() -> None:
+    panes = shell()
+    actions = render_right_panel(panes.right, panes.middle)
+
+    actions.show_log(
+        [
+            _entry(datetime.datetime(2026, 1, 1), "Imported 5 records", "ok"),
+            _entry(datetime.datetime(2026, 1, 2), "Imported 4 records", "warning"),
+        ]
     )
 
+    ok, warning = _log_labels(actions)
+    assert "text-green-7" in ok.classes
+    assert "text-orange-7" in warning.classes
 
-def test_action_panel__show_log_empty_entries_clears_textbox() -> None:
+
+def test_action_panel__show_log_empty_entries_clears_log() -> None:
     panes = shell()
     actions = render_right_panel(panes.right, panes.middle)
     actions.show_log([_entry(datetime.datetime(2026, 1, 1), "Imported 5 records")])
 
     actions.show_log([])
 
-    assert actions.log.value == ""
+    assert _log_labels(actions) == []
 
 
 def test_action_panel__show_log_schedules_scroll_to_bottom() -> None:
