@@ -1,3 +1,4 @@
+import codecs
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -71,6 +72,19 @@ def decode_file(path: Path) -> str:
     for encoding in _FILE_ENCODINGS:
         try:
             return raw_bytes.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise ValueError(f"could not decode {path} using any of {_FILE_ENCODINGS}")
+
+
+def decode_prefix(path: Path, size: int) -> str:
+    with path.open("rb") as file:
+        raw_bytes = file.read(size)
+    for encoding in _FILE_ENCODINGS:
+        # final=False: a character cut off at the end is dropped instead of raising.
+        decoder = codecs.getincrementaldecoder(encoding)()
+        try:
+            return decoder.decode(raw_bytes, final=False)
         except UnicodeDecodeError:
             continue
     raise ValueError(f"could not decode {path} using any of {_FILE_ENCODINGS}")
