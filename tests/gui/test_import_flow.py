@@ -1,5 +1,6 @@
 ﻿import asyncio
 import datetime
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -174,6 +175,27 @@ def test_import_file__writes_activity_log_row(session: Session, tmp_path: Path) 
     assert entry.message == "Imported from:\nexport.csv\nProcessed: 2\nSkipped: 1"
 
 
+def test_import_file__saves_mapping_suggestion_and_summary(
+    session: Session, tmp_path: Path
+) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\nOther Paper,\n")
+    mapping = FieldMapping(targets={"Title": "title"}, list_delimiter="|")
+
+    source_file = import_file(session, csv_path, "csv", mapping)
+
+    assert source_file.field_mapping == asdict(mapping)
+    assert source_file.suggested_mapping["targets"] == {
+        "Title": "title",
+        "DOI": "doi",
+    }
+    assert source_file.file_summary == {
+        "samples": {"Title": "Some Paper", "DOI": "10.1/xyz"},
+        "filled": {"Title": 2, "DOI": 1},
+        "total_rows": 2,
+    }
+
+
 def test_import_file__unsupported_type_raises(session: Session, tmp_path: Path) -> None:
     xml_path = tmp_path / "export.xml"
     xml_path.write_text("<records/>\n")
@@ -214,6 +236,18 @@ def test_import_file__dispatches_ris_to_import_ris(
     source_file = import_file(session, ris_path, "ris", FieldMapping())
 
     assert source_file.format == "ris"
+
+
+def test_import_file__saves_ris_suggestion_with_newline_delimiter(
+    session: Session, tmp_path: Path
+) -> None:
+    ris_path = tmp_path / "export.ris"
+    ris_path.write_text(_RIS_TEXT)
+
+    source_file = import_file(session, ris_path, "ris", FieldMapping())
+
+    assert source_file.suggested_mapping["list_delimiter"] == "\n"
+    assert set(source_file.file_summary["samples"]) == {"TI", "AU", "TY"}
 
 
 def test_render_mapping__ris_lists_distinct_tags_without_delimiter_input(
