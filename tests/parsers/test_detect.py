@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import pytest
+
+from app.parsers import detect
 from app.parsers.detect import detect_source, detect_type
 
 _DATA_DIR = Path(__file__).parent.parent / "data" / "general"
@@ -77,6 +80,16 @@ def test_detect_type__content_beats_wrong_extension(tmp_path: Path) -> None:
     assert detect_type(path) == "ris"
 
 
+def test_detect_type__ignores_content_after_prefix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(detect, "_DETECT_PREFIX_SIZE", 20)
+    text = "free text header...\n@article{k, title = {T}}\n"
+    path = _write(tmp_path, "export.txt", text)
+
+    assert detect_type(path) is None
+
+
 def test_detect_type__falls_back_to_extension_for_unrecognised_content(
     tmp_path: Path,
 ) -> None:
@@ -135,6 +148,16 @@ def test_detect_source__scopus_bibtex(tmp_path: Path) -> None:
     path = _write(tmp_path, "scopus.bib", text)
 
     assert detect_source(path, "bibtex") == "scopus"
+
+
+def test_detect_source__ignores_content_after_prefix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(detect, "_DETECT_PREFIX_SIZE", 22)
+    text = "TY  - JOUR\nTI  - Title\nDB  - Scopus\nER  - \n"
+    path = _write(tmp_path, "scopus.ris", text)
+
+    assert detect_source(path, "ris") is None
 
 
 def test_detect_source__no_matching_profile_returns_none() -> None:
