@@ -3,6 +3,7 @@ import asyncio
 import pytest
 from nicegui import background_tasks, core
 from nicegui.element import Element
+from nicegui.events import ClickEventArguments
 
 
 def click_and_wait(button: Element, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -12,7 +13,9 @@ def click_and_wait(button: Element, monkeypatch: pytest.MonkeyPatch) -> None:
     async def click() -> None:
         monkeypatch.setattr(core, "loop", asyncio.get_running_loop())
         before = set(background_tasks.running_tasks)
-        click_listener.handler(None)  # type: ignore[misc]
+        click_listener.handler(  # type: ignore[misc]
+            ClickEventArguments(sender=button, client=button.client)
+        )
         await asyncio.gather(*(set(background_tasks.running_tasks) - before))
 
     asyncio.run(click())

@@ -121,11 +121,11 @@ def _column_def(key: str) -> dict[str, Any]:
 
 def render_record_table(
     middle: Element,
-    records: Sequence[Record],
+    rows: Sequence[dict[str, Any]],
     columns: Sequence[str],
     selection: RecordSelection,
 ) -> None:
-    selection.ids &= {record.id for record in records}
+    selection.ids &= {row["id"] for row in rows}
 
     def count_line(text: str, count: int) -> ui.label:
         ui.label(f"{text}:").classes("text-sm")
@@ -137,16 +137,16 @@ def render_record_table(
             with ui.grid(columns="max-content 5rem max-content").classes(
                 "items-center gap-x-2 gap-y-1"
             ):
-                count_line("Total number of rows", len(records))
+                count_line("Total number of rows", len(rows))
                 ui.element("div")
-                filter_count = count_line("Rows in filter", len(records))
+                filter_count = count_line("Rows in filter", len(rows))
                 clear_filters = ui.button("Clear all filters", color=None)
                 selection_count = count_line("Rows in selection", len(selection.ids))
                 clear_selection = ui.button("Clear selection", color=None)
             grid = ui.aggrid(
                 {
                     "columnDefs": [_column_def(key) for key in columns],
-                    "rowData": [row_for(record) for record in records],
+                    "rowData": list(rows),
                     "defaultColDef": {"sortable": True, "resizable": True},
                     ":getRowId": "(params) => String(params.data.id)",
                     "rowSelection": {

@@ -1,5 +1,6 @@
 import datetime
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -17,11 +18,13 @@ from app.gui.library_nav import LeftPanelNav
 from app.gui.library_overview import save_sections
 from app.parsers.common import FileSummary
 from app.parsers.mapping import FieldMapping
+from tests.gui.clicks import click_and_wait
 
 
 @pytest.fixture(autouse=True)
-def engine(monkeypatch: pytest.MonkeyPatch) -> Engine:
-    engine = create_engine("sqlite:///:memory:")
+def engine(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Engine:
+    # File-based: slow actions run in a worker thread, which can't see :memory:.
+    engine = create_engine(f"sqlite:///{tmp_path / 'test.db'}")
     Base.metadata.create_all(engine)
     monkeypatch.setattr(home_module, "_engine", engine)
     return engine
@@ -208,6 +211,23 @@ def _capture_removes(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
 
     monkeypatch.setattr(home_module, "render_source_file_view", capture)
     return on_removes
+
+
+def test_home__clicking_table_shows_records_in_grid(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_source_file_with_record(engine)
+    navs = _capture_navs(monkeypatch)
+
+    home()
+    click_and_wait(navs[-1].buttons["library:table"], monkeypatch)
+
+    grid = next(
+        element
+        for element in navs[-1].middle.descendants()
+        if isinstance(element, ui.aggrid)
+    )
+    assert [row["title"] for row in grid.options["rowData"]] == ["A title"]
 
 
 def test_home__selecting_source_file_shows_detail_view(

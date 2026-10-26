@@ -56,6 +56,10 @@ def _record(id_: int, **fields: Any) -> Record:
     return Record(id=id_, **({"authors": [], "keywords": [], "other_ids": {}} | fields))
 
 
+def _row(id_: int, **fields: Any) -> dict[str, Any]:
+    return row_for(_record(id_, **fields))
+
+
 def _grid(middle: Element) -> ui.aggrid:
     return next(
         element for element in middle.descendants() if isinstance(element, ui.aggrid)
@@ -156,7 +160,7 @@ def test_render_record_table__columns_follow_selection() -> None:
     panes = shell()
 
     render_record_table(
-        panes.middle, [_record(1, doi="10.1/x")], ["doi", "title"], RecordSelection()
+        panes.middle, [_row(1, doi="10.1/x")], ["doi", "title"], RecordSelection()
     )
 
     options = _grid(panes.middle).options
@@ -170,9 +174,7 @@ def test_render_record_table__restores_existing_selection() -> None:
     panes = shell()
     selection = RecordSelection(ids={1, 99})
 
-    render_record_table(
-        panes.middle, [_record(1), _record(2)], DEFAULT_COLUMNS, selection
-    )
+    render_record_table(panes.middle, [_row(1), _row(2)], DEFAULT_COLUMNS, selection)
 
     assert selection.ids == {1}
     assert _grid(panes.middle).options["initialState"]["rowSelection"] == ["1"]
@@ -246,7 +248,7 @@ def test_render_record_table__shows_row_filter_and_selection_counts() -> None:
 
     render_record_table(
         panes.middle,
-        [_record(1), _record(2), _record(3)],
+        [_row(1), _row(2), _row(3)],
         DEFAULT_COLUMNS,
         RecordSelection(ids={2}),
     )
@@ -269,7 +271,7 @@ def test_render_record_table__shows_row_filter_and_selection_counts() -> None:
 def test_render_record_table__header_checkbox_selects_filtered_rows() -> None:
     panes = shell()
 
-    render_record_table(panes.middle, [_record(1)], DEFAULT_COLUMNS, RecordSelection())
+    render_record_table(panes.middle, [_row(1)], DEFAULT_COLUMNS, RecordSelection())
 
     row_selection = _grid(panes.middle).options["rowSelection"]
     assert row_selection["headerCheckbox"] is True
@@ -279,7 +281,7 @@ def test_render_record_table__header_checkbox_selects_filtered_rows() -> None:
 def test_render_record_table__clear_buttons_not_all_caps() -> None:
     panes = shell()
 
-    render_record_table(panes.middle, [_record(1)], DEFAULT_COLUMNS, RecordSelection())
+    render_record_table(panes.middle, [_row(1)], DEFAULT_COLUMNS, RecordSelection())
 
     for text in ("Clear all filters", "Clear selection"):
         assert "no-caps" in _button(panes.middle, text).props
@@ -288,7 +290,7 @@ def test_render_record_table__clear_buttons_not_all_caps() -> None:
 def test_render_record_table__row_click_toggles_selection() -> None:
     panes = shell()
 
-    render_record_table(panes.middle, [_record(1)], DEFAULT_COLUMNS, RecordSelection())
+    render_record_table(panes.middle, [_row(1)], DEFAULT_COLUMNS, RecordSelection())
 
     row_selection = _grid(panes.middle).options["rowSelection"]
     assert row_selection["enableClickSelection"] is True
@@ -297,9 +299,9 @@ def test_render_record_table__row_click_toggles_selection() -> None:
 
 def test_render_record_table__counts_use_dot_thousands_separator() -> None:
     panes = shell()
-    records = [_record(id_) for id_ in range(1, 1235)]
+    rows = [_row(id_) for id_ in range(1, 1235)]
 
-    render_record_table(panes.middle, records, ["doi"], RecordSelection())
+    render_record_table(panes.middle, rows, ["doi"], RecordSelection())
 
     labels = [
         element.text

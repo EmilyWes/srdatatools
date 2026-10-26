@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from nicegui import ui
 
@@ -17,6 +18,7 @@ from app.db.session import get_engine, session_scope
 from app.db.store import remove_source_file
 from app.gui.action_panel import render_right_panel
 from app.gui.activity_log import clear_activity_log, log_removal
+from app.gui.busy import run_busy
 from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
 from app.gui.library_nav import LeftPanelNav, render_left_panel
@@ -33,6 +35,7 @@ from app.gui.record_table import (
     render_record_table,
     render_table_settings,
     reset_columns,
+    row_for,
     save_columns,
 )
 from app.gui.source_file_view import render_source_file_view
@@ -98,11 +101,14 @@ def home() -> None:
             on_back=show_overview,
         )
 
-    def show_table() -> None:
-        with session_scope(_engine) as session:
-            render_record_table(
-                panes.middle, list_records(session), load_columns(session), selection
-            )
+    async def show_table() -> None:
+        def load() -> tuple[list[dict[str, Any]], list[str]]:
+            with session_scope(_engine) as session:
+                rows = [row_for(record) for record in list_records(session)]
+                return rows, load_columns(session)
+
+        rows, columns = await run_busy("Loading library table…", load)
+        render_record_table(panes.middle, rows, columns, selection)
 
     def save_table_columns(columns: list[str]) -> None:
         with session_scope(_engine) as session:
