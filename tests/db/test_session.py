@@ -61,6 +61,24 @@ def test_run_migrations__source_file_has_source_column(tmp_path: Path) -> None:
     assert "source" in columns
 
 
+def test_run_migrations__activity_log_status_defaults_to_ok(tmp_path: Path) -> None:
+    db_path = tmp_path / "migration_test.db"
+
+    run_migrations(db_path)
+
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.execute(
+            "insert into activity_log (timestamp, action_type, message)"
+            " values ('2026-01-01 00:00:00', 'import', 'Imported 1 record')"
+        )
+        status = connection.execute("select status from activity_log").fetchone()[0]
+    finally:
+        connection.close()
+
+    assert status == "ok"
+
+
 def test_run_migrations__leaves_app_logging_configuration_alone(
     tmp_path: Path,
 ) -> None:

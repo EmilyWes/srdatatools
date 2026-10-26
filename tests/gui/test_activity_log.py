@@ -45,6 +45,18 @@ def test_log_import__zero_skipped_still_shown(session: Session) -> None:
     assert entry.message == "Imported 2 records from x.csv, 0 skipped"
 
 
+def test_log_import__status_warning_when_rows_skipped(session: Session) -> None:
+    entry = log_import(session, _source_file(row_count=3, skipped=1))
+
+    assert entry.status == "warning"
+
+
+def test_log_import__status_ok_when_nothing_skipped(session: Session) -> None:
+    entry = log_import(session, _source_file(row_count=3, skipped=0))
+
+    assert entry.status == "ok"
+
+
 def test_log_import__singular_record(session: Session) -> None:
     entry = log_import(session, _source_file(row_count=1, skipped=0))
 
