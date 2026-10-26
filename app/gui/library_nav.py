@@ -53,6 +53,7 @@ def render_left_panel(
     source_files: Sequence[SourceFile],
     on_import: Callable[[], Any] | None = None,
     on_overview: Callable[[], Any] | None = None,
+    on_overview_settings: Callable[[], Any] | None = None,
     on_table: Callable[[], Any] | None = None,
     on_table_settings: Callable[[], Any] | None = None,
     on_source_file: Callable[[int], Any] | None = None,
@@ -66,6 +67,10 @@ def render_left_panel(
     def handle_import() -> Any:
         nav.select(_IMPORT_KEY)
         return on_import() if on_import is not None else None
+
+    def handle_overview_settings() -> Any:
+        nav.highlight(_OVERVIEW_KEY)
+        return on_overview_settings() if on_overview_settings is not None else None
 
     def handle_table_settings() -> Any:
         nav.highlight(_TABLE_KEY)
@@ -88,9 +93,15 @@ def render_left_panel(
         ui.separator()
 
         ui.label("Library").classes(_HEADING_CLASSES)
-        overview_button = (
-            ui.button("Overview", color=None).classes("w-44 text-sm").props("dense")
-        )
+        with ui.row().classes("w-44 items-center gap-1 no-wrap"):
+            overview_button = (
+                ui.button("Overview", color=None)
+                .classes("flex-grow text-sm")
+                .props("dense")
+            )
+            ui.button(
+                icon="settings", color=None, on_click=handle_overview_settings
+            ).props("flat dense round size=sm")
         overview_button.on_click(lambda: nav.select(_OVERVIEW_KEY))
         nav.buttons[_OVERVIEW_KEY] = overview_button
         nav.labels[_OVERVIEW_KEY] = "Overview"

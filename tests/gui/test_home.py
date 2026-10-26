@@ -14,6 +14,7 @@ from app.gui.action_panel import ActionPanel
 from app.gui.home import home
 from app.gui.layout import ShellPanes
 from app.gui.library_nav import LeftPanelNav
+from app.gui.library_overview import save_sections
 from app.parsers.common import FileSummary
 from app.parsers.mapping import FieldMapping
 
@@ -120,6 +121,33 @@ def test_home__shows_library_overview_on_start(monkeypatch: pytest.MonkeyPatch) 
         if isinstance(element, ui.label)
     ]
     assert "Total records" in labels
+
+
+def test_home__overview_shows_only_stored_sections(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with Session(engine) as session:
+        save_sections(session, ["per_year"])
+        session.commit()
+    shells: list[ShellPanes] = []
+    shell = home_module.shell
+
+    def capture() -> ShellPanes:
+        panes = shell()
+        shells.append(panes)
+        return panes
+
+    monkeypatch.setattr(home_module, "shell", capture)
+
+    home()
+
+    labels = [
+        element.text
+        for element in shells[0].middle.descendants()
+        if isinstance(element, ui.label)
+    ]
+    assert "Records per year" in labels
+    assert "Total records" not in labels
 
 
 def test_home__builds_with_imported_source_file(engine: Engine) -> None:

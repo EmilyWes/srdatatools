@@ -20,7 +20,13 @@ from app.gui.activity_log import clear_activity_log, log_removal
 from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
 from app.gui.library_nav import LeftPanelNav, render_left_panel
-from app.gui.library_overview import render_library_overview
+from app.gui.library_overview import (
+    load_sections,
+    render_library_overview,
+    render_overview_settings,
+    reset_sections,
+    save_sections,
+)
 from app.gui.record_table import (
     RecordSelection,
     load_columns,
@@ -69,7 +75,28 @@ def home() -> None:
                 count_records_per_source(session),
                 count_records_per_file(session),
                 count_records_per_year(session),
+                load_sections(session),
             )
+
+    def save_overview_sections(sections: list[str]) -> None:
+        with session_scope(_engine) as session:
+            save_sections(session, sections)
+
+    def restore_overview_sections() -> None:
+        with session_scope(_engine) as session:
+            reset_sections(session)
+        show_overview_settings()
+
+    def show_overview_settings() -> None:
+        with session_scope(_engine) as session:
+            sections = load_sections(session)
+        render_overview_settings(
+            panes.middle,
+            sections,
+            on_change=save_overview_sections,
+            on_restore=restore_overview_sections,
+            on_back=show_overview,
+        )
 
     def show_table() -> None:
         with session_scope(_engine) as session:
@@ -124,6 +151,7 @@ def home() -> None:
                 list_source_files(session),
                 on_import=start_import,
                 on_overview=show_overview,
+                on_overview_settings=show_overview_settings,
                 on_table=show_table,
                 on_table_settings=show_table_settings,
                 on_source_file=show_source_file,
