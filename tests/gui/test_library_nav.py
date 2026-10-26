@@ -73,6 +73,19 @@ def test_render_left_panel__select_highlights_entry_and_updates_middle() -> None
     assert middle_children[0].text == "pubmed_export.nbib"  # type: ignore[attr-defined]
 
 
+def test_render_left_panel__selecting_source_file_calls_on_source_file() -> None:
+    panes = shell()
+    source_files = [_source_file(7, "pubmed_export.nbib")]
+    selected: list[int] = []
+    nav = render_left_panel(
+        panes.left, panes.middle, source_files, on_source_file=selected.append
+    )
+
+    nav.select("source_file:7")
+
+    assert selected == [7]
+
+
 def test_render_left_panel__switching_selection_removes_previous_highlight() -> None:
     panes = shell()
     source_files = [_source_file(1, "pubmed_export.nbib")]

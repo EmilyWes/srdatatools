@@ -101,6 +101,7 @@ app/
     library_nav.py   # left panel navigation
     import_flow.py   # import view in the middle panel
     library_overview.py # Library overview stats in the middle panel
+    source_file_view.py # source-file detail view in the middle panel
     record_table.py  # Library record table + its column settings view
     action_panel.py  # right panel actions + activity log
     mapping_table.py # field-mapping table (CSV columns, RIS/NBIB tags, BibTeX fields)
@@ -253,7 +254,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Import action: writes `record_source` + `record`, per-file "N imported, M skipped" summary
 - [ ] Import result summary also reports how many records had a date conflict (Year/Month/Day disagreeing with the full-date column, resolved in favour of Year/Month/Day), e.g. "998 imported, 2 skipped, 14 date conflicts"; not yet implemented
 - [x] Activity log: write a plain-language `activity_log` row for each import (e.g. "Imported 998 records from scopus.csv, 2 skipped")
-- [ ] Source-file detail view: records currently in library from this file, skipped-row count, remove-this-source's-records action
+- [x] Source-file detail view: records currently in library from this file, skipped-row count, remove-this-source's-records action
 - [ ] Delete/wipe the database: action that removes all imported records and source files
 - [x] Right panel: Dedup / Enrich / Snowball / Export buttons in order, each with a gear icon opening its settings in the middle panel, read-only activity log textbox beneath
 - [x] Middle panel Library view: Overview (total records, records per source, per file, per year) + record table with sorting, column filters, row selection and persisted column settings

@@ -8,10 +8,11 @@ from sqlalchemy.orm import Session
 
 import app.gui.home as home_module
 import app.main
-from app.db.models import ActivityLog, Base, SourceFile
+from app.db.models import ActivityLog, Base, Record, RecordSource, SourceFile
 from app.gui.action_panel import ActionPanel
 from app.gui.home import home
 from app.gui.layout import ShellPanes
+from app.gui.library_nav import LeftPanelNav
 
 
 @pytest.fixture(autouse=True)
@@ -95,3 +96,80 @@ def test_home__builds_with_imported_source_file(engine: Engine) -> None:
         session.commit()
 
     home()
+
+
+def _add_source_file_with_record(engine: Engine) -> int:
+    with Session(engine) as session:
+        source_file = SourceFile(
+            filename="scopus.ris",
+            path=None,
+            format="ris",
+            imported_at=datetime.datetime(2026, 1, 1),
+            row_count=1,
+        )
+        session.add(
+            Record(title="A title", sources=[RecordSource(source_file=source_file)])
+        )
+        session.commit()
+        return source_file.id
+
+
+def _capture_navs(monkeypatch: pytest.MonkeyPatch) -> list[LeftPanelNav]:
+    navs: list[LeftPanelNav] = []
+    render_left_panel = home_module.render_left_panel
+
+    def capture(*args: Any, **kwargs: Any) -> LeftPanelNav:
+        nav = render_left_panel(*args, **kwargs)
+        navs.append(nav)
+        return nav
+
+    monkeypatch.setattr(home_module, "render_left_panel", capture)
+    return navs
+
+
+def _capture_removes(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    on_removes: list[Any] = []
+    render_source_file_view = home_module.render_source_file_view
+
+    def capture(*args: Any, **kwargs: Any) -> None:
+        on_removes.append(kwargs["on_remove"])
+        render_source_file_view(*args, **kwargs)
+
+    monkeypatch.setattr(home_module, "render_source_file_view", capture)
+    return on_removes
+
+
+def test_home__selecting_source_file_shows_detail_view(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_file_id = _add_source_file_with_record(engine)
+    navs = _capture_navs(monkeypatch)
+
+    home()
+    navs[-1].select(f"source_file:{source_file_id}")
+
+    labels = [
+        element.text
+        for element in navs[-1].middle.descendants()
+        if isinstance(element, ui.label)
+    ]
+    assert "Records in library" in labels
+
+
+def test_home__removing_source_file_deletes_logs_and_shows_overview(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_file_id = _add_source_file_with_record(engine)
+    navs = _capture_navs(monkeypatch)
+    on_removes = _capture_removes(monkeypatch)
+
+    home()
+    navs[-1].select(f"source_file:{source_file_id}")
+    on_removes[-1]()
+
+    with Session(engine) as session:
+        assert session.query(SourceFile).count() == 0
+        assert session.query(Record).count() == 0
+        assert session.query(ActivityLog).one().action_type == "remove"
+    assert navs[-1].selected_key == "library:overview"
+    assert f"source_file:{source_file_id}" not in navs[-1].buttons

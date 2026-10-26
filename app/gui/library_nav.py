@@ -1,5 +1,6 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Any
 
 from nicegui import ui
@@ -54,6 +55,7 @@ def render_left_panel(
     on_overview: Callable[[], Any] | None = None,
     on_table: Callable[[], Any] | None = None,
     on_table_settings: Callable[[], Any] | None = None,
+    on_source_file: Callable[[int], Any] | None = None,
 ) -> LeftPanelNav:
     nav = LeftPanelNav(middle=middle)
     ui.add_css(
@@ -120,5 +122,7 @@ def render_left_panel(
             button.on_click(lambda key=key: nav.select(key))
             nav.buttons[key] = button
             nav.labels[key] = source_file.filename
+            if on_source_file is not None:
+                nav.views[key] = partial(on_source_file, source_file.id)
 
     return nav
