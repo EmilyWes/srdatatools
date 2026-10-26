@@ -362,6 +362,17 @@ def test_parse_bibtex_record__unmapped_author_field_adds_no_authors() -> None:
     assert row.record.authors == []
 
 
+def test_read_bibtex_fields__file_without_entries_has_no_samples(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "empty.bib"
+    path.write_text("just a comment, no entries\n", encoding="utf-8")
+
+    summary = read_bibtex_fields(path)
+
+    assert summary.samples == {}
+
+
 def test_read_bibtex_fields__collects_samples_and_fill_counts(tmp_path: Path) -> None:
     path = tmp_path / "export.bib"
     path.write_text(

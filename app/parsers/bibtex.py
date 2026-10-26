@@ -3,6 +3,7 @@ import re
 import unicodedata
 from collections.abc import Iterator
 from dataclasses import dataclass
+from itertools import zip_longest
 from pathlib import Path
 
 from app.models.record import Author
@@ -182,7 +183,7 @@ def _iter_entries(text: str) -> Iterator[_Entry | _MalformedEntry]:
     """
     starts = list(_ENTRY_START.finditer(text))
     line_number, counted_to = 1, 0
-    for match, next_match in zip(starts, [*starts[1:], None], strict=True):
+    for match, next_match in zip_longest(starts, starts[1:]):
         if match["type"].lower() in _IGNORED_ENTRY_TYPES:
             continue
         line_number += text.count("\n", counted_to, match.start())
