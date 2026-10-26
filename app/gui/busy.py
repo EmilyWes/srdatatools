@@ -6,7 +6,7 @@ from nicegui import ui
 
 T = TypeVar("T")
 
-_DIALOG_DELAY = 0.3
+_DIALOG_DELAY = 0.1
 
 
 async def run_busy(message: str, work: Callable[[], T]) -> T:
