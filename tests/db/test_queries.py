@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db.models import ActivityLog, Base, Record, RecordSource, SourceFile
 from app.db.queries import (
     count_records,
+    count_records_for_file,
     count_records_per_file,
     count_records_per_source,
     count_records_per_year,
@@ -168,6 +169,12 @@ def test_count_records_per_file__in_import_order(library: Session) -> None:
         ("scopus.csv", 2),
         ("other.ris", 1),
     ]
+
+
+def test_count_records_for_file__counts_only_that_file(library: Session) -> None:
+    pubmed = library.query(SourceFile).filter_by(filename="pubmed.nbib").one()
+
+    assert count_records_for_file(library, pubmed.id) == 2
 
 
 def test_count_records_per_year__ascending_with_unknown_last(
