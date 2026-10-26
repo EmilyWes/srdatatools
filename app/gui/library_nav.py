@@ -1,7 +1,6 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any
 
 from nicegui import ui
 from nicegui.element import Element
@@ -20,7 +19,7 @@ class LeftPanelNav:
     middle: Element
     buttons: dict[str, ui.button] = field(default_factory=dict)
     labels: dict[str, str] = field(default_factory=dict)
-    views: dict[str, Callable[[], Any]] = field(default_factory=dict)
+    views: dict[str, Callable[[], Awaitable[None] | None]] = field(default_factory=dict)
     selected_key: str | None = None
 
     def show_placeholder(self, label: str) -> None:
@@ -38,25 +37,25 @@ class LeftPanelNav:
         self.buttons[key].classes(add=_SELECTED_CLASS)
         self.selected_key = key
 
-    def select(self, key: str) -> None:
+    def select(self, key: str) -> Awaitable[None] | None:
         self.highlight(key)
         view = self.views.get(key)
         if view is not None:
-            view()
-        else:
-            self.show_placeholder(self.labels[key])
+            return view()
+        self.show_placeholder(self.labels[key])
+        return None
 
 
 def render_left_panel(
     left: Element,
     middle: Element,
     source_files: Sequence[SourceFile],
-    on_import: Callable[[], Any] | None = None,
-    on_overview: Callable[[], Any] | None = None,
-    on_overview_settings: Callable[[], Any] | None = None,
-    on_table: Callable[[], Any] | None = None,
-    on_table_settings: Callable[[], Any] | None = None,
-    on_source_file: Callable[[int], Any] | None = None,
+    on_import: Callable[[], Awaitable[None] | None] | None = None,
+    on_overview: Callable[[], Awaitable[None] | None] | None = None,
+    on_overview_settings: Callable[[], Awaitable[None] | None] | None = None,
+    on_table: Callable[[], Awaitable[None] | None] | None = None,
+    on_table_settings: Callable[[], Awaitable[None] | None] | None = None,
+    on_source_file: Callable[[int], Awaitable[None] | None] | None = None,
 ) -> LeftPanelNav:
     nav = LeftPanelNav(middle=middle)
     ui.add_css(
@@ -64,15 +63,15 @@ def render_left_panel(
         " { white-space: normal; overflow-wrap: anywhere; text-align: center; }"
     )
 
-    def handle_import() -> Any:
+    def handle_import() -> Awaitable[None] | None:
         nav.select(_IMPORT_KEY)
         return on_import() if on_import is not None else None
 
-    def handle_overview_settings() -> Any:
+    def handle_overview_settings() -> Awaitable[None] | None:
         nav.highlight(_OVERVIEW_KEY)
         return on_overview_settings() if on_overview_settings is not None else None
 
-    def handle_table_settings() -> Any:
+    def handle_table_settings() -> Awaitable[None] | None:
         nav.highlight(_TABLE_KEY)
         return on_table_settings() if on_table_settings is not None else None
 

@@ -1,5 +1,4 @@
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Awaitable, Callable
 
 from nicegui import ui
 from nicegui.element import Element
@@ -16,11 +15,11 @@ def render_source_file_view(
     middle: Element,
     source_file: SourceFile,
     records_in_library: int,
-    on_remove: Callable[[], Any],
+    on_remove: Callable[[], Awaitable[None] | None],
 ) -> None:
-    def remove() -> None:
+    def remove() -> Awaitable[None] | None:
         dialog.close()
-        on_remove()
+        return on_remove()
 
     middle.clear()
     with middle:

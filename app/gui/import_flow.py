@@ -1,4 +1,4 @@
-﻿from collections.abc import Callable
+﻿from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, replace
 from functools import partial
 from pathlib import Path
@@ -249,7 +249,7 @@ def import_file(
 @dataclass
 class ImportView:
     middle: Element
-    on_import: Callable[[Path, str, FieldMapping, str], None]
+    on_import: Callable[[Path, str, FieldMapping, str], Awaitable[None] | None]
     path: Path | None = None
     file_type: str = _TYPE_UNKNOWN
     source: str = _SOURCE_UNKNOWN
@@ -274,10 +274,10 @@ class ImportView:
         self.source = source
         self.render()
 
-    def _import(self) -> None:
+    def _import(self) -> Awaitable[None] | None:
         assert self.path is not None
         assert self.mapping_screen is not None
-        self.on_import(
+        return self.on_import(
             self.path,
             self.file_type,
             self.mapping_screen.current_mapping(),
@@ -350,7 +350,8 @@ class ImportView:
 
 
 def render_import_view(
-    middle: Element, on_import: Callable[[Path, str, FieldMapping, str], None]
+    middle: Element,
+    on_import: Callable[[Path, str, FieldMapping, str], Awaitable[None] | None],
 ) -> ImportView:
     view = ImportView(middle=middle, on_import=on_import)
     view.render()

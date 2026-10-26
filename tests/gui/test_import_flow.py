@@ -26,6 +26,7 @@ from app.gui.import_flow import (
 from app.gui.layout import shell
 from app.gui.mapping_table import MappingScreen
 from app.parsers.mapping import FieldMapping
+from tests.gui.clicks import click_and_wait
 
 
 class _FakeWindow:
@@ -566,6 +567,29 @@ def test_render_import_view__import_reads_live_mapping_edits(
             "unknown",
         )
     ]
+
+
+def test_render_import_view__import_button_awaits_async_on_import(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    panes = shell()
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title\nA title\n")
+    _pick(monkeypatch, csv_path)
+    calls: list[Path] = []
+
+    async def on_import(
+        path: Path, file_type: str, mapping: FieldMapping, source: str
+    ) -> None:
+        calls.append(path)
+
+    view = render_import_view(panes.middle, on_import=on_import)
+    asyncio.run(view._select_file())
+    assert view.import_button is not None
+
+    click_and_wait(view.import_button, monkeypatch)
+
+    assert calls == [csv_path]
 
 
 def test_render_import_view__selecting_new_file_rerenders_mapping_from_new_headers(

@@ -7,6 +7,7 @@ from nicegui import background_tasks, core, ui
 from app.db.models import SourceFile
 from app.gui.layout import shell
 from app.gui.library_nav import LeftPanelNav, render_left_panel
+from tests.gui.clicks import click_and_wait
 
 _SELECTED_CLASS = "bg-blue-100"
 
@@ -205,6 +206,22 @@ def test_render_left_panel__selecting_overview_and_table_calls_their_views() -> 
 
     assert calls == ["overview", "table"]
     assert nav.selected_key == "library:table"
+
+
+def test_render_left_panel__clicking_table_awaits_async_view(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    panes = shell()
+    calls: list[str] = []
+
+    async def show_table() -> None:
+        calls.append("table")
+
+    nav = render_left_panel(panes.left, panes.middle, [], on_table=show_table)
+
+    click_and_wait(nav.buttons["library:table"], monkeypatch)
+
+    assert calls == ["table"]
 
 
 def test_render_left_panel__table_gear_opens_settings_with_table_highlighted() -> None:
