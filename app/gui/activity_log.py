@@ -1,3 +1,5 @@
+import datetime
+
 from sqlalchemy.orm import Session
 
 from app.db.models import ActivityLog, SourceFile
@@ -13,6 +15,16 @@ def log_import(session: Session, source_file: SourceFile) -> ActivityLog:
             f"Processed: {source_file.row_count}\nSkipped: {skipped}"
         ),
         status="warning" if skipped else "ok",
+    )
+    session.add(entry)
+    return entry
+
+
+def log_removal(session: Session, filename: str, removed: int) -> ActivityLog:
+    entry = ActivityLog(
+        timestamp=datetime.datetime.now(),
+        action_type="remove",
+        message=f"Removed source file:\n{filename}\nRecords removed: {removed}",
     )
     session.add(entry)
     return entry
