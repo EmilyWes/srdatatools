@@ -168,14 +168,17 @@ def home() -> None:
         nav.select(select_key)
         refresh_log()
 
-    def on_confirmed(
+    async def on_confirmed(
         path: Path, file_type: str, mapping: FieldMapping, source: str
     ) -> None:
-        with session_scope(_engine) as session:
-            source_file = import_file(session, path, file_type, mapping, source)
-            session.flush()
-            key = f"source_file:{source_file.id}"
-        refresh(select_key=key)
+        def store() -> int:
+            with session_scope(_engine) as session:
+                source_file = import_file(session, path, file_type, mapping, source)
+                session.flush()
+                return source_file.id
+
+        source_file_id = await run_busy(f"Importing {path.name}…", store)
+        refresh(select_key=f"source_file:{source_file_id}")
 
     def start_import() -> None:
         render_import_view(panes.middle, on_import=on_confirmed)

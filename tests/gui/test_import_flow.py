@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from nicegui.element import Element
 from nicegui.elements.icon import Icon
 from nicegui.elements.tooltip import Tooltip
 from sqlalchemy import Engine, create_engine
@@ -20,11 +21,13 @@ from app.gui.import_flow import (
     import_nbib,
     import_ris,
     pick_file,
+    read_summary,
     render_import_view,
     render_mapping,
 )
 from app.gui.layout import shell
 from app.gui.mapping_table import MappingScreen
+from app.parsers.common import FileSummary
 from app.parsers.mapping import FieldMapping
 from tests.gui.clicks import click_and_wait
 
@@ -72,6 +75,14 @@ def test_pick_file__returns_none_when_cancelled(
     assert result is None
 
 
+def _render_mapping(
+    container: Element, file_type: str, path: Path, source: str = "unknown"
+) -> MappingScreen | None:
+    summary = read_summary(file_type, path)
+    assert summary is not None
+    return render_mapping(container, file_type, path, summary, source)
+
+
 def test_render_mapping__renders_mapping_screen_with_file_headers(
     tmp_path: Path,
 ) -> None:
@@ -79,7 +90,7 @@ def test_render_mapping__renders_mapping_screen_with_file_headers(
     csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\n")
     panes = shell()
 
-    screen = render_mapping(panes.middle, "csv", csv_path)
+    screen = _render_mapping(panes.middle, "csv", csv_path)
 
     assert screen is not None
     middle_children = panes.middle.default_slot.children
@@ -93,23 +104,11 @@ def test_render_mapping__shows_first_value_of_each_column(tmp_path: Path) -> Non
     csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\n")
     panes = shell()
 
-    screen = render_mapping(panes.middle, "csv", csv_path)
+    screen = _render_mapping(panes.middle, "csv", csv_path)
 
     assert screen is not None
     assert screen._row_for("Title").sample.text == "Some Paper"
     assert screen._row_for("DOI").sample.text == "10.1/xyz"
-
-
-def test_render_mapping__notifies_and_returns_none_when_file_cannot_be_decoded(
-    tmp_path: Path,
-) -> None:
-    csv_path = tmp_path / "export.csv"
-    csv_path.write_bytes(b"\x81")  # undefined in both utf-8-sig and cp1252
-    panes = shell()
-
-    screen = render_mapping(panes.middle, "csv", csv_path)  # must not raise
-
-    assert screen is None
 
 
 def test_render_mapping__returns_none_for_unknown_type(tmp_path: Path) -> None:
@@ -117,7 +116,9 @@ def test_render_mapping__returns_none_for_unknown_type(tmp_path: Path) -> None:
     csv_path.write_text("Title\nSome Paper\n")
     panes = shell()
 
-    screen = render_mapping(panes.middle, "unknown", csv_path)
+    screen = render_mapping(
+        panes.middle, "unknown", csv_path, FileSummary({"Title": "Some Paper"}, {}, 1)
+    )
 
     assert screen is None
 
@@ -258,7 +259,7 @@ def test_render_mapping__ris_lists_distinct_tags_without_delimiter_input(
     ris_path.write_text(_RIS_TEXT)
     panes = shell()
 
-    screen = render_mapping(panes.middle, "ris", ris_path)
+    screen = _render_mapping(panes.middle, "ris", ris_path)
 
     assert screen is not None
     assert [row.header for row in screen.rows] == ["TI", "AU", "TY"]
@@ -273,7 +274,7 @@ def test_render_mapping__ris_without_tags_notifies_and_returns_none(
     ris_path.write_text("")
     panes = shell()
 
-    assert render_mapping(panes.middle, "ris", ris_path) is None
+    assert _render_mapping(panes.middle, "ris", ris_path) is None
 
 
 def test_render_import_view__ris_type_renders_mapping_and_enables_import(
@@ -286,7 +287,7 @@ def test_render_import_view__ris_type_renders_mapping_and_enables_import(
     view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
     asyncio.run(view._select_file())
 
-    view._set_type("ris")
+    asyncio.run(view._set_type("ris"))
 
     assert view.mapping_screen is not None
     assert view.import_button is not None
@@ -332,7 +333,7 @@ def test_render_mapping__nbib_lists_distinct_tags_without_delimiter_input(
     nbib_path.write_text(_NBIB_TEXT)
     panes = shell()
 
-    screen = render_mapping(panes.middle, "nbib", nbib_path)
+    screen = _render_mapping(panes.middle, "nbib", nbib_path)
 
     assert screen is not None
     assert [row.header for row in screen.rows] == ["PMID", "TI", "FAU"]
@@ -347,7 +348,7 @@ def test_render_mapping__nbib_without_tags_notifies_and_returns_none(
     nbib_path.write_text("")
     panes = shell()
 
-    assert render_mapping(panes.middle, "nbib", nbib_path) is None
+    assert _render_mapping(panes.middle, "nbib", nbib_path) is None
 
 
 def test_render_import_view__nbib_type_renders_mapping_and_enables_import(
@@ -360,7 +361,7 @@ def test_render_import_view__nbib_type_renders_mapping_and_enables_import(
     view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
     asyncio.run(view._select_file())
 
-    view._set_type("nbib")
+    asyncio.run(view._set_type("nbib"))
 
     assert view.mapping_screen is not None
     assert view.import_button is not None
@@ -409,7 +410,7 @@ def test_render_mapping__bibtex_lists_fields_with_delimiter_input(
     bibtex_path.write_text(_BIBTEX_TEXT)
     panes = shell()
 
-    screen = render_mapping(panes.middle, "bibtex", bibtex_path)
+    screen = _render_mapping(panes.middle, "bibtex", bibtex_path)
 
     assert screen is not None
     assert [row.header for row in screen.rows] == ["title", "author", "@type", "@key"]
@@ -424,7 +425,7 @@ def test_render_mapping__bibtex_without_entries_notifies_and_returns_none(
     bibtex_path.write_text("")
     panes = shell()
 
-    assert render_mapping(panes.middle, "bibtex", bibtex_path) is None
+    assert _render_mapping(panes.middle, "bibtex", bibtex_path) is None
 
 
 def test_render_import_view__bibtex_file_is_detected_and_enables_import(
@@ -497,7 +498,7 @@ def test_render_import_view__mapping_renders_inline_and_enables_import_without_c
     assert view.import_button.enabled is False  # type not detected
     assert view.mapping_screen is None
 
-    view._set_type("csv")
+    asyncio.run(view._set_type("csv"))
 
     # mapping table rendered automatically, no "Check Mapping"/confirm click needed
     assert view.mapping_screen is not None
@@ -530,7 +531,7 @@ def test_render_import_view__undetected_file_resets_type_and_source_to_unknown(
     txt_path.write_text("just some notes\n")
     _pick(monkeypatch, txt_path)
     view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
-    view._set_type("csv")
+    asyncio.run(view._set_type("csv"))
     view._set_source("pubmed")
 
     asyncio.run(view._select_file())
@@ -553,7 +554,7 @@ def test_render_import_view__import_reads_live_mapping_edits(
         panes.middle, on_import=lambda p, t, m, s: calls.append((p, t, m, s))
     )
     asyncio.run(view._select_file())
-    view._set_type("csv")
+    asyncio.run(view._set_type("csv"))
     assert view.mapping_screen is not None
 
     view.mapping_screen.set_target("Scopus Author ID", "authors")
@@ -601,7 +602,7 @@ def test_render_import_view__selecting_new_file_rerenders_mapping_from_new_heade
     _pick(monkeypatch, first_csv)
     view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
     asyncio.run(view._select_file())
-    view._set_type("csv")
+    asyncio.run(view._set_type("csv"))
     assert view.mapping_screen is not None
     assert [row.header for row in view.mapping_screen.rows] == ["Title"]
 
@@ -625,7 +626,7 @@ def test_render_import_view__import_disabled_when_csv_file_cannot_be_decoded(
     view = ImportView(middle=panes.middle, on_import=lambda p, t, m, s: None)
     view.path = csv_path
 
-    view._set_type("csv")  # must not raise
+    asyncio.run(view._set_type("csv"))  # must not raise
 
     assert view.mapping_screen is None
     assert view.import_button is not None
@@ -643,7 +644,7 @@ def test_render_mapping__pubmed_nbib_suggests_jt_not_ta(tmp_path: Path) -> None:
     nbib_path.write_text(_PUBMED_NBIB_TEXT)
     panes = shell()
 
-    screen = render_mapping(panes.middle, "nbib", nbib_path, "pubmed")
+    screen = _render_mapping(panes.middle, "nbib", nbib_path, "pubmed")
 
     assert screen is not None
     targets = screen.current_mapping().targets
@@ -656,7 +657,7 @@ def test_render_mapping__pubmed_csv_uses_comma_delimiter(tmp_path: Path) -> None
     csv_path.write_text('PMID,Authors\n1,"Romano M, Novacek MJ."\n')
     panes = shell()
 
-    screen = render_mapping(panes.middle, "csv", csv_path, "pubmed")
+    screen = _render_mapping(panes.middle, "csv", csv_path, "pubmed")
 
     assert screen is not None
     assert screen.current_mapping().list_delimiter == ","
@@ -669,7 +670,7 @@ def test_render_mapping__scopus_csv_leaves_ignored_columns_unmapped(
     csv_path.write_text("Conference name,Conference date,EID\nC,D,2-s2.0-1\n")
     panes = shell()
 
-    screen = render_mapping(panes.middle, "csv", csv_path, "scopus")
+    screen = _render_mapping(panes.middle, "csv", csv_path, "scopus")
 
     assert screen is not None
     targets = screen.current_mapping().targets
@@ -682,7 +683,7 @@ def test_render_mapping__scopus_ris_uses_profile_aliases(tmp_path: Path) -> None
     ris_path.write_text("TY  - JOUR\nM3  - Article\nDB  - Scopus\nER  - \n")
     panes = shell()
 
-    screen = render_mapping(panes.middle, "ris", ris_path, "scopus")
+    screen = _render_mapping(panes.middle, "ris", ris_path, "scopus")
 
     assert screen is not None
     targets = screen.current_mapping().targets
@@ -744,7 +745,7 @@ def test_render_import_view__source_change_rerenders_mapping_and_is_passed_on(
         panes.middle, on_import=lambda p, t, m, s: calls.append(s)
     )
     asyncio.run(view._select_file())
-    view._set_type("nbib")
+    asyncio.run(view._set_type("nbib"))
 
     view._set_source("pubmed")
 
@@ -764,7 +765,7 @@ def test_render_mapping__result_applies_pubmed_nbib_profile(tmp_path: Path) -> N
     nbib_path.write_text(_PUBMED_NBIB_TEXT + "IS  - 1234-5678 (Print)\n")
     panes = shell()
 
-    screen = render_mapping(panes.middle, "nbib", nbib_path, "pubmed")
+    screen = _render_mapping(panes.middle, "nbib", nbib_path, "pubmed")
 
     assert screen is not None
     assert _result(screen, "PG") == "521-522"
@@ -777,7 +778,7 @@ def test_render_mapping__result_without_source_skips_profile(tmp_path: Path) -> 
     nbib_path.write_text(_PUBMED_NBIB_TEXT)
     panes = shell()
 
-    screen = render_mapping(panes.middle, "nbib", nbib_path)
+    screen = _render_mapping(panes.middle, "nbib", nbib_path)
 
     assert screen is not None
     assert _result(screen, "PG") == "521-2"
@@ -791,7 +792,7 @@ def test_render_mapping__nbib_result_combines_fau_auid_and_ad(tmp_path: Path) ->
     )
     panes = shell()
 
-    screen = render_mapping(panes.middle, "nbib", nbib_path)
+    screen = _render_mapping(panes.middle, "nbib", nbib_path)
 
     assert screen is not None
     expected = "Smith, John (ORCID 0000-0001-2345-6789; University X)"
@@ -837,7 +838,7 @@ def test_render_import_view__mismatched_source_and_type_shows_notice() -> None:
     view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
 
     view._set_source("pubmed")
-    view._set_type("ris")
+    asyncio.run(view._set_type("ris"))
 
     assert _visible_notices(panes.middle) == [_NO_PROFILE_NOTICE]
 
@@ -853,6 +854,6 @@ def test_render_import_view__no_notice_unless_both_set_without_profile(
     view = render_import_view(panes.middle, on_import=lambda p, t, m, s: None)
 
     view._set_source(source)
-    view._set_type(file_type)
+    asyncio.run(view._set_type(file_type))
 
     assert _visible_notices(panes.middle) == []

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
 from app.gui.activity_log import log_import
+from app.gui.busy import run_busy
 from app.gui.mapping_table import MappingScreen, render_mapping_table
 from app.models.record import Record
 from app.parsers.bibtex import (
@@ -144,18 +145,20 @@ def shows_delimiter(file_type: str) -> bool:
     return file_type in (_TYPE_CSV, _TYPE_BIBTEX)
 
 
+def read_summary(file_type: str, path: Path) -> FileSummary | None:
+    handlers = _handlers(file_type, _SOURCE_UNKNOWN)
+    return handlers.read_keys(path) if handlers is not None else None
+
+
 def render_mapping(
-    container: Element, file_type: str, path: Path, source: str = _SOURCE_UNKNOWN
+    container: Element,
+    file_type: str,
+    path: Path,
+    summary: FileSummary,
+    source: str = _SOURCE_UNKNOWN,
 ) -> MappingScreen | None:
     handlers = _handlers(file_type, source)
     if handlers is None:
-        return None
-
-    try:
-        summary = handlers.read_keys(path)
-    except ValueError as exc:
-        with container:
-            ui.notify(str(exc), type="negative")
         return None
 
     if not summary.samples:
@@ -253,6 +256,7 @@ class ImportView:
     path: Path | None = None
     file_type: str = _TYPE_UNKNOWN
     source: str = _SOURCE_UNKNOWN
+    summary: FileSummary | None = None
     mapping_screen: MappingScreen | None = None
     import_button: ui.button | None = None
 
@@ -264,10 +268,24 @@ class ImportView:
             self.source = _SOURCE_UNKNOWN
             if self.file_type != _TYPE_UNKNOWN:
                 self.source = detect_source(picked, self.file_type) or _SOURCE_UNKNOWN
-            self.render()
+            await self._read_file()
 
-    def _set_type(self, file_type: str) -> None:
+    async def _set_type(self, file_type: str) -> None:
         self.file_type = file_type
+        await self._read_file()
+
+    async def _read_file(self) -> None:
+        self.summary = None
+        path = self.path
+        file_type = self.file_type
+        if path is not None:
+            try:
+                self.summary = await run_busy(
+                    f"Reading {path.name}…", lambda: read_summary(file_type, path)
+                )
+            except ValueError as exc:
+                with self.middle:
+                    ui.notify(str(exc), type="negative")
         self.render()
 
     def _set_source(self, source: str) -> None:
@@ -328,9 +346,13 @@ class ImportView:
                         notice.classes("invisible")
 
                 mapping_container = ui.column().classes("items-center w-full")
-                if self.path is not None:
+                if self.path is not None and self.summary is not None:
                     self.mapping_screen = render_mapping(
-                        mapping_container, self.file_type, self.path, self.source
+                        mapping_container,
+                        self.file_type,
+                        self.path,
+                        self.summary,
+                        self.source,
                     )
                 else:
                     self.mapping_screen = None
