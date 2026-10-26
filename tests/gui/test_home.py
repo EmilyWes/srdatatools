@@ -1,4 +1,5 @@
 import datetime
+from dataclasses import asdict
 from typing import Any
 
 import pytest
@@ -13,6 +14,8 @@ from app.gui.action_panel import ActionPanel
 from app.gui.home import home
 from app.gui.layout import ShellPanes
 from app.gui.library_nav import LeftPanelNav
+from app.parsers.common import FileSummary
+from app.parsers.mapping import FieldMapping
 
 
 @pytest.fixture(autouse=True)
@@ -106,6 +109,9 @@ def _add_source_file_with_record(engine: Engine) -> int:
             format="ris",
             imported_at=datetime.datetime(2026, 1, 1),
             row_count=1,
+            field_mapping=asdict(FieldMapping(targets={"TI": "title"})),
+            suggested_mapping=asdict(FieldMapping(targets={"TI": "title"})),
+            file_summary=asdict(FileSummary({"TI": "A title"}, {"TI": 1}, 1)),
         )
         session.add(
             Record(title="A title", sources=[RecordSource(source_file=source_file)])

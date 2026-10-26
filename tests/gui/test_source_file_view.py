@@ -1,4 +1,5 @@
 import datetime
+from dataclasses import asdict
 from typing import Any
 
 from nicegui import ui
@@ -7,6 +8,8 @@ from nicegui.element import Element
 from app.db.models import SourceFile
 from app.gui.layout import shell
 from app.gui.source_file_view import render_source_file_view
+from app.parsers.common import FileSummary
+from app.parsers.mapping import FieldMapping
 
 
 def _source_file(skipped_rows: list[dict[str, Any]]) -> SourceFile:
@@ -18,6 +21,15 @@ def _source_file(skipped_rows: list[dict[str, Any]]) -> SourceFile:
         imported_at=datetime.datetime(2026, 1, 1, 9, 5),
         row_count=3,
         skipped_rows=skipped_rows,
+        field_mapping=asdict(
+            FieldMapping(targets={"TI": "title"}, list_delimiter="\n")
+        ),
+        suggested_mapping=asdict(
+            FieldMapping(targets={"TI": "title", "AB": "abstract"}, list_delimiter="\n")
+        ),
+        file_summary=asdict(
+            FileSummary({"TI": "A title", "AB": "An abstract"}, {"TI": 3, "AB": 2}, 3)
+        ),
     )
 
 
@@ -119,3 +131,18 @@ def test_render_source_file_view__cancel_does_not_remove() -> None:
     _click(_button(_dialog(middle), "Cancel"))
 
     assert removed == []
+
+
+def test_render_source_file_view__shows_saved_mapping_readonly() -> None:
+    middle, _ = _render()
+
+    selects = {
+        element.value: element
+        for element in middle.descendants()
+        if isinstance(element, ui.select)
+    }
+    assert set(selects) == {"title", "ignore"}
+    assert all("readonly" in select.props for select in selects.values())
+    labels = _labels(middle)
+    assert "Field mapping" in labels
+    assert "An abstract" in labels

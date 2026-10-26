@@ -119,7 +119,7 @@ Core tables, kept normalized so the same paper found via two sources becomes one
 | --- | --- |
 | `record` | One row per imported record (pre-dedup), one per unique paper after dedup: title, authors (ordered JSON list: names, ORCID, affiliations), abstract, publication year/month/day, DOI, PMID and other ids, merged/enriched fields |
 | `record_source` | Raw import: which file/source a record came from, its original raw fields (import time is on `source_file`) |
-| `source_file` | Metadata about each imported file: path/name, format, import date, row count, skipped rows (row number + reason) |
+| `source_file` | Metadata about each imported file: path/name, format, import date, row count, skipped rows (row number + reason), and the field mapping used at import (chosen mapping, original suggestion, and per-column example values and fill counts) |
 | `dedup_link` *(planned, Phase 2)* | Which raw `record_source` rows were merged into which `record`, match method used, confidence score, blocking key used |
 | `enrichment_log` *(planned, Phase 3)* | What was fetched from OpenAlex for a record, when, and which fields it filled or overwrote |
 | `citation_edge` *(planned, Phase 4)* | Snowballing results: `record_id` cites/is cited by `record_id` (or an external id not yet imported) |
@@ -181,7 +181,7 @@ flowchart LR
   - **Overview** selected: total records, plus small tables of records per source (vendor, with Unknown), per imported file, and per year (Unknown last).
   - **Table** selected: all records in one unpaginated grid (horizontal scrolling for wide column sets), with column sorting and per-column header filters. Rows are selected by clicking or via checkboxes; the header checkbox selects all rows passing the current filters. Above the grid: total rows, rows in filter (with *Clear all filters*) and rows in selection (with *Clear selection*). The selection is kept for the session (for the right-panel actions to run on later), not between sessions.
   - **Table settings** (gear beside Table): choose which record fields are shown as columns, with *Restore defaults* (DOI, title, authors, year, journal, sources). The choice is remembered between sessions in `app_settings`.
-  - **A source file** selected: that file's info — rows currently in the library from this file, how many rows were skipped on import (and why), and an option to remove all of this file's records from the library (see open question on how this interacts with records already merged via dedup).
+  - **A source file** selected: that file's info — rows currently in the library from this file, how many rows were skipped on import (and why), and an option to remove all of this file's records from the library (see open question on how this interacts with records already merged via dedup), plus a read-only copy of the field mapping used at import.
   - **Import** clicked: the middle panel is replaced by the import flow (below) until the user confirms or cancels.
 - **Right panel** — one button per cross-cutting action, top to bottom: **Deduplicate**, **Enrich**, **Snowball**, **Export**. Each has a small gear icon beside it that opens that action's settings in the middle panel (merge-settings for Deduplicate; polite-pool email/overwrite policy for Enrich; pre-fetch size-warning threshold for Snowball; export options for Export). Below the four buttons, a read-only textbox shows the activity log, oldest first and scrolled to the newest entry — always visible, no separate tab needed. Actions refresh it after doing work that may have written to the log.
 
@@ -254,7 +254,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Import action: writes `record_source` + `record`, per-file "N imported, M skipped" summary
 - [ ] Import result summary also reports how many records had a date conflict (Year/Month/Day disagreeing with the full-date column, resolved in favour of Year/Month/Day), e.g. "998 imported, 2 skipped, 14 date conflicts"; not yet implemented
 - [x] Activity log: write a plain-language `activity_log` row for each import (e.g. "Imported 998 records from scopus.csv, 2 skipped")
-- [x] Source-file detail view: records currently in library from this file, skipped-row count, remove-this-source's-records action
+- [x] Source-file detail view: records currently in library from this file, skipped-row count, remove-this-source's-records action, read-only copy of the field mapping used at import
 - [ ] Delete/wipe the database: action that removes all imported records and source files
 - [x] Right panel: Dedup / Enrich / Snowball / Export buttons in order, each with a gear icon opening its settings in the middle panel, read-only activity log textbox beneath
 - [x] Middle panel Library view: Overview (total records, records per source, per file, per year) + record table with sorting, column filters, row selection and persisted column settings
