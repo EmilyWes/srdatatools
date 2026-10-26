@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.db.models import ActivityLog, Base, SourceFile
-from app.gui.activity_log import log_import
+from app.gui.activity_log import log_import, log_removal
 
 
 @pytest.fixture
@@ -54,4 +54,14 @@ def test_log_import__status_warning_when_rows_skipped(session: Session) -> None:
 def test_log_import__status_ok_when_nothing_skipped(session: Session) -> None:
     entry = log_import(session, _source_file(row_count=3, skipped=0))
 
+    assert entry.status == "ok"
+
+
+def test_log_removal__writes_remove_row_with_count(session: Session) -> None:
+    log_removal(session, "x.csv", removed=2)
+    session.commit()
+
+    entry = session.query(ActivityLog).one()
+    assert entry.message == "Removed source file:\nx.csv\nRecords removed: 2"
+    assert entry.action_type == "remove"
     assert entry.status == "ok"

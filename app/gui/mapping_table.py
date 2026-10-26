@@ -303,8 +303,10 @@ def render_mapping_table(
     *,
     show_delimiter: bool,
     preview: Callable[[FieldMapping], Record],
+    chosen: FieldMapping | None = None,
 ) -> MappingScreen:
-    screen = MappingScreen(preview=preview, list_delimiter=suggestion.list_delimiter)
+    delimiter = (chosen or suggestion).list_delimiter
+    screen = MappingScreen(preview=preview, list_delimiter=delimiter)
     samples = summary.samples
     headers = _sorted_headers(list(samples), suggestion)
     input_width = _input_width_ch(headers)
@@ -399,13 +401,23 @@ def render_mapping_table(
 
         if show_delimiter:
             screen.list_delimiter_input = (
-                ui.input("List delimiter", value=suggestion.list_delimiter)
+                ui.input("List delimiter", value=delimiter)
                 .classes("pl-6 text-xs")
                 .props("dense")
             )
             screen.list_delimiter_input.on_value_change(
                 lambda _e: screen._refresh_results()
             )
+
+    if chosen is not None:
+        for row in screen.rows:
+            target = chosen.targets.get(row.header, _IGNORE)
+            if target.startswith(OTHER_IDS_PREFIX):
+                target = _OTHER_IDS
+            row.select.value = target
+            row.select.props("readonly")
+        if screen.list_delimiter_input is not None:
+            screen.list_delimiter_input.props("readonly")
 
     screen._refresh_options()
     screen._refresh_results()

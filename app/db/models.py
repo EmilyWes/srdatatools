@@ -52,6 +52,9 @@ class SourceFile(Base):
     imported_at: Mapped[datetime.datetime]
     row_count: Mapped[int | None]
     skipped_rows: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    field_mapping: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    suggested_mapping: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    file_summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     record_sources: Mapped[list["RecordSource"]] = relationship(
         back_populates="source_file", cascade="all, delete-orphan"

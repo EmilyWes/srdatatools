@@ -47,6 +47,13 @@ def count_records_per_file(session: Session) -> list[tuple[str, int]]:
     return [(filename, count) for filename, count in session.execute(statement)]
 
 
+def count_records_for_file(session: Session, source_file_id: int) -> int:
+    statement = select(func.count(func.distinct(RecordSource.record_id))).where(
+        RecordSource.source_file_id == source_file_id
+    )
+    return session.scalar(statement) or 0
+
+
 def count_records_per_year(session: Session) -> list[tuple[int | None, int]]:
     statement = (
         select(Record.publication_year, func.count(Record.id))

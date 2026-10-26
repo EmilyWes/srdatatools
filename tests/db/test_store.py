@@ -5,8 +5,8 @@ import pytest
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.db.models import Base, Record, SourceFile
-from app.db.store import store_parsed_rows
+from app.db.models import Base, Record, RecordSource, SourceFile
+from app.db.store import remove_source_file, store_parsed_rows
 from app.models.record import Affiliation, Author, PartialDate
 from app.models.record import Record as RecordSchema
 
@@ -257,3 +257,65 @@ def test_store_parsed_rows__no_skipped_rows_is_empty_list(session: Session) -> N
     session.commit()
 
     assert session.query(SourceFile).one().skipped_rows == []
+
+
+def _source_file(filename: str) -> SourceFile:
+    return SourceFile(
+        filename=filename,
+        path=None,
+        format="ris",
+        imported_at=datetime.datetime(2026, 1, 1),
+        row_count=None,
+    )
+
+
+def _record(title: str, *source_files: SourceFile) -> Record:
+    return Record(
+        title=title,
+        sources=[RecordSource(source_file=source_file) for source_file in source_files],
+    )
+
+
+def test_remove_source_file__removes_file_its_sources_and_records(
+    session: Session,
+) -> None:
+    source_file = _source_file("export.ris")
+    session.add_all([_record("First", source_file), _record("Second", source_file)])
+    session.commit()
+
+    removed = remove_source_file(session, source_file)
+    session.commit()
+
+    assert removed == 2
+    assert session.query(SourceFile).count() == 0
+    assert session.query(RecordSource).count() == 0
+    assert session.query(Record).count() == 0
+
+
+def test_remove_source_file__keeps_record_with_another_source(
+    session: Session,
+) -> None:
+    removed_file = _source_file("removed.ris")
+    kept_file = _source_file("kept.ris")
+    session.add(_record("Shared", removed_file, kept_file))
+    session.commit()
+
+    removed = remove_source_file(session, removed_file)
+    session.commit()
+
+    assert removed == 0
+    record = session.query(Record).one()
+    assert [source.source_file.filename for source in record.sources] == ["kept.ris"]
+
+
+def test_remove_source_file__leaves_other_files_untouched(session: Session) -> None:
+    removed_file = _source_file("removed.ris")
+    kept_file = _source_file("kept.ris")
+    session.add_all([_record("Removed", removed_file), _record("Kept", kept_file)])
+    session.commit()
+
+    remove_source_file(session, removed_file)
+    session.commit()
+
+    assert [f.filename for f in session.query(SourceFile)] == ["kept.ris"]
+    assert [r.title for r in session.query(Record)] == ["Kept"]

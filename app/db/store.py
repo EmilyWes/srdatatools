@@ -1,6 +1,7 @@
 import datetime
 from collections.abc import Sequence
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Record, RecordSource, SourceFile
@@ -49,3 +50,17 @@ def store_parsed_rows(
 
     session.add(source_file)
     return source_file
+
+
+def remove_source_file(session: Session, source_file: SourceFile) -> int:
+    record_ids = [
+        record_source.record_id for record_source in source_file.record_sources
+    ]
+    session.delete(source_file)
+    session.flush()
+    orphans = session.scalars(
+        select(Record).where(Record.id.in_(record_ids), ~Record.sources.any())
+    ).all()
+    for record in orphans:
+        session.delete(record)
+    return len(orphans)

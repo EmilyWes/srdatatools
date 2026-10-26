@@ -2,8 +2,10 @@ from pathlib import Path
 
 from nicegui import ui
 
+from app.db.models import SourceFile
 from app.db.queries import (
     count_records,
+    count_records_for_file,
     count_records_per_file,
     count_records_per_source,
     count_records_per_year,
@@ -12,7 +14,9 @@ from app.db.queries import (
     list_source_files,
 )
 from app.db.session import get_engine, session_scope
+from app.db.store import remove_source_file
 from app.gui.action_panel import render_right_panel
+from app.gui.activity_log import log_removal
 from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
 from app.gui.library_nav import LeftPanelNav, render_left_panel
@@ -25,6 +29,7 @@ from app.gui.record_table import (
     reset_columns,
     save_columns,
 )
+from app.gui.source_file_view import render_source_file_view
 from app.parsers.mapping import FieldMapping
 
 _engine = get_engine()
@@ -84,6 +89,24 @@ def home() -> None:
             on_back=show_table,
         )
 
+    def show_source_file(source_file_id: int) -> None:
+        with session_scope(_engine) as session:
+            source_file = session.get_one(SourceFile, source_file_id)
+            render_source_file_view(
+                panes.middle,
+                source_file,
+                count_records_for_file(session, source_file_id),
+                on_remove=lambda: remove_file(source_file_id),
+            )
+
+    def remove_file(source_file_id: int) -> None:
+        with session_scope(_engine) as session:
+            source_file = session.get_one(SourceFile, source_file_id)
+            filename = source_file.filename
+            removed = remove_source_file(session, source_file)
+            log_removal(session, filename, removed)
+        refresh()
+
     def refresh(select_key: str = "library:overview") -> None:
         nonlocal nav
         with session_scope(_engine) as session:
@@ -95,6 +118,7 @@ def home() -> None:
                 on_overview=show_overview,
                 on_table=show_table,
                 on_table_settings=show_table_settings,
+                on_source_file=show_source_file,
             )
         nav.select(select_key)
         refresh_log()

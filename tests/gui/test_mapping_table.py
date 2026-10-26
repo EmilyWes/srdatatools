@@ -599,3 +599,51 @@ def test_render_mapping_table__result_tooltip_is_replaced_on_refresh() -> None:
     assert _result_tooltips(screen, "Title") == []
     screen._row_for("Title").select.value = "notes"
     assert _result_tooltips(screen, "Title") == ["Some Paper"]
+
+
+def _render_chosen(headers: list[str], chosen: FieldMapping) -> MappingScreen:
+    panes = shell()
+    return render_mapping_table(
+        panes.middle,
+        _summary(dict.fromkeys(headers, "")),
+        suggest_mapping(headers),
+        show_delimiter=True,
+        preview=_no_preview,
+        chosen=chosen,
+    )
+
+
+def test_render_mapping_table__chosen_mapping_overrides_suggestion() -> None:
+    chosen = FieldMapping(targets={"Title": "title", "DOI": "pmid"})
+
+    screen = _render_chosen(["Title", "DOI", "Zzzqqqxx123"], chosen)
+
+    assert screen._row_for("DOI").select.value == "pmid"
+    assert screen._row_for("Zzzqqqxx123").select.value == "ignore"
+    assert _mapping_color(screen, "Title") == "green-2"
+    assert _mapping_color(screen, "DOI") == "blue-2"
+    assert screen.current_mapping().targets == chosen.targets
+
+
+def test_render_mapping_table__chosen_other_id_keeps_key() -> None:
+    chosen = FieldMapping(targets={"PMCID": "other_ids.pmcid"})
+
+    screen = _render_chosen(["PMCID"], chosen)
+
+    assert screen.current_mapping().targets == chosen.targets
+
+
+def test_render_mapping_table__chosen_mapping_is_readonly() -> None:
+    screen = _render_chosen(["Title"], FieldMapping(targets={"Title": "title"}))
+
+    assert "readonly" in screen._row_for("Title").select.props
+    assert screen.list_delimiter_input is not None
+    assert "readonly" in screen.list_delimiter_input.props
+
+
+def test_render_mapping_table__chosen_mapping_sets_delimiter() -> None:
+    chosen = FieldMapping(targets={"Title": "title"}, list_delimiter="|")
+
+    screen = _render_chosen(["Title"], chosen)
+
+    assert screen.current_mapping().list_delimiter == "|"

@@ -1,5 +1,5 @@
 ﻿from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from functools import partial
 from pathlib import Path
 
@@ -34,6 +34,7 @@ from app.parsers.nbib import (
     suggest_nbib_mapping,
 )
 from app.parsers.profiles import PROFILES, apply_profile, profile_for
+from app.parsers.profiles.base import FormatProfile
 from app.parsers.ris import (
     parse_ris_file,
     parse_ris_record,
@@ -71,39 +72,87 @@ def _parse_csv_lines(lines: list[tuple[str, str]], mapping: FieldMapping) -> Par
     return parse_csv_record(dict(lines), mapping)
 
 
-def render_mapping(
-    container: Element, file_type: str, path: Path, source: str = _SOURCE_UNKNOWN
-) -> MappingScreen | None:
-    profile = profile_for(source, file_type)
-    overrides = profile.aliases if profile is not None else None
+@dataclass
+class _FormatHandlers:
     read_keys: Callable[[Path], FileSummary]
     suggest: Callable[[list[str]], FieldMapping]
     parse_record: Callable[[list[tuple[str, str]], FieldMapping], ParsedRow]
+    noun: str
+    profile: FormatProfile | None
+
+
+def _handlers(file_type: str, source: str) -> _FormatHandlers | None:
+    profile = profile_for(source, file_type)
+    overrides = profile.aliases if profile is not None else None
     if file_type == _TYPE_CSV:
-        read_keys, noun = read_csv_headers, "columns"
         suggest = partial(
             suggest_mapping,
             alias_overrides=overrides,
             ignored_keys=profile.ignored_keys if profile is not None else frozenset(),
         )
-        parse_record = _parse_csv_lines
-    elif file_type == _TYPE_RIS:
-        read_keys, noun = read_ris_tags, "tags"
+        return _FormatHandlers(
+            read_csv_headers, suggest, _parse_csv_lines, "columns", profile
+        )
+    if file_type == _TYPE_RIS:
         suggest = partial(suggest_ris_mapping, alias_overrides=overrides)
-        parse_record = parse_ris_record
-    elif file_type == _TYPE_NBIB:
-        read_keys, noun = read_nbib_tags, "tags"
+        return _FormatHandlers(
+            read_ris_tags, suggest, parse_ris_record, "tags", profile
+        )
+    if file_type == _TYPE_NBIB:
         suggest = partial(suggest_nbib_mapping, alias_overrides=overrides)
-        parse_record = parse_nbib_record
-    elif file_type == _TYPE_BIBTEX:
-        read_keys, noun = read_bibtex_fields, "fields"
+        return _FormatHandlers(
+            read_nbib_tags, suggest, parse_nbib_record, "tags", profile
+        )
+    if file_type == _TYPE_BIBTEX:
         suggest = partial(suggest_bibtex_mapping, alias_overrides=overrides)
-        parse_record = parse_bibtex_record
-    else:
+        return _FormatHandlers(
+            read_bibtex_fields, suggest, parse_bibtex_record, "fields", profile
+        )
+    return None
+
+
+def _suggestion(handlers: _FormatHandlers, summary: FileSummary) -> FieldMapping:
+    suggestion = handlers.suggest(list(summary.samples))
+    profile = handlers.profile
+    if profile is not None and profile.list_delimiter is not None:
+        suggestion = replace(suggestion, list_delimiter=profile.list_delimiter)
+    return suggestion
+
+
+def _preview(
+    handlers: _FormatHandlers, summary: FileSummary
+) -> Callable[[FieldMapping], Record]:
+    def preview(mapping: FieldMapping) -> Record:
+        row = handlers.parse_record(list(summary.samples.items()), mapping)
+        if handlers.profile is None:
+            return row.record
+        return handlers.profile.fix_record(row.raw_fields, row.record)
+
+    return preview
+
+
+def preview_for(
+    file_type: str, source: str, summary: FileSummary
+) -> Callable[[FieldMapping], Record]:
+    handlers = _handlers(file_type, source)
+    if handlers is None:
+        raise ValueError(f"unsupported file type: {file_type!r}")
+    return _preview(handlers, summary)
+
+
+def shows_delimiter(file_type: str) -> bool:
+    return file_type in (_TYPE_CSV, _TYPE_BIBTEX)
+
+
+def render_mapping(
+    container: Element, file_type: str, path: Path, source: str = _SOURCE_UNKNOWN
+) -> MappingScreen | None:
+    handlers = _handlers(file_type, source)
+    if handlers is None:
         return None
 
     try:
-        summary = read_keys(path)
+        summary = handlers.read_keys(path)
     except ValueError as exc:
         with container:
             ui.notify(str(exc), type="negative")
@@ -111,32 +160,30 @@ def render_mapping(
 
     if not summary.samples:
         with container:
-            ui.notify(f"{path.name} has no {noun} to map", type="negative")
+            ui.notify(f"{path.name} has no {handlers.noun} to map", type="negative")
         return None
-
-    suggestion = suggest(list(summary.samples))
-    if profile is not None and profile.list_delimiter is not None:
-        suggestion = replace(suggestion, list_delimiter=profile.list_delimiter)
-
-    def preview(mapping: FieldMapping) -> Record:
-        row = parse_record(list(summary.samples.items()), mapping)
-        if profile is None:
-            return row.record
-        return profile.fix_record(row.raw_fields, row.record)
 
     return render_mapping_table(
         container,
         summary,
-        suggestion,
-        show_delimiter=file_type in (_TYPE_CSV, _TYPE_BIBTEX),
-        preview=preview,
+        _suggestion(handlers, summary),
+        show_delimiter=shows_delimiter(file_type),
+        preview=_preview(handlers, summary),
     )
 
 
 def _store(
-    session: Session, path: Path, file_type: str, result: ParseResult, source: str
+    session: Session,
+    path: Path,
+    file_type: str,
+    mapping: FieldMapping,
+    result: ParseResult,
+    source: str,
 ) -> SourceFile:
-    result = apply_profile(result, profile_for(source, file_type))
+    handlers = _handlers(file_type, source)
+    assert handlers is not None
+    summary = handlers.read_keys(path)
+    result = apply_profile(result, handlers.profile)
     source_file = store_parsed_rows(
         session,
         filename=path.name,
@@ -146,6 +193,9 @@ def _store(
         parsed_rows=[(row.record, row.raw_fields) for row in result.rows],
         skipped_rows=[(row.row_number, row.reason) for row in result.skipped],
     )
+    source_file.field_mapping = asdict(mapping)
+    source_file.suggested_mapping = asdict(_suggestion(handlers, summary))
+    source_file.file_summary = asdict(summary)
     log_import(session, source_file)
     return source_file
 
@@ -153,25 +203,29 @@ def _store(
 def import_csv(
     session: Session, path: Path, mapping: FieldMapping, source: str = _SOURCE_UNKNOWN
 ) -> SourceFile:
-    return _store(session, path, _TYPE_CSV, parse_csv_file(path, mapping), source)
+    result = parse_csv_file(path, mapping)
+    return _store(session, path, _TYPE_CSV, mapping, result, source)
 
 
 def import_ris(
     session: Session, path: Path, mapping: FieldMapping, source: str = _SOURCE_UNKNOWN
 ) -> SourceFile:
-    return _store(session, path, _TYPE_RIS, parse_ris_file(path, mapping), source)
+    result = parse_ris_file(path, mapping)
+    return _store(session, path, _TYPE_RIS, mapping, result, source)
 
 
 def import_nbib(
     session: Session, path: Path, mapping: FieldMapping, source: str = _SOURCE_UNKNOWN
 ) -> SourceFile:
-    return _store(session, path, _TYPE_NBIB, parse_nbib_file(path, mapping), source)
+    result = parse_nbib_file(path, mapping)
+    return _store(session, path, _TYPE_NBIB, mapping, result, source)
 
 
 def import_bibtex(
     session: Session, path: Path, mapping: FieldMapping, source: str = _SOURCE_UNKNOWN
 ) -> SourceFile:
-    return _store(session, path, _TYPE_BIBTEX, parse_bibtex_file(path, mapping), source)
+    result = parse_bibtex_file(path, mapping)
+    return _store(session, path, _TYPE_BIBTEX, mapping, result, source)
 
 
 def import_file(
