@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 from dataclasses import asdict
 from pathlib import Path
@@ -256,7 +257,13 @@ def test_home__removing_source_file_deletes_logs_and_shows_overview(
 
     home()
     navs[-1].select(f"source_file:{source_file_id}")
-    on_removes[-1]()
+    middle = navs[-1].middle
+
+    async def remove() -> None:
+        with middle:
+            await on_removes[-1]()
+
+    asyncio.run(remove())
 
     with Session(engine) as session:
         assert session.query(SourceFile).count() == 0

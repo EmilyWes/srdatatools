@@ -133,19 +133,22 @@ def home() -> None:
     def show_source_file(source_file_id: int) -> None:
         with session_scope(_engine) as session:
             source_file = session.get_one(SourceFile, source_file_id)
+            filename = source_file.filename
             render_source_file_view(
                 panes.middle,
                 source_file,
                 count_records_for_file(session, source_file_id),
-                on_remove=lambda: remove_file(source_file_id),
+                on_remove=lambda: remove_file(source_file_id, filename),
             )
 
-    def remove_file(source_file_id: int) -> None:
-        with session_scope(_engine) as session:
-            source_file = session.get_one(SourceFile, source_file_id)
-            filename = source_file.filename
-            removed = remove_source_file(session, source_file)
-            log_removal(session, filename, removed)
+    async def remove_file(source_file_id: int, filename: str) -> None:
+        def remove() -> None:
+            with session_scope(_engine) as session:
+                source_file = session.get_one(SourceFile, source_file_id)
+                removed = remove_source_file(session, source_file)
+                log_removal(session, filename, removed)
+
+        await run_busy(f"Removing {filename}…", remove)
         refresh()
 
     def refresh(select_key: str = "library:overview") -> None:
