@@ -145,6 +145,13 @@ def shows_delimiter(file_type: str) -> bool:
     return file_type in (_TYPE_CSV, _TYPE_BIBTEX)
 
 
+def _detect(path: Path) -> tuple[str, str]:
+    file_type = detect_type(path) or _TYPE_UNKNOWN
+    if file_type == _TYPE_UNKNOWN:
+        return file_type, _SOURCE_UNKNOWN
+    return file_type, detect_source(path, file_type) or _SOURCE_UNKNOWN
+
+
 def read_summary(file_type: str, path: Path) -> FileSummary | None:
     handlers = _handlers(file_type, _SOURCE_UNKNOWN)
     return handlers.read_keys(path) if handlers is not None else None
@@ -264,10 +271,9 @@ class ImportView:
         picked = await pick_file()
         if picked is not None:
             self.path = picked
-            self.file_type = detect_type(picked) or _TYPE_UNKNOWN
-            self.source = _SOURCE_UNKNOWN
-            if self.file_type != _TYPE_UNKNOWN:
-                self.source = detect_source(picked, self.file_type) or _SOURCE_UNKNOWN
+            self.file_type, self.source = await run_busy(
+                f"Reading {picked.name}…", lambda: _detect(picked)
+            )
             await self._read_file()
 
     async def _set_type(self, file_type: str) -> None:
