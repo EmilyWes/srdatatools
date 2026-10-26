@@ -171,7 +171,7 @@ def test_import_file__writes_activity_log_row(session: Session, tmp_path: Path) 
     session.commit()
 
     entry = session.query(ActivityLog).one()
-    assert entry.message == "Imported 2 records from export.csv, 1 skipped"
+    assert entry.message == "Imported from:\nexport.csv\nProcessed: 2\nSkipped: 1"
 
 
 def test_import_file__unsupported_type_raises(session: Session, tmp_path: Path) -> None:

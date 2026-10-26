@@ -33,7 +33,7 @@ def test_log_import__writes_import_row_with_counts(session: Session) -> None:
     session.commit()
 
     entry = session.query(ActivityLog).one()
-    assert entry.message == "Imported 3 records from x.csv, 1 skipped"
+    assert entry.message == "Imported from:\nx.csv\nProcessed: 3\nSkipped: 1"
     assert entry.action_type == "import"
     assert entry.timestamp == datetime.datetime(2026, 1, 1, 9, 5)
     assert entry.record_id is None
@@ -42,7 +42,7 @@ def test_log_import__writes_import_row_with_counts(session: Session) -> None:
 def test_log_import__zero_skipped_still_shown(session: Session) -> None:
     entry = log_import(session, _source_file(row_count=2, skipped=0))
 
-    assert entry.message == "Imported 2 records from x.csv, 0 skipped"
+    assert entry.message == "Imported from:\nx.csv\nProcessed: 2\nSkipped: 0"
 
 
 def test_log_import__status_warning_when_rows_skipped(session: Session) -> None:
@@ -55,9 +55,3 @@ def test_log_import__status_ok_when_nothing_skipped(session: Session) -> None:
     entry = log_import(session, _source_file(row_count=3, skipped=0))
 
     assert entry.status == "ok"
-
-
-def test_log_import__singular_record(session: Session) -> None:
-    entry = log_import(session, _source_file(row_count=1, skipped=0))
-
-    assert entry.message == "Imported 1 record from x.csv, 0 skipped"
