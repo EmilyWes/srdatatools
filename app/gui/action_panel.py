@@ -39,6 +39,7 @@ def render_right_panel(
     right: Element,
     middle: Element,
     on_settings: Callable[[], Any] | None = None,
+    on_clear_log: Callable[[], Any] | None = None,
 ) -> ActionPanel:
     def show_settings(action: str) -> None:
         if on_settings is not None:
@@ -75,5 +76,9 @@ def render_right_panel(
                 )
                 .style("height: 40vh")
             )
+            with ui.row().classes("w-full justify-end"):
+                ui.button("Clear log", color=None, on_click=on_clear_log).props(
+                    "flat dense size=sm"
+                )
 
     return ActionPanel(right=right, log=log)

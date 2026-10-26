@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.db.models import ActivityLog, Base, SourceFile
-from app.gui.activity_log import log_import, log_removal
+from app.gui.activity_log import clear_activity_log, log_import, log_removal
 
 
 @pytest.fixture
@@ -65,3 +65,14 @@ def test_log_removal__writes_remove_row_with_count(session: Session) -> None:
     assert entry.message == "Removed source file:\nx.csv\nRecords removed: 2"
     assert entry.action_type == "remove"
     assert entry.status == "ok"
+
+
+def test_clear_activity_log__deletes_all_entries(session: Session) -> None:
+    log_import(session, _source_file(row_count=3, skipped=0))
+    log_removal(session, "x.csv", removed=2)
+    session.commit()
+
+    clear_activity_log(session)
+    session.commit()
+
+    assert session.query(ActivityLog).count() == 0

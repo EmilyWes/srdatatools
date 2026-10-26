@@ -16,7 +16,7 @@ from app.db.queries import (
 from app.db.session import get_engine, session_scope
 from app.db.store import remove_source_file
 from app.gui.action_panel import render_right_panel
-from app.gui.activity_log import log_removal
+from app.gui.activity_log import clear_activity_log, log_removal
 from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
 from app.gui.library_nav import LeftPanelNav, render_left_panel
@@ -45,8 +45,16 @@ def home() -> None:
         if nav is not None:
             nav.clear_selection()
 
+    def clear_log() -> None:
+        with session_scope(_engine) as session:
+            clear_activity_log(session)
+        refresh_log()
+
     actions = render_right_panel(
-        panes.right, panes.middle, on_settings=clear_nav_selection
+        panes.right,
+        panes.middle,
+        on_settings=clear_nav_selection,
+        on_clear_log=clear_log,
     )
 
     def refresh_log() -> None:

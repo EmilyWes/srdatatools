@@ -123,7 +123,7 @@ Core tables, kept normalized so the same paper found via two sources becomes one
 | `dedup_link` *(planned, Phase 2)* | Which raw `record_source` rows were merged into which `record`, match method used, confidence score, blocking key used |
 | `enrichment_log` *(planned, Phase 3)* | What was fetched from OpenAlex for a record, when, and which fields it filled or overwrote |
 | `citation_edge` *(planned, Phase 4)* | Snowballing results: `record_id` cites/is cited by `record_id` (or an external id not yet imported) |
-| `activity_log` | Append-only log of every user- or system-triggered action, for the transparency view |
+| `activity_log` | Log of every user- or system-triggered action, for the transparency view; the user can clear it |
 | `field_merge_policy` *(planned, Phase 2)* | The default conflict-resolution chain, plus named field-group overrides and which fields belong to each |
 | `app_settings` | Simple key/value local settings store — record-table column selection; later OpenAlex polite-pool email, merge-policy defaults, etc. |
 

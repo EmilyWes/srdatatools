@@ -64,6 +64,43 @@ def test_home__shows_activity_log_entries_in_right_panel(
     ]
 
 
+def test_home__clear_log_empties_db_and_right_panel(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with Session(engine) as session:
+        session.add(
+            ActivityLog(
+                timestamp=datetime.datetime(2026, 1, 1, 9, 5),
+                action_type="import",
+                message="Imported 5 records",
+            )
+        )
+        session.commit()
+    panels: list[ActionPanel] = []
+    render_right_panel = home_module.render_right_panel
+
+    def capture(*args: Any, **kwargs: Any) -> ActionPanel:
+        panel = render_right_panel(*args, **kwargs)
+        panels.append(panel)
+        return panel
+
+    monkeypatch.setattr(home_module, "render_right_panel", capture)
+
+    home()
+    clear_button = next(
+        element
+        for element in panels[0].right.descendants()
+        if isinstance(element, ui.button) and element.text == "Clear log"
+    )
+    click_listener = next(iter(clear_button._event_listeners.values()))
+    assert click_listener.handler is not None
+    click_listener.handler(None)
+
+    with Session(engine) as session:
+        assert session.query(ActivityLog).count() == 0
+    assert panels[0].log.default_slot.children == []
+
+
 def test_home__shows_library_overview_on_start(monkeypatch: pytest.MonkeyPatch) -> None:
     shells: list[ShellPanes] = []
     shell = home_module.shell
