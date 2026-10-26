@@ -230,6 +230,8 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Generic NBIB/MEDLINE tokenizer/parser
 - [x] Generic BibTeX tokenizer/parser
 - [x] Generic CSV reader (column-mapping logic)
+- [ ] Generic TSV reader (column-mapping logic)
+- [ ] Generic Excel reader (column-mapping logic)
 - [x] Field-mapping UI, embedded inline in the import view (live table below Source/Type, no separate screen/confirm step)
 - [x] Field-mapping UI: visual indicators (different colors) per row for columns that are mapped directly (exact alias), mapped via fuzzy match or the ID fallback, or mapped multiple times to the same target
 - [x] Field-mapping UI: show the first value of each column/tag next to its row so the user can see what it contains
@@ -244,6 +246,8 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] IEEE Xplore profile (CSV)
 - [ ] Embase profile (RIS/CSV)
 - [ ] PsycINFO profile — EBSCO and ProQuest variants (RIS/CSV)
+- [ ] OpenAlex profile (CSV/RIS)
+- [ ] ASReview profile (CSV/TSV/RIS/Excel)
 - [x] Store parsed records, keep raw source data (`record_source`)
 - [x] Three-pane GUI shell: left navigation panel, middle content panel, right action panel (no tabs)
 - [x] Left panel: Library entry + list of imported source files (from `source_file`), selecting an entry drives the middle panel; Import button
