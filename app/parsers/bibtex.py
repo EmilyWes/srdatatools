@@ -115,10 +115,15 @@ def clean_value(field: str, value: str) -> str:
     return value.replace("--", "\u2013")
 
 
-def _top_level(text: str) -> Iterator[tuple[int, str]]:
-    """Characters outside braces and quotes, then the "}" that closes text, if any."""
+def _top_level(text: str, wanted: str) -> Iterator[tuple[int, str]]:
+    """Wanted characters outside braces and quotes, then the "}" that closes text.
+
+    Only braces, quotes and wanted characters are visited: a per-character loop
+    is too slow for large exports.
+    """
     depth, quoted = 0, False
-    for index, char in enumerate(text):
+    for match in re.finditer('[{}"' + re.escape(wanted) + "]", text):
+        index, char = match.start(), match.group()
         if char == "{":
             depth += 1
         elif char == "}":
@@ -133,7 +138,7 @@ def _top_level(text: str) -> Iterator[tuple[int, str]]:
 
 
 def _split_top_level(text: str, separator: str) -> list[str]:
-    cuts = [index for index, char in _top_level(text) if char == separator]
+    cuts = [index for index, char in _top_level(text, separator) if char == separator]
     return [
         text[a + 1 : b] for a, b in zip([-1, *cuts], [*cuts, len(text)], strict=True)
     ]
@@ -191,7 +196,9 @@ def _iter_entries(text: str) -> Iterator[_Entry | _MalformedEntry]:
         end = next_match.start() if next_match is not None else len(text)
         segment = text[match.end() : end]
         closer = _CLOSERS[match["open"]]
-        close = next((i for i, char in _top_level(segment) if char == closer), None)
+        close = next(
+            (i for i, char in _top_level(segment, closer) if char == closer), None
+        )
         if close is None:
             yield _MalformedEntry(line_number, "entry has unbalanced braces")
         else:

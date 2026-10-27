@@ -40,6 +40,15 @@ def test_parse_bibtex_text__maps_brace_delimited_fields() -> None:
     assert record.journal == "Nature"
 
 
+def test_parse_bibtex_text__comma_inside_quotes_does_not_split_field() -> None:
+    text = '@article{key1, title = "Cats, Dogs, and Mice", journal = "Nature"}'
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.title == "Cats, Dogs, and Mice"
+    assert record.journal == "Nature"
+
+
 def test_parse_bibtex_text__maps_quote_delimited_fields() -> None:
     text = '@article{key1, title = "Some Paper", journal = "Nature"}'
 
