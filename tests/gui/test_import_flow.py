@@ -20,6 +20,7 @@ from app.gui.import_flow import (
     import_file,
     import_nbib,
     import_ris,
+    import_tsv,
     pick_file,
     read_summary,
     render_import_view,
@@ -173,6 +174,36 @@ def test_import_file__dispatches_csv_to_import_csv(
     )
 
     assert source_file.format == "csv"
+    assert source_file.row_count == 1
+
+
+def test_import_tsv__stores_records_with_tsv_format(
+    session: Session, tmp_path: Path
+) -> None:
+    tsv_path = tmp_path / "export.tsv"
+    tsv_path.write_text("Title\tDOI\nA, B study\t10.1/xyz\nOther Paper\t10.1/abc\n")
+    mapping = FieldMapping(targets={"Title": "title", "DOI": "doi"})
+
+    source_file = import_tsv(session, tsv_path, mapping, _summary("tsv", tsv_path))
+    session.commit()
+
+    assert source_file.format == "tsv"
+    assert source_file.row_count == 2
+    assert source_file.skipped_rows == []
+
+
+def test_import_file__dispatches_tsv_to_import_tsv(
+    session: Session, tmp_path: Path
+) -> None:
+    tsv_path = tmp_path / "export.tsv"
+    tsv_path.write_text("Title\nSome Paper\n")
+    mapping = FieldMapping(targets={"Title": "title"})
+
+    source_file = import_file(
+        session, tsv_path, "tsv", mapping, _summary("tsv", tsv_path)
+    )
+
+    assert source_file.format == "tsv"
     assert source_file.row_count == 1
 
 
@@ -463,6 +494,37 @@ def test_render_import_view__bibtex_file_is_detected_and_enables_import(
     asyncio.run(view._select_file())
 
     assert view.file_type == "bibtex"
+    assert view.mapping_screen is not None
+    assert view.import_button is not None
+    assert view.import_button.enabled is True
+
+
+def test_render_mapping__tsv_lists_columns_with_delimiter_input(
+    tmp_path: Path,
+) -> None:
+    tsv_path = tmp_path / "export.tsv"
+    tsv_path.write_text("Title\tAuthors\nA, B study\tSmith, J; Doe, J\n")
+    panes = shell()
+
+    screen = _render_mapping(panes.middle, "tsv", tsv_path)
+
+    assert screen is not None
+    assert [row.header for row in screen.rows] == ["Title", "Authors"]
+    assert screen.list_delimiter_input is not None
+
+
+def test_render_import_view__tsv_file_is_detected_and_enables_import(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    panes = shell()
+    tsv_path = tmp_path / "export.tsv"
+    tsv_path.write_text("Title\tYear\nSome Paper\t2020\n")
+    _pick(monkeypatch, tsv_path)
+    view = render_import_view(panes.middle, on_import=lambda p, t, m, s, summary: None)
+
+    asyncio.run(view._select_file())
+
+    assert view.file_type == "tsv"
     assert view.mapping_screen is not None
     assert view.import_button is not None
     assert view.import_button.enabled is True
