@@ -35,6 +35,7 @@ from app.gui.library_overview import (
 from app.gui.record_table import (
     RecordSelection,
     load_columns,
+    load_label_columns,
     load_rows,
     render_record_table,
     render_table_settings,
@@ -141,9 +142,11 @@ def home() -> None:
     def show_table_settings() -> None:
         with session_scope(_engine) as session:
             columns = load_columns(session)
+            label_columns = load_label_columns(session)
         render_table_settings(
             panes.middle,
             columns,
+            label_columns=label_columns,
             on_change=save_table_columns,
             on_restore=restore_table_columns,
             on_back=show_table,

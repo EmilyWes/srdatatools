@@ -9,14 +9,17 @@ from nicegui.element import Element
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.db.models import Base, Record, RecordSource, SourceFile
+from app.db.models import Base, Label, Record, RecordSource, SourceFile
 from app.db.settings import set_setting
 from app.gui.layout import shell
 from app.gui.record_table import (
     COLUMNS,
     DEFAULT_COLUMNS,
     RecordSelection,
+    label_column_key,
+    label_field,
     load_columns,
+    load_label_columns,
     load_rows,
     render_record_table,
     render_table_settings,
@@ -331,3 +334,106 @@ def test_render_record_table__counts_use_dot_thousands_separator() -> None:
         if isinstance(element, ui.label)
     ]
     assert labels[1] == "1.234"
+
+
+TIAB = label_column_key("tiab", "Emily")
+FT = label_column_key("ft", "screener 1.0")
+
+
+def _add_labels(session: Session) -> None:
+    source_file = _source_file(None)
+    record = Record(id=1)
+    session.add_all(
+        [
+            Label(
+                record=record,
+                source_file=source_file,
+                phase=phase,
+                screener=screener,
+                value=value,
+            )
+            for phase, screener, value in [
+                ("tiab", "Emily", "include"),
+                ("tiab", "Emily", "maybe"),
+                ("ft", "screener 1.0", "exclude"),
+            ]
+        ]
+        + [Record(id=2)]
+    )
+    session.commit()
+
+
+def test_label_field__is_free_of_dots_and_brackets() -> None:
+    assert all(char.isalnum() or char == "_" for char in label_field(FT))
+
+
+def test_load_label_columns__one_key_per_pair_in_library(session: Session) -> None:
+    _add_labels(session)
+
+    assert load_label_columns(session) == [TIAB, FT]
+
+
+def test_load_columns__keeps_label_columns_after_fixed_ones(session: Session) -> None:
+    _add_labels(session)
+    save_columns(session, [FT, "doi", TIAB])
+    session.commit()
+
+    assert load_columns(session) == ["doi", TIAB, FT]
+
+
+def test_load_columns__drops_label_columns_no_longer_in_library(
+    session: Session,
+) -> None:
+    save_columns(session, ["doi", TIAB])
+    session.commit()
+
+    assert load_columns(session) == ["doi"]
+
+
+def test_load_rows__label_cells_join_values_per_pair(session: Session) -> None:
+    _add_labels(session)
+
+    assert load_rows(session, [TIAB, FT]) == [
+        {"id": 1, label_field(TIAB): "include; maybe", label_field(FT): "exclude"},
+        {"id": 2, label_field(TIAB): "", label_field(FT): ""},
+    ]
+
+
+def test_render_record_table__label_column_header_and_field() -> None:
+    panes = shell()
+
+    render_record_table(panes.middle, [_row(1)], ["doi", FT], RecordSelection())
+
+    column = _grid(panes.middle).options["columnDefs"][1]
+    assert column["field"] == label_field(FT)
+    assert column["headerName"] == "Label: ft / screener 1.0"
+    assert column["filter"] == "agTextColumnFilter"
+
+
+def test_render_table_settings__label_checkboxes_after_fixed_ones() -> None:
+    panes = shell()
+    changes: list[list[str]] = []
+    render_table_settings(
+        panes.middle,
+        ["doi"],
+        label_columns=[TIAB, FT],
+        on_change=changes.append,
+        on_restore=lambda: None,
+        on_back=lambda: None,
+    )
+    checkboxes = [
+        element
+        for element in panes.middle.descendants()
+        if isinstance(element, ui.checkbox)
+    ]
+
+    assert [box.text for box in checkboxes[-2:]] == [
+        "Label: tiab / Emily",
+        "Label: ft / screener 1.0",
+    ]
+    assert not any(box.value for box in checkboxes[-2:])
+
+    checkboxes[-1].value = True
+    checkboxes[-2].value = True
+
+    assert changes == [["doi", FT], ["doi", TIAB, FT]]
