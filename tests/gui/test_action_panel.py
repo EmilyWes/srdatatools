@@ -1,11 +1,13 @@
 import datetime
 
+import pytest
 from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import ActivityLog
 from app.gui.action_panel import ActionPanel, render_right_panel
 from app.gui.layout import shell
+from tests.gui.clicks import click_and_wait
 
 
 def _row_buttons(right: Element) -> list[list[ui.button]]:
@@ -165,3 +167,107 @@ def test_action_panel__show_log_schedules_scroll_to_bottom() -> None:
     assert any(
         isinstance(child, ui.timer) for child in panes.right.default_slot.children
     )
+
+
+def _button(element: Element, text: str) -> ui.button:
+    return next(
+        child
+        for child in element.descendants()
+        if isinstance(child, ui.button) and child.text == text
+    )
+
+
+def _delete_dialog(right: Element) -> ui.dialog:
+    # Dialogs live in the client layout, which every test in this run shares.
+    return [
+        element
+        for element in right.client.layout.descendants()
+        if isinstance(element, ui.dialog)
+    ][-1]
+
+
+def _render_with_delete(right: Element, middle: Element) -> list[None]:
+    deleted: list[None] = []
+    render_right_panel(
+        right,
+        middle,
+        count_library=lambda: (3, 1204),
+        on_delete_library=lambda: deleted.append(None),
+    )
+    return deleted
+
+
+def test_render_right_panel__delete_library_button_is_red_and_last() -> None:
+    panes = shell()
+
+    render_right_panel(panes.right, panes.middle)
+
+    buttons = [
+        element
+        for element in panes.right.descendants()
+        if isinstance(element, ui.button)
+    ]
+    delete_button = _button(panes.right, "Delete library")
+    assert buttons[-1] is delete_button
+    assert delete_button.props["color"] == "negative"
+    assert delete_button.enabled
+
+
+def test_render_right_panel__delete_library_dialog_shows_counts() -> None:
+    panes = shell()
+    _render_with_delete(panes.right, panes.middle)
+
+    _click(_button(panes.right, "Delete library"))
+
+    dialog = _delete_dialog(panes.right)
+    assert dialog.value
+    message = next(
+        element for element in dialog.descendants() if isinstance(element, ui.label)
+    )
+    assert message.text == (
+        "Delete all 1.204 records and 3 source files from the library? "
+        "This cannot be undone."
+    )
+
+
+def test_render_right_panel__confirming_delete_library_calls_back() -> None:
+    panes = shell()
+    deleted = _render_with_delete(panes.right, panes.middle)
+
+    _click(_button(panes.right, "Delete library"))
+    _click(_button(_delete_dialog(panes.right), "Delete"))
+
+    assert deleted == [None]
+    assert not _delete_dialog(panes.right).value
+
+
+def test_render_right_panel__confirming_delete_library_awaits_async_callback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    panes = shell()
+    deleted: list[None] = []
+
+    async def on_delete_library() -> None:
+        deleted.append(None)
+
+    render_right_panel(
+        panes.right,
+        panes.middle,
+        count_library=lambda: (0, 0),
+        on_delete_library=on_delete_library,
+    )
+
+    _click(_button(panes.right, "Delete library"))
+    click_and_wait(_button(_delete_dialog(panes.right), "Delete"), monkeypatch)
+
+    assert deleted == [None]
+
+
+def test_render_right_panel__cancel_delete_library_does_not_call_back() -> None:
+    panes = shell()
+    deleted = _render_with_delete(panes.right, panes.middle)
+
+    _click(_button(panes.right, "Delete library"))
+    _click(_button(_delete_dialog(panes.right), "Cancel"))
+
+    assert deleted == []
