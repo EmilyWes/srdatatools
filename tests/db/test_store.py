@@ -82,6 +82,29 @@ def test_store_parsed_rows__source_defaults_to_none(session: Session) -> None:
     assert session.query(SourceFile).one().source is None
 
 
+def test_store_parsed_rows__stores_sheet(session: Session) -> None:
+    store_parsed_rows(
+        session,
+        filename="export.xlsx",
+        path=None,
+        format="excel",
+        sheet="Records",
+        parsed_rows=[],
+    )
+    session.commit()
+
+    assert session.query(SourceFile).one().sheet == "Records"
+
+
+def test_store_parsed_rows__sheet_defaults_to_none(session: Session) -> None:
+    store_parsed_rows(
+        session, filename="export.ris", path=None, format="ris", parsed_rows=[]
+    )
+    session.commit()
+
+    assert session.query(SourceFile).one().sheet is None
+
+
 def test_store_parsed_rows__creates_record_with_mapped_scalar_fields(
     session: Session,
 ) -> None:
