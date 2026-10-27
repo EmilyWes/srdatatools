@@ -5,7 +5,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.db.models import ActivityLog, Base, SourceFile
-from app.gui.activity_log import clear_activity_log, log_import, log_removal
+from app.gui.activity_log import (
+    clear_activity_log,
+    log_import,
+    log_library_deleted,
+    log_removal,
+)
 
 
 @pytest.fixture
@@ -76,3 +81,15 @@ def test_clear_activity_log__deletes_all_entries(session: Session) -> None:
     session.commit()
 
     assert session.query(ActivityLog).count() == 0
+
+
+def test_log_library_deleted__writes_row_with_counts(session: Session) -> None:
+    log_library_deleted(session, source_files=2, records=1204)
+    session.commit()
+
+    entry = session.query(ActivityLog).one()
+    assert entry.message == (
+        "Deleted library\nSource files removed: 2\nRecords removed: 1204"
+    )
+    assert entry.action_type == "delete_library"
+    assert entry.status == "ok"

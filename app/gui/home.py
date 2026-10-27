@@ -14,9 +14,13 @@ from app.db.queries import (
     list_source_files,
 )
 from app.db.session import get_engine, session_scope
-from app.db.store import remove_source_file
+from app.db.store import delete_library, remove_source_file
 from app.gui.action_panel import render_right_panel
-from app.gui.activity_log import clear_activity_log, log_removal
+from app.gui.activity_log import (
+    clear_activity_log,
+    log_library_deleted,
+    log_removal,
+)
 from app.gui.busy import run_busy
 from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
@@ -59,11 +63,26 @@ def home() -> None:
             clear_activity_log(session)
         refresh_log()
 
+    def count_library() -> tuple[int, int]:
+        with session_scope(_engine) as session:
+            return len(list_source_files(session)), count_records(session)
+
+    async def delete_all() -> None:
+        def delete() -> None:
+            with session_scope(_engine) as session:
+                source_files, records = delete_library(session)
+                log_library_deleted(session, source_files, records)
+
+        await run_busy("Deleting library…", delete)
+        refresh()
+
     actions = render_right_panel(
         panes.right,
         panes.middle,
         on_settings=clear_nav_selection,
         on_clear_log=clear_log,
+        count_library=count_library,
+        on_delete_library=delete_all,
     )
 
     def refresh_log() -> None:

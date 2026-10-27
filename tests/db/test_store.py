@@ -5,8 +5,15 @@ import pytest
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.db.models import Base, Record, RecordSource, SourceFile
-from app.db.store import remove_source_file, store_parsed_rows
+from app.db.models import (
+    ActivityLog,
+    AppSetting,
+    Base,
+    Record,
+    RecordSource,
+    SourceFile,
+)
+from app.db.store import delete_library, remove_source_file, store_parsed_rows
 from app.models.record import Affiliation, Author, PartialDate
 from app.models.record import Record as RecordSchema
 
@@ -319,3 +326,51 @@ def test_remove_source_file__leaves_other_files_untouched(session: Session) -> N
 
     assert [f.filename for f in session.query(SourceFile)] == ["kept.ris"]
     assert [r.title for r in session.query(Record)] == ["Kept"]
+
+
+def test_delete_library__removes_all_files_sources_and_records(
+    session: Session,
+) -> None:
+    first_file = _source_file("first.ris")
+    second_file = _source_file("second.ris")
+    session.add_all(
+        [
+            _record("First", first_file),
+            _record("Shared", first_file, second_file),
+            _record("Second", second_file),
+        ]
+    )
+    session.commit()
+
+    removed = delete_library(session)
+    session.commit()
+
+    assert removed == (2, 3)
+    assert session.query(SourceFile).count() == 0
+    assert session.query(RecordSource).count() == 0
+    assert session.query(Record).count() == 0
+
+
+def test_delete_library__keeps_activity_log_and_settings(session: Session) -> None:
+    session.add_all(
+        [
+            _record("First", _source_file("first.ris")),
+            ActivityLog(
+                timestamp=datetime.datetime(2026, 1, 1),
+                action_type="import",
+                message="Imported",
+            ),
+            AppSetting(key="table_columns", value="[]"),
+        ]
+    )
+    session.commit()
+
+    delete_library(session)
+    session.commit()
+
+    assert session.query(ActivityLog).count() == 1
+    assert session.query(AppSetting).count() == 1
+
+
+def test_delete_library__empty_library_returns_zeros(session: Session) -> None:
+    assert delete_library(session) == (0, 0)

@@ -31,5 +31,20 @@ def log_removal(session: Session, filename: str, removed: int) -> ActivityLog:
     return entry
 
 
+def log_library_deleted(
+    session: Session, source_files: int, records: int
+) -> ActivityLog:
+    entry = ActivityLog(
+        timestamp=datetime.datetime.now(),
+        action_type="delete_library",
+        message=(
+            f"Deleted library\nSource files removed: {source_files}\n"
+            f"Records removed: {records}"
+        ),
+    )
+    session.add(entry)
+    return entry
+
+
 def clear_activity_log(session: Session) -> None:
     session.execute(delete(ActivityLog))

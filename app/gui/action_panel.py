@@ -1,4 +1,4 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -6,6 +6,7 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import ActivityLog
+from app.gui.library_overview import format_count
 
 _ACTIONS = ["Deduplicate", "Enrich", "Snowball", "Export"]
 _STATUS_CLASSES = {"ok": "text-green-7", "warning": "text-orange-7"}
@@ -40,6 +41,8 @@ def render_right_panel(
     middle: Element,
     on_settings: Callable[[], Any] | None = None,
     on_clear_log: Callable[[], Any] | None = None,
+    count_library: Callable[[], tuple[int, int]] | None = None,
+    on_delete_library: Callable[[], Awaitable[None] | None] | None = None,
 ) -> ActionPanel:
     def show_settings(action: str) -> None:
         if on_settings is not None:
@@ -49,6 +52,19 @@ def render_right_panel(
             with ui.column().classes("pt-4 items-center w-full"):
                 ui.label(f"{action} settings").classes("text-lg")
                 ui.label("Not available yet.").classes("text-sm text-grey-6")
+
+    def open_delete_dialog() -> None:
+        source_files, records = (0, 0) if count_library is None else count_library()
+        delete_message.text = (
+            f"Delete all {format_count(records)} records and "
+            f"{format_count(source_files)} source files from the library? "
+            "This cannot be undone."
+        )
+        delete_dialog.open()
+
+    def delete() -> Awaitable[None] | None:
+        delete_dialog.close()
+        return None if on_delete_library is None else on_delete_library()
 
     right.clear()
     with right:
@@ -80,5 +96,16 @@ def render_right_panel(
                 ui.button("Clear log", color=None, on_click=on_clear_log).props(
                     "flat dense size=sm"
                 )
+        with ui.row().classes("w-full justify-center pt-4 pb-6"):
+            ui.button(
+                "Delete library", color="negative", on_click=open_delete_dialog
+            ).classes("w-32 text-sm").props("dense")
+        with ui.dialog() as delete_dialog, ui.card():
+            delete_message = ui.label()
+            with ui.row().classes("w-full justify-end"):
+                ui.button("Cancel", color=None, on_click=delete_dialog.close).props(
+                    "flat"
+                )
+                ui.button("Delete", color="negative", on_click=delete)
 
     return ActionPanel(right=right, log=log)

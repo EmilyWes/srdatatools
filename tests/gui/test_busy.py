@@ -1,6 +1,6 @@
 import asyncio
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import TypeVar
 
 import pytest
@@ -12,11 +12,29 @@ from app.gui.layout import shell
 T = TypeVar("T")
 
 
-def _dialogs() -> list[ui.dialog]:
+_preexisting_dialog_ids: set[int] = set()
+
+
+@pytest.fixture(autouse=True)
+def _ignore_preexisting_dialogs() -> Iterator[None]:
+    # The client layout is shared by every test in the run, so other tests'
+    # dialogs may already be there.
+    _preexisting_dialog_ids.update(dialog.id for dialog in _all_dialogs())
+    yield
+    _preexisting_dialog_ids.clear()
+
+
+def _all_dialogs() -> list[ui.dialog]:
     return [
         element
         for element in ui.context.client.layout.descendants()
         if isinstance(element, ui.dialog)
+    ]
+
+
+def _dialogs() -> list[ui.dialog]:
+    return [
+        dialog for dialog in _all_dialogs() if dialog.id not in _preexisting_dialog_ids
     ]
 
 

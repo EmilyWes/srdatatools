@@ -73,3 +73,10 @@ def remove_source_file(session: Session, source_file: SourceFile) -> int:
     )
     session.delete(source_file)
     return result.rowcount
+
+
+def delete_library(session: Session) -> tuple[int, int]:
+    session.execute(delete(RecordSource))
+    records = cast(CursorResult[Any], session.execute(delete(Record)))
+    source_files = cast(CursorResult[Any], session.execute(delete(SourceFile)))
+    return source_files.rowcount, records.rowcount
