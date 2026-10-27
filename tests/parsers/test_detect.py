@@ -30,6 +30,10 @@ def test_detect_type__bibtex_content() -> None:
     assert detect_type(_DATA_DIR / "bibtex_style.bib") == "bibtex"
 
 
+def test_detect_type__tab_delimited_content_is_tsv() -> None:
+    assert detect_type(_DATA_DIR / "tab_delimited.tsv") == "tsv"
+
+
 def test_detect_type__bibtex_after_free_text_header(tmp_path: Path) -> None:
     text = "Scopus\nEXPORT DATE: 22 October 2026\n\n@ARTICLE{key1,\n\ttitle = {T}\n}\n"
     path = _write(tmp_path, "export.txt", text)
@@ -53,6 +57,12 @@ def test_detect_type__semicolon_csv_in_txt_file(tmp_path: Path) -> None:
     path = _write(tmp_path, "export.txt", "Title;Year\nA study;2020\n")
 
     assert detect_type(path) == "csv"
+
+
+def test_detect_type__tab_delimited_csv_extension_is_tsv(tmp_path: Path) -> None:
+    path = _write(tmp_path, "export.csv", "Title\tYear\nA, B study\t2020\n")
+
+    assert detect_type(path) == "tsv"
 
 
 def test_detect_type__prose_with_commas_is_not_csv(tmp_path: Path) -> None:
@@ -102,6 +112,12 @@ def test_detect_type__falls_back_to_bib_extension(tmp_path: Path) -> None:
     path = _write(tmp_path, "empty.bib", "")
 
     assert detect_type(path) == "bibtex"
+
+
+def test_detect_type__falls_back_to_tsv_extension(tmp_path: Path) -> None:
+    path = _write(tmp_path, "empty.tsv", "")
+
+    assert detect_type(path) == "tsv"
 
 
 def test_detect_type__falls_back_to_extension_for_undecodable_file(
@@ -162,6 +178,12 @@ def test_detect_source__ignores_content_after_prefix(
 
 def test_detect_source__no_matching_profile_returns_none() -> None:
     assert detect_source(_DATA_DIR / "scopus_style.ris", "ris") is None
+
+
+def test_detect_source__tsv_has_no_profile(tmp_path: Path) -> None:
+    path = _write(tmp_path, "scopus.tsv", "Authors\tTitle\tEID\nA\tT\tE\n")
+
+    assert detect_source(path, "tsv") is None
 
 
 def test_detect_source__undecodable_file_returns_none(tmp_path: Path) -> None:

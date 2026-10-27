@@ -47,14 +47,17 @@ _TYPE_UNKNOWN = "unknown"
 _TYPE_RIS = "ris"
 _TYPE_NBIB = "nbib"
 _TYPE_CSV = "csv"
+_TYPE_TSV = "tsv"
 _TYPE_BIBTEX = "bibtex"
 _TYPE_OPTIONS = {
     _TYPE_UNKNOWN: "Unknown",
     _TYPE_RIS: "RIS",
     _TYPE_NBIB: "NBIB",
     _TYPE_CSV: "CSV",
+    _TYPE_TSV: "TSV",
     _TYPE_BIBTEX: "BibTeX",
 }
+_TSV_DELIMITER = "\t"
 
 _SOURCE_UNKNOWN = "unknown"
 _SOURCE_OPTIONS = {
@@ -85,15 +88,18 @@ class _FormatHandlers:
 def _handlers(file_type: str, source: str) -> _FormatHandlers | None:
     profile = profile_for(source, file_type)
     overrides = profile.aliases if profile is not None else None
-    if file_type == _TYPE_CSV:
+    if file_type in (_TYPE_CSV, _TYPE_TSV):
         suggest = partial(
             suggest_mapping,
             alias_overrides=overrides,
             ignored_keys=profile.ignored_keys if profile is not None else frozenset(),
         )
-        return _FormatHandlers(
-            read_csv_headers, suggest, _parse_csv_lines, "columns", profile
+        read_keys = (
+            read_csv_headers
+            if file_type == _TYPE_CSV
+            else partial(read_csv_headers, delimiter=_TSV_DELIMITER)
         )
+        return _FormatHandlers(read_keys, suggest, _parse_csv_lines, "columns", profile)
     if file_type == _TYPE_RIS:
         suggest = partial(suggest_ris_mapping, alias_overrides=overrides)
         return _FormatHandlers(
@@ -142,7 +148,7 @@ def preview_for(
 
 
 def shows_delimiter(file_type: str) -> bool:
-    return file_type in (_TYPE_CSV, _TYPE_BIBTEX)
+    return file_type in (_TYPE_CSV, _TYPE_TSV, _TYPE_BIBTEX)
 
 
 def _detect(path: Path) -> tuple[str, str]:
@@ -221,6 +227,17 @@ def import_csv(
     return _store(session, path, _TYPE_CSV, mapping, summary, result, source)
 
 
+def import_tsv(
+    session: Session,
+    path: Path,
+    mapping: FieldMapping,
+    summary: FileSummary,
+    source: str = _SOURCE_UNKNOWN,
+) -> SourceFile:
+    result = parse_csv_file(path, mapping, delimiter=_TSV_DELIMITER)
+    return _store(session, path, _TYPE_TSV, mapping, summary, result, source)
+
+
 def import_ris(
     session: Session,
     path: Path,
@@ -264,6 +281,8 @@ def import_file(
 ) -> SourceFile:
     if file_type == _TYPE_CSV:
         return import_csv(session, path, mapping, summary, source)
+    if file_type == _TYPE_TSV:
+        return import_tsv(session, path, mapping, summary, source)
     if file_type == _TYPE_RIS:
         return import_ris(session, path, mapping, summary, source)
     if file_type == _TYPE_NBIB:

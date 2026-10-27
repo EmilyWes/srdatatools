@@ -537,3 +537,77 @@ def test_parse_csv_record__applies_mapping() -> None:
     assert row.record.title == "Some Paper"
     assert [a.full_name for a in row.record.authors] == ["Smith, J", "Doe, J"]
     assert row.raw_fields == raw_fields
+
+
+def test_parse_csv_file__tab_delimiter_maps_fields() -> None:
+    mapping = FieldMapping(
+        targets={
+            "title": "title",
+            "authors": "authors",
+            "doi": "doi",
+            "keywords": "keywords",
+            "year": "year",
+        }
+    )
+
+    result = parse_csv_file(
+        CSV_FIXTURES_DIR / "tab_delimited.tsv", mapping, delimiter="\t"
+    )
+
+    assert result.skipped == []
+    assert len(result.rows) == 3
+    record = result.rows[0].record
+    assert record.title == "Deep learning for screening, a review"
+    assert [a.full_name for a in record.authors] == ["Smith, Jane", "Doe, John"]
+    assert record.doi == "10.1000/abc123"
+    assert record.keywords == ["active learning", "screening"]
+    assert record.publication_date is not None
+    assert record.publication_date.year == 2021
+
+
+def test_parse_csv_text__tab_delimiter_keeps_commas_in_cells() -> None:
+    text = "Title\tAuthors\nA, B, and C\tSmith, J\nD, E\tDoe, J\n"
+    mapping = FieldMapping(targets={"Title": "title"})
+
+    result = parse_csv_text(text, mapping, delimiter="\t")
+
+    assert result.skipped == []
+    assert [row.record.title for row in result.rows] == ["A, B, and C", "D, E"]
+
+
+def test_parse_csv_text__tab_delimiter_reads_quoted_multiline_cell() -> None:
+    text = 'Title\tAbstract\nSome Paper\t"First line.\nSecond line with a\ttab."\n'
+    mapping = FieldMapping(targets={"Abstract": "abstract"})
+
+    result = parse_csv_text(text, mapping, delimiter="\t")
+
+    assert result.skipped == []
+    assert result.rows[0].record.abstract == "First line.\nSecond line with a\ttab."
+
+
+def test_parse_csv_text__tab_delimiter_skips_ragged_row() -> None:
+    text = "Title\tDOI\nSome Paper\t10.1/x\nOnly title\n"
+    mapping = FieldMapping(targets={"Title": "title"})
+
+    result = parse_csv_text(text, mapping, delimiter="\t")
+
+    assert len(result.rows) == 1
+    assert len(result.skipped) == 1
+    assert "fewer fields" in result.skipped[0].reason
+
+
+def test_read_csv_headers__tab_delimiter_returns_headers_and_counts() -> None:
+    summary = read_csv_headers(CSV_FIXTURES_DIR / "tab_delimited.tsv", delimiter="\t")
+
+    assert list(summary.samples) == [
+        "record_id",
+        "title",
+        "abstract",
+        "authors",
+        "doi",
+        "keywords",
+        "year",
+    ]
+    assert summary.samples["authors"] == "Smith, Jane; Doe, John"
+    assert summary.total_rows == 3
+    assert summary.filled["doi"] == 2

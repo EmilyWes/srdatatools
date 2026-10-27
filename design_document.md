@@ -72,7 +72,7 @@ app/
     common.py        # result types shared by all parsers + file decoding
     mapping.py       # generic input-key -> Record field mapping (CSV columns, RIS/NBIB tags, BibTeX fields)
     authors.py       # author-name parsing shared by the parsers
-    csv_.py          # generic CSV reader + column-mapping suggestions
+    csv_.py          # generic CSV/TSV reader + column-mapping suggestions
     ris.py           # generic RIS tokenizer + tag-mapping suggestions
     nbib.py          # generic NBIB/MEDLINE tokenizer + tag-mapping suggestions
     bibtex.py        # generic BibTeX tokenizer + field-mapping suggestions
@@ -230,7 +230,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Generic NBIB/MEDLINE tokenizer/parser
 - [x] Generic BibTeX tokenizer/parser
 - [x] Generic CSV reader (column-mapping logic)
-- [ ] Generic TSV reader (column-mapping logic)
+- [x] Generic TSV reader (column-mapping logic)
 - [ ] Generic Excel reader (column-mapping logic)
 - [x] Field-mapping UI, embedded inline in the import view (live table below Source/Type, no separate screen/confirm step)
 - [x] Field-mapping UI: visual indicators (different colors) per row for columns that are mapped directly (exact alias), mapped via fuzzy match or the ID fallback, or mapped multiple times to the same target
