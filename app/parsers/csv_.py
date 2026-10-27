@@ -60,12 +60,22 @@ def _sniff_dialect(sample: str) -> type[csv.Dialect] | str:
     return dialect
 
 
+def _dialect(text: str, delimiter: str | None) -> type[csv.Dialect] | csv.Dialect | str:
+    if delimiter is None:
+        return _sniff_dialect(text[:2048])
+    dialect = csv.excel()
+    dialect.delimiter = delimiter
+    return dialect
+
+
 def parse_csv_record(raw_fields: dict[str, str], mapping: FieldMapping) -> ParsedRow:
     return ParsedRow(record=apply_mapping(raw_fields, mapping), raw_fields=raw_fields)
 
 
-def parse_csv_text(text: str, mapping: FieldMapping) -> ParseResult:
-    dialect = _sniff_dialect(text[:2048])
+def parse_csv_text(
+    text: str, mapping: FieldMapping, delimiter: str | None = None
+) -> ParseResult:
+    dialect = _dialect(text, delimiter)
     reader = csv.DictReader(
         StringIO(text), dialect=dialect, restkey=_EXTRA_FIELDS_KEY, restval=None
     )
@@ -106,13 +116,15 @@ def parse_csv_text(text: str, mapping: FieldMapping) -> ParseResult:
     return ParseResult(rows=rows, skipped=skipped)
 
 
-def parse_csv_file(path: Path, mapping: FieldMapping) -> ParseResult:
-    return parse_csv_text(decode_file(path), mapping)
+def parse_csv_file(
+    path: Path, mapping: FieldMapping, delimiter: str | None = None
+) -> ParseResult:
+    return parse_csv_text(decode_file(path), mapping, delimiter)
 
 
-def read_csv_headers(path: Path) -> FileSummary:
+def read_csv_headers(path: Path, delimiter: str | None = None) -> FileSummary:
     text = decode_file(path)
-    dialect = _sniff_dialect(text[:2048])
+    dialect = _dialect(text, delimiter)
     reader = csv.reader(StringIO(text), dialect=dialect)
     headers = next(reader, [])
     summary = SummaryBuilder(headers)

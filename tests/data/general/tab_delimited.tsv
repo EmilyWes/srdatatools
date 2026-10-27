@@ -1,0 +1,5 @@
+record_id	title	abstract	authors	doi	keywords	year
+1	Deep learning for screening, a review	We review active learning; results vary, as expected.	Smith, Jane; Doe, John	10.1000/abc123	active learning; screening	2021
+2	Semi-automated title screening	"First paragraph.
+Second paragraph with a	tab."	Lee, Kim	10.1000/def456	systematic review	2019
+3	Citation chasing tools		Garcia, Ana; Chen, Wei; Okafor, Ngozi			2023
