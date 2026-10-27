@@ -27,6 +27,11 @@ from app.parsers.csv_ import (
     suggest_mapping,
 )
 from app.parsers.detect import detect_source, detect_type
+from app.parsers.excel import (
+    parse_excel_file,
+    read_excel_headers,
+    read_excel_sheets,
+)
 from app.parsers.mapping import FieldMapping
 from app.parsers.nbib import (
     parse_nbib_file,
@@ -48,6 +53,7 @@ _TYPE_RIS = "ris"
 _TYPE_NBIB = "nbib"
 _TYPE_CSV = "csv"
 _TYPE_TSV = "tsv"
+_TYPE_EXCEL = "excel"
 _TYPE_BIBTEX = "bibtex"
 _TYPE_OPTIONS = {
     _TYPE_UNKNOWN: "Unknown",
@@ -55,6 +61,7 @@ _TYPE_OPTIONS = {
     _TYPE_NBIB: "NBIB",
     _TYPE_CSV: "CSV",
     _TYPE_TSV: "TSV",
+    _TYPE_EXCEL: "Excel",
     _TYPE_BIBTEX: "BibTeX",
 }
 _TSV_DELIMITER = "\t"
@@ -69,6 +76,7 @@ _MIXED_WARNING = (
     "The selected files look like they come from different sources or types."
     " Make sure you are importing files from the same source and of the same type."
 )
+_EXCEL_SINGLE_FILE = "Excel import takes one file at a time"
 
 
 async def pick_files() -> list[Path]:
@@ -105,6 +113,11 @@ def _handlers(file_type: str, source: str) -> _FormatHandlers | None:
             else partial(read_csv_headers, delimiter=_TSV_DELIMITER)
         )
         return _FormatHandlers(read_keys, suggest, _parse_csv_lines, "columns", profile)
+    if file_type == _TYPE_EXCEL:
+        suggest = partial(suggest_mapping, alias_overrides=overrides)
+        return _FormatHandlers(
+            read_excel_headers, suggest, _parse_csv_lines, "columns", profile
+        )
     if file_type == _TYPE_RIS:
         suggest = partial(suggest_ris_mapping, alias_overrides=overrides)
         return _FormatHandlers(
@@ -153,7 +166,7 @@ def preview_for(
 
 
 def shows_delimiter(file_type: str) -> bool:
-    return file_type in (_TYPE_CSV, _TYPE_TSV, _TYPE_BIBTEX)
+    return file_type in (_TYPE_CSV, _TYPE_TSV, _TYPE_EXCEL, _TYPE_BIBTEX)
 
 
 def _detect(path: Path) -> tuple[str, str]:
@@ -171,7 +184,11 @@ def common_detection(detected: list[tuple[str, str]]) -> tuple[str, str]:
     return file_type, source
 
 
-def read_summary(file_type: str, path: Path) -> FileSummary | None:
+def read_summary(
+    file_type: str, path: Path, sheet: str | None = None
+) -> FileSummary | None:
+    if file_type == _TYPE_EXCEL:
+        return read_excel_headers(path, sheet)
     handlers = _handlers(file_type, _SOURCE_UNKNOWN)
     return handlers.read_keys(path) if handlers is not None else None
 
@@ -209,6 +226,7 @@ def _store(
     summary: FileSummary,
     result: ParseResult,
     source: str,
+    sheet: str | None = None,
 ) -> SourceFile:
     handlers = _handlers(file_type, source)
     assert handlers is not None
@@ -219,6 +237,7 @@ def _store(
         path=str(path),
         format=file_type,
         source=source if source != _SOURCE_UNKNOWN else None,
+        sheet=sheet,
         parsed_rows=[(row.record, row.raw_fields) for row in result.rows],
         skipped_rows=[(row.row_number, row.reason) for row in result.skipped],
     )
@@ -249,6 +268,18 @@ def import_tsv(
 ) -> SourceFile:
     result = parse_csv_file(path, mapping, delimiter=_TSV_DELIMITER)
     return _store(session, path, _TYPE_TSV, mapping, summary, result, source)
+
+
+def import_excel(
+    session: Session,
+    path: Path,
+    mapping: FieldMapping,
+    summary: FileSummary,
+    source: str = _SOURCE_UNKNOWN,
+    sheet: str | None = None,
+) -> SourceFile:
+    result = parse_excel_file(path, mapping, sheet)
+    return _store(session, path, _TYPE_EXCEL, mapping, summary, result, source, sheet)
 
 
 def import_ris(
@@ -291,11 +322,14 @@ def import_file(
     mapping: FieldMapping,
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
+    sheet: str | None = None,
 ) -> SourceFile:
     if file_type == _TYPE_CSV:
         return import_csv(session, path, mapping, summary, source)
     if file_type == _TYPE_TSV:
         return import_tsv(session, path, mapping, summary, source)
+    if file_type == _TYPE_EXCEL:
+        return import_excel(session, path, mapping, summary, source, sheet)
     if file_type == _TYPE_RIS:
         return import_ris(session, path, mapping, summary, source)
     if file_type == _TYPE_NBIB:
@@ -306,7 +340,8 @@ def import_file(
 
 
 OnImport = Callable[
-    [list[tuple[Path, FileSummary]], str, FieldMapping, str], Awaitable[None] | None
+    [list[tuple[Path, FileSummary]], str, FieldMapping, str, str | None],
+    Awaitable[None] | None,
 ]
 
 
@@ -319,6 +354,8 @@ class ImportView:
     file_type: str = _TYPE_UNKNOWN
     source: str = _SOURCE_UNKNOWN
     summaries: list[FileSummary] = field(default_factory=list)
+    sheets: list[str] = field(default_factory=list)
+    sheet: str | None = None
     mapping_screen: MappingScreen | None = None
     import_button: ui.button | None = None
 
@@ -326,6 +363,9 @@ class ImportView:
         if len(self.paths) == 1:
             return self.paths[0].name
         return f"{len(self.paths)} files"
+
+    def _too_many_for_excel(self) -> bool:
+        return self.file_type == _TYPE_EXCEL and len(self.paths) > 1
 
     def _mixed(self) -> bool:
         return len(set(self.detected)) > 1
@@ -340,6 +380,7 @@ class ImportView:
         picked = await pick_files()
         if picked:
             self.paths = picked
+            self.sheet = None
             self.detected = await run_busy(
                 f"Reading {self._name()}…", lambda: [_detect(path) for path in picked]
             )
@@ -353,18 +394,33 @@ class ImportView:
         self.file_type = file_type
         await self._read_files()
 
+    async def _set_sheet(self, sheet: str) -> None:
+        self.sheet = sheet
+        await self._read_files()
+
     async def _read_files(self) -> None:
         self.summaries = []
+        self.sheets = []
         paths = self.paths
         file_type = self.file_type
+        previous_sheet = self.sheet
+        self.sheet = None
 
-        def read() -> list[FileSummary]:
-            summaries = [read_summary(file_type, path) for path in paths]
-            return [summary for summary in summaries if summary is not None]
+        def read() -> tuple[list[str], str | None, list[FileSummary]]:
+            sheets = read_excel_sheets(paths[0]) if file_type == _TYPE_EXCEL else []
+            first_sheet = next(iter(sheets), None)
+            sheet = previous_sheet if previous_sheet in sheets else first_sheet
+            summaries = [read_summary(file_type, path, sheet) for path in paths]
+            return sheets, sheet, [s for s in summaries if s is not None]
 
-        if paths:
+        if self._too_many_for_excel():
+            with self.middle:
+                ui.notify(_EXCEL_SINGLE_FILE, type="warning")
+        elif paths:
             try:
-                self.summaries = await run_busy(f"Reading {self._name()}…", read)
+                self.sheets, self.sheet, self.summaries = await run_busy(
+                    f"Reading {self._name()}…", read
+                )
             except ValueError as exc:
                 with self.middle:
                     ui.notify(str(exc), type="negative")
@@ -382,6 +438,7 @@ class ImportView:
             self.file_type,
             self.mapping_screen.current_mapping(),
             self.source,
+            self.sheet,
         )
 
     def render(self) -> None:
@@ -407,6 +464,14 @@ class ImportView:
                     ui.button("Select files", on_click=self._select_files).props(
                         "dense"
                     )
+
+                if self.sheets:
+                    sheet_select = (
+                        ui.select(self.sheets, value=self.sheet, label="Sheet")
+                        .props("dense outlined")
+                        .classes("w-48")
+                    )
+                    sheet_select.on_value_change(lambda e: self._set_sheet(e.value))
 
                 with ui.row().classes("items-center gap-2"):
                     # Mirrors the warning icon's slot so the dropdowns stay centred.
@@ -460,6 +525,8 @@ class ImportView:
                     )
                     if not type_known:
                         self.import_button.tooltip("please select the type")
+                    elif self._too_many_for_excel():
+                        self.import_button.tooltip(_EXCEL_SINGLE_FILE)
                     elif not has_mapping:
                         self.import_button.tooltip("file has no mapping available")
 

@@ -36,12 +36,15 @@ def render_source_file_view(
         with ui.column().classes("w-full p-4 gap-4"):
             ui.label(source_file.filename).classes("text-lg")
             with ui.grid(columns="max-content auto").classes("gap-x-4 gap-y-1"):
-                for name, value in [
+                details = [
                     ("Source", source_label(source_file.source)),
                     ("Format", source_file.format),
                     ("Imported at", f"{source_file.imported_at:%Y-%m-%d %H:%M}"),
                     ("Path", source_file.path or ""),
-                ]:
+                ]
+                if source_file.sheet is not None:
+                    details.insert(2, ("Sheet", source_file.sheet))
+                for name, value in details:
                     ui.label(name).classes("text-sm text-grey-7")
                     ui.label(value).classes("text-sm")
             with ui.row().classes("items-center gap-6"):

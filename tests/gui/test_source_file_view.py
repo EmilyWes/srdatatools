@@ -101,6 +101,27 @@ def test_render_source_file_view__shows_metadata_and_record_count() -> None:
         assert text in labels
 
 
+def test_render_source_file_view__shows_sheet_after_format() -> None:
+    panes = shell()
+    source_file = _source_file([])
+    source_file.format = "excel"
+    source_file.sheet = "Records"
+
+    render_source_file_view(
+        panes.middle, source_file, records_in_library=3, on_remove=lambda: None
+    )
+
+    labels = _labels(panes.middle)
+    assert labels.index("Sheet") == labels.index("Format") + 2
+    assert labels[labels.index("Sheet") + 1] == "Records"
+
+
+def test_render_source_file_view__no_sheet_row_without_sheet() -> None:
+    middle, _ = _render()
+
+    assert "Sheet" not in _labels(middle)
+
+
 def test_render_source_file_view__lists_skipped_rows() -> None:
     skipped = [{"row_number": 4, "reason": "row is blank"}]
 

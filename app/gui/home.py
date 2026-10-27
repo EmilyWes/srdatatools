@@ -192,11 +192,14 @@ def home() -> None:
         file_type: str,
         mapping: FieldMapping,
         source: str,
+        sheet: str | None,
     ) -> None:
         def store() -> list[int]:
             with session_scope(_engine) as session:
                 source_files = [
-                    import_file(session, path, file_type, mapping, summary, source)
+                    import_file(
+                        session, path, file_type, mapping, summary, source, sheet
+                    )
                     for path, summary in files
                 ]
                 session.flush()
