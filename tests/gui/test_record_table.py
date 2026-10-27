@@ -15,6 +15,7 @@ from app.gui.layout import shell
 from app.gui.record_table import (
     COLUMNS,
     DEFAULT_COLUMNS,
+    LabelFormat,
     RecordSelection,
     label_column_key,
     label_field,
@@ -406,7 +407,7 @@ def test_load_columns__drops_label_columns_no_longer_in_library(
 def test_load_rows__label_cells_join_values_per_pair(session: Session) -> None:
     _add_labels(session)
 
-    assert load_rows(session, [TIAB, FT]) == [
+    assert load_rows(session, [TIAB, FT], label_format="words") == [
         {"id": 1, label_field(TIAB): "include; maybe", label_field(FT): "exclude"},
         {"id": 2, label_field(TIAB): "", label_field(FT): ""},
     ]
@@ -454,18 +455,18 @@ def test_render_table_settings__label_checkboxes_after_fixed_ones() -> None:
     assert changes == [["doi", FT], ["doi", TIAB, FT]]
 
 
-def test_load_label_format__defaults_to_words(session: Session) -> None:
-    assert load_label_format(session) == "words"
+def test_load_label_format__defaults_to_numbers(session: Session) -> None:
+    assert load_label_format(session) == "numbers"
 
 
 def test_save_label_format__roundtrip_and_reset(session: Session) -> None:
-    save_label_format(session, "numbers")
+    save_label_format(session, "words")
     session.commit()
-    assert load_label_format(session) == "numbers"
+    assert load_label_format(session) == "words"
 
     reset_label_format(session)
     session.commit()
-    assert load_label_format(session) == "words"
+    assert load_label_format(session) == "numbers"
 
 
 def test_load_rows__label_cells_as_numbers(session: Session) -> None:
@@ -483,7 +484,7 @@ def test_load_rows__label_cells_as_numbers(session: Session) -> None:
         ("exclude", "0"),
         ("maybe", "0.5"),
         ("unknown", "?"),
-        ("unlabeled", "-1"),
+        ("unlabeled", ""),
     ],
 )
 def test_load_rows__each_label_value_has_a_number(
@@ -513,7 +514,7 @@ def test_render_table_settings__label_format_radio_reports_change() -> None:
     render_table_settings(
         panes.middle,
         ["doi"],
-        label_format="words",
+        label_format="numbers",
         on_change=lambda columns: None,
         on_label_format=formats.append,
         on_restore=lambda: None,
@@ -525,9 +526,35 @@ def test_render_table_settings__label_format_radio_reports_change() -> None:
         if isinstance(element, ui.radio)
     )
 
-    assert radio.options == {"words": "Words", "numbers": "Numbers"}
-    assert radio.value == "words"
+    assert isinstance(radio.options, dict)
+    assert list(radio.options.items()) == [("numbers", "Numbers"), ("words", "Words")]
+    assert radio.value == "numbers"
 
-    radio.value = "numbers"
+    radio.value = "words"
 
-    assert formats == ["numbers"]
+    assert formats == ["words"]
+
+
+@pytest.mark.parametrize("label_format", ["numbers", "words"])
+def test_load_rows__unlabeled_is_empty_but_keeps_its_slot(
+    session: Session, label_format: LabelFormat
+) -> None:
+    record = Record(id=1)
+    source_file = _source_file(None)
+    session.add_all(
+        Label(
+            record=record,
+            source_file=source_file,
+            phase="ft",
+            screener="screener 1",
+            value=value,
+        )
+        for value in ("unlabeled", "include", "unlabeled")
+    )
+    session.commit()
+    key = label_column_key("ft", "screener 1")
+
+    rows = load_rows(session, [key], label_format=label_format)
+
+    include = "1" if label_format == "numbers" else "include"
+    assert rows[0][label_field(key)] == f"; {include}; "

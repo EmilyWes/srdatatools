@@ -25,13 +25,12 @@ _LABEL_PREFIX = "label:"
 _LABEL_FORMAT_KEY = "table_label_format"
 
 LabelFormat = Literal["words", "numbers"]
-_LABEL_FORMATS: dict[LabelFormat, str] = {"words": "Words", "numbers": "Numbers"}
+_LABEL_FORMATS: dict[LabelFormat, str] = {"numbers": "Numbers", "words": "Words"}
 _LABEL_NUMBERS = {
     "include": "1",
     "exclude": "0",
     "maybe": "0.5",
     "unknown": "?",
-    "unlabeled": "-1",
 }
 
 COLUMNS: dict[str, str] = {
@@ -125,7 +124,7 @@ def reset_columns(session: Session) -> None:
 
 
 def load_label_format(session: Session) -> LabelFormat:
-    return cast(LabelFormat, get_setting(session, _LABEL_FORMAT_KEY) or "words")
+    return cast(LabelFormat, get_setting(session, _LABEL_FORMAT_KEY) or "numbers")
 
 
 def save_label_format(session: Session, label_format: LabelFormat) -> None:
@@ -167,8 +166,14 @@ def row_for(values: Mapping[str, Any]) -> dict[str, Any]:
     return row
 
 
+def _label_text(value: str, label_format: LabelFormat) -> str:
+    if value == "unlabeled":
+        return ""
+    return _LABEL_NUMBERS[value] if label_format == "numbers" else value
+
+
 def load_rows(
-    session: Session, columns: Sequence[str], label_format: LabelFormat = "words"
+    session: Session, columns: Sequence[str], label_format: LabelFormat = "numbers"
 ) -> list[dict[str, Any]]:
     label_columns = [key for key in columns if _is_label_column(key)]
     fields = [key for key in columns if key != "sources" and key not in label_columns]
@@ -183,9 +188,9 @@ def load_rows(
             pairs = labels.get(row["id"], {})
             for key in label_columns:
                 values = pairs.get(_label_pair(key), [])
-                if label_format == "numbers":
-                    values = [_LABEL_NUMBERS[value] for value in values]
-                row[label_field(key)] = "; ".join(values)
+                row[label_field(key)] = "; ".join(
+                    _label_text(value, label_format) for value in values
+                )
     return rows
 
 
