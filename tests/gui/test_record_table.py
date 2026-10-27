@@ -9,20 +9,27 @@ from nicegui.element import Element
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.db.models import Base, Record, RecordSource, SourceFile
+from app.db.models import Base, Label, Record, RecordSource, SourceFile
 from app.db.settings import set_setting
 from app.gui.layout import shell
 from app.gui.record_table import (
     COLUMNS,
     DEFAULT_COLUMNS,
+    LabelFormat,
     RecordSelection,
+    label_column_key,
+    label_field,
     load_columns,
+    load_label_columns,
+    load_label_format,
     load_rows,
     render_record_table,
     render_table_settings,
     reset_columns,
+    reset_label_format,
     row_for,
     save_columns,
+    save_label_format,
 )
 
 
@@ -214,7 +221,13 @@ def test_render_table_settings__checkboxes_reflect_columns() -> None:
     panes = shell()
 
     render_table_settings(
-        panes.middle, ["doi"], on_change=print, on_restore=print, on_back=print
+        panes.middle,
+        ["doi"],
+        label_format="words",
+        on_change=print,
+        on_label_format=print,
+        on_restore=print,
+        on_back=print,
     )
 
     checkboxes = {
@@ -233,7 +246,9 @@ def test_render_table_settings__toggling_reports_new_columns() -> None:
     render_table_settings(
         panes.middle,
         ["doi"],
+        label_format="words",
         on_change=changes.append,
+        on_label_format=print,
         on_restore=lambda: None,
         on_back=lambda: None,
     )
@@ -254,7 +269,9 @@ def test_render_table_settings__restore_and_back_buttons_call_back() -> None:
     render_table_settings(
         panes.middle,
         ["doi"],
+        label_format="words",
         on_change=lambda columns: None,
+        on_label_format=print,
         on_restore=lambda: calls.append("restore"),
         on_back=lambda: calls.append("back"),
     )
@@ -331,3 +348,213 @@ def test_render_record_table__counts_use_dot_thousands_separator() -> None:
         if isinstance(element, ui.label)
     ]
     assert labels[1] == "1.234"
+
+
+TIAB = label_column_key("tiab", "Emily")
+FT = label_column_key("ft", "screener 1.0")
+
+
+def _add_labels(session: Session) -> None:
+    source_file = _source_file(None)
+    record = Record(id=1)
+    session.add_all(
+        [
+            Label(
+                record=record,
+                source_file=source_file,
+                phase=phase,
+                screener=screener,
+                value=value,
+            )
+            for phase, screener, value in [
+                ("tiab", "Emily", "include"),
+                ("tiab", "Emily", "maybe"),
+                ("ft", "screener 1.0", "exclude"),
+            ]
+        ]
+        + [Record(id=2)]
+    )
+    session.commit()
+
+
+def test_label_field__is_free_of_dots_and_brackets() -> None:
+    assert all(char.isalnum() or char == "_" for char in label_field(FT))
+
+
+def test_load_label_columns__one_key_per_pair_in_library(session: Session) -> None:
+    _add_labels(session)
+
+    assert load_label_columns(session) == [TIAB, FT]
+
+
+def test_load_columns__keeps_label_columns_after_fixed_ones(session: Session) -> None:
+    _add_labels(session)
+    save_columns(session, [FT, "doi", TIAB])
+    session.commit()
+
+    assert load_columns(session) == ["doi", TIAB, FT]
+
+
+def test_load_columns__drops_label_columns_no_longer_in_library(
+    session: Session,
+) -> None:
+    save_columns(session, ["doi", TIAB])
+    session.commit()
+
+    assert load_columns(session) == ["doi"]
+
+
+def test_load_rows__label_cells_join_values_per_pair(session: Session) -> None:
+    _add_labels(session)
+
+    assert load_rows(session, [TIAB, FT], label_format="words") == [
+        {"id": 1, label_field(TIAB): "include; maybe", label_field(FT): "exclude"},
+        {"id": 2, label_field(TIAB): "", label_field(FT): ""},
+    ]
+
+
+def test_render_record_table__label_column_header_and_field() -> None:
+    panes = shell()
+
+    render_record_table(panes.middle, [_row(1)], ["doi", FT], RecordSelection())
+
+    column = _grid(panes.middle).options["columnDefs"][1]
+    assert column["field"] == label_field(FT)
+    assert column["headerName"] == "Label: ft / screener 1.0"
+    assert column["filter"] == "agTextColumnFilter"
+
+
+def test_render_table_settings__label_checkboxes_after_fixed_ones() -> None:
+    panes = shell()
+    changes: list[list[str]] = []
+    render_table_settings(
+        panes.middle,
+        ["doi"],
+        label_columns=[TIAB, FT],
+        label_format="words",
+        on_change=changes.append,
+        on_label_format=print,
+        on_restore=lambda: None,
+        on_back=lambda: None,
+    )
+    checkboxes = [
+        element
+        for element in panes.middle.descendants()
+        if isinstance(element, ui.checkbox)
+    ]
+
+    assert [box.text for box in checkboxes[-2:]] == [
+        "Label: tiab / Emily",
+        "Label: ft / screener 1.0",
+    ]
+    assert not any(box.value for box in checkboxes[-2:])
+
+    checkboxes[-1].value = True
+    checkboxes[-2].value = True
+
+    assert changes == [["doi", FT], ["doi", TIAB, FT]]
+
+
+def test_load_label_format__defaults_to_numbers(session: Session) -> None:
+    assert load_label_format(session) == "numbers"
+
+
+def test_save_label_format__roundtrip_and_reset(session: Session) -> None:
+    save_label_format(session, "words")
+    session.commit()
+    assert load_label_format(session) == "words"
+
+    reset_label_format(session)
+    session.commit()
+    assert load_label_format(session) == "numbers"
+
+
+def test_load_rows__label_cells_as_numbers(session: Session) -> None:
+    _add_labels(session)
+
+    rows = load_rows(session, [TIAB, FT], label_format="numbers")
+
+    assert rows[0] == {"id": 1, label_field(TIAB): "1; 0.5", label_field(FT): "0"}
+
+
+@pytest.mark.parametrize(
+    ("value", "number"),
+    [
+        ("include", "1"),
+        ("exclude", "0"),
+        ("maybe", "0.5"),
+        ("unknown", "?"),
+        ("unlabeled", ""),
+    ],
+)
+def test_load_rows__each_label_value_has_a_number(
+    session: Session, value: str, number: str
+) -> None:
+    record = Record(id=1)
+    session.add(
+        Label(
+            record=record,
+            source_file=_source_file(None),
+            phase="ft",
+            screener="screener 1",
+            value=value,
+        )
+    )
+    session.commit()
+    key = label_column_key("ft", "screener 1")
+
+    rows = load_rows(session, [key], label_format="numbers")
+
+    assert rows[0][label_field(key)] == number
+
+
+def test_render_table_settings__label_format_radio_reports_change() -> None:
+    panes = shell()
+    formats: list[str] = []
+    render_table_settings(
+        panes.middle,
+        ["doi"],
+        label_format="numbers",
+        on_change=lambda columns: None,
+        on_label_format=formats.append,
+        on_restore=lambda: None,
+        on_back=lambda: None,
+    )
+    radio = next(
+        element
+        for element in panes.middle.descendants()
+        if isinstance(element, ui.radio)
+    )
+
+    assert isinstance(radio.options, dict)
+    assert list(radio.options.items()) == [("numbers", "Numbers"), ("words", "Words")]
+    assert radio.value == "numbers"
+
+    radio.value = "words"
+
+    assert formats == ["words"]
+
+
+@pytest.mark.parametrize("label_format", ["numbers", "words"])
+def test_load_rows__unlabeled_is_empty_but_keeps_its_slot(
+    session: Session, label_format: LabelFormat
+) -> None:
+    record = Record(id=1)
+    source_file = _source_file(None)
+    session.add_all(
+        Label(
+            record=record,
+            source_file=source_file,
+            phase="ft",
+            screener="screener 1",
+            value=value,
+        )
+        for value in ("unlabeled", "include", "unlabeled")
+    )
+    session.commit()
+    key = label_column_key("ft", "screener 1")
+
+    rows = load_rows(session, [key], label_format=label_format)
+
+    include = "1" if label_format == "numbers" else "include"
+    assert rows[0][label_field(key)] == f"; {include}; "

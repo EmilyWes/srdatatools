@@ -10,6 +10,7 @@ from app.db.session import default_db_path, run_migrations
 EXPECTED_TABLES = {
     "activity_log",
     "app_settings",
+    "label",
     "record",
     "record_source",
     "source_file",
@@ -78,6 +79,29 @@ def test_run_migrations__source_file_has_nullable_sheet_column(
         connection.close()
 
     assert notnull_by_column["sheet"] == 0
+
+
+def test_run_migrations__label_has_record_source_file_and_label_columns(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "migration_test.db"
+
+    run_migrations(db_path)
+
+    connection = sqlite3.connect(db_path)
+    try:
+        columns = {row[1] for row in connection.execute("pragma table_info(label)")}
+    finally:
+        connection.close()
+
+    assert columns == {
+        "id",
+        "record_id",
+        "source_file_id",
+        "phase",
+        "screener",
+        "value",
+    }
 
 
 def test_run_migrations__source_file_mapping_columns_default_to_empty(

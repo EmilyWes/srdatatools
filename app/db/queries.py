@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import ActivityLog, Record, RecordSource, SourceFile
+from app.db.models import ActivityLog, Label, Record, RecordSource, SourceFile
 
 
 def list_source_files(session: Session) -> list[SourceFile]:
@@ -35,6 +35,29 @@ def list_record_sources(session: Session) -> dict[int, list[str | None]]:
     for record_id, source in session.execute(statement):
         sources[record_id].append(source)
     return sources
+
+
+def list_label_columns(session: Session) -> list[tuple[str, str]]:
+    statement = (
+        select(Label.phase, Label.screener)
+        .group_by(Label.phase, Label.screener)
+        .order_by(func.min(Label.id))
+    )
+    return [(phase, screener) for phase, screener in session.execute(statement)]
+
+
+def list_record_labels(
+    session: Session,
+) -> dict[int, dict[tuple[str, str], list[str]]]:
+    statement = select(
+        Label.record_id, Label.phase, Label.screener, Label.value
+    ).order_by(Label.id)
+    labels: dict[int, dict[tuple[str, str], list[str]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    for record_id, phase, screener, value in session.execute(statement):
+        labels[record_id][(phase, screener)].append(value)
+    return {record_id: dict(pairs) for record_id, pairs in labels.items()}
 
 
 def count_records(session: Session) -> int:

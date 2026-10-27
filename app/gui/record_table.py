@@ -1,14 +1,19 @@
 import json
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, cast
 
 from nicegui import ui
 from nicegui.element import Element
 from nicegui.events import GenericEventArguments
 from sqlalchemy.orm import Session
 
-from app.db.queries import list_record_rows, list_record_sources
+from app.db.queries import (
+    list_label_columns,
+    list_record_labels,
+    list_record_rows,
+    list_record_sources,
+)
 from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.library_overview import format_count, source_label
 
@@ -16,6 +21,17 @@ _COLUMNS_KEY = "table_columns"
 _NUMBER_COLUMNS = {"publication_year", "publication_month", "publication_day"}
 _WIDE_COLUMNS = {"title", "abstract", "notes"}
 _SELECTION_TIMEOUT = 10.0
+_LABEL_PREFIX = "label:"
+_LABEL_FORMAT_KEY = "table_label_format"
+
+LabelFormat = Literal["words", "numbers"]
+_LABEL_FORMATS: dict[LabelFormat, str] = {"numbers": "Numbers", "words": "Words"}
+_LABEL_NUMBERS = {
+    "include": "1",
+    "exclude": "0",
+    "maybe": "0.5",
+    "unknown": "?",
+}
 
 COLUMNS: dict[str, str] = {
     "doi": "DOI",
@@ -53,23 +69,70 @@ class RecordSelection:
         self.ids = set(ids)
 
 
-def _in_display_order(columns: Collection[str]) -> list[str]:
-    return [key for key in COLUMNS if key in columns]
+def label_column_key(phase: str, screener: str) -> str:
+    return _LABEL_PREFIX + json.dumps([phase, screener])
+
+
+def _is_label_column(key: str) -> bool:
+    return key.startswith(_LABEL_PREFIX)
+
+
+def _label_pair(key: str) -> tuple[str, str]:
+    phase, screener = json.loads(key.removeprefix(_LABEL_PREFIX))
+    return phase, screener
+
+
+def label_field(key: str) -> str:
+    """ag-grid reads dots in a field as a nested path, so label keys are hex-encoded."""
+    return f"label_{key.encode().hex()}" if _is_label_column(key) else key
+
+
+def _header(key: str) -> str:
+    if _is_label_column(key):
+        phase, screener = _label_pair(key)
+        return f"Label: {phase} / {screener}"
+    return COLUMNS[key]
+
+
+def _in_display_order(
+    columns: Collection[str], label_columns: Sequence[str]
+) -> list[str]:
+    fixed = [key for key in COLUMNS if key in columns]
+    return fixed + [key for key in label_columns if key in columns]
+
+
+def load_label_columns(session: Session) -> list[str]:
+    return [label_column_key(*pair) for pair in list_label_columns(session)]
 
 
 def load_columns(session: Session) -> list[str]:
     stored = get_setting(session, _COLUMNS_KEY)
-    return (
-        _in_display_order(json.loads(stored)) if stored is not None else DEFAULT_COLUMNS
-    )
+    if stored is None:
+        return DEFAULT_COLUMNS
+    return _in_display_order(json.loads(stored), load_label_columns(session))
 
 
 def save_columns(session: Session, columns: Sequence[str]) -> None:
-    set_setting(session, _COLUMNS_KEY, json.dumps(_in_display_order(columns)))
+    label_columns = [key for key in columns if _is_label_column(key)]
+    set_setting(
+        session, _COLUMNS_KEY, json.dumps(_in_display_order(columns, label_columns))
+    )
 
 
 def reset_columns(session: Session) -> None:
     delete_setting(session, _COLUMNS_KEY)
+
+
+def load_label_format(session: Session) -> LabelFormat:
+    return cast(LabelFormat, get_setting(session, _LABEL_FORMAT_KEY) or "numbers")
+
+
+def save_label_format(session: Session, label_format: LabelFormat) -> None:
+    set_setting(session, _LABEL_FORMAT_KEY, label_format)
+
+
+def reset_label_format(session: Session) -> None:
+    delete_setting(session, _LABEL_FORMAT_KEY)
 
 
 def _author_name(author: dict[str, Any]) -> str:
@@ -103,20 +166,38 @@ def row_for(values: Mapping[str, Any]) -> dict[str, Any]:
     return row
 
 
-def load_rows(session: Session, columns: Sequence[str]) -> list[dict[str, Any]]:
-    fields = [key for key in columns if key != "sources"]
+def _label_text(value: str, label_format: LabelFormat) -> str:
+    if value == "unlabeled":
+        return ""
+    return _LABEL_NUMBERS[value] if label_format == "numbers" else value
+
+
+def load_rows(
+    session: Session, columns: Sequence[str], label_format: LabelFormat = "numbers"
+) -> list[dict[str, Any]]:
+    label_columns = [key for key in columns if _is_label_column(key)]
+    fields = [key for key in columns if key != "sources" and key not in label_columns]
     rows = [row_for(values) for values in list_record_rows(session, fields)]
     if "sources" in columns:
         sources = list_record_sources(session)
         for row in rows:
             row["sources"] = _sources(sources.get(row["id"], []))
+    if label_columns:
+        labels = list_record_labels(session)
+        for row in rows:
+            pairs = labels.get(row["id"], {})
+            for key in label_columns:
+                values = pairs.get(_label_pair(key), [])
+                row[label_field(key)] = "; ".join(
+                    _label_text(value, label_format) for value in values
+                )
     return rows
 
 
 def _column_def(key: str) -> dict[str, Any]:
     return {
-        "field": key,
-        "headerName": COLUMNS[key],
+        "field": label_field(key),
+        "headerName": _header(key),
         "width": 400 if key in _WIDE_COLUMNS else 160,
         "filter": (
             "agNumberColumnFilter" if key in _NUMBER_COLUMNS else "agTextColumnFilter"
@@ -195,9 +276,12 @@ def render_record_table(
 def render_table_settings(
     middle: Element,
     columns: Sequence[str],
+    label_format: LabelFormat,
     on_change: Callable[[list[str]], Any],
+    on_label_format: Callable[[LabelFormat], Any],
     on_restore: Callable[[], Any],
     on_back: Callable[[], Any],
+    label_columns: Sequence[str] = (),
 ) -> None:
     selected = set(columns)
 
@@ -206,7 +290,7 @@ def render_table_settings(
             selected.add(key)
         else:
             selected.discard(key)
-        on_change(_in_display_order(selected))
+        on_change(_in_display_order(selected, label_columns))
 
     middle.clear()
     with middle:
@@ -214,12 +298,18 @@ def render_table_settings(
             ui.label("Table settings").classes("text-lg")
             ui.label("Columns").classes("text-sm text-grey-7")
             with ui.column().classes("gap-0"):
-                for key, label in COLUMNS.items():
+                for key in [*COLUMNS, *label_columns]:
                     ui.checkbox(
-                        label,
+                        _header(key),
                         value=key in selected,
                         on_change=lambda e, key=key: toggle(key, e.value),
                     ).props("dense")
+            ui.label("Label values").classes("text-sm text-grey-7 pt-2")
+            ui.radio(
+                dict(_LABEL_FORMATS),
+                value=label_format,
+                on_change=lambda e: on_label_format(e.value),
+            ).props("dense inline")
             with ui.row().classes("gap-2 pt-2"):
                 ui.button("Restore defaults", color=None, on_click=on_restore).classes(
                     "text-sm"

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -27,6 +29,15 @@ class Author(BaseModel):
     affiliations: list[Affiliation] = Field(default_factory=list)
 
 
+LabelValue = Literal["include", "exclude", "maybe", "unknown", "unlabeled"]
+
+
+class Label(BaseModel):
+    phase: str
+    screener: str
+    value: LabelValue
+
+
 class Record(BaseModel):
     title: str | None = None
     authors: list[Author] = Field(default_factory=list)
@@ -48,6 +59,7 @@ class Record(BaseModel):
     publisher: str | None = None
     url: str | None = None
     notes: str | None = None
+    labels: list[Label] = Field(default_factory=list)
 
     @field_validator("doi")
     @classmethod

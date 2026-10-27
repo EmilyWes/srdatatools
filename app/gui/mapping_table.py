@@ -9,8 +9,11 @@ from app.models.record import Author, PartialDate, Record
 from app.parsers.common import FileSummary
 from app.parsers.mapping import (
     DATE_TARGETS,
+    DEFAULT_PHASE,
+    DEFAULT_SCREENER,
     EXCLUSIVE_TARGETS,
     ISSN_ISBN_TARGET,
+    LABEL_TARGET,
     LIST_TARGETS,
     OTHER_IDS_PREFIX,
     PAGE_TARGETS,
@@ -43,6 +46,7 @@ _BASE_TARGET_KEYS = (
     *sorted({*SCALAR_FIELDS, ISSN_ISBN_TARGET}),
     *LIST_TARGETS,
     _OTHER_IDS,
+    LABEL_TARGET,
 )
 _ALL_TARGET_KEYS = (*_BASE_TARGET_KEYS, *EXCLUSIVE_TARGETS)
 
@@ -86,6 +90,7 @@ _FIELD_ORDER = (
     "language",
     "url",
     _OTHER_IDS,
+    LABEL_TARGET,
     "notes",
 )
 
@@ -215,6 +220,8 @@ class _Row:
     result: ui.label
     count: ui.linear_progress
     select: ui.select
+    phase: ui.input
+    screener: ui.input
     other_id_key: str
     status: Status
     initial_target: str
@@ -252,15 +259,28 @@ class MappingScreen:
         for row in self.rows:
             row.select.props(f"bg-color={_STATUS_COLORS[row.display_status]}")
 
+    def _refresh_label_inputs(self) -> None:
+        for row in self.rows:
+            is_label = row.select.value == LABEL_TARGET
+            row.phase.set_visibility(is_label)
+            row.screener.set_visibility(is_label)
+
     def _refresh_results(self) -> None:
         mapping = self.current_mapping()
         record = self.preview(mapping)
+        label_headers = [k for k, t in mapping.targets.items() if t == LABEL_TARGET]
         for row in self.rows:
             target = mapping.targets.get(row.header)
-            text = _result_text(target, record) if target else ""
+            text: str
+            if target == LABEL_TARGET:
+                text = record.labels[label_headers.index(row.header)].value
+            else:
+                text = _result_text(target, record) if target else ""
             not_parsed = bool(target and row.sample.text and not text)
             row.result.set_text(_NOT_PARSED if not_parsed else text)
             status = _result_status(text, row.sample.text, not_parsed)
+            if target == LABEL_TARGET and text == "unknown":
+                status = "red"
             color = _RESULT_TEXT_COLORS[status] if status else "text-grey-7"
             row.result.classes(replace=f"{_RESULT_CLASSES} {color}")
             row.result.clear()
@@ -269,6 +289,7 @@ class MappingScreen:
                     ui.tooltip(text)
 
     def on_target_change(self) -> None:
+        self._refresh_label_inputs()
         self._refresh_options()
         self._refresh_colors()
         self._refresh_results()
@@ -283,12 +304,17 @@ class MappingScreen:
 
     def current_mapping(self) -> FieldMapping:
         targets: dict[str, str] = {}
+        phases: dict[str, str] = {}
+        screeners: dict[str, str] = {}
         for row in self.rows:
             target = row.select.value
             if target == _IGNORE:
                 continue
             if target == _OTHER_IDS:
                 target = OTHER_IDS_PREFIX + row.other_id_key
+            if target == LABEL_TARGET:
+                phases[row.header] = row.phase.value.strip() or DEFAULT_PHASE
+                screeners[row.header] = row.screener.value.strip() or DEFAULT_SCREENER
             targets[row.header] = target
 
         delimiter = (
@@ -296,7 +322,12 @@ class MappingScreen:
             if self.list_delimiter_input
             else self.list_delimiter
         )
-        return FieldMapping(targets=targets, list_delimiter=delimiter or ";")
+        return FieldMapping(
+            targets=targets,
+            list_delimiter=delimiter or ";",
+            label_phases=phases,
+            label_screeners=screeners,
+        )
 
 
 def render_mapping_table(
@@ -369,18 +400,28 @@ def render_mapping_table(
                     label.style(input_style)
                     if len(header) >= input_width:
                         label.tooltip(header)
-                    select = (
-                        ui.select(
-                            _sorted_options(_ALL_TARGET_KEYS),
-                            value=initial_targets[header],
+                    with ui.column().classes("gap-0").style(mapping_style):
+                        select = (
+                            ui.select(
+                                _sorted_options(_ALL_TARGET_KEYS),
+                                value=initial_targets[header],
+                            )
+                            .classes("mapping-field text-xs w-full")
+                            .props(
+                                "dense options-dense outlined "
+                                f"bg-color={_STATUS_COLORS[status]}"
+                            )
                         )
-                        .classes("mapping-field text-xs")
-                        .style(mapping_style)
-                        .props(
-                            "dense options-dense outlined "
-                            f"bg-color={_STATUS_COLORS[status]}"
+                        phase, screener = (
+                            ui.input(placeholder=placeholder)
+                            .classes("mapping-field text-xs w-full")
+                            .props("dense outlined")
+                            .tooltip(name)
+                            for placeholder, name in (
+                                (DEFAULT_PHASE, "Phase"),
+                                (DEFAULT_SCREENER, "Screener"),
+                            )
                         )
-                    )
                     sample = ui.label(samples[header]).classes(
                         "w-48 truncate text-xs text-grey-7"
                     )
@@ -395,6 +436,8 @@ def render_mapping_table(
                         result=result,
                         count=count,
                         select=select,
+                        phase=phase,
+                        screener=screener,
                         other_id_key=initial_keys[header],
                         status=status,
                         initial_target=initial_targets[header],
@@ -419,9 +462,14 @@ def render_mapping_table(
                 target = _OTHER_IDS
             row.select.value = target
             row.select.props("readonly")
+            row.phase.value = chosen.label_phases.get(row.header, "")
+            row.screener.value = chosen.label_screeners.get(row.header, "")
+            row.phase.props("readonly")
+            row.screener.props("readonly")
         if screen.list_delimiter_input is not None:
             screen.list_delimiter_input.props("readonly")
 
+    screen._refresh_label_inputs()
     screen._refresh_options()
     screen._refresh_results()
     return screen

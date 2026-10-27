@@ -9,12 +9,14 @@ from app.db.models import (
     ActivityLog,
     AppSetting,
     Base,
+    Label,
     Record,
     RecordSource,
     SourceFile,
 )
 from app.db.store import delete_library, remove_source_file, store_parsed_rows
 from app.models.record import Affiliation, Author, PartialDate
+from app.models.record import Label as LabelSchema
 from app.models.record import Record as RecordSchema
 
 
@@ -289,6 +291,32 @@ def test_store_parsed_rows__no_skipped_rows_is_empty_list(session: Session) -> N
     assert session.query(SourceFile).one().skipped_rows == []
 
 
+def test_store_parsed_rows__stores_labels_linked_to_record_and_file(
+    session: Session,
+) -> None:
+    labels = [
+        LabelSchema(phase="tiab", screener="Emily", value="include"),
+        LabelSchema(phase="ft", screener="screener 1", value="unlabeled"),
+    ]
+
+    store_parsed_rows(
+        session,
+        filename="asreview.csv",
+        path=None,
+        format="csv",
+        parsed_rows=[(RecordSchema(title="Paper", labels=labels), {})],
+    )
+    session.commit()
+
+    record = session.query(Record).one()
+    source_file = session.query(SourceFile).one()
+    assert [(lab.phase, lab.screener, lab.value) for lab in record.labels] == [
+        ("tiab", "Emily", "include"),
+        ("ft", "screener 1", "unlabeled"),
+    ]
+    assert all(lab.source_file is source_file for lab in record.labels)
+
+
 def _source_file(filename: str) -> SourceFile:
     return SourceFile(
         filename=filename,
@@ -338,6 +366,45 @@ def test_remove_source_file__keeps_record_with_another_source(
     assert [source.source_file.filename for source in record.sources] == ["kept.ris"]
 
 
+def _label(record: Record, source_file: SourceFile, phase: str) -> Label:
+    return Label(
+        record=record,
+        source_file=source_file,
+        phase=phase,
+        screener="screener 1",
+        value="include",
+    )
+
+
+def test_remove_source_file__removes_its_labels(session: Session) -> None:
+    source_file = _source_file("export.ris")
+    record = _record("First", source_file)
+    session.add_all([record, _label(record, source_file, "ft")])
+    session.commit()
+
+    remove_source_file(session, source_file)
+    session.commit()
+
+    assert session.query(Label).count() == 0
+
+
+def test_remove_source_file__keeps_other_files_labels_on_shared_record(
+    session: Session,
+) -> None:
+    removed_file = _source_file("removed.ris")
+    kept_file = _source_file("kept.ris")
+    record = _record("Shared", removed_file, kept_file)
+    session.add_all(
+        [record, _label(record, removed_file, "tiab"), _label(record, kept_file, "ft")]
+    )
+    session.commit()
+
+    remove_source_file(session, removed_file)
+    session.commit()
+
+    assert [lab.phase for lab in session.query(Label)] == ["ft"]
+
+
 def test_remove_source_file__leaves_other_files_untouched(session: Session) -> None:
     removed_file = _source_file("removed.ris")
     kept_file = _source_file("kept.ris")
@@ -372,6 +439,18 @@ def test_delete_library__removes_all_files_sources_and_records(
     assert session.query(SourceFile).count() == 0
     assert session.query(RecordSource).count() == 0
     assert session.query(Record).count() == 0
+
+
+def test_delete_library__removes_all_labels(session: Session) -> None:
+    source_file = _source_file("first.ris")
+    record = _record("First", source_file)
+    session.add_all([record, _label(record, source_file, "ft")])
+    session.commit()
+
+    delete_library(session)
+    session.commit()
+
+    assert session.query(Label).count() == 0
 
 
 def test_delete_library__keeps_activity_log_and_settings(session: Session) -> None:

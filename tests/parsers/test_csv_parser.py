@@ -611,3 +611,26 @@ def test_read_csv_headers__tab_delimiter_returns_headers_and_counts() -> None:
     assert summary.samples["authors"] == "Smith, Jane; Doe, John"
     assert summary.total_rows == 3
     assert summary.filled["doi"] == 2
+
+
+@pytest.mark.parametrize(
+    "header", ["included", "label_included", "Label", "Decision", "Inclusion"]
+)
+def test_suggest_mapping__matches_label_headers(header: str) -> None:
+    suggestions = suggest_mapping([header])
+
+    assert suggestions.targets == {header: "label"}
+
+
+def test_parse_csv_text__reads_asreview_style_included_column() -> None:
+    text = "title,included\nA,1\nB,0\nC,-1\nD,\n"
+    mapping = suggest_mapping(["title", "included"])
+
+    result = parse_csv_text(text, mapping)
+
+    assert [row.record.labels[0].value for row in result.rows] == [
+        "include",
+        "exclude",
+        "unlabeled",
+        "unlabeled",
+    ]

@@ -33,13 +33,18 @@ from app.gui.library_overview import (
     save_sections,
 )
 from app.gui.record_table import (
+    LabelFormat,
     RecordSelection,
     load_columns,
+    load_label_columns,
+    load_label_format,
     load_rows,
     render_record_table,
     render_table_settings,
     reset_columns,
+    reset_label_format,
     save_columns,
+    save_label_format,
 )
 from app.gui.source_file_view import render_source_file_view
 from app.parsers.common import FileSummary
@@ -124,7 +129,8 @@ def home() -> None:
         def load() -> tuple[list[dict[str, Any]], list[str]]:
             with session_scope(_engine) as session:
                 columns = load_columns(session)
-                return load_rows(session, columns), columns
+                label_format = load_label_format(session)
+                return load_rows(session, columns, label_format), columns
 
         rows, columns = await run_busy("Loading library table…", load)
         render_record_table(panes.middle, rows, columns, selection)
@@ -133,18 +139,28 @@ def home() -> None:
         with session_scope(_engine) as session:
             save_columns(session, columns)
 
+    def save_table_label_format(label_format: LabelFormat) -> None:
+        with session_scope(_engine) as session:
+            save_label_format(session, label_format)
+
     def restore_table_columns() -> None:
         with session_scope(_engine) as session:
             reset_columns(session)
+            reset_label_format(session)
         show_table_settings()
 
     def show_table_settings() -> None:
         with session_scope(_engine) as session:
             columns = load_columns(session)
+            label_columns = load_label_columns(session)
+            label_format = load_label_format(session)
         render_table_settings(
             panes.middle,
             columns,
+            label_columns=label_columns,
+            label_format=label_format,
             on_change=save_table_columns,
+            on_label_format=save_table_label_format,
             on_restore=restore_table_columns,
             on_back=show_table,
         )

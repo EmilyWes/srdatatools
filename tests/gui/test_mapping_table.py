@@ -51,14 +51,7 @@ def _result(screen: MappingScreen, header: str) -> str:
 
 
 def _render(headers: list[str]) -> MappingScreen:
-    panes = shell()
-    return render_mapping_table(
-        panes.middle,
-        _summary(dict.fromkeys(headers, "")),
-        suggest_mapping(headers),
-        show_delimiter=True,
-        preview=_no_preview,
-    )
+    return _render_samples(dict.fromkeys(headers, ""))
 
 
 def _render_ris(tags: list[str]) -> MappingScreen:
@@ -602,13 +595,14 @@ def test_render_mapping_table__result_tooltip_is_replaced_on_refresh() -> None:
 
 
 def _render_chosen(headers: list[str], chosen: FieldMapping) -> MappingScreen:
+    samples = dict.fromkeys(headers, "")
     panes = shell()
     return render_mapping_table(
         panes.middle,
-        _summary(dict.fromkeys(headers, "")),
+        _summary(samples),
         suggest_mapping(headers),
         show_delimiter=True,
-        preview=_no_preview,
+        preview=lambda mapping: parse_csv_record(samples, mapping).record,
         chosen=chosen,
     )
 
@@ -647,3 +641,106 @@ def test_render_mapping_table__chosen_mapping_sets_delimiter() -> None:
     screen = _render_chosen(["Title"], chosen)
 
     assert screen.current_mapping().list_delimiter == "|"
+
+
+def _label_inputs_visible(screen: MappingScreen, header: str) -> bool:
+    row = screen._row_for(header)
+    visible: bool = row.phase.visible and row.screener.visible
+    return visible
+
+
+def test_render_mapping_table__label_is_a_dropdown_option() -> None:
+    screen = _render(["Title"])
+
+    options = screen._row_for("Title").select.options
+    assert isinstance(options, dict)
+    assert options["label"] == "Label"
+
+
+def test_render_mapping_table__label_inputs_only_show_for_label_target() -> None:
+    screen = _render(["included", "Title"])
+
+    assert _label_inputs_visible(screen, "included")
+    assert not _label_inputs_visible(screen, "Title")
+
+
+def test_render_mapping_table__picking_label_shows_inputs_and_back_hides() -> None:
+    screen = _render(["Title"])
+
+    screen._row_for("Title").select.value = "label"
+    assert _label_inputs_visible(screen, "Title")
+
+    screen._row_for("Title").select.value = "title"
+    assert not _label_inputs_visible(screen, "Title")
+
+
+def test_render_mapping_table__label_inputs_have_placeholders_and_tooltips() -> None:
+    screen = _render(["included"])
+    row = screen._row_for("included")
+
+    assert row.phase.props["placeholder"] == "ft"
+    assert row.screener.props["placeholder"] == "screener 1"
+    tooltips = [
+        t.text
+        for box in (row.phase, row.screener)
+        for t in box.client.layout.descendants()
+        if isinstance(t, Tooltip) and t.props.get("target") == f"#{box.html_id}"
+    ]
+    assert tooltips == ["Phase", "Screener"]
+
+
+def test_render_mapping_table__current_mapping_uses_typed_phase_and_screener() -> None:
+    screen = _render(["included"])
+    screen._row_for("included").phase.value = "tiab"
+    screen._row_for("included").screener.value = "Emily"
+
+    mapping = screen.current_mapping()
+
+    assert mapping.targets == {"included": "label"}
+    assert mapping.label_phases == {"included": "tiab"}
+    assert mapping.label_screeners == {"included": "Emily"}
+
+
+def test_render_mapping_table__empty_label_inputs_fall_back_to_placeholders() -> None:
+    mapping = _render(["included"]).current_mapping()
+
+    assert mapping.label_phases == {"included": "ft"}
+    assert mapping.label_screeners == {"included": "screener 1"}
+
+
+def test_render_mapping_table__non_label_rows_have_no_phase_or_screener() -> None:
+    mapping = _render(["Title"]).current_mapping()
+
+    assert mapping.label_phases == {}
+    assert mapping.label_screeners == {}
+
+
+def test_render_mapping_table__result_shows_normalized_label_per_row() -> None:
+    screen = _render_samples({"included": "1", "Title": "x"})
+    screen._row_for("Title").select.value = "label"
+
+    assert _result(screen, "included") == "include"
+    assert _result(screen, "Title") == "unknown"
+
+
+def test_render_mapping_table__unknown_label_result_is_red() -> None:
+    screen = _render_samples({"included": "conflict", "decision": "yes"})
+
+    assert _result_color(screen, "included") == ["text-negative"]
+    assert _result_color(screen, "decision") == ["text-positive"]
+
+
+def test_render_mapping_table__chosen_label_prefills_readonly_inputs() -> None:
+    chosen = FieldMapping(
+        targets={"included": "label"},
+        label_phases={"included": "tiab"},
+        label_screeners={"included": "Emily"},
+    )
+
+    screen = _render_chosen(["included"], chosen)
+    row = screen._row_for("included")
+
+    assert (row.phase.value, row.screener.value) == ("tiab", "Emily")
+    assert "readonly" in row.phase.props
+    assert "readonly" in row.screener.props
+    assert _label_inputs_visible(screen, "included")
