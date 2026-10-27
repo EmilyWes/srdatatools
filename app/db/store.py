@@ -13,7 +13,7 @@ from app.models.record import Record as RecordSchema
 def _build_record(schema: RecordSchema) -> Record:
     date = schema.publication_date or PartialDate()
     return Record(
-        **schema.model_dump(exclude={"publication_date"}),
+        **schema.model_dump(exclude={"publication_date", "labels"}),
         publication_year=date.year,
         publication_month=date.month,
         publication_day=date.day,

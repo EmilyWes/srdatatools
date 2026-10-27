@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import ValidationError
 
-from app.models.record import Author, PartialDate, Record
+from app.models.record import Author, Label, LabelValue, PartialDate, Record
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,21 @@ PAGE_TARGETS = ("page_start", "page_end")
 EXCLUSIVE_TARGETS = (*DATE_TARGETS, *PAGE_TARGETS)
 ISSN_ISBN_TARGET = "issn_isbn"
 OTHER_IDS_PREFIX = "other_ids."
+LABEL_TARGET = "label"
+DEFAULT_PHASE = "ft"
+DEFAULT_SCREENER = "screener 1"
+
+_LABEL_SPELLINGS: dict[str, LabelValue] = {
+    **dict.fromkeys(
+        ("include", "included", "yes", "y", "1", "true", "relevant"), "include"
+    ),
+    **dict.fromkeys(
+        ("exclude", "excluded", "no", "n", "0", "false", "irrelevant"), "exclude"
+    ),
+    **dict.fromkeys(("maybe", "unsure", "undecided", "?"), "maybe"),
+    # ASReview writes -1 for records nobody has labeled yet.
+    **dict.fromkeys(("", "-1"), "unlabeled"),
+}
 
 _ISSN_ISBN_SEPARATORS = re.compile(r"[\s;]+")
 _ISSN_LENGTH = 8
@@ -66,6 +81,7 @@ def _is_valid_target(target: str) -> bool:
         or target in LIST_TARGETS
         or target in EXCLUSIVE_TARGETS
         or target == ISSN_ISBN_TARGET
+        or target == LABEL_TARGET
     ):
         return True
     return target.startswith(OTHER_IDS_PREFIX) and len(target) > len(OTHER_IDS_PREFIX)
@@ -79,6 +95,8 @@ class FieldMapping:
     targets: dict[str, str] = field(default_factory=dict)
     list_delimiter: str = ";"
     match_kinds: dict[str, MatchKind] = field(default_factory=dict)
+    label_phases: dict[str, str] = field(default_factory=dict)
+    label_screeners: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         for key, target in self.targets.items():
@@ -91,6 +109,19 @@ class FieldMapping:
 
     def key_for(self, target: str) -> str | None:
         return next((k for k, t in self.targets.items() if t == target), None)
+
+    def label_context(self, key: str) -> tuple[str, str]:
+        phase = self.label_phases.get(key, "").strip()
+        screener = self.label_screeners.get(key, "").strip()
+        return phase or DEFAULT_PHASE, screener or DEFAULT_SCREENER
+
+
+def normalize_label(value: str) -> LabelValue:
+    label = _LABEL_SPELLINGS.get(value.strip().lower())
+    if label is None:
+        logger.warning("Unknown label value %r", value)
+        return "unknown"
+    return label
 
 
 def _classify_issn_isbn(value: str) -> dict[str, str]:
@@ -201,8 +232,15 @@ def apply_mapping(raw_fields: dict[str, str], mapping: FieldMapping) -> Record:
     other_ids: dict[str, str] = {}
     author_names: list[str] = []
     keywords: list[str] = []
+    labels: list[Label] = []
     for key, target in mapping.targets.items():
         value = (raw_fields.get(key) or "").strip()
+        if target == LABEL_TARGET:
+            phase, screener = mapping.label_context(key)
+            labels.append(
+                Label(phase=phase, screener=screener, value=normalize_label(value))
+            )
+            continue
         if not value:
             continue
         if target in SCALAR_FIELDS:
@@ -227,6 +265,7 @@ def apply_mapping(raw_fields: dict[str, str], mapping: FieldMapping) -> Record:
         other_ids=other_ids,
         authors=[Author(full_name=name) for name in author_names],
         keywords=keywords,
+        labels=labels,
         publication_date=_parse_publication_date(raw_fields, mapping),
     )
 

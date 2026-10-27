@@ -42,6 +42,7 @@ _SUGGESTION_ALIASES: dict[str, list[str]] = {
     "day": ["day"],
     "date": ["date", "publication date", "coverdate"],
     "other_ids": ["eid", "pmcid", "pmc id"],
+    "label": ["included", "label_included", "label", "decision", "inclusion"],
 }
 
 _EXTRA_FIELDS_KEY = "__extra__"

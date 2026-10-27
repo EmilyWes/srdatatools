@@ -1,9 +1,11 @@
 import pytest
 
+from app.models.record import Label
 from app.parsers.mapping import (
     SCALAR_FIELDS,
     FieldMapping,
     apply_mapping,
+    normalize_label,
     override_aliases,
     suggest_mapping,
 )
@@ -287,3 +289,100 @@ def test_suggest_mapping__lenient_fuzzy_matches_and_falls_back_to_id() -> None:
         "Article Titles": "title",
         "Custom ID": "other_ids.custom_id",
     }
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("include", "include"),
+        ("Included", "include"),
+        (" YES ", "include"),
+        ("y", "include"),
+        ("1", "include"),
+        ("true", "include"),
+        ("relevant", "include"),
+        ("exclude", "exclude"),
+        ("Excluded", "exclude"),
+        ("no", "exclude"),
+        ("N", "exclude"),
+        ("0", "exclude"),
+        ("False", "exclude"),
+        ("irrelevant", "exclude"),
+        ("maybe", "maybe"),
+        ("Unsure", "maybe"),
+        ("undecided", "maybe"),
+        ("?", "maybe"),
+        ("", "unlabeled"),
+        ("  ", "unlabeled"),
+        ("-1", "unlabeled"),
+    ],
+)
+def test_normalize_label__maps_known_spellings(value: str, expected: str) -> None:
+    assert normalize_label(value) == expected
+
+
+def test_normalize_label__unknown_spelling_is_unknown_and_warns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level("WARNING"):
+        value = normalize_label("conflict")
+
+    assert value == "unknown"
+    assert "conflict" in caplog.text
+
+
+def test_field_mapping__allows_label_target_from_several_inputs() -> None:
+    mapping = FieldMapping(targets={"TiAb": "label", "FT": "label"})
+
+    assert mapping.targets == {"TiAb": "label", "FT": "label"}
+
+
+def test_apply_mapping__label_uses_phase_and_screener() -> None:
+    mapping = FieldMapping(
+        targets={"included": "label"},
+        label_phases={"included": "tiab"},
+        label_screeners={"included": "Emily"},
+    )
+
+    record = apply_mapping({"included": "1"}, mapping)
+
+    assert record.labels == [Label(phase="tiab", screener="Emily", value="include")]
+
+
+def test_apply_mapping__label_falls_back_to_default_phase_and_screener() -> None:
+    mapping = FieldMapping(
+        targets={"included": "label"},
+        label_phases={"included": "  "},
+    )
+
+    record = apply_mapping({"included": "0"}, mapping)
+
+    assert record.labels == [Label(phase="ft", screener="screener 1", value="exclude")]
+
+
+def test_apply_mapping__empty_label_cell_is_unlabeled() -> None:
+    mapping = FieldMapping(targets={"included": "label"})
+
+    record = apply_mapping({"included": ""}, mapping)
+
+    assert [label.value for label in record.labels] == ["unlabeled"]
+
+
+def test_apply_mapping__missing_label_cell_is_unlabeled() -> None:
+    record = apply_mapping({}, FieldMapping(targets={"included": "label"}))
+
+    assert [label.value for label in record.labels] == ["unlabeled"]
+
+
+def test_apply_mapping__several_label_columns_keep_mapping_order() -> None:
+    mapping = FieldMapping(
+        targets={"TiAb": "label", "FT": "label"},
+        label_phases={"TiAb": "tiab", "FT": "ft"},
+    )
+
+    record = apply_mapping({"TiAb": "Included", "FT": "maybe"}, mapping)
+
+    assert [(label.phase, label.value) for label in record.labels] == [
+        ("tiab", "include"),
+        ("ft", "maybe"),
+    ]
