@@ -52,6 +52,9 @@ def _type_from_content(text: str) -> str | None:
 
 
 def detect_type(path: Path) -> str | None:
+    # A workbook is a zip archive, so its content can't be sniffed as text.
+    if path.suffix.lower() == ".xlsx":
+        return "excel"
     try:
         file_type = _type_from_content(decode_prefix(path, _DETECT_PREFIX_SIZE))
     except ValueError:

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from openpyxl import Workbook
 
 from app.parsers import detect
 from app.parsers.detect import detect_source, detect_type
@@ -11,6 +12,15 @@ _DATA_DIR = Path(__file__).parent.parent / "data" / "general"
 def _write(tmp_path: Path, name: str, text: str) -> Path:
     path = tmp_path / name
     path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _workbook(tmp_path: Path, name: str, rows: list[list[object]]) -> Path:
+    workbook = Workbook()
+    for row in rows:
+        workbook.worksheets[0].append(row)
+    path = tmp_path / name
+    workbook.save(path)
     return path
 
 
@@ -120,6 +130,18 @@ def test_detect_type__falls_back_to_tsv_extension(tmp_path: Path) -> None:
     assert detect_type(path) == "tsv"
 
 
+def test_detect_type__xlsx_workbook_is_excel(tmp_path: Path) -> None:
+    path = _workbook(tmp_path, "export.xlsx", [["Title", "DOI"], ["A", "10.1/a"]])
+
+    assert detect_type(path) == "excel"
+
+
+def test_detect_type__uppercase_xlsx_extension_is_excel(tmp_path: Path) -> None:
+    path = _workbook(tmp_path, "EXPORT.XLSX", [["Title"], ["A"]])
+
+    assert detect_type(path) == "excel"
+
+
 def test_detect_type__falls_back_to_extension_for_undecodable_file(
     tmp_path: Path,
 ) -> None:
@@ -184,6 +206,12 @@ def test_detect_source__tsv_has_no_profile(tmp_path: Path) -> None:
     path = _write(tmp_path, "scopus.tsv", "Authors\tTitle\tEID\nA\tT\tE\n")
 
     assert detect_source(path, "tsv") is None
+
+
+def test_detect_source__excel_has_no_profile(tmp_path: Path) -> None:
+    path = _workbook(tmp_path, "scopus.xlsx", [["Authors", "Title", "EID"]])
+
+    assert detect_source(path, "excel") is None
 
 
 def test_detect_source__undecodable_file_returns_none(tmp_path: Path) -> None:
