@@ -39,6 +39,9 @@ class Record(Base):
     sources: Mapped[list["RecordSource"]] = relationship(
         back_populates="record", cascade="all, delete-orphan"
     )
+    labels: Mapped[list["Label"]] = relationship(
+        back_populates="record", cascade="all, delete-orphan"
+    )
 
 
 class SourceFile(Base):
@@ -60,6 +63,9 @@ class SourceFile(Base):
     record_sources: Mapped[list["RecordSource"]] = relationship(
         back_populates="source_file", cascade="all, delete-orphan"
     )
+    labels: Mapped[list["Label"]] = relationship(
+        back_populates="source_file", cascade="all, delete-orphan"
+    )
 
 
 class RecordSource(Base):
@@ -74,6 +80,22 @@ class RecordSource(Base):
 
     record: Mapped["Record"] = relationship(back_populates="sources")
     source_file: Mapped["SourceFile"] = relationship(back_populates="record_sources")
+
+
+class Label(Base):
+    __tablename__ = "label"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    record_id: Mapped[int] = mapped_column(ForeignKey("record.id"), index=True)
+    source_file_id: Mapped[int] = mapped_column(
+        ForeignKey("source_file.id"), index=True
+    )
+    phase: Mapped[str]
+    screener: Mapped[str]
+    value: Mapped[str]
+
+    record: Mapped["Record"] = relationship(back_populates="labels")
+    source_file: Mapped["SourceFile"] = relationship(back_populates="labels")
 
 
 class ActivityLog(Base):

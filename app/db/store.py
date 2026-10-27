@@ -5,7 +5,7 @@ from typing import Any, cast
 from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Record, RecordSource, SourceFile
+from app.db.models import Label, Record, RecordSource, SourceFile
 from app.models.record import PartialDate
 from app.models.record import Record as RecordSchema
 
@@ -49,6 +49,10 @@ def store_parsed_rows(
     for schema, raw_fields in parsed_rows:
         record = _build_record(schema)
         record.sources = [RecordSource(source_file=source_file, raw_fields=raw_fields)]
+        record.labels = [
+            Label(source_file=source_file, **label.model_dump())
+            for label in schema.labels
+        ]
         session.add(record)
 
     session.add(source_file)
@@ -56,6 +60,7 @@ def store_parsed_rows(
 
 
 def remove_source_file(session: Session, source_file: SourceFile) -> int:
+    session.execute(delete(Label).where(Label.source_file_id == source_file.id))
     file_record_ids = select(RecordSource.record_id).where(
         RecordSource.source_file_id == source_file.id
     )
@@ -78,6 +83,7 @@ def remove_source_file(session: Session, source_file: SourceFile) -> int:
 
 
 def delete_library(session: Session) -> tuple[int, int]:
+    session.execute(delete(Label))
     session.execute(delete(RecordSource))
     records = cast(CursorResult[Any], session.execute(delete(Record)))
     source_files = cast(CursorResult[Any], session.execute(delete(SourceFile)))
