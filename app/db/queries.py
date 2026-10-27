@@ -1,5 +1,9 @@
+from collections import defaultdict
+from collections.abc import Sequence
+from typing import Any
+
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.db.models import ActivityLog, Record, RecordSource, SourceFile
 
@@ -14,13 +18,23 @@ def list_activity_log(session: Session) -> list[ActivityLog]:
     return list(session.scalars(statement))
 
 
-def list_records(session: Session) -> list[Record]:
+def list_record_rows(session: Session, fields: Sequence[str]) -> list[dict[str, Any]]:
+    statement = select(
+        Record.id, *(getattr(Record, field) for field in fields)
+    ).order_by(Record.id)
+    return [dict(row) for row in session.execute(statement).mappings()]
+
+
+def list_record_sources(session: Session) -> dict[int, list[str | None]]:
     statement = (
-        select(Record)
-        .options(selectinload(Record.sources).selectinload(RecordSource.source_file))
-        .order_by(Record.id)
+        select(RecordSource.record_id, SourceFile.source)
+        .join(RecordSource.source_file)
+        .order_by(RecordSource.id)
     )
-    return list(session.scalars(statement))
+    sources: dict[int, list[str | None]] = defaultdict(list)
+    for record_id, source in session.execute(statement):
+        sources[record_id].append(source)
+    return sources
 
 
 def count_records(session: Session) -> int:

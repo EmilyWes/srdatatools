@@ -40,6 +40,15 @@ def test_parse_bibtex_text__maps_brace_delimited_fields() -> None:
     assert record.journal == "Nature"
 
 
+def test_parse_bibtex_text__comma_inside_quotes_does_not_split_field() -> None:
+    text = '@article{key1, title = "Cats, Dogs, and Mice", journal = "Nature"}'
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.title == "Cats, Dogs, and Mice"
+    assert record.journal == "Nature"
+
+
 def test_parse_bibtex_text__maps_quote_delimited_fields() -> None:
     text = '@article{key1, title = "Some Paper", journal = "Nature"}'
 
@@ -71,6 +80,23 @@ def test_parse_bibtex_text__raw_fields_include_entry_type_and_key() -> None:
         "title": "Some Paper",
     }
     assert row.record.publication_type == "article"
+
+
+def test_parse_bibtex_text__citation_key_may_contain_commas() -> None:
+    text = (
+        "@ARTICLE{Guay1981222,224,226passim,\n"
+        "\ttitle = {Private practice--no dinosaur!},\n"
+        "\tpages = {222,224,226passim}\n"
+        "}\n"
+    )
+
+    result = parse_bibtex_text(text, _MAPPING)
+
+    assert result.skipped == []
+    row = result.rows[0]
+    assert row.raw_fields["@key"] == "Guay1981222,224,226passim"
+    assert row.record.title == "Private practice–no dinosaur!"
+    assert row.record.pages == "222,224,226passim"
 
 
 def test_parse_bibtex_text__field_names_are_case_insensitive() -> None:
@@ -360,6 +386,17 @@ def test_parse_bibtex_record__unmapped_author_field_adds_no_authors() -> None:
     row = parse_bibtex_record([("title", "T"), ("author", "Doe, Jane")], mapping)
 
     assert row.record.authors == []
+
+
+def test_read_bibtex_fields__file_without_entries_has_no_samples(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "empty.bib"
+    path.write_text("just a comment, no entries\n", encoding="utf-8")
+
+    summary = read_bibtex_fields(path)
+
+    assert summary.samples == {}
 
 
 def test_read_bibtex_fields__collects_samples_and_fill_counts(tmp_path: Path) -> None:

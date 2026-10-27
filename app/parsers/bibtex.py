@@ -3,6 +3,7 @@ import re
 import unicodedata
 from collections.abc import Iterator
 from dataclasses import dataclass
+from itertools import zip_longest
 from pathlib import Path
 
 from app.models.record import Author
@@ -50,6 +51,8 @@ _ENTRY_START = re.compile(
     r"^[ \t]*@(?P<type>[A-Za-z]+)[ \t]*(?P<open>[{(])", re.MULTILINE
 )
 _CLOSERS = {"{": "}", "(": ")"}
+# Scopus builds keys from page numbers, so pages "22,24" gives key "Wong200922,24".
+_KEY_CONTINUATION = re.compile(r"[^\s=]+")
 
 _PAGES_FIELD = "pages"
 _PAGE_DASHES = re.compile(r"\s*-+\s*")
@@ -114,10 +117,15 @@ def clean_value(field: str, value: str) -> str:
     return value.replace("--", "\u2013")
 
 
-def _top_level(text: str) -> Iterator[tuple[int, str]]:
-    """Characters outside braces and quotes, then the "}" that closes text, if any."""
+def _top_level(text: str, wanted: str) -> Iterator[tuple[int, str]]:
+    """Wanted characters outside braces and quotes, then the "}" that closes text.
+
+    Only braces, quotes and wanted characters are visited: a per-character loop
+    is too slow for large exports.
+    """
     depth, quoted = 0, False
-    for index, char in enumerate(text):
+    for match in re.finditer('[{}"' + re.escape(wanted) + "]", text):
+        index, char = match.start(), match.group()
         if char == "{":
             depth += 1
         elif char == "}":
@@ -132,7 +140,7 @@ def _top_level(text: str) -> Iterator[tuple[int, str]]:
 
 
 def _split_top_level(text: str, separator: str) -> list[str]:
-    cuts = [index for index, char in _top_level(text) if char == separator]
+    cuts = [index for index, char in _top_level(text, separator) if char == separator]
     return [
         text[a + 1 : b] for a, b in zip([-1, *cuts], [*cuts, len(text)], strict=True)
     ]
@@ -149,6 +157,8 @@ def _parse_entry(
     entry_type: str, body: str, line_number: int
 ) -> _Entry | _MalformedEntry:
     key, *pieces = _split_top_level(body, ",")
+    while pieces and _KEY_CONTINUATION.fullmatch(pieces[0]):
+        key += "," + pieces.pop(0)
     key = key.strip()
     if not key or "=" in key:
         return _MalformedEntry(line_number, "entry has no citation key")
@@ -182,7 +192,7 @@ def _iter_entries(text: str) -> Iterator[_Entry | _MalformedEntry]:
     """
     starts = list(_ENTRY_START.finditer(text))
     line_number, counted_to = 1, 0
-    for match, next_match in zip(starts, [*starts[1:], None], strict=True):
+    for match, next_match in zip_longest(starts, starts[1:]):
         if match["type"].lower() in _IGNORED_ENTRY_TYPES:
             continue
         line_number += text.count("\n", counted_to, match.start())
@@ -190,7 +200,9 @@ def _iter_entries(text: str) -> Iterator[_Entry | _MalformedEntry]:
         end = next_match.start() if next_match is not None else len(text)
         segment = text[match.end() : end]
         closer = _CLOSERS[match["open"]]
-        close = next((i for i, char in _top_level(segment) if char == closer), None)
+        close = next(
+            (i for i, char in _top_level(segment, closer) if char == closer), None
+        )
         if close is None:
             yield _MalformedEntry(line_number, "entry has unbalanced braces")
         else:

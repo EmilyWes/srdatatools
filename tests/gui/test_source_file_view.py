@@ -2,6 +2,7 @@ import datetime
 from dataclasses import asdict
 from typing import Any
 
+import pytest
 from nicegui import ui
 from nicegui.element import Element
 
@@ -10,6 +11,7 @@ from app.gui.layout import shell
 from app.gui.source_file_view import render_source_file_view
 from app.parsers.common import FileSummary
 from app.parsers.mapping import FieldMapping
+from tests.gui.clicks import click_and_wait
 
 
 def _source_file(skipped_rows: list[dict[str, Any]]) -> SourceFile:
@@ -120,6 +122,25 @@ def test_render_source_file_view__confirming_remove_calls_on_remove() -> None:
 
     _click(_button(middle, "Remove from library"))
     _click(_button(_dialog(middle), "Remove"))
+
+    assert removed == [None]
+
+
+def test_render_source_file_view__confirming_remove_awaits_async_on_remove(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    panes = shell()
+    removed: list[None] = []
+
+    async def on_remove() -> None:
+        removed.append(None)
+
+    render_source_file_view(
+        panes.middle, _source_file([]), records_in_library=3, on_remove=on_remove
+    )
+
+    _click(_button(panes.middle, "Remove from library"))
+    click_and_wait(_button(_dialog(panes.middle), "Remove"), monkeypatch)
 
     assert removed == [None]
 

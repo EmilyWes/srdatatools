@@ -1,4 +1,4 @@
-﻿from collections.abc import Callable
+﻿from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, replace
 from functools import partial
 from pathlib import Path
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
 from app.gui.activity_log import log_import
+from app.gui.busy import run_busy
 from app.gui.mapping_table import MappingScreen, render_mapping_table
 from app.models.record import Record
 from app.parsers.bibtex import (
@@ -144,18 +145,27 @@ def shows_delimiter(file_type: str) -> bool:
     return file_type in (_TYPE_CSV, _TYPE_BIBTEX)
 
 
+def _detect(path: Path) -> tuple[str, str]:
+    file_type = detect_type(path) or _TYPE_UNKNOWN
+    if file_type == _TYPE_UNKNOWN:
+        return file_type, _SOURCE_UNKNOWN
+    return file_type, detect_source(path, file_type) or _SOURCE_UNKNOWN
+
+
+def read_summary(file_type: str, path: Path) -> FileSummary | None:
+    handlers = _handlers(file_type, _SOURCE_UNKNOWN)
+    return handlers.read_keys(path) if handlers is not None else None
+
+
 def render_mapping(
-    container: Element, file_type: str, path: Path, source: str = _SOURCE_UNKNOWN
+    container: Element,
+    file_type: str,
+    path: Path,
+    summary: FileSummary,
+    source: str = _SOURCE_UNKNOWN,
 ) -> MappingScreen | None:
     handlers = _handlers(file_type, source)
     if handlers is None:
-        return None
-
-    try:
-        summary = handlers.read_keys(path)
-    except ValueError as exc:
-        with container:
-            ui.notify(str(exc), type="negative")
         return None
 
     if not summary.samples:
@@ -177,12 +187,12 @@ def _store(
     path: Path,
     file_type: str,
     mapping: FieldMapping,
+    summary: FileSummary,
     result: ParseResult,
     source: str,
 ) -> SourceFile:
     handlers = _handlers(file_type, source)
     assert handlers is not None
-    summary = handlers.read_keys(path)
     result = apply_profile(result, handlers.profile)
     source_file = store_parsed_rows(
         session,
@@ -201,31 +211,47 @@ def _store(
 
 
 def import_csv(
-    session: Session, path: Path, mapping: FieldMapping, source: str = _SOURCE_UNKNOWN
+    session: Session,
+    path: Path,
+    mapping: FieldMapping,
+    summary: FileSummary,
+    source: str = _SOURCE_UNKNOWN,
 ) -> SourceFile:
     result = parse_csv_file(path, mapping)
-    return _store(session, path, _TYPE_CSV, mapping, result, source)
+    return _store(session, path, _TYPE_CSV, mapping, summary, result, source)
 
 
 def import_ris(
-    session: Session, path: Path, mapping: FieldMapping, source: str = _SOURCE_UNKNOWN
+    session: Session,
+    path: Path,
+    mapping: FieldMapping,
+    summary: FileSummary,
+    source: str = _SOURCE_UNKNOWN,
 ) -> SourceFile:
     result = parse_ris_file(path, mapping)
-    return _store(session, path, _TYPE_RIS, mapping, result, source)
+    return _store(session, path, _TYPE_RIS, mapping, summary, result, source)
 
 
 def import_nbib(
-    session: Session, path: Path, mapping: FieldMapping, source: str = _SOURCE_UNKNOWN
+    session: Session,
+    path: Path,
+    mapping: FieldMapping,
+    summary: FileSummary,
+    source: str = _SOURCE_UNKNOWN,
 ) -> SourceFile:
     result = parse_nbib_file(path, mapping)
-    return _store(session, path, _TYPE_NBIB, mapping, result, source)
+    return _store(session, path, _TYPE_NBIB, mapping, summary, result, source)
 
 
 def import_bibtex(
-    session: Session, path: Path, mapping: FieldMapping, source: str = _SOURCE_UNKNOWN
+    session: Session,
+    path: Path,
+    mapping: FieldMapping,
+    summary: FileSummary,
+    source: str = _SOURCE_UNKNOWN,
 ) -> SourceFile:
     result = parse_bibtex_file(path, mapping)
-    return _store(session, path, _TYPE_BIBTEX, mapping, result, source)
+    return _store(session, path, _TYPE_BIBTEX, mapping, summary, result, source)
 
 
 def import_file(
@@ -233,26 +259,31 @@ def import_file(
     path: Path,
     file_type: str,
     mapping: FieldMapping,
+    summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
 ) -> SourceFile:
     if file_type == _TYPE_CSV:
-        return import_csv(session, path, mapping, source)
+        return import_csv(session, path, mapping, summary, source)
     if file_type == _TYPE_RIS:
-        return import_ris(session, path, mapping, source)
+        return import_ris(session, path, mapping, summary, source)
     if file_type == _TYPE_NBIB:
-        return import_nbib(session, path, mapping, source)
+        return import_nbib(session, path, mapping, summary, source)
     if file_type == _TYPE_BIBTEX:
-        return import_bibtex(session, path, mapping, source)
+        return import_bibtex(session, path, mapping, summary, source)
     raise ValueError(f"unsupported file type: {file_type!r}")
+
+
+OnImport = Callable[[Path, str, FieldMapping, str, FileSummary], Awaitable[None] | None]
 
 
 @dataclass
 class ImportView:
     middle: Element
-    on_import: Callable[[Path, str, FieldMapping, str], None]
+    on_import: OnImport
     path: Path | None = None
     file_type: str = _TYPE_UNKNOWN
     source: str = _SOURCE_UNKNOWN
+    summary: FileSummary | None = None
     mapping_screen: MappingScreen | None = None
     import_button: ui.button | None = None
 
@@ -260,28 +291,43 @@ class ImportView:
         picked = await pick_file()
         if picked is not None:
             self.path = picked
-            self.file_type = detect_type(picked) or _TYPE_UNKNOWN
-            self.source = _SOURCE_UNKNOWN
-            if self.file_type != _TYPE_UNKNOWN:
-                self.source = detect_source(picked, self.file_type) or _SOURCE_UNKNOWN
-            self.render()
+            self.file_type, self.source = await run_busy(
+                f"Reading {picked.name}…", lambda: _detect(picked)
+            )
+            await self._read_file()
 
-    def _set_type(self, file_type: str) -> None:
+    async def _set_type(self, file_type: str) -> None:
         self.file_type = file_type
+        await self._read_file()
+
+    async def _read_file(self) -> None:
+        self.summary = None
+        path = self.path
+        file_type = self.file_type
+        if path is not None:
+            try:
+                self.summary = await run_busy(
+                    f"Reading {path.name}…", lambda: read_summary(file_type, path)
+                )
+            except ValueError as exc:
+                with self.middle:
+                    ui.notify(str(exc), type="negative")
         self.render()
 
     def _set_source(self, source: str) -> None:
         self.source = source
         self.render()
 
-    def _import(self) -> None:
+    def _import(self) -> Awaitable[None] | None:
         assert self.path is not None
         assert self.mapping_screen is not None
-        self.on_import(
+        assert self.summary is not None
+        return self.on_import(
             self.path,
             self.file_type,
             self.mapping_screen.current_mapping(),
             self.source,
+            self.summary,
         )
 
     def render(self) -> None:
@@ -328,9 +374,13 @@ class ImportView:
                         notice.classes("invisible")
 
                 mapping_container = ui.column().classes("items-center w-full")
-                if self.path is not None:
+                if self.path is not None and self.summary is not None:
                     self.mapping_screen = render_mapping(
-                        mapping_container, self.file_type, self.path, self.source
+                        mapping_container,
+                        self.file_type,
+                        self.path,
+                        self.summary,
+                        self.source,
                     )
                 else:
                     self.mapping_screen = None
@@ -349,9 +399,7 @@ class ImportView:
                         self.import_button.tooltip("file has no mapping available")
 
 
-def render_import_view(
-    middle: Element, on_import: Callable[[Path, str, FieldMapping, str], None]
-) -> ImportView:
+def render_import_view(middle: Element, on_import: OnImport) -> ImportView:
     view = ImportView(middle=middle, on_import=on_import)
     view.render()
     return view

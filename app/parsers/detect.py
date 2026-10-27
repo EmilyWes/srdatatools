@@ -3,7 +3,7 @@ import re
 from io import StringIO
 from pathlib import Path
 
-from app.parsers.common import decode_file
+from app.parsers.common import decode_prefix
 from app.parsers.profiles import PROFILES
 
 _RIS_FIRST_LINE = re.compile(r"^TY  -")
@@ -15,6 +15,7 @@ _BIBTEX_ENTRY = re.compile(
 )
 _EXTENSION_TYPES = {".ris": "ris", ".nbib": "nbib", ".csv": "csv", ".bib": "bibtex"}
 _CSV_SAMPLE_SIZE = 2048
+_DETECT_PREFIX_SIZE = 4 * 1024 * 1024
 
 
 def _looks_like_csv(text: str) -> bool:
@@ -43,7 +44,7 @@ def _type_from_content(text: str) -> str | None:
 
 def detect_type(path: Path) -> str | None:
     try:
-        file_type = _type_from_content(decode_file(path))
+        file_type = _type_from_content(decode_prefix(path, _DETECT_PREFIX_SIZE))
     except ValueError:
         file_type = None
     return file_type or _EXTENSION_TYPES.get(path.suffix.lower())
@@ -51,7 +52,7 @@ def detect_type(path: Path) -> str | None:
 
 def detect_source(path: Path, file_type: str) -> str | None:
     try:
-        text = decode_file(path)
+        text = decode_prefix(path, _DETECT_PREFIX_SIZE)
     except ValueError:
         return None
     for key, profile in PROFILES.items():

@@ -398,7 +398,7 @@ def test_render_mapping_table__dropdown_options_are_sorted_alphabetically() -> N
 
     assert labels == sorted(labels, key=str.lower)
     assert "Ignore" in labels
-    assert "Date (full)" in labels
+    assert "Publication date (full)" in labels
 
 
 def test_render_mapping_table__truncated_input_header_has_full_value_tooltip() -> None:

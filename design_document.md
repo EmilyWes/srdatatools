@@ -123,7 +123,7 @@ Core tables, kept normalized so the same paper found via two sources becomes one
 | `dedup_link` *(planned, Phase 2)* | Which raw `record_source` rows were merged into which `record`, match method used, confidence score, blocking key used |
 | `enrichment_log` *(planned, Phase 3)* | What was fetched from OpenAlex for a record, when, and which fields it filled or overwrote |
 | `citation_edge` *(planned, Phase 4)* | Snowballing results: `record_id` cites/is cited by `record_id` (or an external id not yet imported) |
-| `activity_log` | Append-only log of every user- or system-triggered action, for the transparency view |
+| `activity_log` | Log of every user- or system-triggered action, for the transparency view; the user can clear it |
 | `field_merge_policy` *(planned, Phase 2)* | The default conflict-resolution chain, plus named field-group overrides and which fields belong to each |
 | `app_settings` | Simple key/value local settings store — record-table column selection; later OpenAlex polite-pool email, merge-policy defaults, etc. |
 
@@ -176,9 +176,9 @@ flowchart LR
 
 **Layout:** a single-window, three-pane shell — no tabs, not a step-by-step wizard, since real usage jumps between actions rather than following one fixed order.
 
-- **Left panel** — navigation: a **Library** heading with two entries for the full combined record set, **Overview** and **Table** (Table has a gear icon that opens its settings), followed by a list of imported source files, one per `source_file` row. Selecting an entry drives what the middle panel shows; Overview is selected on app start. An **Import** button sits at the top of this panel.
+- **Left panel** — navigation: a **Library** heading with two entries for the full combined record set, **Overview** and **Table** (each has a gear icon that opens its settings), followed by a list of imported source files, one per `source_file` row. Selecting an entry drives what the middle panel shows; Overview is selected on app start. An **Import** button sits at the top of this panel.
 - **Middle panel** — content for whatever is selected on the left:
-  - **Overview** selected: total records, plus small tables of records per source (vendor, with Unknown), per imported file, and per year (Unknown last).
+  - **Overview** selected: total records, plus small tables of records per source (vendor, with Unknown), per imported file, and per year (Unknown last). Its settings choose which of these sections are shown (persisted in `app_settings`).
   - **Table** selected: all records in one unpaginated grid (horizontal scrolling for wide column sets), with column sorting and per-column header filters. Rows are selected by clicking or via checkboxes; the header checkbox selects all rows passing the current filters. Above the grid: total rows, rows in filter (with *Clear all filters*) and rows in selection (with *Clear selection*). The selection is kept for the session (for the right-panel actions to run on later), not between sessions.
   - **Table settings** (gear beside Table): choose which record fields are shown as columns, with *Restore defaults* (DOI, title, authors, year, journal, sources). The choice is remembered between sessions in `app_settings`.
   - **A source file** selected: that file's info — rows currently in the library from this file, how many rows were skipped on import (and why), and an option to remove all of this file's records from the library (see open question on how this interacts with records already merged via dedup), plus a read-only copy of the field mapping used at import.
@@ -230,6 +230,8 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Generic NBIB/MEDLINE tokenizer/parser
 - [x] Generic BibTeX tokenizer/parser
 - [x] Generic CSV reader (column-mapping logic)
+- [ ] Generic TSV reader (column-mapping logic)
+- [ ] Generic Excel reader (column-mapping logic)
 - [x] Field-mapping UI, embedded inline in the import view (live table below Source/Type, no separate screen/confirm step)
 - [x] Field-mapping UI: visual indicators (different colors) per row for columns that are mapped directly (exact alias), mapped via fuzzy match or the ID fallback, or mapped multiple times to the same target
 - [x] Field-mapping UI: show the first value of each column/tag next to its row so the user can see what it contains
@@ -244,6 +246,8 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] IEEE Xplore profile (CSV)
 - [ ] Embase profile (RIS/CSV)
 - [ ] PsycINFO profile — EBSCO and ProQuest variants (RIS/CSV)
+- [ ] OpenAlex profile (CSV/RIS)
+- [ ] ASReview profile (CSV/TSV/RIS/Excel)
 - [x] Store parsed records, keep raw source data (`record_source`)
 - [x] Three-pane GUI shell: left navigation panel, middle content panel, right action panel (no tabs)
 - [x] Left panel: Library entry + list of imported source files (from `source_file`), selecting an entry drives the middle panel; Import button

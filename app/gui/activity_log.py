@@ -1,5 +1,6 @@
 import datetime
 
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.db.models import ActivityLog, SourceFile
@@ -28,3 +29,7 @@ def log_removal(session: Session, filename: str, removed: int) -> ActivityLog:
     )
     session.add(entry)
     return entry
+
+
+def clear_activity_log(session: Session) -> None:
+    session.execute(delete(ActivityLog))

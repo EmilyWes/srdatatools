@@ -1,5 +1,5 @@
 import json
-from collections.abc import Callable, Collection, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -8,7 +8,7 @@ from nicegui.element import Element
 from nicegui.events import GenericEventArguments
 from sqlalchemy.orm import Session
 
-from app.db.models import Record
+from app.db.queries import list_record_rows, list_record_sources
 from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.library_overview import format_count, source_label
 
@@ -21,12 +21,12 @@ COLUMNS: dict[str, str] = {
     "doi": "DOI",
     "title": "Title",
     "authors": "Authors",
-    "publication_year": "Year",
+    "publication_year": "Publication year",
     "journal": "Journal",
     "sources": "Sources",
     "abstract": "Abstract",
-    "publication_month": "Month",
-    "publication_day": "Day",
+    "publication_month": "Publication month",
+    "publication_day": "Publication day",
     "conference_name": "Conference",
     "volume": "Volume",
     "issue": "Issue",
@@ -86,26 +86,31 @@ def _authors(authors: list[dict[str, Any]]) -> str:
     return f"{first} et al." if len(authors) > 1 else first
 
 
-def _sources(record: Record) -> str:
-    labels = [source_label(rs.source_file.source) for rs in record.sources]
-    return ", ".join(dict.fromkeys(labels))
+def _sources(sources: Sequence[str | None]) -> str:
+    return ", ".join(dict.fromkeys(source_label(source) for source in sources))
 
 
-def row_for(record: Record) -> dict[str, Any]:
-    row: dict[str, Any] = {"id": record.id}
-    for key in COLUMNS:
-        if key == "sources":
-            row[key] = _sources(record)
-        elif key == "authors":
-            row[key] = _authors(record.authors)
-        else:
-            value = getattr(record, key)
-            if isinstance(value, list):
-                value = "; ".join(value)
-            elif isinstance(value, dict):
-                value = "; ".join(f"{name}: {id_}" for name, id_ in value.items())
-            row[key] = value
+def row_for(values: Mapping[str, Any]) -> dict[str, Any]:
+    row: dict[str, Any] = {}
+    for key, value in values.items():
+        if key == "authors":
+            value = _authors(value)
+        elif isinstance(value, list):
+            value = "; ".join(value)
+        elif isinstance(value, dict):
+            value = "; ".join(f"{name}: {id_}" for name, id_ in value.items())
+        row[key] = value
     return row
+
+
+def load_rows(session: Session, columns: Sequence[str]) -> list[dict[str, Any]]:
+    fields = [key for key in columns if key != "sources"]
+    rows = [row_for(values) for values in list_record_rows(session, fields)]
+    if "sources" in columns:
+        sources = list_record_sources(session)
+        for row in rows:
+            row["sources"] = _sources(sources.get(row["id"], []))
+    return rows
 
 
 def _column_def(key: str) -> dict[str, Any]:
@@ -121,11 +126,11 @@ def _column_def(key: str) -> dict[str, Any]:
 
 def render_record_table(
     middle: Element,
-    records: Sequence[Record],
+    rows: Sequence[dict[str, Any]],
     columns: Sequence[str],
     selection: RecordSelection,
 ) -> None:
-    selection.ids &= {record.id for record in records}
+    selection.ids &= {row["id"] for row in rows}
 
     def count_line(text: str, count: int) -> ui.label:
         ui.label(f"{text}:").classes("text-sm")
@@ -137,16 +142,16 @@ def render_record_table(
             with ui.grid(columns="max-content 5rem max-content").classes(
                 "items-center gap-x-2 gap-y-1"
             ):
-                count_line("Total number of rows", len(records))
+                count_line("Total number of rows", len(rows))
                 ui.element("div")
-                filter_count = count_line("Rows in filter", len(records))
+                filter_count = count_line("Rows in filter", len(rows))
                 clear_filters = ui.button("Clear all filters", color=None)
                 selection_count = count_line("Rows in selection", len(selection.ids))
                 clear_selection = ui.button("Clear selection", color=None)
             grid = ui.aggrid(
                 {
                     "columnDefs": [_column_def(key) for key in columns],
-                    "rowData": [row_for(record) for record in records],
+                    "rowData": list(rows),
                     "defaultColDef": {"sortable": True, "resizable": True},
                     ":getRowId": "(params) => String(params.data.id)",
                     "rowSelection": {

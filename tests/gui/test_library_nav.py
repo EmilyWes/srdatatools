@@ -7,6 +7,7 @@ from nicegui import background_tasks, core, ui
 from app.db.models import SourceFile
 from app.gui.layout import shell
 from app.gui.library_nav import LeftPanelNav, render_left_panel
+from tests.gui.clicks import click_and_wait
 
 _SELECTED_CLASS = "bg-blue-100"
 
@@ -173,10 +174,10 @@ def _click(button: ui.button) -> None:
     click_listener.handler(None)
 
 
-def _table_gear(nav: LeftPanelNav) -> ui.button:
-    table_row = nav.buttons["library:table"].parent_slot
-    assert table_row is not None
-    return [c for c in table_row.children if isinstance(c, ui.button)][1]
+def _gear(nav: LeftPanelNav, key: str) -> ui.button:
+    row = nav.buttons[key].parent_slot
+    assert row is not None
+    return [c for c in row.children if isinstance(c, ui.button)][1]
 
 
 def test_render_left_panel__library_heading_above_overview_and_table() -> None:
@@ -207,6 +208,22 @@ def test_render_left_panel__selecting_overview_and_table_calls_their_views() -> 
     assert nav.selected_key == "library:table"
 
 
+def test_render_left_panel__clicking_table_awaits_async_view(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    panes = shell()
+    calls: list[str] = []
+
+    async def show_table() -> None:
+        calls.append("table")
+
+    nav = render_left_panel(panes.left, panes.middle, [], on_table=show_table)
+
+    click_and_wait(nav.buttons["library:table"], monkeypatch)
+
+    assert calls == ["table"]
+
+
 def test_render_left_panel__table_gear_opens_settings_with_table_highlighted() -> None:
     panes = shell()
     calls: list[str] = []
@@ -219,9 +236,29 @@ def test_render_left_panel__table_gear_opens_settings_with_table_highlighted() -
     )
     nav.select("library:overview")
 
-    _click(_table_gear(nav))
+    _click(_gear(nav, "library:table"))
 
     assert calls == ["settings"]
     assert nav.selected_key == "library:table"
     assert _SELECTED_CLASS in nav.buttons["library:table"].classes
     assert _SELECTED_CLASS not in nav.buttons["library:overview"].classes
+
+
+def test_render_left_panel__overview_gear_opens_settings_and_highlights() -> None:
+    panes = shell()
+    calls: list[str] = []
+    nav = render_left_panel(
+        panes.left,
+        panes.middle,
+        [],
+        on_overview=lambda: calls.append("overview"),
+        on_overview_settings=lambda: calls.append("settings"),
+    )
+    nav.select("library:table")
+
+    _click(_gear(nav, "library:overview"))
+
+    assert calls == ["settings"]
+    assert nav.selected_key == "library:overview"
+    assert _SELECTED_CLASS in nav.buttons["library:overview"].classes
+    assert _SELECTED_CLASS not in nav.buttons["library:table"].classes

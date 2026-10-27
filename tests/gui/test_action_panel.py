@@ -85,6 +85,26 @@ def test_render_right_panel__gear_shows_settings_in_middle_and_calls_back() -> N
     assert labels[0].text == "Enrich settings"  # type: ignore[attr-defined]
 
 
+def _clear_log_button(right: Element) -> ui.button:
+    return next(
+        element
+        for element in right.descendants()
+        if isinstance(element, ui.button) and element.text == "Clear log"
+    )
+
+
+def test_render_right_panel__clear_log_button_calls_back() -> None:
+    panes = shell()
+    calls: list[None] = []
+    render_right_panel(
+        panes.right, panes.middle, on_clear_log=lambda: calls.append(None)
+    )
+
+    _click(_clear_log_button(panes.right))
+
+    assert calls == [None]
+
+
 def test_render_right_panel__log_is_empty() -> None:
     panes = shell()
 

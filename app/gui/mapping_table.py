@@ -52,7 +52,10 @@ _LABELS: dict[str, str] = {
     "isbn": "ISBN",
     ISSN_ISBN_TARGET: "ISSN/ISBN",
     "pmid": "PMID",
-    "date": "Date (full)",
+    "date": "Publication date (full)",
+    "year": "Publication year",
+    "month": "Publication month",
+    "day": "Publication day",
     _OTHER_IDS: "Other ID",
 }
 

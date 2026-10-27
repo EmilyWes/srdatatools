@@ -1,5 +1,4 @@
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Awaitable, Callable
 
 from nicegui import ui
 from nicegui.element import Element
@@ -16,11 +15,11 @@ def render_source_file_view(
     middle: Element,
     source_file: SourceFile,
     records_in_library: int,
-    on_remove: Callable[[], Any],
+    on_remove: Callable[[], Awaitable[None] | None],
 ) -> None:
-    def remove() -> None:
+    def remove() -> Awaitable[None] | None:
         dialog.close()
-        on_remove()
+        return on_remove()
 
     middle.clear()
     with middle:
@@ -52,7 +51,7 @@ def render_source_file_view(
                 ui.button(
                     "Remove from library", color=None, on_click=dialog.open
                 ).classes("text-sm").props("dense no-caps")
-            with ui.column().classes("gap-1"):
+            with ui.column().classes("w-full gap-1"):
                 ui.label(
                     f"Skipped on import: {format_count(len(source_file.skipped_rows))}"
                 ).classes("text-sm text-grey-7")
@@ -64,11 +63,14 @@ def render_source_file_view(
                             "label": "Reason",
                             "field": "reason",
                             "align": "left",
+                            "style": "white-space: normal; overflow-wrap: anywhere",
                         },
                     ],
                     rows=source_file.skipped_rows,
                     pagination=0,
-                ).props("dense flat bordered hide-bottom").classes("min-w-48")
+                ).props("dense flat bordered hide-bottom").classes(
+                    "min-w-48 max-w-full max-h-80"
+                )
             with ui.column().classes("gap-1"):
                 ui.label("Field mapping").classes("text-sm text-grey-7")
                 summary = FileSummary(**source_file.file_summary)
