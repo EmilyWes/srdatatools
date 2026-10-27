@@ -308,3 +308,38 @@ def test_home__removing_source_file_deletes_logs_and_shows_overview(
         assert session.query(ActivityLog).one().action_type == "remove"
     assert navs[-1].selected_key == "library:overview"
     assert f"source_file:{source_file_id}" not in navs[-1].buttons
+
+
+def test_home__deleting_library_empties_db_logs_and_shows_overview(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_file_id = _add_source_file_with_record(engine)
+    navs = _capture_navs(monkeypatch)
+    on_deletes: list[Any] = []
+    render_right_panel = home_module.render_right_panel
+
+    def capture(*args: Any, **kwargs: Any) -> ActionPanel:
+        on_deletes.append(kwargs["on_delete_library"])
+        return render_right_panel(*args, **kwargs)
+
+    monkeypatch.setattr(home_module, "render_right_panel", capture)
+
+    home()
+    navs[-1].select(f"source_file:{source_file_id}")
+    middle = navs[-1].middle
+
+    async def delete() -> None:
+        with middle:
+            await on_deletes[-1]()
+
+    asyncio.run(delete())
+
+    with Session(engine) as session:
+        assert session.query(SourceFile).count() == 0
+        assert session.query(RecordSource).count() == 0
+        assert session.query(Record).count() == 0
+        entry = session.query(ActivityLog).one()
+        assert entry.action_type == "delete_library"
+        assert "Records removed: 1" in entry.message
+    assert navs[-1].selected_key == "library:overview"
+    assert f"source_file:{source_file_id}" not in navs[-1].buttons

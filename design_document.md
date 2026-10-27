@@ -183,7 +183,7 @@ flowchart LR
   - **Table settings** (gear beside Table): choose which record fields are shown as columns, with *Restore defaults* (DOI, title, authors, year, journal, sources). The choice is remembered between sessions in `app_settings`.
   - **A source file** selected: that file's info — rows currently in the library from this file, how many rows were skipped on import (and why), and an option to remove all of this file's records from the library (see open question on how this interacts with records already merged via dedup), plus a read-only copy of the field mapping used at import.
   - **Import** clicked: the middle panel is replaced by the import flow (below) until the user confirms or cancels.
-- **Right panel** — one button per cross-cutting action, top to bottom: **Deduplicate**, **Enrich**, **Snowball**, **Export**. Each has a small gear icon beside it that opens that action's settings in the middle panel (merge-settings for Deduplicate; polite-pool email/overwrite policy for Enrich; pre-fetch size-warning threshold for Snowball; export options for Export). Below the four buttons, a read-only textbox shows the activity log, oldest first and scrolled to the newest entry — always visible, no separate tab needed. Actions refresh it after doing work that may have written to the log.
+- **Right panel** — one button per cross-cutting action, top to bottom: **Deduplicate**, **Enrich**, **Snowball**, **Export**. Each has a small gear icon beside it that opens that action's settings in the middle panel (merge-settings for Deduplicate; polite-pool email/overwrite policy for Enrich; pre-fetch size-warning threshold for Snowball; export options for Export). Below the four buttons, a read-only textbox shows the activity log, oldest first and scrolled to the newest entry — always visible, no separate tab needed. Actions refresh it after doing work that may have written to the log. Pinned to the bottom of the panel, a red **Delete library** button removes all records and source files after a confirmation dialog showing the counts; the activity log and settings are kept, and the deletion is logged.
 
 **Import flow.**
 
@@ -259,7 +259,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] Import result summary also reports how many records had a date conflict (Year/Month/Day disagreeing with the full-date column, resolved in favour of Year/Month/Day), e.g. "998 imported, 2 skipped, 14 date conflicts"; not yet implemented
 - [x] Activity log: write a plain-language `activity_log` row for each import (e.g. "Imported 998 records from scopus.csv, 2 skipped")
 - [x] Source-file detail view: records currently in library from this file, skipped-row count, remove-this-source's-records action, read-only copy of the field mapping used at import
-- [ ] Delete/wipe the database: action that removes all imported records and source files
+- [x] Delete/wipe the database: action that removes all imported records and source files
 - [x] Right panel: Dedup / Enrich / Snowball / Export buttons in order, each with a gear icon opening its settings in the middle panel, read-only activity log textbox beneath
 - [x] Middle panel Library view: Overview (total records, records per source, per file, per year) + record table with sorting, column filters, row selection and persisted column settings
 
