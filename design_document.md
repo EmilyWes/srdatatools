@@ -242,10 +242,6 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] PubMed profile (NBIB, CSV)
 - [x] PubMed quirks
 - [x] Scopus profile (CSV, RIS, BibTeX)
-- [ ] Web of Science profile (RIS)
-- [ ] IEEE Xplore profile (CSV)
-- [ ] Embase profile (RIS/CSV)
-- [ ] PsycINFO profile — EBSCO and ProQuest variants (RIS/CSV)
 - [ ] OpenAlex profile (CSV/RIS)
 - [ ] ASReview profile (CSV/TSV/RIS/Excel)
 - [x] Store parsed records, keep raw source data (`record_source`)
@@ -256,7 +252,6 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Auto-detection of type/source from file extension + content sniffing, prefilling the Source/Type dropdowns
 - [x] Source/Type dropdowns: implemented profiles/formats + "Unknown"; Type required (Import disabled with a tooltip while Unknown); mismatched Source/Type combination falls back to the default parser with an inline notice
 - [x] Import action: writes `record_source` + `record`, per-file "N imported, M skipped" summary
-- [ ] Import result summary also reports how many records had a date conflict (Year/Month/Day disagreeing with the full-date column, resolved in favour of Year/Month/Day), e.g. "998 imported, 2 skipped, 14 date conflicts"; not yet implemented
 - [x] Activity log: write a plain-language `activity_log` row for each import (e.g. "Imported 998 records from scopus.csv, 2 skipped")
 - [x] Source-file detail view: records currently in library from this file, skipped-row count, remove-this-source's-records action, read-only copy of the field mapping used at import
 - [x] Delete/wipe the database: action that removes all imported records and source files
@@ -309,6 +304,10 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] Zotero profile (RIS/CSV)
 - [ ] Zotero profile: Zotero BibTeX mapping
 - [ ] Zotero profile: generic CSL JSON parser + Zotero CSL JSON mapping
+- [ ] Web of Science profile (RIS)
+- [ ] IEEE Xplore profile (CSV)
+- [ ] Embase profile (RIS/CSV)
+- [ ] PsycINFO profile — EBSCO and ProQuest variants (RIS/CSV)
 
 **Backlog / stretch**
 
