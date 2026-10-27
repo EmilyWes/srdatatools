@@ -13,20 +13,28 @@ _BIBTEX_ENTRY = re.compile(
     r"^[ \t]*@(?!(?:comment|string|preamble)\b)[A-Za-z]+[ \t]*[{(]",
     re.MULTILINE | re.IGNORECASE,
 )
-_EXTENSION_TYPES = {".ris": "ris", ".nbib": "nbib", ".csv": "csv", ".bib": "bibtex"}
+_EXTENSION_TYPES = {
+    ".ris": "ris",
+    ".nbib": "nbib",
+    ".csv": "csv",
+    ".tsv": "tsv",
+    ".bib": "bibtex",
+}
 _CSV_SAMPLE_SIZE = 2048
 _DETECT_PREFIX_SIZE = 4 * 1024 * 1024
 
 
-def _looks_like_csv(text: str) -> bool:
+def _sniff_tabular(text: str) -> str | None:
     try:
         dialect = csv.Sniffer().sniff(text[:_CSV_SAMPLE_SIZE], delimiters=",;\t")
         reader = csv.reader(StringIO(text), dialect=dialect)
         header = next(reader, [])
         first_row = next(reader, [])
     except csv.Error:
-        return False
-    return len(header) > 1 and len(first_row) == len(header)
+        return None
+    if len(header) > 1 and len(first_row) == len(header):
+        return dialect.delimiter
+    return None
 
 
 def _type_from_content(text: str) -> str | None:
@@ -37,9 +45,10 @@ def _type_from_content(text: str) -> str | None:
         return "nbib"
     if _BIBTEX_ENTRY.search(text):
         return "bibtex"
-    if _looks_like_csv(text):
-        return "csv"
-    return None
+    delimiter = _sniff_tabular(text)
+    if delimiter is None:
+        return None
+    return "tsv" if delimiter == "\t" else "csv"
 
 
 def detect_type(path: Path) -> str | None:
