@@ -51,7 +51,7 @@ def render_source_file_view(
                 ui.button(
                     "Remove from library", color=None, on_click=dialog.open
                 ).classes("text-sm").props("dense no-caps")
-            with ui.column().classes("gap-1"):
+            with ui.column().classes("w-full gap-1"):
                 ui.label(
                     f"Skipped on import: {format_count(len(source_file.skipped_rows))}"
                 ).classes("text-sm text-grey-7")
@@ -63,11 +63,14 @@ def render_source_file_view(
                             "label": "Reason",
                             "field": "reason",
                             "align": "left",
+                            "style": "white-space: normal; overflow-wrap: anywhere",
                         },
                     ],
                     rows=source_file.skipped_rows,
                     pagination=0,
-                ).props("dense flat bordered hide-bottom").classes("min-w-48")
+                ).props("dense flat bordered hide-bottom").classes(
+                    "min-w-48 max-w-full max-h-80"
+                )
             with ui.column().classes("gap-1"):
                 ui.label("Field mapping").classes("text-sm text-grey-7")
                 summary = FileSummary(**source_file.file_summary)
