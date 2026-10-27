@@ -235,11 +235,10 @@ def test_home__import_stores_given_summary_and_selects_new_file(
     async def confirm() -> None:
         with middle:
             await on_imports[-1](
-                csv_path,
+                [(csv_path, summary)],
                 "csv",
                 FieldMapping(targets={"Title": "title"}),
                 "unknown",
-                summary,
             )
 
     asyncio.run(confirm())
@@ -249,6 +248,52 @@ def test_home__import_stores_given_summary_and_selects_new_file(
         assert source_file.file_summary == asdict(summary)
         assert session.query(Record).one().title == "A title"
     assert navs[-1].selected_key == f"source_file:{source_file.id}"
+
+
+def test_home__multi_file_import_stores_each_file_and_selects_overview(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    first_path = tmp_path / "first.csv"
+    second_path = tmp_path / "second.csv"
+    first_path.write_text("Title\nFirst title\n")
+    second_path.write_text("Title\nSecond title\n")
+    first_summary = FileSummary({"Title": "First title"}, {"Title": 1}, 1)
+    second_summary = FileSummary({"Title": "Second title"}, {"Title": 1}, 1)
+    navs = _capture_navs(monkeypatch)
+    on_imports: list[Any] = []
+    monkeypatch.setattr(
+        home_module,
+        "render_import_view",
+        lambda middle, on_import: on_imports.append(on_import),
+    )
+
+    home()
+    click_and_wait(navs[-1].buttons["import"], monkeypatch)
+    middle = navs[-1].middle
+
+    async def confirm() -> None:
+        with middle:
+            await on_imports[-1](
+                [(first_path, first_summary), (second_path, second_summary)],
+                "csv",
+                FieldMapping(targets={"Title": "title"}),
+                "unknown",
+            )
+
+    asyncio.run(confirm())
+
+    with Session(engine) as session:
+        source_files = session.query(SourceFile).order_by(SourceFile.id).all()
+        assert [source_file.filename for source_file in source_files] == [
+            "first.csv",
+            "second.csv",
+        ]
+        assert [source_file.file_summary for source_file in source_files] == [
+            asdict(first_summary),
+            asdict(second_summary),
+        ]
+        assert session.query(ActivityLog).filter_by(action_type="import").count() == 2
+    assert navs[-1].selected_key == "library:overview"
 
 
 def test_home__clicking_table_shows_records_in_grid(

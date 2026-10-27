@@ -1,5 +1,5 @@
 ﻿from collections.abc import Awaitable, Callable
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from functools import partial
 from pathlib import Path
 
@@ -19,7 +19,7 @@ from app.parsers.bibtex import (
     read_bibtex_fields,
     suggest_bibtex_mapping,
 )
-from app.parsers.common import FileSummary, ParsedRow, ParseResult
+from app.parsers.common import FileSummary, ParsedRow, ParseResult, merge_summaries
 from app.parsers.csv_ import (
     parse_csv_file,
     parse_csv_record,
@@ -65,11 +65,16 @@ _SOURCE_OPTIONS = {
     **{key: profile.label for key, profile in PROFILES.items()},
 }
 
+_MIXED_WARNING = (
+    "The selected files look like they come from different sources or types."
+    " Make sure you are importing files from the same source and of the same type."
+)
 
-async def pick_file() -> Path | None:
+
+async def pick_files() -> list[Path]:
     assert app.native.main_window is not None, "native window is not running"
-    selected = await app.native.main_window.create_file_dialog(allow_multiple=False)
-    return Path(selected[0]) if selected else None
+    selected = await app.native.main_window.create_file_dialog(allow_multiple=True)
+    return [Path(path) for path in selected] if selected else []
 
 
 def _parse_csv_lines(lines: list[tuple[str, str]], mapping: FieldMapping) -> ParsedRow:
@@ -158,6 +163,14 @@ def _detect(path: Path) -> tuple[str, str]:
     return file_type, detect_source(path, file_type) or _SOURCE_UNKNOWN
 
 
+def common_detection(detected: list[tuple[str, str]]) -> tuple[str, str]:
+    types = {file_type for file_type, _ in detected}
+    sources = {source for _, source in detected}
+    file_type = types.pop() if len(types) == 1 else _TYPE_UNKNOWN
+    source = sources.pop() if len(sources) == 1 else _SOURCE_UNKNOWN
+    return file_type, source
+
+
 def read_summary(file_type: str, path: Path) -> FileSummary | None:
     handlers = _handlers(file_type, _SOURCE_UNKNOWN)
     return handlers.read_keys(path) if handlers is not None else None
@@ -166,7 +179,7 @@ def read_summary(file_type: str, path: Path) -> FileSummary | None:
 def render_mapping(
     container: Element,
     file_type: str,
-    path: Path,
+    name: str,
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
 ) -> MappingScreen | None:
@@ -176,7 +189,7 @@ def render_mapping(
 
     if not summary.samples:
         with container:
-            ui.notify(f"{path.name} has no {handlers.noun} to map", type="negative")
+            ui.notify(f"No {handlers.noun} to map in {name}", type="negative")
         return None
 
     return render_mapping_table(
@@ -292,42 +305,66 @@ def import_file(
     raise ValueError(f"unsupported file type: {file_type!r}")
 
 
-OnImport = Callable[[Path, str, FieldMapping, str, FileSummary], Awaitable[None] | None]
+OnImport = Callable[
+    [list[tuple[Path, FileSummary]], str, FieldMapping, str], Awaitable[None] | None
+]
 
 
 @dataclass
 class ImportView:
     middle: Element
     on_import: OnImport
-    path: Path | None = None
+    paths: list[Path] = field(default_factory=list)
+    detected: list[tuple[str, str]] = field(default_factory=list)
     file_type: str = _TYPE_UNKNOWN
     source: str = _SOURCE_UNKNOWN
-    summary: FileSummary | None = None
+    summaries: list[FileSummary] = field(default_factory=list)
     mapping_screen: MappingScreen | None = None
     import_button: ui.button | None = None
 
-    async def _select_file(self) -> None:
-        picked = await pick_file()
-        if picked is not None:
-            self.path = picked
-            self.file_type, self.source = await run_busy(
-                f"Reading {picked.name}…", lambda: _detect(picked)
+    def _name(self) -> str:
+        if len(self.paths) == 1:
+            return self.paths[0].name
+        return f"{len(self.paths)} files"
+
+    def _mixed(self) -> bool:
+        return len(set(self.detected)) > 1
+
+    def _mixed_details(self) -> str:
+        return "; ".join(
+            f"{path.name}: {_TYPE_OPTIONS[file_type]}, {_SOURCE_OPTIONS[source]}"
+            for path, (file_type, source) in zip(self.paths, self.detected, strict=True)
+        )
+
+    async def _select_files(self) -> None:
+        picked = await pick_files()
+        if picked:
+            self.paths = picked
+            self.detected = await run_busy(
+                f"Reading {self._name()}…", lambda: [_detect(path) for path in picked]
             )
-            await self._read_file()
+            self.file_type, self.source = common_detection(self.detected)
+            if self._mixed():
+                with self.middle:
+                    ui.notify(_MIXED_WARNING, type="warning")
+            await self._read_files()
 
     async def _set_type(self, file_type: str) -> None:
         self.file_type = file_type
-        await self._read_file()
+        await self._read_files()
 
-    async def _read_file(self) -> None:
-        self.summary = None
-        path = self.path
+    async def _read_files(self) -> None:
+        self.summaries = []
+        paths = self.paths
         file_type = self.file_type
-        if path is not None:
+
+        def read() -> list[FileSummary]:
+            summaries = [read_summary(file_type, path) for path in paths]
+            return [summary for summary in summaries if summary is not None]
+
+        if paths:
             try:
-                self.summary = await run_busy(
-                    f"Reading {path.name}…", lambda: read_summary(file_type, path)
-                )
+                self.summaries = await run_busy(f"Reading {self._name()}…", read)
             except ValueError as exc:
                 with self.middle:
                     ui.notify(str(exc), type="negative")
@@ -338,29 +375,38 @@ class ImportView:
         self.render()
 
     def _import(self) -> Awaitable[None] | None:
-        assert self.path is not None
+        assert self.paths
         assert self.mapping_screen is not None
-        assert self.summary is not None
         return self.on_import(
-            self.path,
+            list(zip(self.paths, self.summaries, strict=True)),
             self.file_type,
             self.mapping_screen.current_mapping(),
             self.source,
-            self.summary,
         )
 
     def render(self) -> None:
         type_known = self.file_type != _TYPE_UNKNOWN
-        has_file = self.path is not None
+        has_file = bool(self.paths)
 
         self.middle.clear()
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):
                 with ui.row().classes("items-center gap-2"):
-                    ui.label(
-                        self.path.name if self.path else "No file selected"
-                    ).classes("text-sm")
-                    ui.button("Select file", on_click=self._select_file).props("dense")
+                    if len(self.paths) > 1:
+                        files_label = ui.label(f"{len(self.paths)} files selected")
+                        files_label.tooltip(", ".join(path.name for path in self.paths))
+                    else:
+                        files_label = ui.label(
+                            self.paths[0].name if self.paths else "No file selected"
+                        )
+                    files_label.classes("text-sm")
+                    if self._mixed():
+                        ui.icon("warning", size="sm").classes("text-orange-7").tooltip(
+                            f"{_MIXED_WARNING} Detected: {self._mixed_details()}"
+                        )
+                    ui.button("Select files", on_click=self._select_files).props(
+                        "dense"
+                    )
 
                 with ui.row().classes("items-center gap-2"):
                     # Mirrors the warning icon's slot so the dropdowns stay centred.
@@ -393,12 +439,12 @@ class ImportView:
                         notice.classes("invisible")
 
                 mapping_container = ui.column().classes("items-center w-full")
-                if self.path is not None and self.summary is not None:
+                if self.paths and self.summaries:
                     self.mapping_screen = render_mapping(
                         mapping_container,
                         self.file_type,
-                        self.path,
-                        self.summary,
+                        self._name(),
+                        merge_summaries(self.summaries),
                         self.source,
                     )
                 else:

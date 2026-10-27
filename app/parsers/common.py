@@ -67,6 +67,19 @@ class SummaryBuilder:
         return FileSummary(self._samples, self._filled, self._total_rows)
 
 
+def merge_summaries(summaries: list[FileSummary]) -> FileSummary:
+    samples: dict[str, str] = {}
+    filled: dict[str, int] = {}
+    for summary in summaries:
+        for key, sample in summary.samples.items():
+            if not samples.get(key):
+                samples[key] = sample
+        for key, count in summary.filled.items():
+            filled[key] = filled.get(key, 0) + count
+    total_rows = sum(summary.total_rows for summary in summaries)
+    return FileSummary(samples, filled, total_rows)
+
+
 def decode_file(path: Path) -> str:
     raw_bytes = path.read_bytes()
     for encoding in _FILE_ENCODINGS:

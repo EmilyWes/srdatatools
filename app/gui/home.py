@@ -188,22 +188,26 @@ def home() -> None:
         refresh_log()
 
     async def on_confirmed(
-        path: Path,
+        files: list[tuple[Path, FileSummary]],
         file_type: str,
         mapping: FieldMapping,
         source: str,
-        summary: FileSummary,
     ) -> None:
-        def store() -> int:
+        def store() -> list[int]:
             with session_scope(_engine) as session:
-                source_file = import_file(
-                    session, path, file_type, mapping, summary, source
-                )
+                source_files = [
+                    import_file(session, path, file_type, mapping, summary, source)
+                    for path, summary in files
+                ]
                 session.flush()
-                return source_file.id
+                return [source_file.id for source_file in source_files]
 
-        source_file_id = await run_busy(f"Importing {path.name}…", store)
-        refresh(select_key=f"source_file:{source_file_id}")
+        name = files[0][0].name if len(files) == 1 else f"{len(files)} files"
+        source_file_ids = await run_busy(f"Importing {name}…", store)
+        if len(source_file_ids) == 1:
+            refresh(select_key=f"source_file:{source_file_ids[0]}")
+        else:
+            refresh()
 
     def start_import() -> None:
         render_import_view(panes.middle, on_import=on_confirmed)
