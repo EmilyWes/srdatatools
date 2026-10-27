@@ -11,7 +11,6 @@ from app.db.queries import (
     count_records_per_source,
     count_records_per_year,
     list_activity_log,
-    list_records,
     list_source_files,
 )
 from app.db.session import get_engine, session_scope
@@ -32,10 +31,10 @@ from app.gui.library_overview import (
 from app.gui.record_table import (
     RecordSelection,
     load_columns,
+    load_rows,
     render_record_table,
     render_table_settings,
     reset_columns,
-    row_for,
     save_columns,
 )
 from app.gui.source_file_view import render_source_file_view
@@ -105,8 +104,8 @@ def home() -> None:
     async def show_table() -> None:
         def load() -> tuple[list[dict[str, Any]], list[str]]:
             with session_scope(_engine) as session:
-                rows = [row_for(record) for record in list_records(session)]
-                return rows, load_columns(session)
+                columns = load_columns(session)
+                return load_rows(session, columns), columns
 
         rows, columns = await run_busy("Loading library table…", load)
         render_record_table(panes.middle, rows, columns, selection)

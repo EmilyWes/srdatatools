@@ -13,7 +13,8 @@ from app.db.queries import (
     count_records_per_source,
     count_records_per_year,
     list_activity_log,
-    list_records,
+    list_record_rows,
+    list_record_sources,
     list_source_files,
 )
 
@@ -183,11 +184,23 @@ def test_count_records_per_year__ascending_with_unknown_last(
     assert count_records_per_year(library) == [(2020, 2), (2021, 1), (None, 1)]
 
 
-def test_list_records__loads_records_with_source_files(library: Session) -> None:
-    records = list_records(library)
+def test_list_record_rows__requested_fields_ordered_by_id(library: Session) -> None:
+    rows = list_record_rows(library, ["publication_year"])
 
-    assert len(records) == 4
-    assert [rs.source_file.filename for rs in records[1].sources] == [
-        "pubmed.nbib",
-        "scopus.csv",
+    assert rows == [
+        {"id": 1, "publication_year": 2020},
+        {"id": 2, "publication_year": 2021},
+        {"id": 3, "publication_year": None},
+        {"id": 4, "publication_year": 2020},
     ]
+
+
+def test_list_record_sources__sources_per_record_in_import_order(
+    library: Session,
+) -> None:
+    assert list_record_sources(library) == {
+        1: ["pubmed"],
+        2: ["pubmed", "scopus"],
+        3: ["scopus"],
+        4: [None],
+    }

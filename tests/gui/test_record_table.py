@@ -17,6 +17,7 @@ from app.gui.record_table import (
     DEFAULT_COLUMNS,
     RecordSelection,
     load_columns,
+    load_rows,
     render_record_table,
     render_table_settings,
     reset_columns,
@@ -52,12 +53,8 @@ def _source_file(source: str | None) -> SourceFile:
     )
 
 
-def _record(id_: int, **fields: Any) -> Record:
-    return Record(id=id_, **({"authors": [], "keywords": [], "other_ids": {}} | fields))
-
-
 def _row(id_: int, **fields: Any) -> dict[str, Any]:
-    return row_for(_record(id_, **fields))
+    return row_for({"id": id_} | fields)
 
 
 def _grid(middle: Element) -> ui.aggrid:
@@ -114,46 +111,71 @@ def test_columns__cover_every_record_field_plus_sources() -> None:
     assert set(COLUMNS) == record_fields | {"sources"}
 
 
-def test_row_for__formats_authors_lists_and_sources() -> None:
-    record = _record(
-        7,
-        title="A title",
-        authors=[{"full_name": "Smith, J"}, {"full_name": "Doe, A"}],
-        keywords=["alpha", "beta"],
-        other_ids={"wos": "123"},
-        publication_year=2020,
+def test_row_for__formats_authors_lists_and_dicts() -> None:
+    row = row_for(
+        {
+            "id": 7,
+            "authors": [{"full_name": "Smith, J"}, {"full_name": "Doe, A"}],
+            "keywords": ["alpha", "beta"],
+            "other_ids": {"wos": "123"},
+            "publication_year": 2020,
+            "doi": None,
+        }
     )
-    record.sources = [
-        RecordSource(source_file=_source_file("pubmed")),
-        RecordSource(source_file=_source_file("pubmed")),
-        RecordSource(source_file=_source_file("scopus")),
-    ]
 
-    row = row_for(record)
-
-    assert row["id"] == 7
-    assert row["authors"] == "Smith, J et al."
-    assert row["keywords"] == "alpha; beta"
-    assert row["other_ids"] == "wos: 123"
-    assert row["publication_year"] == 2020
-    assert row["sources"] == "PubMed, Scopus"
+    assert row == {
+        "id": 7,
+        "authors": "Smith, J et al.",
+        "keywords": "alpha; beta",
+        "other_ids": "wos: 123",
+        "publication_year": 2020,
+        "doi": None,
+    }
 
 
 def test_row_for__single_author_without_et_al() -> None:
-    record = _record(1, authors=[{"family_name": "Smith", "given_name": "J"}])
+    row = row_for({"authors": [{"family_name": "Smith", "given_name": "J"}]})
 
-    assert row_for(record)["authors"] == "Smith, J"
+    assert row["authors"] == "Smith, J"
 
 
-def test_row_for__unknown_source_and_empty_fields() -> None:
-    record = _record(1)
-    record.sources = [RecordSource(source_file=_source_file(None))]
+def test_row_for__no_authors() -> None:
+    assert row_for({"authors": []})["authors"] == ""
 
-    row = row_for(record)
 
-    assert row["sources"] == "Unknown"
-    assert row["authors"] == ""
-    assert row["doi"] is None
+def test_load_rows__only_requested_columns(session: Session) -> None:
+    session.add(Record(id=1, title="A title", doi="10.1/x", abstract="Long text"))
+    session.commit()
+
+    assert load_rows(session, ["doi", "title"]) == [
+        {"id": 1, "doi": "10.1/x", "title": "A title"}
+    ]
+
+
+def test_load_rows__sources_deduplicated_in_import_order(session: Session) -> None:
+    session.add(
+        Record(
+            id=1,
+            sources=[
+                RecordSource(source_file=_source_file("scopus")),
+                RecordSource(source_file=_source_file("pubmed")),
+                RecordSource(source_file=_source_file("scopus")),
+                RecordSource(source_file=_source_file(None)),
+            ],
+        )
+    )
+    session.commit()
+
+    assert load_rows(session, ["sources"]) == [
+        {"id": 1, "sources": "Scopus, PubMed, Unknown"}
+    ]
+
+
+def test_load_rows__record_without_sources(session: Session) -> None:
+    session.add(Record(id=1))
+    session.commit()
+
+    assert load_rows(session, ["sources"]) == [{"id": 1, "sources": ""}]
 
 
 def test_render_record_table__columns_follow_selection() -> None:

@@ -1,5 +1,5 @@
 import json
-from collections.abc import Callable, Collection, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -8,7 +8,7 @@ from nicegui.element import Element
 from nicegui.events import GenericEventArguments
 from sqlalchemy.orm import Session
 
-from app.db.models import Record
+from app.db.queries import list_record_rows, list_record_sources
 from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.library_overview import format_count, source_label
 
@@ -86,26 +86,31 @@ def _authors(authors: list[dict[str, Any]]) -> str:
     return f"{first} et al." if len(authors) > 1 else first
 
 
-def _sources(record: Record) -> str:
-    labels = [source_label(rs.source_file.source) for rs in record.sources]
-    return ", ".join(dict.fromkeys(labels))
+def _sources(sources: Sequence[str | None]) -> str:
+    return ", ".join(dict.fromkeys(source_label(source) for source in sources))
 
 
-def row_for(record: Record) -> dict[str, Any]:
-    row: dict[str, Any] = {"id": record.id}
-    for key in COLUMNS:
-        if key == "sources":
-            row[key] = _sources(record)
-        elif key == "authors":
-            row[key] = _authors(record.authors)
-        else:
-            value = getattr(record, key)
-            if isinstance(value, list):
-                value = "; ".join(value)
-            elif isinstance(value, dict):
-                value = "; ".join(f"{name}: {id_}" for name, id_ in value.items())
-            row[key] = value
+def row_for(values: Mapping[str, Any]) -> dict[str, Any]:
+    row: dict[str, Any] = {}
+    for key, value in values.items():
+        if key == "authors":
+            value = _authors(value)
+        elif isinstance(value, list):
+            value = "; ".join(value)
+        elif isinstance(value, dict):
+            value = "; ".join(f"{name}: {id_}" for name, id_ in value.items())
+        row[key] = value
     return row
+
+
+def load_rows(session: Session, columns: Sequence[str]) -> list[dict[str, Any]]:
+    fields = [key for key in columns if key != "sources"]
+    rows = [row_for(values) for values in list_record_rows(session, fields)]
+    if "sources" in columns:
+        sources = list_record_sources(session)
+        for row in rows:
+            row["sources"] = _sources(sources.get(row["id"], []))
+    return rows
 
 
 def _column_def(key: str) -> dict[str, Any]:
