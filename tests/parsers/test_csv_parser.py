@@ -575,16 +575,14 @@ def test_parse_csv_text__tab_delimiter_keeps_commas_in_cells() -> None:
     assert [row.record.title for row in result.rows] == ["A, B, and C", "D, E"]
 
 
-def test_parse_csv_file__tab_delimiter_reads_quoted_multiline_cell() -> None:
-    mapping = FieldMapping(targets={"abstract": "abstract"})
+def test_parse_csv_text__tab_delimiter_reads_quoted_multiline_cell() -> None:
+    text = 'Title\tAbstract\nSome Paper\t"First line.\nSecond line with a\ttab."\n'
+    mapping = FieldMapping(targets={"Abstract": "abstract"})
 
-    result = parse_csv_file(
-        CSV_FIXTURES_DIR / "tab_delimited.tsv", mapping, delimiter="\t"
-    )
+    result = parse_csv_text(text, mapping, delimiter="\t")
 
-    assert result.rows[1].record.abstract == (
-        "First paragraph.\nSecond paragraph with a\ttab."
-    )
+    assert result.skipped == []
+    assert result.rows[0].record.abstract == "First line.\nSecond line with a\ttab."
 
 
 def test_parse_csv_text__tab_delimiter_skips_ragged_row() -> None:
