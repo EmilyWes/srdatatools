@@ -96,7 +96,7 @@ def render_right_panel(
                 ui.button("Clear log", color=None, on_click=on_clear_log).props(
                     "flat dense size=sm"
                 )
-        with ui.row().classes("w-full justify-center mt-auto pt-4 pb-6"):
+        with ui.row().classes("w-full justify-center pt-4 pb-6"):
             ui.button(
                 "Delete library", color="negative", on_click=open_delete_dialog
             ).classes("w-32 text-sm").props("dense")
