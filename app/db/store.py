@@ -27,6 +27,7 @@ def store_parsed_rows(
     path: str | None,
     format: str,
     source: str | None = None,
+    sheet: str | None = None,
     parsed_rows: Sequence[tuple[RecordSchema, dict[str, str]]],
     skipped_rows: Sequence[tuple[int, str]] = (),
     imported_at: datetime.datetime | None = None,
@@ -36,6 +37,7 @@ def store_parsed_rows(
         path=path,
         format=format,
         source=source,
+        sheet=sheet,
         imported_at=imported_at or datetime.datetime.now(),
         row_count=len(parsed_rows),
         skipped_rows=[

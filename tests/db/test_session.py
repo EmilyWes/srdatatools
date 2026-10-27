@@ -61,6 +61,25 @@ def test_run_migrations__source_file_has_source_column(tmp_path: Path) -> None:
     assert "source" in columns
 
 
+def test_run_migrations__source_file_has_nullable_sheet_column(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "migration_test.db"
+
+    run_migrations(db_path)
+
+    connection = sqlite3.connect(db_path)
+    try:
+        notnull_by_column = {
+            row[1]: row[3]
+            for row in connection.execute("pragma table_info(source_file)")
+        }
+    finally:
+        connection.close()
+
+    assert notnull_by_column["sheet"] == 0
+
+
 def test_run_migrations__source_file_mapping_columns_default_to_empty(
     tmp_path: Path,
 ) -> None:
