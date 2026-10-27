@@ -51,6 +51,8 @@ _ENTRY_START = re.compile(
     r"^[ \t]*@(?P<type>[A-Za-z]+)[ \t]*(?P<open>[{(])", re.MULTILINE
 )
 _CLOSERS = {"{": "}", "(": ")"}
+# Scopus builds keys from page numbers, so pages "22,24" gives key "Wong200922,24".
+_KEY_CONTINUATION = re.compile(r"[^\s=]+")
 
 _PAGES_FIELD = "pages"
 _PAGE_DASHES = re.compile(r"\s*-+\s*")
@@ -155,6 +157,8 @@ def _parse_entry(
     entry_type: str, body: str, line_number: int
 ) -> _Entry | _MalformedEntry:
     key, *pieces = _split_top_level(body, ",")
+    while pieces and _KEY_CONTINUATION.fullmatch(pieces[0]):
+        key += "," + pieces.pop(0)
     key = key.strip()
     if not key or "=" in key:
         return _MalformedEntry(line_number, "entry has no citation key")

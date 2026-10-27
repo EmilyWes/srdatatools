@@ -82,6 +82,23 @@ def test_parse_bibtex_text__raw_fields_include_entry_type_and_key() -> None:
     assert row.record.publication_type == "article"
 
 
+def test_parse_bibtex_text__citation_key_may_contain_commas() -> None:
+    text = (
+        "@ARTICLE{Guay1981222,224,226passim,\n"
+        "\ttitle = {Private practice--no dinosaur!},\n"
+        "\tpages = {222,224,226passim}\n"
+        "}\n"
+    )
+
+    result = parse_bibtex_text(text, _MAPPING)
+
+    assert result.skipped == []
+    row = result.rows[0]
+    assert row.raw_fields["@key"] == "Guay1981222,224,226passim"
+    assert row.record.title == "Private practice–no dinosaur!"
+    assert row.record.pages == "222,224,226passim"
+
+
 def test_parse_bibtex_text__field_names_are_case_insensitive() -> None:
     text = "@article{key1, TITLE = {Some Paper}, Journal = {Nature}}"
 
