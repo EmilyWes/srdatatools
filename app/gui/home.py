@@ -39,6 +39,7 @@ from app.gui.record_table import (
     save_columns,
 )
 from app.gui.source_file_view import render_source_file_view
+from app.parsers.common import FileSummary
 from app.parsers.mapping import FieldMapping
 
 _engine = get_engine()
@@ -169,11 +170,17 @@ def home() -> None:
         refresh_log()
 
     async def on_confirmed(
-        path: Path, file_type: str, mapping: FieldMapping, source: str
+        path: Path,
+        file_type: str,
+        mapping: FieldMapping,
+        source: str,
+        summary: FileSummary,
     ) -> None:
         def store() -> int:
             with session_scope(_engine) as session:
-                source_file = import_file(session, path, file_type, mapping, source)
+                source_file = import_file(
+                    session, path, file_type, mapping, summary, source
+                )
                 session.flush()
                 return source_file.id
 

@@ -214,6 +214,43 @@ def _capture_removes(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     return on_removes
 
 
+def test_home__import_stores_given_summary_and_selects_new_file(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title\nA title\n")
+    summary = FileSummary({"Title": "From the mapping screen"}, {"Title": 1}, 1)
+    navs = _capture_navs(monkeypatch)
+    on_imports: list[Any] = []
+    monkeypatch.setattr(
+        home_module,
+        "render_import_view",
+        lambda middle, on_import: on_imports.append(on_import),
+    )
+
+    home()
+    click_and_wait(navs[-1].buttons["import"], monkeypatch)
+    middle = navs[-1].middle
+
+    async def confirm() -> None:
+        with middle:
+            await on_imports[-1](
+                csv_path,
+                "csv",
+                FieldMapping(targets={"Title": "title"}),
+                "unknown",
+                summary,
+            )
+
+    asyncio.run(confirm())
+
+    with Session(engine) as session:
+        source_file = session.query(SourceFile).one()
+        assert source_file.file_summary == asdict(summary)
+        assert session.query(Record).one().title == "A title"
+    assert navs[-1].selected_key == f"source_file:{source_file.id}"
+
+
 def test_home__clicking_table_shows_records_in_grid(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
