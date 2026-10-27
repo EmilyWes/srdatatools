@@ -20,12 +20,15 @@ from app.gui.record_table import (
     label_field,
     load_columns,
     load_label_columns,
+    load_label_format,
     load_rows,
     render_record_table,
     render_table_settings,
     reset_columns,
+    reset_label_format,
     row_for,
     save_columns,
+    save_label_format,
 )
 
 
@@ -217,7 +220,13 @@ def test_render_table_settings__checkboxes_reflect_columns() -> None:
     panes = shell()
 
     render_table_settings(
-        panes.middle, ["doi"], on_change=print, on_restore=print, on_back=print
+        panes.middle,
+        ["doi"],
+        label_format="words",
+        on_change=print,
+        on_label_format=print,
+        on_restore=print,
+        on_back=print,
     )
 
     checkboxes = {
@@ -236,7 +245,9 @@ def test_render_table_settings__toggling_reports_new_columns() -> None:
     render_table_settings(
         panes.middle,
         ["doi"],
+        label_format="words",
         on_change=changes.append,
+        on_label_format=print,
         on_restore=lambda: None,
         on_back=lambda: None,
     )
@@ -257,7 +268,9 @@ def test_render_table_settings__restore_and_back_buttons_call_back() -> None:
     render_table_settings(
         panes.middle,
         ["doi"],
+        label_format="words",
         on_change=lambda columns: None,
+        on_label_format=print,
         on_restore=lambda: calls.append("restore"),
         on_back=lambda: calls.append("back"),
     )
@@ -417,7 +430,9 @@ def test_render_table_settings__label_checkboxes_after_fixed_ones() -> None:
         panes.middle,
         ["doi"],
         label_columns=[TIAB, FT],
+        label_format="words",
         on_change=changes.append,
+        on_label_format=print,
         on_restore=lambda: None,
         on_back=lambda: None,
     )
@@ -437,3 +452,82 @@ def test_render_table_settings__label_checkboxes_after_fixed_ones() -> None:
     checkboxes[-2].value = True
 
     assert changes == [["doi", FT], ["doi", TIAB, FT]]
+
+
+def test_load_label_format__defaults_to_words(session: Session) -> None:
+    assert load_label_format(session) == "words"
+
+
+def test_save_label_format__roundtrip_and_reset(session: Session) -> None:
+    save_label_format(session, "numbers")
+    session.commit()
+    assert load_label_format(session) == "numbers"
+
+    reset_label_format(session)
+    session.commit()
+    assert load_label_format(session) == "words"
+
+
+def test_load_rows__label_cells_as_numbers(session: Session) -> None:
+    _add_labels(session)
+
+    rows = load_rows(session, [TIAB, FT], label_format="numbers")
+
+    assert rows[0] == {"id": 1, label_field(TIAB): "1; 0.5", label_field(FT): "0"}
+
+
+@pytest.mark.parametrize(
+    ("value", "number"),
+    [
+        ("include", "1"),
+        ("exclude", "0"),
+        ("maybe", "0.5"),
+        ("unknown", "?"),
+        ("unlabeled", "-1"),
+    ],
+)
+def test_load_rows__each_label_value_has_a_number(
+    session: Session, value: str, number: str
+) -> None:
+    record = Record(id=1)
+    session.add(
+        Label(
+            record=record,
+            source_file=_source_file(None),
+            phase="ft",
+            screener="screener 1",
+            value=value,
+        )
+    )
+    session.commit()
+    key = label_column_key("ft", "screener 1")
+
+    rows = load_rows(session, [key], label_format="numbers")
+
+    assert rows[0][label_field(key)] == number
+
+
+def test_render_table_settings__label_format_radio_reports_change() -> None:
+    panes = shell()
+    formats: list[str] = []
+    render_table_settings(
+        panes.middle,
+        ["doi"],
+        label_format="words",
+        on_change=lambda columns: None,
+        on_label_format=formats.append,
+        on_restore=lambda: None,
+        on_back=lambda: None,
+    )
+    radio = next(
+        element
+        for element in panes.middle.descendants()
+        if isinstance(element, ui.radio)
+    )
+
+    assert radio.options == {"words": "Words", "numbers": "Numbers"}
+    assert radio.value == "words"
+
+    radio.value = "numbers"
+
+    assert formats == ["numbers"]

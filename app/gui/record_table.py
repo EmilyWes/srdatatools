@@ -1,7 +1,7 @@
 import json
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, cast
 
 from nicegui import ui
 from nicegui.element import Element
@@ -22,6 +22,17 @@ _NUMBER_COLUMNS = {"publication_year", "publication_month", "publication_day"}
 _WIDE_COLUMNS = {"title", "abstract", "notes"}
 _SELECTION_TIMEOUT = 10.0
 _LABEL_PREFIX = "label:"
+_LABEL_FORMAT_KEY = "table_label_format"
+
+LabelFormat = Literal["words", "numbers"]
+_LABEL_FORMATS: dict[LabelFormat, str] = {"words": "Words", "numbers": "Numbers"}
+_LABEL_NUMBERS = {
+    "include": "1",
+    "exclude": "0",
+    "maybe": "0.5",
+    "unknown": "?",
+    "unlabeled": "-1",
+}
 
 COLUMNS: dict[str, str] = {
     "doi": "DOI",
@@ -113,6 +124,18 @@ def reset_columns(session: Session) -> None:
     delete_setting(session, _COLUMNS_KEY)
 
 
+def load_label_format(session: Session) -> LabelFormat:
+    return cast(LabelFormat, get_setting(session, _LABEL_FORMAT_KEY) or "words")
+
+
+def save_label_format(session: Session, label_format: LabelFormat) -> None:
+    set_setting(session, _LABEL_FORMAT_KEY, label_format)
+
+
+def reset_label_format(session: Session) -> None:
+    delete_setting(session, _LABEL_FORMAT_KEY)
+
+
 def _author_name(author: dict[str, Any]) -> str:
     if author.get("full_name"):
         return str(author["full_name"])
@@ -144,7 +167,9 @@ def row_for(values: Mapping[str, Any]) -> dict[str, Any]:
     return row
 
 
-def load_rows(session: Session, columns: Sequence[str]) -> list[dict[str, Any]]:
+def load_rows(
+    session: Session, columns: Sequence[str], label_format: LabelFormat = "words"
+) -> list[dict[str, Any]]:
     label_columns = [key for key in columns if _is_label_column(key)]
     fields = [key for key in columns if key != "sources" and key not in label_columns]
     rows = [row_for(values) for values in list_record_rows(session, fields)]
@@ -157,7 +182,10 @@ def load_rows(session: Session, columns: Sequence[str]) -> list[dict[str, Any]]:
         for row in rows:
             pairs = labels.get(row["id"], {})
             for key in label_columns:
-                row[label_field(key)] = "; ".join(pairs.get(_label_pair(key), []))
+                values = pairs.get(_label_pair(key), [])
+                if label_format == "numbers":
+                    values = [_LABEL_NUMBERS[value] for value in values]
+                row[label_field(key)] = "; ".join(values)
     return rows
 
 
@@ -243,7 +271,9 @@ def render_record_table(
 def render_table_settings(
     middle: Element,
     columns: Sequence[str],
+    label_format: LabelFormat,
     on_change: Callable[[list[str]], Any],
+    on_label_format: Callable[[LabelFormat], Any],
     on_restore: Callable[[], Any],
     on_back: Callable[[], Any],
     label_columns: Sequence[str] = (),
@@ -269,6 +299,12 @@ def render_table_settings(
                         value=key in selected,
                         on_change=lambda e, key=key: toggle(key, e.value),
                     ).props("dense")
+            ui.label("Label values").classes("text-sm text-grey-7 pt-2")
+            ui.radio(
+                dict(_LABEL_FORMATS),
+                value=label_format,
+                on_change=lambda e: on_label_format(e.value),
+            ).props("dense inline")
             with ui.row().classes("gap-2 pt-2"):
                 ui.button("Restore defaults", color=None, on_click=on_restore).classes(
                     "text-sm"
