@@ -110,6 +110,9 @@ class FieldMapping:
     def key_for(self, target: str) -> str | None:
         return next((k for k, t in self.targets.items() if t == target), None)
 
+    def keys_for(self, target: str) -> set[str]:
+        return {k for k, t in self.targets.items() if t == target}
+
     def label_context(self, key: str) -> tuple[str, str]:
         phase = self.label_phases.get(key, "").strip()
         screener = self.label_screeners.get(key, "").strip()

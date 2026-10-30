@@ -6,6 +6,7 @@ from io import StringIO
 from app.models.record import Affiliation, Author, Record
 from app.parsers.authors import author_from_name
 from app.parsers.bibtex import clean_value
+from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.base import FormatProfile, Profile
 
 logger = logging.getLogger(__name__)
@@ -114,7 +115,9 @@ def _prefixed_keywords(author: str | None, index: str | None) -> list[str]:
     ]
 
 
-def _fix_csv_record(raw_fields: dict[str, str], record: Record) -> Record:
+def _fix_csv_record(
+    raw_fields: dict[str, str], record: Record, mapping: FieldMapping
+) -> Record:
     update: dict[str, object] = {}
     if record.authors:
         update["authors"] = _scopus_csv_authors(raw_fields)
@@ -138,7 +141,9 @@ def _ris_note(raw_fields: dict[str, str], prefix: str) -> str | None:
     return None
 
 
-def _fix_ris_record(raw_fields: dict[str, str], record: Record) -> Record:
+def _fix_ris_record(
+    raw_fields: dict[str, str], record: Record, mapping: FieldMapping
+) -> Record:
     update: dict[str, object] = {}
     eid = _ris_note(raw_fields, _RIS_EID_NOTE)
     if eid is not None:
@@ -156,7 +161,9 @@ def _clean_bibtex(raw_fields: dict[str, str], field: str) -> str:
     return clean_value(field, raw_fields.get(field, ""))
 
 
-def _fix_bibtex_record(raw_fields: dict[str, str], record: Record) -> Record:
+def _fix_bibtex_record(
+    raw_fields: dict[str, str], record: Record, mapping: FieldMapping
+) -> Record:
     update: dict[str, object] = {}
     if record.keywords:
         update["keywords"] = _prefixed_keywords(

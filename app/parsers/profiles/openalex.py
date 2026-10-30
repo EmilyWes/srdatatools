@@ -3,6 +3,7 @@ import logging
 from io import StringIO
 
 from app.models.record import Author, Record
+from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.base import FormatProfile, Profile
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,9 @@ def _csv_keywords(raw_fields: dict[str, str]) -> list[str]:
     )
 
 
-def _fix_csv_record(raw_fields: dict[str, str], record: Record) -> Record:
+def _fix_csv_record(
+    raw_fields: dict[str, str], record: Record, mapping: FieldMapping
+) -> Record:
     update: dict[str, object] = {}
     if record.authors:
         update["authors"] = _csv_authors(raw_fields)
@@ -87,7 +90,9 @@ def _matches_csv(text: str) -> bool:
     return _CSV_MARKER_HEADERS <= {column.strip().lower() for column in header}
 
 
-def _unchanged(raw_fields: dict[str, str], record: Record) -> Record:
+def _unchanged(
+    raw_fields: dict[str, str], record: Record, mapping: FieldMapping
+) -> Record:
     return record
 
 

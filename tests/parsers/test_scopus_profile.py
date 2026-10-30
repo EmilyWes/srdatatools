@@ -30,7 +30,9 @@ def _csv_text(row: dict[str, str]) -> str:
 
 def _parse_csv(row: dict[str, str], mapping: FieldMapping | None = None) -> Record:
     mapping = mapping or _suggest_csv(list(row))
-    result = apply_profile(parse_csv_text(_csv_text(row), mapping), _CSV_PROFILE)
+    result = apply_profile(
+        parse_csv_text(_csv_text(row), mapping), _CSV_PROFILE, mapping
+    )
     return result.rows[0].record
 
 
@@ -183,7 +185,7 @@ def _parse_ris(body: str) -> Record:
     text = f"TY  - JOUR\n{body}ER  - \n"
     tags = list(dict.fromkeys(line[:2] for line in text.splitlines()))
     mapping = suggest_ris_mapping(tags, _RIS_PROFILE.aliases)
-    result = apply_profile(parse_ris_text(text, mapping), _RIS_PROFILE)
+    result = apply_profile(parse_ris_text(text, mapping), _RIS_PROFILE, mapping)
     return result.rows[0].record
 
 
@@ -240,7 +242,7 @@ def _parse_bibtex(fields: str, mapping: FieldMapping | None = None) -> Record:
             *(line.split("=")[0].strip() for line in fields.splitlines()),
         ]
         mapping = suggest_bibtex_mapping(keys, _BIBTEX_PROFILE.aliases)
-    result = apply_profile(parse_bibtex_text(text, mapping), _BIBTEX_PROFILE)
+    result = apply_profile(parse_bibtex_text(text, mapping), _BIBTEX_PROFILE, mapping)
     return result.rows[0].record
 
 

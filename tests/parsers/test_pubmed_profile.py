@@ -16,7 +16,7 @@ def _parse_nbib(text: str) -> Record:
     tags = list(dict.fromkeys(line[:4].strip() for line in text.splitlines()))
     profile = PUBMED.formats["nbib"]
     mapping = suggest_nbib_mapping(tags, profile.aliases)
-    result = apply_profile(parse_nbib_text(text, mapping), profile)
+    result = apply_profile(parse_nbib_text(text, mapping), profile, mapping)
     return result.rows[0].record
 
 
@@ -34,7 +34,7 @@ def _parse_csv(row: dict[str, str]) -> Record:
     writer.writerow(row)
     profile = PUBMED.formats["csv"]
     mapping = _suggest_csv(list(row))
-    result = apply_profile(parse_csv_text(out.getvalue(), mapping), profile)
+    result = apply_profile(parse_csv_text(out.getvalue(), mapping), profile, mapping)
     return result.rows[0].record
 
 

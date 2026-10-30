@@ -42,7 +42,7 @@ def _parse(path: Path, file_format: str) -> ParseResult:
     parse = {"csv": parse_csv_file, "ris": parse_ris_file}.get(
         file_format, parse_bibtex_file
     )
-    return apply_profile(parse(path, mapping), profile)
+    return apply_profile(parse(path, mapping), profile, mapping)
 
 
 def _records_by_doi(suffix: str) -> dict[str, Record]:

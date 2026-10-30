@@ -151,7 +151,7 @@ def _preview(
         row = handlers.parse_record(list(summary.samples.items()), mapping)
         if handlers.profile is None:
             return row.record
-        return handlers.profile.fix_record(row.raw_fields, row.record)
+        return handlers.profile.fix_record(row.raw_fields, row.record, mapping)
 
     return preview
 
@@ -230,7 +230,7 @@ def _store(
 ) -> SourceFile:
     handlers = _handlers(file_type, source)
     assert handlers is not None
-    result = apply_profile(result, handlers.profile)
+    result = apply_profile(result, handlers.profile, mapping)
     source_file = store_parsed_rows(
         session,
         filename=path.name,

@@ -33,7 +33,9 @@ def _csv_text(row: dict[str, str]) -> str:
 
 def _parse_csv(row: dict[str, str], mapping: FieldMapping | None = None) -> Record:
     mapping = mapping or _suggest_csv(list(row))
-    result = apply_profile(parse_csv_text(_csv_text(row), mapping), _CSV_PROFILE)
+    result = apply_profile(
+        parse_csv_text(_csv_text(row), mapping), _CSV_PROFILE, mapping
+    )
     return result.rows[0].record
 
 
@@ -184,7 +186,11 @@ def test_openalex_ris__attaches_c1_affiliations_to_authors() -> None:
     )
     mapping = suggest_ris_mapping(["TY", "AU", "C1"], _RIS_PROFILE.aliases)
 
-    record = apply_profile(parse_ris_text(text, mapping), _RIS_PROFILE).rows[0].record
+    record = (
+        apply_profile(parse_ris_text(text, mapping), _RIS_PROFILE, mapping)
+        .rows[0]
+        .record
+    )
 
     assert record.authors == [
         Author(
@@ -208,7 +214,7 @@ def test_openalex_bibtex__splits_keywords_on_comma() -> None:
     assert _BIBTEX_PROFILE.list_delimiter is not None
     mapping = replace(mapping, list_delimiter=_BIBTEX_PROFILE.list_delimiter)
 
-    result = apply_profile(parse_bibtex_text(text, mapping), _BIBTEX_PROFILE)
+    result = apply_profile(parse_bibtex_text(text, mapping), _BIBTEX_PROFILE, mapping)
 
     assert result.rows[0].record.keywords == ["dinosaur phylogeny", "Ornithischia"]
 
