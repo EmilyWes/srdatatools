@@ -1,4 +1,5 @@
 import csv
+from dataclasses import replace
 from io import StringIO
 
 import pytest
@@ -30,7 +31,9 @@ def _csv_text(row: dict[str, str]) -> str:
 
 def _parse_csv(row: dict[str, str], mapping: FieldMapping | None = None) -> Record:
     mapping = mapping or _suggest_csv(list(row))
-    result = apply_profile(parse_csv_text(_csv_text(row), mapping), _CSV_PROFILE)
+    result = apply_profile(
+        parse_csv_text(_csv_text(row), mapping), _CSV_PROFILE, mapping
+    )
     return result.rows[0].record
 
 
@@ -134,6 +137,50 @@ def test_scopus_csv__mismatched_column_is_ignored_with_warning(
     assert "Author(s) ID" in caplog.text
 
 
+def _without(mapping: FieldMapping, *ignored: str) -> FieldMapping:
+    targets = {k: t for k, t in mapping.targets.items() if k not in ignored}
+    return replace(mapping, targets=targets)
+
+
+def test_scopus_csv__ignored_author_id_column_is_not_used() -> None:
+    row = {
+        "Authors": "Teng Y.; Han Y.",
+        "Author(s) ID": "60652739200; 59534195400",
+    }
+    mapping = _without(_suggest_csv(list(row)), "Author(s) ID")
+
+    record = _parse_csv(row, mapping)
+
+    assert record.authors == [Author(full_name="Teng Y."), Author(full_name="Han Y.")]
+
+
+def test_scopus_csv__ignored_affiliations_column_is_not_used() -> None:
+    mapping = _without(_suggest_csv(list(_AUTHOR_ROW)), "Authors with affiliations")
+
+    record = _parse_csv(_AUTHOR_ROW, mapping)
+
+    assert all(author.affiliations == [] for author in record.authors)
+    assert record.authors[0].family_name == "Teng"
+
+
+def test_scopus_csv__ignored_full_names_fall_back_to_abbreviated_names() -> None:
+    mapping = _without(_suggest_csv(list(_AUTHOR_ROW)), "Author full names")
+
+    record = _parse_csv(_AUTHOR_ROW, mapping)
+
+    assert [author.full_name for author in record.authors] == ["Teng Y.", "Han Y."]
+    assert record.authors[0].other_ids == {"scopus_author_id": "60652739200"}
+
+
+def test_scopus_csv__ignored_index_keywords_column_is_not_used() -> None:
+    row = {"Author Keywords": "Asia", "Index Keywords": "Thermal"}
+    mapping = _without(_suggest_csv(list(row)), "Index Keywords")
+
+    record = _parse_csv(row, mapping)
+
+    assert record.keywords == ["[Author] Asia"]
+
+
 def test_scopus_csv__unmapped_authors_stay_empty() -> None:
     record = _parse_csv(_AUTHOR_ROW, FieldMapping(targets={}))
 
@@ -183,7 +230,7 @@ def _parse_ris(body: str) -> Record:
     text = f"TY  - JOUR\n{body}ER  - \n"
     tags = list(dict.fromkeys(line[:2] for line in text.splitlines()))
     mapping = suggest_ris_mapping(tags, _RIS_PROFILE.aliases)
-    result = apply_profile(parse_ris_text(text, mapping), _RIS_PROFILE)
+    result = apply_profile(parse_ris_text(text, mapping), _RIS_PROFILE, mapping)
     return result.rows[0].record
 
 
@@ -216,6 +263,23 @@ def test_scopus_ris__takes_eid_and_conference_name_from_notes() -> None:
     )
 
 
+def test_scopus_ris__ignored_notes_give_no_eid_or_conference_name() -> None:
+    text = (
+        "TY  - JOUR\nN1  - EID: 2-s2.0-105040180364\n"
+        "N1  - Conference name: 5th Conference on Control Engineering\nER  - \n"
+    )
+    mapping = FieldMapping(targets={"TY": "publication_type"})
+
+    record = (
+        apply_profile(parse_ris_text(text, mapping), _RIS_PROFILE, mapping)
+        .rows[0]
+        .record
+    )
+
+    assert record.other_ids == {}
+    assert record.conference_name is None
+
+
 def test_scopus_ris__record_without_labelled_notes_is_unchanged() -> None:
     record = _parse_ris("TI  - Some Paper\nN1  - Export Date: 22 October 2026\n")
 
@@ -240,7 +304,7 @@ def _parse_bibtex(fields: str, mapping: FieldMapping | None = None) -> Record:
             *(line.split("=")[0].strip() for line in fields.splitlines()),
         ]
         mapping = suggest_bibtex_mapping(keys, _BIBTEX_PROFILE.aliases)
-    result = apply_profile(parse_bibtex_text(text, mapping), _BIBTEX_PROFILE)
+    result = apply_profile(parse_bibtex_text(text, mapping), _BIBTEX_PROFILE, mapping)
     return result.rows[0].record
 
 
@@ -270,6 +334,25 @@ def test_scopus_bibtex__prefixes_cleaned_author_keywords_only() -> None:
     )
 
     assert record.keywords == ["[Author] Grönland", "[Author] Asia", "R&D", "Thermal"]
+
+
+def test_scopus_bibtex__ignored_author_keywords_field_is_not_used() -> None:
+    record = _parse_bibtex(
+        "author_keywords = {Asia},\nkeywords = {Thermal},\n",
+        FieldMapping(targets={"keywords": "keywords"}),
+    )
+
+    assert record.keywords == ["Thermal"]
+
+
+def test_scopus_bibtex__ignored_url_gives_no_eid() -> None:
+    url = "https://www.scopus.com/pages/publications/105040180364"
+
+    record = _parse_bibtex(
+        f"url = {{{url}}},\npmid = {{1}},\n", FieldMapping(targets={"pmid": "pmid"})
+    )
+
+    assert record.other_ids == {}
 
 
 def test_scopus_bibtex__unmapped_keywords_stay_empty() -> None:

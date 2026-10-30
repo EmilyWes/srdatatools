@@ -16,7 +16,7 @@ def _parse_nbib(text: str) -> Record:
     tags = list(dict.fromkeys(line[:4].strip() for line in text.splitlines()))
     profile = PUBMED.formats["nbib"]
     mapping = suggest_nbib_mapping(tags, profile.aliases)
-    result = apply_profile(parse_nbib_text(text, mapping), profile)
+    result = apply_profile(parse_nbib_text(text, mapping), profile, mapping)
     return result.rows[0].record
 
 
@@ -34,7 +34,7 @@ def _parse_csv(row: dict[str, str]) -> Record:
     writer.writerow(row)
     profile = PUBMED.formats["csv"]
     mapping = _suggest_csv(list(row))
-    result = apply_profile(parse_csv_text(out.getvalue(), mapping), profile)
+    result = apply_profile(parse_csv_text(out.getvalue(), mapping), profile, mapping)
     return result.rows[0].record
 
 
@@ -75,6 +75,22 @@ def test_pubmed_nbib__not_available_title_uses_tt() -> None:
     )
 
     assert record.title == "Clin d'oeil du Dinosaure."
+
+
+def test_pubmed_nbib__suggests_tt_as_title() -> None:
+    mapping = suggest_nbib_mapping(["TI", "TT"], PUBMED.formats["nbib"].aliases)
+
+    assert mapping.targets == {"TI": "title", "TT": "title"}
+
+
+def test_pubmed_nbib__ignored_tt_gives_no_title() -> None:
+    text = "PMID- 1\nTI  - [Not Available].\nTT  - Clin d'oeil du Dinosaure.\n"
+    profile = PUBMED.formats["nbib"]
+    mapping = FieldMapping(targets={"TI": "title"})
+
+    record = apply_profile(parse_nbib_text(text, mapping), profile, mapping)
+
+    assert record.rows[0].record.title is None
 
 
 def test_pubmed_nbib__not_available_title_without_tt_is_none() -> None:

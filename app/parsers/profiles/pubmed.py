@@ -3,6 +3,7 @@ import re
 from io import StringIO
 
 from app.models.record import Record
+from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.base import FormatProfile, Profile
 
 _NOT_AVAILABLE_TITLE = "[Not Available]."
@@ -29,10 +30,14 @@ def _first_line(value: str | None) -> str | None:
     return value.splitlines()[0] if value else value
 
 
-def _fix_nbib_record(raw_fields: dict[str, str], record: Record) -> Record:
+def _fix_nbib_record(
+    raw_fields: dict[str, str], record: Record, mapping: FieldMapping
+) -> Record:
     title = record.title
     if title == _NOT_AVAILABLE_TITLE:
-        title = raw_fields.get(_TRANSLATED_TITLE_TAG, "").strip() or None
+        title = None
+        if mapping.targets.get(_TRANSLATED_TITLE_TAG) == "title":
+            title = raw_fields.get(_TRANSLATED_TITLE_TAG, "").strip() or None
     return record.model_copy(
         update={
             "title": title,
@@ -43,7 +48,9 @@ def _fix_nbib_record(raw_fields: dict[str, str], record: Record) -> Record:
     )
 
 
-def _fix_csv_record(raw_fields: dict[str, str], record: Record) -> Record:
+def _fix_csv_record(
+    raw_fields: dict[str, str], record: Record, mapping: FieldMapping
+) -> Record:
     authors = [author for author in record.authors if author.full_name != _ET_AL]
     if authors and authors[-1].full_name:
         last_name = authors[-1].full_name.rstrip(".")
@@ -65,7 +72,7 @@ PUBMED = Profile(
     label="PubMed",
     formats={
         "nbib": FormatProfile(
-            aliases={"journal": ["jt", "bti"]},
+            aliases={"journal": ["jt", "bti"], "title": ["ti", "tt"]},
             fix_record=_fix_nbib_record,
             matches=_matches_nbib,
         ),

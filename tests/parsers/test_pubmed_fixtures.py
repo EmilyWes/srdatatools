@@ -19,12 +19,12 @@ def _parse(path: Path, file_format: str) -> ParseResult:
     if file_format == "nbib":
         tags = list(read_nbib_tags(path).samples)
         mapping = suggest_nbib_mapping(tags, profile.aliases)
-        return apply_profile(parse_nbib_file(path, mapping), profile)
+        return apply_profile(parse_nbib_file(path, mapping), profile, mapping)
     headers = list(read_csv_headers(path).samples)
     mapping = suggest_mapping(headers, profile.aliases)
     if profile.list_delimiter is not None:
         mapping = replace(mapping, list_delimiter=profile.list_delimiter)
-    return apply_profile(parse_csv_file(path, mapping), profile)
+    return apply_profile(parse_csv_file(path, mapping), profile, mapping)
 
 
 def _records_by_pmid(suffix: str, file_format: str) -> dict[str, Record]:

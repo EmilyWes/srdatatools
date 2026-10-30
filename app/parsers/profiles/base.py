@@ -3,8 +3,10 @@ from dataclasses import dataclass, replace
 
 from app.models.record import Record
 from app.parsers.common import ParseResult
+from app.parsers.mapping import FieldMapping
 
-FixRecord = Callable[[dict[str, str], Record], Record]
+# Gets the mapping so a fix never reads a column the user set to ignore.
+FixRecord = Callable[[dict[str, str], Record, FieldMapping], Record]
 MatchesText = Callable[[str], bool]
 
 
@@ -24,11 +26,13 @@ class Profile:
     formats: dict[str, FormatProfile]
 
 
-def apply_profile(result: ParseResult, profile: FormatProfile | None) -> ParseResult:
+def apply_profile(
+    result: ParseResult, profile: FormatProfile | None, mapping: FieldMapping
+) -> ParseResult:
     if profile is None:
         return result
     rows = [
-        replace(row, record=profile.fix_record(row.raw_fields, row.record))
+        replace(row, record=profile.fix_record(row.raw_fields, row.record, mapping))
         for row in result.rows
     ]
     return replace(result, rows=rows)

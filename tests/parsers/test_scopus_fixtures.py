@@ -28,14 +28,14 @@ def _parse(path: Path, file_format: str) -> ParseResult:
     if file_format == "csv":
         headers = list(read_csv_headers(path).samples)
         mapping = suggest_mapping(headers, profile.aliases, profile.ignored_keys)
-        return apply_profile(parse_csv_file(path, mapping), profile)
+        return apply_profile(parse_csv_file(path, mapping), profile, mapping)
     if file_format == "ris":
         tags = list(read_ris_tags(path).samples)
         mapping = suggest_ris_mapping(tags, profile.aliases)
-        return apply_profile(parse_ris_file(path, mapping), profile)
+        return apply_profile(parse_ris_file(path, mapping), profile, mapping)
     keys = list(read_bibtex_fields(path).samples)
     mapping = suggest_bibtex_mapping(keys, profile.aliases)
-    return apply_profile(parse_bibtex_file(path, mapping), profile)
+    return apply_profile(parse_bibtex_file(path, mapping), profile, mapping)
 
 
 def _records_by_eid(suffix: str) -> dict[str, Record]:
