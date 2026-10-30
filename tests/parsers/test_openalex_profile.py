@@ -46,6 +46,11 @@ _AUTHOR_ROW = {
 }
 
 
+def _without(mapping: FieldMapping, *ignored: str) -> FieldMapping:
+    targets = {k: t for k, t in mapping.targets.items() if k not in ignored}
+    return replace(mapping, targets=targets)
+
+
 def test_openalex_csv__suggests_only_exact_columns() -> None:
     headers = [
         "Title",
@@ -77,6 +82,8 @@ def test_openalex_csv__suggests_only_exact_columns() -> None:
     assert mapping.targets == {
         "Title": "title",
         "Author": "authors",
+        "Author IDs": "authors",
+        "ORCID": "authors",
         "Keyword": "keywords",
         "Concept": "keywords",
         "Topic": "keywords",
@@ -136,6 +143,64 @@ def test_openalex_csv__unmapped_authors_stay_empty() -> None:
     record = _parse_csv(_AUTHOR_ROW, FieldMapping(targets={}))
 
     assert record.authors == []
+
+
+def test_openalex_csv__ignored_orcid_column_is_not_used() -> None:
+    mapping = _without(_suggest_csv(list(_AUTHOR_ROW)), "ORCID")
+
+    record = _parse_csv(_AUTHOR_ROW, mapping)
+
+    assert all(author.orcid is None for author in record.authors)
+    assert record.authors[0].other_ids == {"openalex_author_id": "A5091833725"}
+
+
+def test_openalex_csv__ignored_author_ids_column_is_not_used() -> None:
+    mapping = _without(_suggest_csv(list(_AUTHOR_ROW)), "Author IDs")
+
+    record = _parse_csv(_AUTHOR_ROW, mapping)
+
+    assert all(author.other_ids == {} for author in record.authors)
+    assert record.authors[0].orcid == "0000-0001-9069-7638"
+
+
+def test_openalex_csv__ignored_names_fall_back_to_orcid_for_author_count() -> None:
+    mapping = _without(_suggest_csv(list(_AUTHOR_ROW)), "Author")
+
+    record = _parse_csv(_AUTHOR_ROW, mapping)
+
+    assert record.authors == [
+        Author(
+            orcid="0000-0001-9069-7638",
+            other_ids={"openalex_author_id": "A5091833725"},
+        ),
+        Author(other_ids={"openalex_author_id": "A5085682707"}),
+        Author(
+            orcid="0000-0003-0412-3000",
+            other_ids={"openalex_author_id": "A5053220301"},
+        ),
+    ]
+
+
+def test_openalex_csv__only_author_ids_mapped_gives_id_only_authors() -> None:
+    mapping = _without(_suggest_csv(list(_AUTHOR_ROW)), "Author", "ORCID")
+
+    record = _parse_csv(_AUTHOR_ROW, mapping)
+
+    assert [author.other_ids for author in record.authors] == [
+        {"openalex_author_id": "A5091833725"},
+        {"openalex_author_id": "A5085682707"},
+        {"openalex_author_id": "A5053220301"},
+    ]
+    assert all(a.full_name is None and a.orcid is None for a in record.authors)
+
+
+def test_openalex_csv__ignored_concept_column_adds_no_concepts() -> None:
+    row = {"Keyword": "dinosaurs", "Concept": "Biology", "Topic": "Paleontology"}
+    mapping = _without(_suggest_csv(list(row)), "Concept")
+
+    record = _parse_csv(row, mapping)
+
+    assert record.keywords == ["dinosaurs", "[Topic] Paleontology"]
 
 
 def test_openalex_csv__prefixes_concept_and_topic_keywords() -> None:

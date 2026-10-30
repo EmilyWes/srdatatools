@@ -16,11 +16,9 @@ _PMID_PREFIX = "https://pubmed.ncbi.nlm.nih.gov/"
 _CSV_AUTHORS = "Author"
 _CSV_AUTHOR_IDS = "Author IDs"
 _CSV_ORCIDS = "ORCID"
-_CSV_KEYWORDS = "Keyword"
-_CSV_CONCEPTS = "Concept"
-_CSV_TOPICS = "Topic"
-_CONCEPT_PREFIX = "[Concept] "
-_TOPIC_PREFIX = "[Topic] "
+# The first mapped, non-empty one sets the author count; the others are zipped onto it.
+_CSV_AUTHOR_COLUMNS = (_CSV_AUTHORS, _CSV_ORCIDS, _CSV_AUTHOR_IDS)
+_CSV_KEYWORD_PREFIXES = {"Keyword": "", "Concept": "[Concept] ", "Topic": "[Topic] "}
 _CSV_MARKER_HEADERS = frozenset({"work id", "concept ids"})
 
 
@@ -44,40 +42,45 @@ def _aligned(raw_fields: dict[str, str], column: str, count: int) -> list[str]:
     return values
 
 
-def _csv_authors(raw_fields: dict[str, str]) -> list[Author]:
-    names = _split(raw_fields.get(_CSV_AUTHORS))
-    ids = _aligned(raw_fields, _CSV_AUTHOR_IDS, len(names))
-    orcids = _aligned(raw_fields, _CSV_ORCIDS, len(names))
-    authors = []
-    for index, name in enumerate(names):
-        author = Author(full_name=name)
-        if ids and ids[index]:
-            author.other_ids[_AUTHOR_ID_KEY] = ids[index]
-        if orcids and orcids[index]:
-            author.orcid = orcids[index].removeprefix(_ORCID_PREFIX)
-        authors.append(author)
-    return [author for author in authors if author.full_name]
-
-
-def _csv_keywords(raw_fields: dict[str, str]) -> list[str]:
-    def pieces(column: str, prefix: str = "") -> list[str]:
-        return [prefix + kw for kw in _split(raw_fields.get(column)) if kw]
-
-    return (
-        pieces(_CSV_KEYWORDS)
-        + pieces(_CSV_CONCEPTS, _CONCEPT_PREFIX)
-        + pieces(_CSV_TOPICS, _TOPIC_PREFIX)
+def _csv_authors(raw_fields: dict[str, str], columns: list[str]) -> list[Author]:
+    count = next(
+        (len(values) for c in columns if (values := _split(raw_fields.get(c)))), 0
     )
+    aligned = {c: _aligned(raw_fields, c, count) for c in columns}
+    names, orcids, ids = (aligned.get(c) or [""] * count for c in _CSV_AUTHOR_COLUMNS)
+    authors = []
+    for name, orcid, author_id in zip(names, orcids, ids, strict=True):
+        author = Author(
+            full_name=name or None,
+            orcid=orcid.removeprefix(_ORCID_PREFIX) or None,
+            other_ids={_AUTHOR_ID_KEY: author_id} if author_id else {},
+        )
+        if author.full_name or author.orcid or author.other_ids:
+            authors.append(author)
+    return authors
+
+
+def _csv_keywords(raw_fields: dict[str, str], columns: list[str]) -> list[str]:
+    return [
+        _CSV_KEYWORD_PREFIXES[column] + keyword
+        for column in columns
+        for keyword in _split(raw_fields.get(column))
+        if keyword
+    ]
 
 
 def _fix_csv_record(
     raw_fields: dict[str, str], record: Record, mapping: FieldMapping
 ) -> Record:
     update: dict[str, object] = {}
-    if record.authors:
-        update["authors"] = _csv_authors(raw_fields)
-    if record.keywords:
-        update["keywords"] = _csv_keywords(raw_fields)
+    mapped_authors = mapping.keys_for("authors")
+    author_columns = [c for c in _CSV_AUTHOR_COLUMNS if c in mapped_authors]
+    if author_columns:
+        update["authors"] = _csv_authors(raw_fields, author_columns)
+    mapped_keywords = mapping.keys_for("keywords")
+    keyword_columns = [c for c in _CSV_KEYWORD_PREFIXES if c in mapped_keywords]
+    if keyword_columns:
+        update["keywords"] = _csv_keywords(raw_fields, keyword_columns)
     if record.issn:
         update["issn"] = record.issn.split(_LIST_DELIMITER)[0].strip()
     if record.pmid:
@@ -107,7 +110,7 @@ OPENALEX = Profile(
     formats={
         "csv": FormatProfile(
             aliases={
-                "authors": ["author"],
+                "authors": ["author", "orcid", "author ids"],
                 "journal": ["source"],
                 "keywords": ["keyword", "concept", "topic"],
                 "publication_type": ["type"],
@@ -118,7 +121,6 @@ OPENALEX = Profile(
             list_delimiter=_LIST_DELIMITER,
             ignored_keys=frozenset(
                 {
-                    "author ids",
                     "concept ids",
                     "keyword ids",
                     "topic ids",
@@ -130,7 +132,6 @@ OPENALEX = Profile(
                     "has orcid",
                     "has pmcid",
                     "has abstract",
-                    "orcid",
                     "pubmed",
                     "ror id",
                 }
