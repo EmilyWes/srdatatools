@@ -77,6 +77,22 @@ def test_pubmed_nbib__not_available_title_uses_tt() -> None:
     assert record.title == "Clin d'oeil du Dinosaure."
 
 
+def test_pubmed_nbib__suggests_tt_as_title() -> None:
+    mapping = suggest_nbib_mapping(["TI", "TT"], PUBMED.formats["nbib"].aliases)
+
+    assert mapping.targets == {"TI": "title", "TT": "title"}
+
+
+def test_pubmed_nbib__ignored_tt_gives_no_title() -> None:
+    text = "PMID- 1\nTI  - [Not Available].\nTT  - Clin d'oeil du Dinosaure.\n"
+    profile = PUBMED.formats["nbib"]
+    mapping = FieldMapping(targets={"TI": "title"})
+
+    record = apply_profile(parse_nbib_text(text, mapping), profile, mapping)
+
+    assert record.rows[0].record.title is None
+
+
 def test_pubmed_nbib__not_available_title_without_tt_is_none() -> None:
     record = _parse_nbib("PMID- 1\nTI  - [Not Available].\n")
 

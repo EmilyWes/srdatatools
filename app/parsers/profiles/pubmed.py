@@ -35,7 +35,9 @@ def _fix_nbib_record(
 ) -> Record:
     title = record.title
     if title == _NOT_AVAILABLE_TITLE:
-        title = raw_fields.get(_TRANSLATED_TITLE_TAG, "").strip() or None
+        title = None
+        if mapping.targets.get(_TRANSLATED_TITLE_TAG) == "title":
+            title = raw_fields.get(_TRANSLATED_TITLE_TAG, "").strip() or None
     return record.model_copy(
         update={
             "title": title,
@@ -70,7 +72,7 @@ PUBMED = Profile(
     label="PubMed",
     formats={
         "nbib": FormatProfile(
-            aliases={"journal": ["jt", "bti"]},
+            aliases={"journal": ["jt", "bti"], "title": ["ti", "tt"]},
             fix_record=_fix_nbib_record,
             matches=_matches_nbib,
         ),

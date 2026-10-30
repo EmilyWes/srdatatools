@@ -819,7 +819,7 @@ def test_import_file__pubmed_applies_profile_and_stores_source(
 ) -> None:
     nbib_path = tmp_path / "pubmed.nbib"
     nbib_path.write_text(_PUBMED_NBIB_TEXT)
-    mapping = FieldMapping(targets={"TI": "title", "PG": "pages"})
+    mapping = FieldMapping(targets={"TI": "title", "TT": "title", "PG": "pages"})
 
     source_file = import_file(
         session, nbib_path, "nbib", mapping, _summary("nbib", nbib_path), "pubmed"
