@@ -115,15 +115,26 @@ def _prefixed_keywords(author: str | None, index: str | None) -> list[str]:
     ]
 
 
+def _mapped_to(
+    raw_fields: dict[str, str], mapping: FieldMapping, target: str
+) -> dict[str, str]:
+    keys = mapping.keys_for(target)
+    return {key: value for key, value in raw_fields.items() if key in keys}
+
+
 def _fix_csv_record(
     raw_fields: dict[str, str], record: Record, mapping: FieldMapping
 ) -> Record:
     update: dict[str, object] = {}
     if record.authors:
-        update["authors"] = _scopus_csv_authors(raw_fields)
+        update["authors"] = _scopus_csv_authors(
+            _mapped_to(raw_fields, mapping, "authors")
+        )
     if record.keywords:
+        keyword_fields = _mapped_to(raw_fields, mapping, "keywords")
         update["keywords"] = _prefixed_keywords(
-            raw_fields.get(_CSV_AUTHOR_KEYWORDS), raw_fields.get(_CSV_INDEX_KEYWORDS)
+            keyword_fields.get(_CSV_AUTHOR_KEYWORDS),
+            keyword_fields.get(_CSV_INDEX_KEYWORDS),
         )
     return record.model_copy(update=update)
 
@@ -144,6 +155,8 @@ def _ris_note(raw_fields: dict[str, str], prefix: str) -> str | None:
 def _fix_ris_record(
     raw_fields: dict[str, str], record: Record, mapping: FieldMapping
 ) -> Record:
+    if _RIS_NOTES_TAG not in mapping.targets:
+        return record
     update: dict[str, object] = {}
     eid = _ris_note(raw_fields, _RIS_EID_NOTE)
     if eid is not None:
@@ -166,12 +179,13 @@ def _fix_bibtex_record(
 ) -> Record:
     update: dict[str, object] = {}
     if record.keywords:
+        keyword_fields = _mapped_to(raw_fields, mapping, "keywords")
         update["keywords"] = _prefixed_keywords(
-            _clean_bibtex(raw_fields, _BIBTEX_AUTHOR_KEYWORDS),
-            _clean_bibtex(raw_fields, _BIBTEX_INDEX_KEYWORDS),
+            _clean_bibtex(keyword_fields, _BIBTEX_AUTHOR_KEYWORDS),
+            _clean_bibtex(keyword_fields, _BIBTEX_INDEX_KEYWORDS),
         )
     match = _URL_EID.search(raw_fields.get(_BIBTEX_URL, ""))
-    if match:
+    if match and _BIBTEX_URL in mapping.targets:
         update["other_ids"] = {**record.other_ids, "eid": _EID_PREFIX + match[1]}
     return record.model_copy(update=update)
 
