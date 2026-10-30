@@ -15,6 +15,7 @@ from app.parsers.common import (
 )
 from app.parsers.mapping import FieldMapping, apply_mapping, override_aliases
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
+from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +53,6 @@ _AUID_TAG = "AUID"
 _AD_TAG = "AD"
 _ORCID_SCHEME = "ORCID"
 _ORCID_URL = re.compile(r"^https?://orcid\.org/")
-_MH_TAG = "MH"
-_MESH_PREFIX = "[MeSH] "
 _EDITOR_TAGS = ("FED", "ED")
 # FAU is "Family, Given"; AU ("Müller RT") and mononyms have no comma.
 _NAME_SEPARATOR = ", "
@@ -92,7 +91,7 @@ def _add_auid(author: Author, value: str) -> None:
 
 
 def _authors_from_lines(
-    lines: list[tuple[str, str]], author_tags: set[str]
+    lines: list[tuple[str, str]], author_tags: set[str], settings: ParseSettings
 ) -> list[Author]:
     """AUID and AD lines belong to the author or editor name line before them."""
     authors: list[Author] = []
@@ -111,12 +110,18 @@ def _authors_from_lines(
             if current is not None:
                 current.affiliations.append(Affiliation(name=value))
         else:
-            current = author_from_name(value, _NAME_SEPARATOR)
+            current = author_from_name(
+                value, _NAME_SEPARATOR, settings.ambiguous_name_split
+            )
             authors.append(current)
     return authors
 
 
-def parse_nbib_record(lines: list[tuple[str, str]], mapping: FieldMapping) -> ParsedRow:
+def parse_nbib_record(
+    lines: list[tuple[str, str]],
+    mapping: FieldMapping,
+    settings: ParseSettings = NO_QUIRKS,
+) -> ParsedRow:
     values: dict[str, list[str]] = {}
     for tag, value in lines:
         values.setdefault(tag, []).append(value)
@@ -135,19 +140,17 @@ def parse_nbib_record(lines: list[tuple[str, str]], mapping: FieldMapping) -> Pa
     mapping_fields = dict(raw_fields)
     if (issn := _issn_from_is(values.get(_IS_TAG, []))) is not None:
         mapping_fields[_IS_TAG] = issn
-    if mapping.targets.get(_MH_TAG) == "keywords" and _MH_TAG in values:
-        mapping_fields[_MH_TAG] = "\n".join(
-            _MESH_PREFIX + value for value in values[_MH_TAG] if value
-        )
-    record = apply_mapping(mapping_fields, mapping)
+    record = apply_mapping(mapping_fields, mapping, settings)
     author_tags = {k for k, t in mapping.targets.items() if t == "authors"}
     if author_tags:
-        authors = _authors_from_lines(lines, author_tags)
+        authors = _authors_from_lines(lines, author_tags, settings)
         record = record.model_copy(update={"authors": authors})
     return ParsedRow(record=record, raw_fields=raw_fields)
 
 
-def parse_nbib_text(text: str, mapping: FieldMapping) -> ParseResult:
+def parse_nbib_text(
+    text: str, mapping: FieldMapping, settings: ParseSettings = NO_QUIRKS
+) -> ParseResult:
     rows: list[ParsedRow] = []
     skipped: list[SkippedRow] = []
 
@@ -164,7 +167,7 @@ def parse_nbib_text(text: str, mapping: FieldMapping) -> ParseResult:
         if all(tag != _REQUIRED_TAG for tag, _ in lines):
             skip(start_line, f"record has no {_REQUIRED_TAG} tag")
             return
-        rows.append(parse_nbib_record(lines, mapping))
+        rows.append(parse_nbib_record(lines, mapping, settings))
 
     for line_number, line in enumerate(text.splitlines(), start=1):
         if not line.strip():
@@ -189,8 +192,10 @@ def parse_nbib_text(text: str, mapping: FieldMapping) -> ParseResult:
     return ParseResult(rows=rows, skipped=skipped)
 
 
-def parse_nbib_file(path: Path, mapping: FieldMapping) -> ParseResult:
-    return parse_nbib_text(decode_file(path), mapping)
+def parse_nbib_file(
+    path: Path, mapping: FieldMapping, settings: ParseSettings = NO_QUIRKS
+) -> ParseResult:
+    return parse_nbib_text(decode_file(path), mapping, settings)
 
 
 def read_nbib_tags(path: Path) -> FileSummary:

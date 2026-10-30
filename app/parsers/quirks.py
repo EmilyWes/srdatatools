@@ -44,6 +44,9 @@ class ParseSettings:
     continue_to_next: tuple[ContinueToNextField, ...] = ()
 
 
+NO_QUIRKS = ParseSettings()
+
+
 class RecordQuirk(Protocol):
     def apply(
         self,

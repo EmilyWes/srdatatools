@@ -13,6 +13,7 @@ from app.parsers.common import (
 )
 from app.parsers.mapping import FieldMapping, apply_mapping, override_aliases
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
+from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +47,6 @@ _SUGGESTION_ALIASES: dict[str, list[str]] = {
 }
 
 _EXTRA_FIELDS_KEY = "__extra__"
-# Scopus References cells exceed the csv module's default 131072-character limit.
-_MAX_FIELD_SIZE = 1_000_000
-csv.field_size_limit(_MAX_FIELD_SIZE)
 
 
 def _sniff_dialect(sample: str) -> type[csv.Dialect] | str:
@@ -69,13 +67,22 @@ def _dialect(text: str, delimiter: str | None) -> type[csv.Dialect] | csv.Dialec
     return dialect
 
 
-def parse_csv_record(raw_fields: dict[str, str], mapping: FieldMapping) -> ParsedRow:
-    return ParsedRow(record=apply_mapping(raw_fields, mapping), raw_fields=raw_fields)
+def parse_csv_record(
+    raw_fields: dict[str, str],
+    mapping: FieldMapping,
+    settings: ParseSettings = NO_QUIRKS,
+) -> ParsedRow:
+    record = apply_mapping(raw_fields, mapping, settings)
+    return ParsedRow(record=record, raw_fields=raw_fields)
 
 
 def parse_csv_text(
-    text: str, mapping: FieldMapping, delimiter: str | None = None
+    text: str,
+    mapping: FieldMapping,
+    delimiter: str | None = None,
+    settings: ParseSettings = NO_QUIRKS,
 ) -> ParseResult:
+    csv.field_size_limit(settings.csv_field_size_limit)
     dialect = _dialect(text, delimiter)
     reader = csv.DictReader(
         StringIO(text), dialect=dialect, restkey=_EXTRA_FIELDS_KEY, restval=None
@@ -112,18 +119,24 @@ def parse_csv_text(
             logger.warning("Skipping row %d: blank", row_number)
             continue
 
-        rows.append(parse_csv_record(raw_fields, mapping))
+        rows.append(parse_csv_record(raw_fields, mapping, settings))
 
     return ParseResult(rows=rows, skipped=skipped)
 
 
 def parse_csv_file(
-    path: Path, mapping: FieldMapping, delimiter: str | None = None
+    path: Path,
+    mapping: FieldMapping,
+    delimiter: str | None = None,
+    settings: ParseSettings = NO_QUIRKS,
 ) -> ParseResult:
-    return parse_csv_text(decode_file(path), mapping, delimiter)
+    return parse_csv_text(decode_file(path), mapping, delimiter, settings)
 
 
-def read_csv_headers(path: Path, delimiter: str | None = None) -> FileSummary:
+def read_csv_headers(
+    path: Path, delimiter: str | None = None, settings: ParseSettings = NO_QUIRKS
+) -> FileSummary:
+    csv.field_size_limit(settings.csv_field_size_limit)
     text = decode_file(path)
     dialect = _dialect(text, delimiter)
     reader = csv.reader(StringIO(text), dialect=dialect)

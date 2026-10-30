@@ -39,10 +39,13 @@ def _parse(path: Path, file_format: str) -> ParseResult:
         mapping = suggest_bibtex_mapping(keys, profile.aliases)
     if profile.list_delimiter is not None:
         mapping = replace(mapping, list_delimiter=profile.list_delimiter)
-    parse = {"csv": parse_csv_file, "ris": parse_ris_file}.get(
-        file_format, parse_bibtex_file
-    )
-    return apply_profile(parse(path, mapping), profile, mapping)
+    if file_format == "csv":
+        result = parse_csv_file(path, mapping, settings=profile.settings)
+    elif file_format == "ris":
+        result = parse_ris_file(path, mapping, profile.settings)
+    else:
+        result = parse_bibtex_file(path, mapping, profile.settings)
+    return apply_profile(result, profile, mapping)
 
 
 def _records_by_doi(suffix: str) -> dict[str, Record]:

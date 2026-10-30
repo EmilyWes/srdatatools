@@ -32,7 +32,9 @@ def _csv_text(row: dict[str, str]) -> str:
 def _parse_csv(row: dict[str, str], mapping: FieldMapping | None = None) -> Record:
     mapping = mapping or _suggest_csv(list(row))
     result = apply_profile(
-        parse_csv_text(_csv_text(row), mapping), _CSV_PROFILE, mapping
+        parse_csv_text(_csv_text(row), mapping, settings=_CSV_PROFILE.settings),
+        _CSV_PROFILE,
+        mapping,
     )
     return result.rows[0].record
 
@@ -230,7 +232,11 @@ def _parse_ris(body: str) -> Record:
     text = f"TY  - JOUR\n{body}ER  - \n"
     tags = list(dict.fromkeys(line[:2] for line in text.splitlines()))
     mapping = suggest_ris_mapping(tags, _RIS_PROFILE.aliases)
-    result = apply_profile(parse_ris_text(text, mapping), _RIS_PROFILE, mapping)
+    result = apply_profile(
+        parse_ris_text(text, mapping, settings=_RIS_PROFILE.settings),
+        _RIS_PROFILE,
+        mapping,
+    )
     return result.rows[0].record
 
 
@@ -263,7 +269,7 @@ def test_scopus_ris__takes_eid_and_conference_name_from_notes() -> None:
     )
 
 
-def test_scopus_ris__ignored_notes_give_no_eid_or_conference_name() -> None:
+def test_scopus_ris__ignored_notes_still_give_eid_and_conference_name() -> None:
     text = (
         "TY  - JOUR\nN1  - EID: 2-s2.0-105040180364\n"
         "N1  - Conference name: 5th Conference on Control Engineering\nER  - \n"
@@ -271,13 +277,17 @@ def test_scopus_ris__ignored_notes_give_no_eid_or_conference_name() -> None:
     mapping = FieldMapping(targets={"TY": "publication_type"})
 
     record = (
-        apply_profile(parse_ris_text(text, mapping), _RIS_PROFILE, mapping)
+        apply_profile(
+            parse_ris_text(text, mapping, settings=_RIS_PROFILE.settings),
+            _RIS_PROFILE,
+            mapping,
+        )
         .rows[0]
         .record
     )
 
-    assert record.other_ids == {}
-    assert record.conference_name is None
+    assert record.other_ids == {"eid": "2-s2.0-105040180364"}
+    assert record.conference_name == "5th Conference on Control Engineering"
 
 
 def test_scopus_ris__record_without_labelled_notes_is_unchanged() -> None:
@@ -304,7 +314,11 @@ def _parse_bibtex(fields: str, mapping: FieldMapping | None = None) -> Record:
             *(line.split("=")[0].strip() for line in fields.splitlines()),
         ]
         mapping = suggest_bibtex_mapping(keys, _BIBTEX_PROFILE.aliases)
-    result = apply_profile(parse_bibtex_text(text, mapping), _BIBTEX_PROFILE, mapping)
+    result = apply_profile(
+        parse_bibtex_text(text, mapping, settings=_BIBTEX_PROFILE.settings),
+        _BIBTEX_PROFILE,
+        mapping,
+    )
     return result.rows[0].record
 
 
@@ -345,14 +359,14 @@ def test_scopus_bibtex__ignored_author_keywords_field_is_not_used() -> None:
     assert record.keywords == ["Thermal"]
 
 
-def test_scopus_bibtex__ignored_url_gives_no_eid() -> None:
+def test_scopus_bibtex__ignored_url_still_gives_eid() -> None:
     url = "https://www.scopus.com/pages/publications/105040180364"
 
     record = _parse_bibtex(
         f"url = {{{url}}},\npmid = {{1}},\n", FieldMapping(targets={"pmid": "pmid"})
     )
 
-    assert record.other_ids == {}
+    assert record.other_ids == {"eid": "2-s2.0-105040180364"}
 
 
 def test_scopus_bibtex__unmapped_keywords_stay_empty() -> None:

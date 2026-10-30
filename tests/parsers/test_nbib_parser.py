@@ -9,6 +9,7 @@ from app.parsers.nbib import (
     read_nbib_tags,
     suggest_nbib_mapping,
 )
+from app.parsers.quirks import ParseSettings
 
 NBIB_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "general"
 
@@ -331,7 +332,7 @@ def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
         first.publication_date.month,
         first.publication_date.day,
     ) == (2020, 5, 14)
-    assert second.keywords == ["[MeSH] Humans", "[MeSH] Review Literature as Topic"]
+    assert second.keywords == ["Humans", "Review Literature as Topic"]
     assert second.publication_date is not None
     assert (second.publication_date.year, second.publication_date.month) == (2019, 1)
 
@@ -604,6 +605,7 @@ def test_parse_nbib_text__au_fallback_name_is_not_split() -> None:
     assert author.full_name == "Müller RT"
 
 
+_MESH = ParseSettings(keyword_prefixes={"MH": "[MeSH] "})
 _KEYWORD_MAPPING = FieldMapping(
     targets={"OT": "keywords", "MH": "keywords"}, list_delimiter="\n"
 )
@@ -612,7 +614,7 @@ _KEYWORD_MAPPING = FieldMapping(
 def test_parse_nbib_text__mh_keywords_get_mesh_prefix() -> None:
     text = "PMID- 1\nMH  - *Dinosaurs/anatomy & histology\nMH  - Animals\n"
 
-    record = parse_nbib_text(text, _KEYWORD_MAPPING).rows[0].record
+    record = parse_nbib_text(text, _KEYWORD_MAPPING, _MESH).rows[0].record
 
     assert record.keywords == [
         "[MeSH] *Dinosaurs/anatomy & histology",
@@ -623,7 +625,7 @@ def test_parse_nbib_text__mh_keywords_get_mesh_prefix() -> None:
 def test_parse_nbib_text__ot_keywords_have_no_prefix() -> None:
     text = "PMID- 1\nOT  - Quality control\nMH  - Quality Control\n"
 
-    record = parse_nbib_text(text, _KEYWORD_MAPPING).rows[0].record
+    record = parse_nbib_text(text, _KEYWORD_MAPPING, _MESH).rows[0].record
 
     assert record.keywords == ["Quality control", "[MeSH] Quality Control"]
 
@@ -631,7 +633,9 @@ def test_parse_nbib_text__ot_keywords_have_no_prefix() -> None:
 def test_parse_nbib_text__mh_mapped_elsewhere_has_no_prefix() -> None:
     mapping = FieldMapping(targets={"MH": "notes"}, list_delimiter="\n")
 
-    record = parse_nbib_text("PMID- 1\nMH  - *Dinosaurs\n", mapping).rows[0].record
+    record = (
+        parse_nbib_text("PMID- 1\nMH  - *Dinosaurs\n", mapping, _MESH).rows[0].record
+    )
 
     assert record.notes == "*Dinosaurs"
 
