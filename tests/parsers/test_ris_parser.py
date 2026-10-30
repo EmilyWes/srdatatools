@@ -56,6 +56,55 @@ def test_parse_ris_text__repeated_author_tags_become_separate_authors() -> None:
     assert [author.full_name for author in authors] == ["Smith, John", "Doe, Jane"]
 
 
+_AFFILIATION_MAPPING = FieldMapping(
+    targets={"TI": "title", "AU": "authors", "AD": "authors", "C1": "authors"},
+    list_delimiter="\n",
+)
+
+
+def test_parse_ris_text__attaches_adjacent_affiliations_to_author() -> None:
+    text = (
+        "TY  - JOUR\nAU  - Smith, John\nC1  - Uni A\nC1  - Uni B\n"
+        "AU  - Doe, Jane\nAD  - Uni C\nER  - \n"
+    )
+
+    authors = parse_ris_text(text, _AFFILIATION_MAPPING).rows[0].record.authors
+
+    assert [author.full_name for author in authors] == ["Smith, John", "Doe, Jane"]
+    assert [a.name for a in authors[0].affiliations] == ["Uni A", "Uni B"]
+    assert [a.name for a in authors[1].affiliations] == ["Uni C"]
+
+
+def test_parse_ris_text__author_without_affiliation_gets_none() -> None:
+    text = "TY  - JOUR\nAU  - Smith, John\nAU  - Doe, Jane\nC1  - Uni C\nER  - \n"
+
+    authors = parse_ris_text(text, _AFFILIATION_MAPPING).rows[0].record.authors
+
+    assert authors[0].affiliations == []
+    assert [a.name for a in authors[1].affiliations] == ["Uni C"]
+
+
+def test_parse_ris_text__ignores_affiliations_not_adjacent_to_author() -> None:
+    text = (
+        "TY  - JOUR\nAU  - Smith, John\nAU  - Doe, Jane\nTI  - Some Paper\n"
+        "AD  - Uni A\nAD  - Uni B\nER  - \n"
+    )
+
+    authors = parse_ris_text(text, _AFFILIATION_MAPPING).rows[0].record.authors
+
+    assert [author.full_name for author in authors] == ["Smith, John", "Doe, Jane"]
+    assert all(author.affiliations == [] for author in authors)
+
+
+def test_parse_ris_text__unmapped_affiliation_tag_is_ignored() -> None:
+    text = "TY  - JOUR\nAU  - Smith, John\nC1  - Uni A\nER  - \n"
+
+    authors = parse_ris_text(text, _MAPPING).rows[0].record.authors
+
+    assert [author.full_name for author in authors] == ["Smith, John"]
+    assert authors[0].affiliations == []
+
+
 def test_parse_ris_text__repeated_keyword_tags_collect_all() -> None:
     text = "TY  - JOUR\nKW  - nlp\nKW  - machine learning\nER  - \n"
 
@@ -241,6 +290,13 @@ def test_suggest_ris_mapping__routes_accession_number_to_other_ids() -> None:
     suggestions = suggest_ris_mapping(["AN"])
 
     assert suggestions.targets == {"AN": "other_ids.an"}
+
+
+def test_suggest_ris_mapping__maps_ad_to_authors() -> None:
+    assert suggest_ris_mapping(["AU", "AD"]).targets == {
+        "AU": "authors",
+        "AD": "authors",
+    }
 
 
 def test_suggest_ris_mapping__maps_sn_to_issn_isbn() -> None:
