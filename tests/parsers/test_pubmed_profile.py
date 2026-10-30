@@ -2,21 +2,21 @@ import csv
 from dataclasses import replace
 from io import StringIO
 
-import pytest
-
 from app.models.record import PartialDate, Record
 from app.parsers.csv_ import parse_csv_text, suggest_mapping
 from app.parsers.mapping import FieldMapping
 from app.parsers.nbib import parse_nbib_text, suggest_nbib_mapping
 from app.parsers.profiles import apply_profile
-from app.parsers.profiles.pubmed import PUBMED, expand_page_range
+from app.parsers.profiles.pubmed import PUBMED
 
 
 def _parse_nbib(text: str) -> Record:
     tags = list(dict.fromkeys(line[:4].strip() for line in text.splitlines()))
     profile = PUBMED.formats["nbib"]
     mapping = suggest_nbib_mapping(tags, profile.aliases)
-    result = apply_profile(parse_nbib_text(text, mapping), profile, mapping)
+    result = apply_profile(
+        parse_nbib_text(text, mapping, settings=profile.settings), profile, mapping
+    )
     return result.rows[0].record
 
 
@@ -34,27 +34,12 @@ def _parse_csv(row: dict[str, str]) -> Record:
     writer.writerow(row)
     profile = PUBMED.formats["csv"]
     mapping = _suggest_csv(list(row))
-    result = apply_profile(parse_csv_text(out.getvalue(), mapping), profile, mapping)
+    result = apply_profile(
+        parse_csv_text(out.getvalue(), mapping, settings=profile.settings),
+        profile,
+        mapping,
+    )
     return result.rows[0].record
-
-
-@pytest.mark.parametrize(
-    ("pages", "expected"),
-    [
-        ("521-2", "521-522"),
-        ("3705-6", "3705-3706"),
-        ("1199-201", "1199-1201"),
-        ("1-2", "1-2"),
-        ("589-594", "589-594"),
-        ("121354", "121354"),
-        ("e123", "e123"),
-        ("S12-5", "S12-5"),
-    ],
-)
-def test_expand_page_range__expands_only_abbreviated_numeric_ranges(
-    pages: str, expected: str
-) -> None:
-    assert expand_page_range(pages) == expected
 
 
 def test_pubmed_nbib__journal_uses_jt_not_ta() -> None:
@@ -88,7 +73,9 @@ def test_pubmed_nbib__ignored_tt_gives_no_title() -> None:
     profile = PUBMED.formats["nbib"]
     mapping = FieldMapping(targets={"TI": "title"})
 
-    record = apply_profile(parse_nbib_text(text, mapping), profile, mapping)
+    record = apply_profile(
+        parse_nbib_text(text, mapping, settings=profile.settings), profile, mapping
+    )
 
     assert record.rows[0].record.title is None
 

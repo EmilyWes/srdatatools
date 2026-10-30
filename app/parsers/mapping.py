@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import ValidationError
 
 from app.models.record import Author, Label, LabelValue, PartialDate, Record
+from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +67,10 @@ _LABEL_SPELLINGS: dict[str, LabelValue] = {
         ("exclude", "excluded", "no", "n", "0", "false", "irrelevant"), "exclude"
     ),
     **dict.fromkeys(("maybe", "unsure", "undecided", "?"), "maybe"),
-    # ASReview writes -1 for records nobody has labeled yet.
-    **dict.fromkeys(("", "-1"), "unlabeled"),
+    "": "unlabeled",
 }
+# ASReview writes -1 for records nobody has labeled yet.
+_MINUS_ONE = "-1"
 
 _ISSN_ISBN_SEPARATORS = re.compile(r"[\s;]+")
 _ISSN_LENGTH = 8
@@ -119,22 +121,27 @@ class FieldMapping:
         return phase or DEFAULT_PHASE, screener or DEFAULT_SCREENER
 
 
-def normalize_label(value: str) -> LabelValue:
-    label = _LABEL_SPELLINGS.get(value.strip().lower())
+def normalize_label(value: str, minus_one_unlabeled: bool = False) -> LabelValue:
+    normalized = value.strip().lower()
+    if minus_one_unlabeled and normalized == _MINUS_ONE:
+        return "unlabeled"
+    label = _LABEL_SPELLINGS.get(normalized)
     if label is None:
         logger.warning("Unknown label value %r", value)
         return "unknown"
     return label
 
 
-def _classify_issn_isbn(value: str) -> dict[str, str]:
+def _classify_issn_isbn(value: str, skip_qualifiers: bool) -> dict[str, str]:
     """RIS keeps both in SN; tell them apart by length. First of each kind wins.
 
-    Qualifiers like Scopus's "(ISSN)" / "(ISBN)" are skipped.
+    skip_qualifiers skips pieces like Scopus's "(ISSN)" / "(ISBN)".
     """
     found: dict[str, str] = {}
     for piece in _ISSN_ISBN_SEPARATORS.split(value):
-        if not piece or (piece.startswith("(") and piece.endswith(")")):
+        if not piece or (
+            skip_qualifiers and piece.startswith("(") and piece.endswith(")")
+        ):
             continue
         length = len(piece.replace("-", ""))
         if length in _ISBN_LENGTHS:
@@ -230,7 +237,18 @@ def _join_pages(raw_fields: dict[str, str], mapping: FieldMapping) -> str | None
     return "-".join(pieces) or None
 
 
-def apply_mapping(raw_fields: dict[str, str], mapping: FieldMapping) -> Record:
+def _continues_to_next(target: str, value: str, settings: ParseSettings) -> bool:
+    return any(
+        quirk.field == target and quirk.matches(value)
+        for quirk in settings.continue_to_next
+    )
+
+
+def apply_mapping(
+    raw_fields: dict[str, str],
+    mapping: FieldMapping,
+    settings: ParseSettings = NO_QUIRKS,
+) -> Record:
     values: dict[str, Any] = {}
     other_ids: dict[str, str] = {}
     author_names: list[str] = []
@@ -241,22 +259,32 @@ def apply_mapping(raw_fields: dict[str, str], mapping: FieldMapping) -> Record:
         if target == LABEL_TARGET:
             phase, screener = mapping.label_context(key)
             labels.append(
-                Label(phase=phase, screener=screener, value=normalize_label(value))
+                Label(
+                    phase=phase,
+                    screener=screener,
+                    value=normalize_label(value, settings.minus_one_unlabeled),
+                )
             )
             continue
         if not value:
             continue
         if target in SCALAR_FIELDS:
-            values.setdefault(target, value)
+            if not _continues_to_next(target, value, settings):
+                values.setdefault(target, value)
         elif target == ISSN_ISBN_TARGET:
-            for scalar, piece in _classify_issn_isbn(value).items():
+            skip = settings.skip_issn_isbn_qualifiers
+            for scalar, piece in _classify_issn_isbn(value, skip).items():
                 values.setdefault(scalar, piece)
         elif target.startswith(OTHER_IDS_PREFIX):
             other_ids[target.removeprefix(OTHER_IDS_PREFIX)] = value
         elif target == "authors":
             author_names.extend(_split_list(value, mapping.list_delimiter))
         elif target == "keywords":
-            keywords.extend(_split_list(value, mapping.list_delimiter))
+            prefix = settings.keyword_prefixes.get(key, "")
+            keywords.extend(
+                prefix + keyword
+                for keyword in _split_list(value, mapping.list_delimiter)
+            )
 
     if "pages" not in values:
         pages = _join_pages(raw_fields, mapping)

@@ -39,8 +39,15 @@ from app.parsers.nbib import (
     read_nbib_tags,
     suggest_nbib_mapping,
 )
-from app.parsers.profiles import PROFILES, apply_profile, profile_for
-from app.parsers.profiles.base import FormatProfile
+from app.parsers.profiles import (
+    PROFILES,
+    FormatProfile,
+    apply_profile,
+    fix_record,
+    has_profile,
+    profile_for,
+)
+from app.parsers.quirks import ParseSettings
 from app.parsers.ris import (
     parse_ris_file,
     parse_ris_record,
@@ -85,8 +92,10 @@ async def pick_files() -> list[Path]:
     return [Path(path) for path in selected] if selected else []
 
 
-def _parse_csv_lines(lines: list[tuple[str, str]], mapping: FieldMapping) -> ParsedRow:
-    return parse_csv_record(dict(lines), mapping)
+def _parse_csv_lines(
+    lines: list[tuple[str, str]], mapping: FieldMapping, settings: ParseSettings
+) -> ParsedRow:
+    return parse_csv_record(dict(lines), mapping, settings)
 
 
 @dataclass
@@ -95,43 +104,55 @@ class _FormatHandlers:
     suggest: Callable[[list[str]], FieldMapping]
     parse_record: Callable[[list[tuple[str, str]], FieldMapping], ParsedRow]
     noun: str
-    profile: FormatProfile | None
+    profile: FormatProfile
 
 
 def _handlers(file_type: str, source: str) -> _FormatHandlers | None:
     profile = profile_for(source, file_type)
-    overrides = profile.aliases if profile is not None else None
+    if profile is None:
+        return None
+    overrides, settings = profile.aliases, profile.settings
+    parse_csv = partial(_parse_csv_lines, settings=settings)
     if file_type in (_TYPE_CSV, _TYPE_TSV):
         suggest = partial(
             suggest_mapping,
             alias_overrides=overrides,
-            ignored_keys=profile.ignored_keys if profile is not None else frozenset(),
+            ignored_keys=profile.ignored_keys,
         )
-        read_keys = (
-            read_csv_headers
-            if file_type == _TYPE_CSV
-            else partial(read_csv_headers, delimiter=_TSV_DELIMITER)
-        )
-        return _FormatHandlers(read_keys, suggest, _parse_csv_lines, "columns", profile)
+        delimiter = _TSV_DELIMITER if file_type == _TYPE_TSV else None
+        read_keys = partial(read_csv_headers, delimiter=delimiter, settings=settings)
+        return _FormatHandlers(read_keys, suggest, parse_csv, "columns", profile)
     if file_type == _TYPE_EXCEL:
         suggest = partial(suggest_mapping, alias_overrides=overrides)
         return _FormatHandlers(
-            read_excel_headers, suggest, _parse_csv_lines, "columns", profile
+            read_excel_headers, suggest, parse_csv, "columns", profile
         )
     if file_type == _TYPE_RIS:
         suggest = partial(suggest_ris_mapping, alias_overrides=overrides)
         return _FormatHandlers(
-            read_ris_tags, suggest, parse_ris_record, "tags", profile
+            read_ris_tags,
+            suggest,
+            partial(parse_ris_record, settings=settings),
+            "tags",
+            profile,
         )
     if file_type == _TYPE_NBIB:
         suggest = partial(suggest_nbib_mapping, alias_overrides=overrides)
         return _FormatHandlers(
-            read_nbib_tags, suggest, parse_nbib_record, "tags", profile
+            read_nbib_tags,
+            suggest,
+            partial(parse_nbib_record, settings=settings),
+            "tags",
+            profile,
         )
     if file_type == _TYPE_BIBTEX:
         suggest = partial(suggest_bibtex_mapping, alias_overrides=overrides)
         return _FormatHandlers(
-            read_bibtex_fields, suggest, parse_bibtex_record, "fields", profile
+            read_bibtex_fields,
+            suggest,
+            partial(parse_bibtex_record, settings=settings),
+            "fields",
+            profile,
         )
     return None
 
@@ -139,7 +160,7 @@ def _handlers(file_type: str, source: str) -> _FormatHandlers | None:
 def _suggestion(handlers: _FormatHandlers, summary: FileSummary) -> FieldMapping:
     suggestion = handlers.suggest(list(summary.samples))
     profile = handlers.profile
-    if profile is not None and profile.list_delimiter is not None:
+    if profile.list_delimiter is not None:
         suggestion = replace(suggestion, list_delimiter=profile.list_delimiter)
     return suggestion
 
@@ -149,9 +170,7 @@ def _preview(
 ) -> Callable[[FieldMapping], Record]:
     def preview(mapping: FieldMapping) -> Record:
         row = handlers.parse_record(list(summary.samples.items()), mapping)
-        if handlers.profile is None:
-            return row.record
-        return handlers.profile.fix_record(row.raw_fields, row.record, mapping)
+        return fix_record(handlers.profile, row.raw_fields, row.record, mapping)
 
     return preview
 
@@ -248,6 +267,12 @@ def _store(
     return source_file
 
 
+def _settings(file_type: str, source: str) -> ParseSettings:
+    profile = profile_for(source, file_type)
+    assert profile is not None
+    return profile.settings
+
+
 def import_csv(
     session: Session,
     path: Path,
@@ -255,7 +280,7 @@ def import_csv(
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
 ) -> SourceFile:
-    result = parse_csv_file(path, mapping)
+    result = parse_csv_file(path, mapping, settings=_settings(_TYPE_CSV, source))
     return _store(session, path, _TYPE_CSV, mapping, summary, result, source)
 
 
@@ -266,7 +291,8 @@ def import_tsv(
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
 ) -> SourceFile:
-    result = parse_csv_file(path, mapping, delimiter=_TSV_DELIMITER)
+    settings = _settings(_TYPE_TSV, source)
+    result = parse_csv_file(path, mapping, _TSV_DELIMITER, settings)
     return _store(session, path, _TYPE_TSV, mapping, summary, result, source)
 
 
@@ -278,7 +304,8 @@ def import_excel(
     source: str = _SOURCE_UNKNOWN,
     sheet: str | None = None,
 ) -> SourceFile:
-    result = parse_excel_file(path, mapping, sheet)
+    settings = _settings(_TYPE_EXCEL, source)
+    result = parse_excel_file(path, mapping, sheet, settings)
     return _store(session, path, _TYPE_EXCEL, mapping, summary, result, source, sheet)
 
 
@@ -289,7 +316,7 @@ def import_ris(
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
 ) -> SourceFile:
-    result = parse_ris_file(path, mapping)
+    result = parse_ris_file(path, mapping, _settings(_TYPE_RIS, source))
     return _store(session, path, _TYPE_RIS, mapping, summary, result, source)
 
 
@@ -300,7 +327,7 @@ def import_nbib(
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
 ) -> SourceFile:
-    result = parse_nbib_file(path, mapping)
+    result = parse_nbib_file(path, mapping, _settings(_TYPE_NBIB, source))
     return _store(session, path, _TYPE_NBIB, mapping, summary, result, source)
 
 
@@ -311,7 +338,7 @@ def import_bibtex(
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
 ) -> SourceFile:
-    result = parse_bibtex_file(path, mapping)
+    result = parse_bibtex_file(path, mapping, _settings(_TYPE_BIBTEX, source))
     return _store(session, path, _TYPE_BIBTEX, mapping, summary, result, source)
 
 
@@ -494,7 +521,7 @@ class ImportView:
                     if (
                         self.source != _SOURCE_UNKNOWN
                         and type_known
-                        and profile_for(self.source, self.file_type) is None
+                        and not has_profile(self.source, self.file_type)
                     ):
                         notice.tooltip(
                             "No profile for this source/type combination"

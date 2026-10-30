@@ -10,6 +10,7 @@ from app.parsers.csv_ import (
     suggest_mapping,
 )
 from app.parsers.mapping import FieldMapping
+from app.parsers.quirks import ParseSettings
 
 CSV_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "general"
 
@@ -625,8 +626,9 @@ def test_suggest_mapping__matches_label_headers(header: str) -> None:
 def test_parse_csv_text__reads_asreview_style_included_column() -> None:
     text = "title,included\nA,1\nB,0\nC,-1\nD,\n"
     mapping = suggest_mapping(["title", "included"])
+    settings = ParseSettings(minus_one_unlabeled=True)
 
-    result = parse_csv_text(text, mapping)
+    result = parse_csv_text(text, mapping, settings=settings)
 
     assert [row.record.labels[0].value for row in result.rows] == [
         "include",

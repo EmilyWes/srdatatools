@@ -9,6 +9,7 @@ from app.parsers.mapping import (
     override_aliases,
     suggest_mapping,
 )
+from app.parsers.quirks import ContinueToNextField, ParseSettings
 
 
 def test_field_mapping__rejects_other_ids_target_without_key() -> None:
@@ -151,7 +152,7 @@ def test_apply_mapping__issn_isbn_unrecognised_value_goes_to_issn_and_warns(
         ("979-840072171-7 (ISBN)", (None, "979-840072171-7")),
     ],
 )
-def test_apply_mapping__issn_isbn_ignores_parenthesised_qualifier(
+def test_apply_mapping__issn_isbn_skips_parenthesised_qualifier_when_on(
     value: str,
     expected: tuple[str | None, str | None],
     caplog: pytest.LogCaptureFixture,
@@ -159,10 +160,20 @@ def test_apply_mapping__issn_isbn_ignores_parenthesised_qualifier(
     mapping = FieldMapping(targets={"SN": "issn_isbn"})
 
     with caplog.at_level("WARNING"):
-        record = apply_mapping({"SN": value}, mapping)
+        record = apply_mapping(
+            {"SN": value}, mapping, ParseSettings(skip_issn_isbn_qualifiers=True)
+        )
 
     assert (record.issn, record.isbn) == expected
     assert caplog.text == ""
+
+
+def test_apply_mapping__issn_isbn_keeps_qualifier_when_off() -> None:
+    mapping = FieldMapping(targets={"SN": "issn_isbn"})
+
+    record = apply_mapping({"SN": "979-840072171-7 (ISBN)"}, mapping)
+
+    assert (record.issn, record.isbn) == ("(ISBN)", "979-840072171-7")
 
 
 def test_apply_mapping__issn_isbn_empty_value_sets_nothing() -> None:
@@ -314,11 +325,37 @@ def test_suggest_mapping__lenient_fuzzy_matches_and_falls_back_to_id() -> None:
         ("?", "maybe"),
         ("", "unlabeled"),
         ("  ", "unlabeled"),
-        ("-1", "unlabeled"),
     ],
 )
 def test_normalize_label__maps_known_spellings(value: str, expected: str) -> None:
     assert normalize_label(value) == expected
+
+
+def test_normalize_label__minus_one_is_unlabeled_only_when_on() -> None:
+    assert normalize_label("-1", minus_one_unlabeled=True) == "unlabeled"
+    assert normalize_label("-1") == "unknown"
+
+
+def test_apply_mapping__continue_to_next_field_uses_next_mapped_key() -> None:
+    mapping = FieldMapping(targets={"TI": "title", "TT": "title"})
+    settings = ParseSettings(
+        continue_to_next=(
+            ContinueToNextField("title", frozenset({"[Not Available]."}), True),
+        )
+    )
+    raw = {"TI": "[Not Available].", "TT": "Translated"}
+
+    assert apply_mapping(raw, mapping, settings).title == "Translated"
+    assert apply_mapping({"TI": "[Not Available]."}, mapping, settings).title is None
+
+
+def test_apply_mapping__keyword_prefix_applies_per_key() -> None:
+    mapping = FieldMapping(targets={"A": "keywords", "B": "keywords"})
+    settings = ParseSettings(keyword_prefixes={"A": "[A] "})
+
+    record = apply_mapping({"A": "x; y", "B": "z"}, mapping, settings)
+
+    assert record.keywords == ["[A] x", "[A] y", "z"]
 
 
 def test_normalize_label__unknown_spelling_is_unknown_and_warns(

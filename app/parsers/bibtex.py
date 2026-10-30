@@ -18,6 +18,7 @@ from app.parsers.common import (
 )
 from app.parsers.mapping import FieldMapping, apply_mapping, override_aliases
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
+from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -224,9 +225,11 @@ def _split_authors(value: str) -> list[str]:
     return names
 
 
-def _authors_from_fields(raw_fields: dict[str, str], keys: list[str]) -> list[Author]:
+def _authors_from_fields(
+    raw_fields: dict[str, str], keys: list[str], settings: ParseSettings
+) -> list[Author]:
     return [
-        author_from_name(name, _NAME_SEPARATOR)
+        author_from_name(name, _NAME_SEPARATOR, settings.ambiguous_name_split)
         for key in keys
         for raw_name in _split_authors(raw_fields.get(key, ""))
         if (name := clean_value(_AUTHOR_FIELD, raw_name))
@@ -234,19 +237,23 @@ def _authors_from_fields(raw_fields: dict[str, str], keys: list[str]) -> list[Au
 
 
 def parse_bibtex_record(
-    lines: list[tuple[str, str]], mapping: FieldMapping
+    lines: list[tuple[str, str]],
+    mapping: FieldMapping,
+    settings: ParseSettings = NO_QUIRKS,
 ) -> ParsedRow:
     raw_fields = dict(lines)
     cleaned = {key: clean_value(key, value) for key, value in raw_fields.items()}
-    record = apply_mapping(cleaned, mapping)
+    record = apply_mapping(cleaned, mapping, settings)
     author_keys = [k for k, t in mapping.targets.items() if t == "authors"]
     if author_keys:
-        authors = _authors_from_fields(raw_fields, author_keys)
+        authors = _authors_from_fields(raw_fields, author_keys, settings)
         record = record.model_copy(update={"authors": authors})
     return ParsedRow(record=record, raw_fields=raw_fields)
 
 
-def parse_bibtex_text(text: str, mapping: FieldMapping) -> ParseResult:
+def parse_bibtex_text(
+    text: str, mapping: FieldMapping, settings: ParseSettings = NO_QUIRKS
+) -> ParseResult:
     rows: list[ParsedRow] = []
     skipped: list[SkippedRow] = []
     for entry in _iter_entries(text):
@@ -256,12 +263,14 @@ def parse_bibtex_text(text: str, mapping: FieldMapping) -> ParseResult:
                 "Skipping BibTeX entry at line %d: %s", entry.line_number, entry.reason
             )
         else:
-            rows.append(parse_bibtex_record(entry.fields, mapping))
+            rows.append(parse_bibtex_record(entry.fields, mapping, settings))
     return ParseResult(rows=rows, skipped=skipped)
 
 
-def parse_bibtex_file(path: Path, mapping: FieldMapping) -> ParseResult:
-    return parse_bibtex_text(decode_file(path), mapping)
+def parse_bibtex_file(
+    path: Path, mapping: FieldMapping, settings: ParseSettings = NO_QUIRKS
+) -> ParseResult:
+    return parse_bibtex_text(decode_file(path), mapping, settings)
 
 
 def read_bibtex_fields(path: Path) -> FileSummary:

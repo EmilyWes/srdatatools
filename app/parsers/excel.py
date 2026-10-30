@@ -16,6 +16,7 @@ from app.parsers.common import (
 )
 from app.parsers.csv_ import parse_csv_record
 from app.parsers.mapping import FieldMapping
+from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +81,10 @@ def read_excel_sheets(path: Path) -> list[str]:
 
 
 def parse_excel_file(
-    path: Path, mapping: FieldMapping, sheet: str | None = None
+    path: Path,
+    mapping: FieldMapping,
+    sheet: str | None = None,
+    settings: ParseSettings = NO_QUIRKS,
 ) -> ParseResult:
     headers, data_rows = _sheet_rows(path, sheet)
 
@@ -100,7 +104,8 @@ def parse_excel_file(
             skipped.append(SkippedRow(row_number, "row is blank"))
             logger.warning("Skipping row %d: blank", row_number)
             continue
-        rows.append(parse_csv_record(dict(zip(headers, values, strict=True)), mapping))
+        raw_fields = dict(zip(headers, values, strict=True))
+        rows.append(parse_csv_record(raw_fields, mapping, settings))
 
     return ParseResult(rows=rows, skipped=skipped)
 

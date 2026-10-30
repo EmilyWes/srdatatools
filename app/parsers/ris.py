@@ -14,6 +14,7 @@ from app.parsers.common import (
 )
 from app.parsers.mapping import FieldMapping, apply_mapping, override_aliases
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
+from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -67,12 +68,16 @@ def _authors_from_lines(
     return authors
 
 
-def parse_ris_record(lines: list[tuple[str, str]], mapping: FieldMapping) -> ParsedRow:
+def parse_ris_record(
+    lines: list[tuple[str, str]],
+    mapping: FieldMapping,
+    settings: ParseSettings = NO_QUIRKS,
+) -> ParsedRow:
     values: dict[str, list[str]] = {}
     for tag, value in lines:
         values.setdefault(tag, []).append(value)
     raw_fields = {t: "\n".join(v for v in vs if v) for t, vs in values.items()}
-    record = apply_mapping(raw_fields, mapping)
+    record = apply_mapping(raw_fields, mapping, settings)
     author_tags = {k for k, t in mapping.targets.items() if t == "authors"}
     if author_tags:
         authors = _authors_from_lines(lines, author_tags)
@@ -80,7 +85,9 @@ def parse_ris_record(lines: list[tuple[str, str]], mapping: FieldMapping) -> Par
     return ParsedRow(record=record, raw_fields=raw_fields)
 
 
-def parse_ris_text(text: str, mapping: FieldMapping) -> ParseResult:
+def parse_ris_text(
+    text: str, mapping: FieldMapping, settings: ParseSettings = NO_QUIRKS
+) -> ParseResult:
     rows: list[ParsedRow] = []
     skipped: list[SkippedRow] = []
 
@@ -108,7 +115,7 @@ def parse_ris_text(text: str, mapping: FieldMapping) -> ParseResult:
             if lines and all(t != _TYPE_TAG for t, _ in lines):
                 skip(start_line, "record has no TY tag")
             elif lines:
-                rows.append(parse_ris_record(lines, mapping))
+                rows.append(parse_ris_record(lines, mapping, settings))
             lines = []
             continue
 
@@ -122,8 +129,10 @@ def parse_ris_text(text: str, mapping: FieldMapping) -> ParseResult:
     return ParseResult(rows=rows, skipped=skipped)
 
 
-def parse_ris_file(path: Path, mapping: FieldMapping) -> ParseResult:
-    return parse_ris_text(decode_file(path), mapping)
+def parse_ris_file(
+    path: Path, mapping: FieldMapping, settings: ParseSettings = NO_QUIRKS
+) -> ParseResult:
+    return parse_ris_text(decode_file(path), mapping, settings)
 
 
 def read_ris_tags(path: Path) -> FileSummary:
