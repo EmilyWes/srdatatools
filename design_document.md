@@ -47,6 +47,12 @@ Goal: support as many databases as possible, built in order of how widely used t
 
 **Design implication:** most of these export to RIS or CSV rather than a unique file format each. So the real challenge isn't "one parser per database" — it's that RIS tag usage and CSV column names vary by vendor. The parser architecture should be **format + vendor profile**, not just format: a shared RIS/CSV parsing core, with a per-database "profile" (tag/column mapping + quirks) layered on top. This makes adding a new database mostly a matter of writing a new profile rather than a new parser, and keeps the door open for scaling to "as many databases as possible" without the codebase growing linearly with the parser count.
 
+**Quirks** *(planned)*. Every vendor or format fix is written once, as a shared, parametrized quirk, and never duplicated across profiles. A quirk is either general (any format, e.g. strip a URL prefix, prefix keywords from a column, keep the first of several values) or tied to one Type (e.g. NBIB `[Not Available].` title → `TT`, RIS `N1` note lines → EID / conference name). A profile is then mostly a declaration: suggested mapping + per-row options, plus which quirks are on and with which arguments. Each Type also gets a **default profile** used when Source is Unknown, with some quirks on by default. Three kinds of behaviour are listed in the quirks overview (see Import flow):
+
+- **Toggleable quirks** — on/off plus their settings; the profile only sets the defaults. This covers all profile fixes and the data-changing ones that used to sit in generic code: the Scopus `(ISSN)`/`(ISBN)` qualifier skip, the NBIB `[MeSH] ` keyword prefix, ASReview's `-1` = unlabeled, and how an ambiguous author name is split (don't split, the default / at the first separator / at the last separator).
+- **Always-on quirks with settings** — not toggleable, but their arguments are editable: the CSV/TSV field-size limit (default 1,000,000 characters, for Scopus References cells; Python's csv limit is process-wide, so it is set before each parse).
+- **Parser behaviour** — read-only, stays in the generic parser, shown with what it does and why: BibTeX citation-key continuation (Scopus keys like `Wong200922,24`), and the RIS rule that an `AD`/`C1` line only attaches to the author directly above it (so Scopus's affiliation block after all authors isn't pinned on the last one).
+
 ## Architecture & tech stack
 
 **Language:** Python throughout — one language for parsing, DB, GUI, and packaging keeps this approachable for open-source contributors.
@@ -77,6 +83,7 @@ app/
     ris.py           # generic RIS tokenizer + tag-mapping suggestions
     nbib.py          # generic NBIB/MEDLINE tokenizer + tag-mapping suggestions
     bibtex.py        # generic BibTeX tokenizer + field-mapping suggestions
+    quirks.py        # (planned) shared, parametrized quirk fixes that profiles switch on
     profiles/        # per-database tag/column mappings + quirks
       base.py        # Profile/FormatProfile types + apply_profile
       pubmed.py
@@ -199,6 +206,14 @@ flowchart LR
 3. Once a file and Type with a mapping renderer are set, a field-mapping table appears inline in the import view itself, directly below the Source/Type dropdowns — no separate screen or confirm step. It's pre-filled with suggested field mappings and stays editable; **Import** always reads whatever the table currently shows at the moment it's clicked. Vendor profiles follow the table too: they only read rows that are mapped, so a row set to ignore is never used, not even by profile fixes such as pairing author IDs with author names. (Today CSV, TSV, Excel, RIS, NBIB and BibTeX share the same mapping table: CSV, TSV and Excel rows are the file's (or sheet's) columns, RIS rows are the tags found in the file (except `ER`), NBIB rows are the tags found in the file plus a derived `DOI` row (taken from the `AID`/`LID` entry ending `[doi]`), BibTeX rows are the fields found in the file plus `@type` (entry type) and `@key` (citation key), pre-filled from a default tag mapping. The list-delimiter input only shows for CSV, TSV, Excel and BibTeX, since RIS and NBIB repeat a tag per value; BibTeX authors are always split on `and`, so there the delimiter only applies to keywords. Each row also shows an Example: the first non-empty value of that column or tag, truncated, with the full value on hover.)
    - **Labels:** any number of rows can map to **Label**, for screening decisions. Picking it shows two stacked boxes under the dropdown, **phase** and **screener** (grey placeholders `ft` / `screener 1`, used when a box is left empty). Values are normalized case-insensitively: include (`include`, `included`, `yes`, `y`, `1`, `true`, `relevant`), exclude (`exclude`, `excluded`, `no`, `n`, `0`, `false`, `irrelevant`), maybe (`maybe`, `unsure`, `undecided`, `?`), unlabeled (empty cell or ASReview's `-1`); anything else is stored as unknown (red in the Result column) and logged. CSV/TSV/Excel headers `included`, `label_included`, `label`, `decision` and `inclusion` are suggested as Label.
 4. **Import** parses for real and writes both `record_source` (raw fields) and `record` (one row per imported record, pre-dedup). Malformed rows are skipped, logged, and rolled into a result summary ("998 imported, 2 skipped"), consistent with the general malformed-record handling.
+   - **Per-row options** *(planned)*: the dropdown gets one entry per target, and picking a target with options shows its inputs stacked under the dropdown, always visible (like Label). Text boxes left empty use the grey placeholder (the profile's default). The per-row delimiter replaces the global list-delimiter input.
+     - **Publication date:** part (full / year / month / day) + a format box (e.g. `DD/MM/YYYY`) for dates the built-in patterns can't read unambiguously.
+     - **Pages:** part (range / start / end / number of pages); with start + number of pages, end = start + count − 1.
+     - **Authors:** delimiter + role: full name (not split) / names: first,last / names: last,first / ORCID / author IDs / affiliations. The two split roles show a separator box. Every Type's default profile suggests names: last,first with `,`. Parallel author columns (names, ORCID, IDs, affiliations) are zipped by position, for any source. A name containing the separator more than once is handled per the ambiguous-name quirk (not split by default).
+     - **Keywords:** delimiter + prefix (e.g. `[Author] `).
+     - **ISSN/ISBN:** auto (by length) / ISSN / ISBN.
+     - **Other ID:** editable key name (defaults to the slug of the column name).
+   - **Quirks overview** *(planned)*: lists every quirk for the chosen Type (see Quirks under Source database priority), with the selected profile's defaults pre-set — toggleable quirks with an on/off switch and their settings, always-on quirks with their settings, and parser behaviour read-only — each with a short explanation of what it does and why.
    - **CSV dates:** a full-date column and Year/Month/Day columns may both be mapped. Each of year, month and day comes from its Year/Month/Day column when the row has a value there; missing parts are filled from the full-date column. When the two disagree, Year/Month/Day wins.
 
 **Visualizations:** valued highly (e.g. publications-per-year charts, source-overlap Venn diagrams), but in service of the workflow rather than cluttering it — shown in the middle panel when Library is selected, a few well-chosen, contextually placed visuals rather than a wall of graphs. The specific set beyond the basic counts (a later dashboard pass — see to-do list) will be figured out iteratively as the app takes shape, not fully speced up front.
@@ -248,6 +263,9 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] PubMed quirks
 - [x] Scopus profile (CSV, RIS, BibTeX)
 - [x] OpenAlex profile (CSV/RIS/BibTeX)
+- [ ] Shared quirks: refactor all profile fixes and data-changing generic fixes into shared, parametrized quirks; profiles (plus a default profile per Type for Unknown source) declare which are on and their arguments; behaviour-preserving, no UI change
+- [ ] Per-row mapping options (date, pages, authors, keywords, ISSN/ISBN, Other ID) replacing the split date/page/ISSN targets and the global list delimiter, with a migration for stored mappings
+- [ ] Quirks overview in the import view: toggleable quirks with on/off and settings, always-on quirks with settings, parser behaviour read-only, each with an explanation
 - [ ] ASReview profile (CSV/TSV/RIS/Excel)
 - [x] Store parsed records, keep raw source data (`record_source`)
 - [x] Three-pane GUI shell: left navigation panel, middle content panel, right action panel (no tabs)
