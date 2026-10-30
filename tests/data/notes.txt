@@ -1,0 +1,4 @@
+sizes of big datasets:
+pubmed: 4 k
+scopus: 14 k
+openalex: 29 k
