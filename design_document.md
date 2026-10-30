@@ -247,7 +247,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] PubMed profile (NBIB, CSV)
 - [x] PubMed quirks
 - [x] Scopus profile (CSV, RIS, BibTeX)
-- [ ] OpenAlex profile (CSV/RIS)
+- [x] OpenAlex profile (CSV/RIS/BibTeX)
 - [ ] ASReview profile (CSV/TSV/RIS/Excel)
 - [x] Store parsed records, keep raw source data (`record_source`)
 - [x] Three-pane GUI shell: left navigation panel, middle content panel, right action panel (no tabs)
@@ -310,6 +310,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] Zotero profile: Zotero BibTeX mapping
 - [ ] Zotero profile: generic CSL JSON parser + Zotero CSL JSON mapping
 - [ ] Web of Science profile (RIS)
+- [ ] Generic Web of Science "Plain Text" tagged parser + mappings for WoS and OpenAlex (OpenAlex's `.txt` export uses this format)
 - [ ] IEEE Xplore profile (CSV)
 - [ ] Embase profile (RIS/CSV)
 - [ ] PsycINFO profile — EBSCO and ProQuest variants (RIS/CSV)
