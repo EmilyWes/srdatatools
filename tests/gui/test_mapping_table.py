@@ -24,6 +24,7 @@ from app.parsers.mapping import (
     ScalarRow,
     Suggest,
 )
+from app.parsers.profiles.default import DEFAULT_PROFILES
 from app.parsers.ris import ROW_DEFAULTS as RIS_DEFAULTS
 from app.parsers.ris import parse_ris_record, suggest_ris_mapping
 from tests.mappings import mapping_of, targets_of
@@ -634,7 +635,17 @@ def test_render_mapping_table__result_splits_authors_with_row_delimiter() -> Non
 
 
 def test_render_mapping_table__result_labels_issn_and_isbn() -> None:
-    screen = _render_ris_samples({"SN": "1234-5678; 978-3-16-148410-0"})
+    samples = {"SN": "1234-5678; 978-3-16-148410-0"}
+    settings = DEFAULT_PROFILES["ris"].settings
+    screen = render_mapping_table(
+        shell().middle,
+        _summary(samples),
+        suggest_ris_mapping(list(samples)),
+        defaults=RIS_DEFAULTS,
+        preview=lambda mapping: parse_ris_record(
+            list(samples.items()), mapping, settings
+        ).record,
+    )
 
     assert _result(screen, "SN") == "ISSN 1234-5678 | ISBN 978-3-16-148410-0"
 

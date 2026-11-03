@@ -4,13 +4,17 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import SourceFile
-from app.gui.import_flow import preview_for, row_defaults_for, type_group_label
+from app.gui.import_flow import preview_for, row_defaults_for, type_label
 from app.gui.library_overview import format_count, source_label
 from app.gui.mapping_table import render_mapping_table
 from app.gui.quirks_overview import render_quirks_overview
 from app.parsers.common import FileSummary
 from app.parsers.mapping import FieldMapping
-from app.parsers.profiles.overview import load_choices, quirk_entries
+from app.parsers.profiles.overview import (
+    default_choices,
+    load_choices,
+    quirk_boxes,
+)
 
 _VIEW_MAPPING = "mapping"
 _VIEW_PARSING = "parsing"
@@ -86,7 +90,9 @@ def render_source_file_view(
                 ).props("dense no-caps")
                 summary = FileSummary(**source_file.file_summary)
                 source = source_file.source or "unknown"
-                choices = load_choices(source_file.quirk_choices)
+                choices = load_choices(
+                    source_file.quirk_choices, source_file.format, source
+                )
                 mapping_container = ui.column()
                 quirks_container = ui.column()
                 quirks_container.set_visibility(False)
@@ -102,8 +108,8 @@ def render_source_file_view(
                 )
                 render_quirks_overview(
                     quirks_container,
-                    quirk_entries(source_file.format, source),
-                    type_group_label(source_file.format),
+                    quirk_boxes(source_file.format, type_label(source_file.format)),
+                    default_choices(source_file.format, source),
                     chosen=choices,
                 )
 

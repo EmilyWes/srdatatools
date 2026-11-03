@@ -34,10 +34,9 @@ from app.gui.mapping_table import MappingScreen
 from app.parsers.common import FileSummary
 from app.parsers.mapping import AuthorsRow, FieldMapping
 from app.parsers.profiles.overview import (
-    QuirkChoice,
-    QuirkChoices,
+    ParsingChoices,
+    default_choices,
     load_choices,
-    quirk_entries,
 )
 from tests.gui.clicks import click_and_wait
 from tests.mappings import mapping_of, targets_of
@@ -280,7 +279,7 @@ def test_import_file__saves_every_parsing_choice(
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title\nSome Paper\n")
-    choices = {"DropEtAl": QuirkChoice(on=False)}
+    choices = default_choices("csv", "unknown").model_copy(update={"drop_et_al": False})
 
     source_file = import_file(
         session,
@@ -291,10 +290,26 @@ def test_import_file__saves_every_parsing_choice(
         choices=choices,
     )
 
-    stored = load_choices(source_file.quirk_choices)
-    assert stored["DropEtAl"] == QuirkChoice(on=False)
-    assert stored["FirstValue.issn"] == QuirkChoice(on=True, values={"delimiter": "|"})
-    assert set(stored) == {e.key for e in quirk_entries("csv", "unknown")}
+    assert set(source_file.quirk_choices) == set(ParsingChoices.model_fields)
+    assert load_choices(source_file.quirk_choices, "csv", "unknown") == choices
+
+
+def test_import_file__without_choices_saves_the_profile_defaults(
+    session: Session, tmp_path: Path
+) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title\nSome Paper\n")
+
+    source_file = import_file(
+        session,
+        csv_path,
+        "csv",
+        mapping_of({"Title": "title"}),
+        _summary("csv", csv_path),
+    )
+
+    stored = load_choices(source_file.quirk_choices, "csv", "unknown")
+    assert stored == default_choices("csv", "unknown")
 
 
 def test_import_file__unsupported_type_raises(session: Session, tmp_path: Path) -> None:
@@ -745,7 +760,7 @@ def test_render_import_view__import_button_awaits_async_on_import(
         mapping: FieldMapping,
         source: str,
         sheet: str | None,
-        choices: QuirkChoices,
+        choices: ParsingChoices,
     ) -> None:
         calls.extend(path for path, _ in files)
 
@@ -1473,7 +1488,7 @@ def test_render_import_view__result_follows_parsing_after_switching_back(
     assert _result(view.mapping_screen, "PG") == "521-522"
     _toggle(middle).value = "parsing"
 
-    view.quirks_screen.set_on("ExpandPageRange", False)
+    view.quirks_screen.set_value("pages_set", False)
     _toggle(middle).value = "mapping"
 
     assert _result(view.mapping_screen, "PG") == "521-2"
@@ -1482,18 +1497,33 @@ def test_render_import_view__result_follows_parsing_after_switching_back(
 def test_render_import_view__import_passes_parsing_choices(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    calls: list[QuirkChoices] = []
+    calls: list[ParsingChoices] = []
     view, _ = _nbib_view(
         monkeypatch, tmp_path, lambda f, t, m, s, sh, q: calls.append(q)
     )
     assert view.quirks_screen is not None
-    view.quirks_screen.set_on("ExpandPageRange", False)
+    view.quirks_screen.set_value("pages_set", False)
 
     view._import()
 
     [choices] = calls
-    assert not choices["ExpandPageRange"].on
-    assert choices["DropEtAl"].on
+    assert not choices.pages_set
+    assert choices.drop_et_al
+
+
+def test_render_import_view__ordering_offers_keys_sharing_a_target(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view, middle = _nbib_view(monkeypatch, tmp_path)
+    assert view.mapping_screen is not None and view.quirks_screen is not None
+    view.mapping_screen.set_target("TA", "journal")
+    view.mapping_screen.set_target("JT", "journal")
+
+    _toggle(middle).value = "parsing"
+
+    [select] = view.quirks_screen.order_rows
+    assert {"TA", "JT"} <= set(select.options)
+    assert "PG" not in select.options
 
 
 def test_render_import_view__no_toggle_without_a_mapping() -> None:
@@ -1508,7 +1538,7 @@ def test_import_file__applies_parsing_choices(session: Session, tmp_path: Path) 
     nbib_path = tmp_path / "pubmed.nbib"
     nbib_path.write_text(_PUBMED_NBIB_TEXT)
     mapping = mapping_of({"PG": "pages"})
-    choices = {"ExpandPageRange": QuirkChoice(on=False)}
+    choices = default_choices("nbib", "unknown").model_copy(update={"pages_set": False})
 
     import_file(
         session,
@@ -1523,6 +1553,6 @@ def test_import_file__applies_parsing_choices(session: Session, tmp_path: Path) 
     assert session.query(Record).one().pages == "521-2"
 
 
-def test_type_group_label__column_types_share_one_label() -> None:
-    assert import_flow.type_group_label("tsv") == "CSV / TSV / Excel"
-    assert import_flow.type_group_label("nbib") == "NBIB"
+def test_type_label__names_the_selected_type() -> None:
+    assert import_flow.type_label("tsv") == "TSV"
+    assert import_flow.type_label("nbib") == "NBIB"

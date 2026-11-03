@@ -232,7 +232,7 @@ _INPUT_WIDTH_CH = (8, 24)
 _SELECT_CHROME_CH = 6
 
 
-def _sorted_options(keys: Iterable[str]) -> dict[str, str]:
+def sorted_target_options(keys: Iterable[str]) -> dict[str, str]:
     options = {key: _option_label(key) for key in keys}
     return dict(sorted(options.items(), key=lambda item: item[1].lower()))
 
@@ -536,7 +536,7 @@ def render_mapping_table(
                     with ui.column().classes("gap-0").style(mapping_style):
                         select = (
                             ui.select(
-                                _sorted_options(_TARGET_KEYS),
+                                sorted_target_options(_TARGET_KEYS),
                                 value=initial_targets[header],
                             )
                             .classes("mapping-field text-xs w-full")
