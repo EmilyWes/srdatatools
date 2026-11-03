@@ -1,4 +1,5 @@
 from nicegui import ui
+from nicegui.element import Element
 
 from app.gui.layout import shell
 from app.gui.quirks_overview import QuirksScreen, render_quirks_overview
@@ -31,11 +32,11 @@ def test_render_quirks_overview__defaults_give_the_entry_defaults() -> None:
     assert choices == {entry.key: entry.default for entry in entries}
 
 
-def test_render_quirks_overview__shows_origin_blocks_in_order() -> None:
+def test_render_quirks_overview__shows_general_then_type_block() -> None:
     texts = _texts()
 
-    general = texts.index("General")
-    assert general < texts.index("CSV / TSV / Excel") < texts.index("Profiles")
+    assert texts.index("General") < texts.index("CSV / TSV / Excel")
+    assert "Profiles" not in texts
 
 
 def test_render_quirks_overview__skips_an_empty_block() -> None:
@@ -45,7 +46,7 @@ def test_render_quirks_overview__skips_an_empty_block() -> None:
     render_quirks_overview(panes.middle, entries, "CSV / TSV / Excel")
 
     texts = [e.text for e in panes.middle.descendants() if isinstance(e, ui.label)]
-    assert "Profiles" not in texts
+    assert "CSV / TSV / Excel" not in texts
 
 
 def _tooltip(screen: QuirksScreen, key: str) -> str:
@@ -137,16 +138,55 @@ def test_render_quirks_overview__new_line_is_shown_and_typed_as_escape() -> None
     assert screen.current_choices()["FirstValue.isbn"].values == {"delimiter": ","}
 
 
-def test_render_quirks_overview__changed_option_is_tinted_blue() -> None:
+def test_render_quirks_overview__changed_text_box_is_not_tinted() -> None:
     screen = _render()
     widget = screen._widgets_for("FirstValue.issn").inputs["delimiter"]
-    assert "bg-color" not in widget.props
 
     screen.set_option("FirstValue.issn", "delimiter", ";")
+
+    assert "bg-color" not in widget.props
+
+
+def test_render_quirks_overview__changed_dropdown_is_tinted_blue() -> None:
+    screen = _render()
+    widget = screen._widgets_for("ambiguous_name_split").inputs["split"]
+    assert "bg-color" not in widget.props
+
+    screen.set_option("ambiguous_name_split", "split", "last")
     assert widget.props["bg-color"] == "blue-2"
 
-    screen.set_option("FirstValue.issn", "delimiter", "")
+    screen.set_option("ambiguous_name_split", "split", "none")
     assert "bg-color" not in widget.props
+
+
+def test_render_quirks_overview__restore_defaults_resets_every_choice() -> None:
+    screen = _render(source="scopus")
+    screen.set_on("DropEtAl", False)
+    screen.set_option("FirstValue.issn", "delimiter", ";")
+    screen.set_option("csv_field_size_limit", "limit", "500")
+    screen.set_option("ambiguous_name_split", "split", "last")
+
+    screen.restore_defaults()
+
+    entries = quirk_entries("csv", "scopus")
+    assert screen.current_choices() == {e.key: e.default for e in entries}
+    checkbox = screen._widgets_for("DropEtAl").checkbox
+    assert checkbox is not None and "color" not in checkbox.props
+    assert screen._widgets_for("FirstValue.issn").inputs["delimiter"].value == ""
+
+
+def _buttons(middle: Element) -> list[str]:
+    return [e.text for e in middle.descendants() if isinstance(e, ui.button)]
+
+
+def test_render_quirks_overview__restore_defaults_button_only_when_editable() -> None:
+    editable = shell().middle
+    render_quirks_overview(editable, quirk_entries("csv", "unknown"), "CSV")
+    readonly = shell().middle
+    render_quirks_overview(readonly, quirk_entries("csv", "unknown"), "CSV", {})
+
+    assert _buttons(editable) == ["Restore defaults"]
+    assert _buttons(readonly) == []
 
 
 def test_render_quirks_overview__field_size_limit_is_numeric() -> None:

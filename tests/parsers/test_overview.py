@@ -83,9 +83,9 @@ def test_quirk_entries__origins() -> None:
     ):
         assert entries[key].origin == "general"
     assert entries["csv_field_size_limit"].origin == "type"
-    assert entries["EmbeddedAuthorIds"].origin == "profile"
+    assert entries["EmbeddedAuthorIds"].origin == "general"
     assert _entries("nbib")["FirstValue.publication_type"].origin == "type"
-    assert _entries("ris")["RisNotes"].origin == "profile"
+    assert _entries("ris")["RisNotes"].origin == "general"
 
 
 def test_quirk_entries__used_by_names_the_declaring_profiles() -> None:

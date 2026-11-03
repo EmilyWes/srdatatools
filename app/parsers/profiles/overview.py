@@ -11,7 +11,7 @@ from app.parsers.profiles import PROFILES, FormatProfile, profile_for
 from app.parsers.profiles.default import DEFAULT_PROFILES
 from app.parsers.quirks import ContinueToNextField, RecordQuirk
 
-Origin = Literal["general", "type", "profile"]
+Origin = Literal["general", "type"]
 Kind = Literal["toggleable", "setting", "parser"]
 
 # Listing only: these Types show each other's quirks, their profiles stay separate.
@@ -241,14 +241,14 @@ def _catalogue(
     for label, format_profile in declared:
         for item in items(format_profile):
             key = quirk_key(item)
+            # Profile-only quirks are listed under General, with who uses them.
+            profile_only = key not in type_default
             origin: Origin = (
-                "general"
-                if key in general
-                else "type" if key in type_default else "profile"
+                "type" if key in type_default and key not in general else "general"
             )
             previous = found.get(key)
             used_by: tuple[str, ...] = previous.used_by if previous else ()
-            if origin == "profile" and label is not None and label not in used_by:
+            if profile_only and label is not None and label not in used_by:
                 used_by = (*used_by, label)
             instance = on.get(key, previous.instance if previous else item)
             found[key] = _Found(instance, origin, used_by, key in on)
