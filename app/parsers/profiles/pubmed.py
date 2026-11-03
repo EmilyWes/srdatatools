@@ -4,14 +4,12 @@ from io import StringIO
 
 from app.parsers.mapping import Suggest
 from app.parsers.profiles.base import FormatProfile, Profile
-from app.parsers.profiles.default import default_row_defaults, default_settings
-from app.parsers.quirks import (
-    ContinueToNextField,
-    DropEtAl,
-    ExpandPageRange,
-    FirstValue,
-    StripLastAuthorTrailing,
+from app.parsers.profiles.default import (
+    default_quirks,
+    default_row_defaults,
+    default_settings,
 )
+from app.parsers.quirks import StripLastAuthorTrailing
 
 _NBIB_PMID_LINE = re.compile(r"^PMID ?- ", re.MULTILINE)
 _NBIB_OWN_NLM_LINE = re.compile(r"^OWN ?- NLM\s*$", re.MULTILINE)
@@ -39,20 +37,9 @@ PUBMED = Profile(
                 "tt": Suggest("title"),
             },
             matches=_matches_nbib,
-            settings=default_settings(
-                "nbib",
-                continue_to_next=(
-                    ContinueToNextField(
-                        "title", frozenset({"[Not Available]."}), case_sensitive=True
-                    ),
-                ),
-            ),
+            settings=default_settings("nbib"),
             row_defaults=default_row_defaults("nbib"),
-            quirks=(
-                ExpandPageRange(),
-                FirstValue("publication_type", "\n"),
-                FirstValue("isbn", "\n"),
-            ),
+            quirks=default_quirks("nbib"),
         ),
         "csv": FormatProfile(
             suggestions={
@@ -64,7 +51,7 @@ PUBMED = Profile(
             matches=_matches_csv,
             settings=default_settings("csv"),
             row_defaults=default_row_defaults("csv", delimiter=","),
-            quirks=(DropEtAl(), StripLastAuthorTrailing(".")),
+            quirks=default_quirks("csv", StripLastAuthorTrailing(".")),
         ),
     },
 )

@@ -240,6 +240,7 @@ def test_home__import_stores_given_summary_and_selects_new_file(
                 mapping_of({"Title": "title"}),
                 "unknown",
                 None,
+                {},
             )
 
     asyncio.run(confirm())
@@ -280,6 +281,7 @@ def test_home__multi_file_import_stores_each_file_and_selects_overview(
                 mapping_of({"Title": "title"}),
                 "unknown",
                 None,
+                {},
             )
 
     asyncio.run(confirm())

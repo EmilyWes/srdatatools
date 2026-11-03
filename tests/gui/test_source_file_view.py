@@ -14,7 +14,9 @@ from tests.gui.clicks import click_and_wait
 from tests.mappings import mapping_of
 
 
-def _source_file(skipped_rows: list[dict[str, Any]]) -> SourceFile:
+def _source_file(
+    skipped_rows: list[dict[str, Any]], quirk_choices: dict[str, Any]
+) -> SourceFile:
     return SourceFile(
         filename="pubmed.nbib",
         path="/imports/pubmed.nbib",
@@ -28,6 +30,7 @@ def _source_file(skipped_rows: list[dict[str, Any]]) -> SourceFile:
         file_summary=asdict(
             FileSummary({"TI": "A title", "AB": "An abstract"}, {"TI": 3, "AB": 2}, 3)
         ),
+        quirk_choices=quirk_choices,
     )
 
 
@@ -70,12 +73,13 @@ def _click(element: ui.button) -> None:
 
 def _render(
     skipped_rows: list[dict[str, Any]] | None = None,
+    quirk_choices: dict[str, Any] | None = None,
 ) -> tuple[Element, list[None]]:
     panes = shell()
     removed: list[None] = []
     render_source_file_view(
         panes.middle,
-        _source_file(skipped_rows or []),
+        _source_file(skipped_rows or [], quirk_choices or {}),
         records_in_library=3,
         on_remove=lambda: removed.append(None),
     )
@@ -99,7 +103,7 @@ def test_render_source_file_view__shows_metadata_and_record_count() -> None:
 
 def test_render_source_file_view__shows_sheet_after_format() -> None:
     panes = shell()
-    source_file = _source_file([])
+    source_file = _source_file([], {})
     source_file.format = "excel"
     source_file.sheet = "Records"
 
@@ -153,7 +157,7 @@ def test_render_source_file_view__confirming_remove_awaits_async_on_remove(
         removed.append(None)
 
     render_source_file_view(
-        panes.middle, _source_file([]), records_in_library=3, on_remove=on_remove
+        panes.middle, _source_file([], {}), records_in_library=3, on_remove=on_remove
     )
 
     _click(_button(panes.middle, "Remove from library"))
@@ -179,8 +183,43 @@ def test_render_source_file_view__shows_saved_mapping_readonly() -> None:
         for element in middle.descendants()
         if isinstance(element, ui.select)
     }
-    assert set(selects) == {"title", "ignore"}
+    assert {"title", "ignore"} <= set(selects)
     assert all("readonly" in select.props for select in selects.values())
     labels = _labels(middle)
-    assert "Field mapping" in labels
+    assert "Field mapping" not in labels
     assert "An abstract" in labels
+
+
+def _toggle(middle: Element) -> ui.toggle:
+    return next(e for e in middle.descendants() if isinstance(e, ui.toggle))
+
+
+def test_render_source_file_view__toggle_switches_between_mapping_and_parsing() -> None:
+    middle, _ = _render()
+    toggle = _toggle(middle)
+    assert toggle.parent_slot is not None
+    _, mapping, parsing = toggle.parent_slot.children
+    assert toggle.value == "mapping"
+    assert mapping.visible and not parsing.visible
+
+    toggle.value = "parsing"
+
+    assert parsing.visible and not mapping.visible
+
+
+def test_render_source_file_view__parsing_shows_stored_choices_readonly() -> None:
+    middle, _ = _render(
+        quirk_choices={
+            "ExpandPageRange": {"on": False, "values": {}},
+            "FirstValue.issn": {"on": True, "values": {"delimiter": ";"}},
+        }
+    )
+
+    checkboxes = [e for e in middle.descendants() if isinstance(e, ui.checkbox)]
+    inputs = {
+        e.value: e for e in middle.descendants() if isinstance(e, ui.input) and e.value
+    }
+    assert checkboxes and all("disable" in box.props for box in checkboxes)
+    assert ";" in inputs
+    assert "readonly" in inputs[";"].props
+    assert "Expand short page ranges" in [box.text for box in checkboxes]

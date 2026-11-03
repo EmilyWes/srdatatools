@@ -5,11 +5,21 @@ from app.parsers.profiles import apply_profile, has_profile, profile_for
 from app.parsers.profiles.base import FormatProfile, never_matches
 from app.parsers.profiles.default import (
     DEFAULT_PROFILES,
+    default_quirks,
     default_row_defaults,
     default_settings,
 )
 from app.parsers.profiles.pubmed import PUBMED
-from app.parsers.quirks import FirstValue, ParseSettings, StripPrefix
+from app.parsers.profiles.scopus import SCOPUS
+from app.parsers.quirks import (
+    DropEtAl,
+    EmbeddedAuthorIds,
+    ExpandPageRange,
+    FirstValue,
+    ParseSettings,
+    StripLastAuthorTrailing,
+    StripPrefix,
+)
 
 
 def test_profile_for__returns_format_profile_of_known_source() -> None:
@@ -39,6 +49,43 @@ def test_default_profiles__turn_on_the_generic_quirks() -> None:
         assert settings.skip_issn_isbn_qualifiers
         assert settings.minus_one_unlabeled
         assert settings.ambiguous_name_split == "none"
+
+
+def test_default_profiles__turn_on_the_generic_quirks_for_every_type() -> None:
+    for profile in DEFAULT_PROFILES.values():
+        assert FirstValue("isbn", "\n") in profile.quirks
+        assert FirstValue("issn", "|") in profile.quirks
+        assert DropEtAl() in profile.quirks
+        assert StripPrefix("pmid", "https://pubmed.ncbi.nlm.nih.gov/") in (
+            profile.quirks
+        )
+        assert ExpandPageRange() in profile.quirks
+        [placeholder] = profile.settings.continue_to_next
+        assert placeholder.field == "title"
+        assert placeholder.matches("[Not Available].")
+
+
+def test_default_profiles__nbib_keeps_first_publication_type() -> None:
+    assert FirstValue("publication_type", "\n") in DEFAULT_PROFILES["nbib"].quirks
+    assert FirstValue("publication_type", "\n") not in DEFAULT_PROFILES["ris"].quirks
+
+
+def test_default_quirks__profile_quirks_come_after_the_type_defaults() -> None:
+    own = StripPrefix("doi", "x")
+
+    assert default_quirks("ris", own) == (*DEFAULT_PROFILES["ris"].quirks, own)
+
+
+def test_profiles__build_on_their_type_defaults() -> None:
+    pubmed_csv = PUBMED.formats["csv"].quirks
+    scopus_csv = SCOPUS.formats["csv"].quirks
+
+    assert pubmed_csv[: len(DEFAULT_PROFILES["csv"].quirks)] == (
+        DEFAULT_PROFILES["csv"].quirks
+    )
+    assert StripLastAuthorTrailing(".") in pubmed_csv
+    assert StripLastAuthorTrailing(".") not in scopus_csv
+    assert EmbeddedAuthorIds("scopus_author_id") not in DEFAULT_PROFILES["csv"].quirks
 
 
 def test_default_settings__overrides_the_type_default() -> None:

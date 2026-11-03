@@ -49,6 +49,7 @@ from app.gui.record_table import (
 from app.gui.source_file_view import render_source_file_view
 from app.parsers.common import FileSummary
 from app.parsers.mapping import FieldMapping
+from app.parsers.profiles.overview import QuirkChoices
 
 _engine = get_engine()
 
@@ -209,12 +210,20 @@ def home() -> None:
         mapping: FieldMapping,
         source: str,
         sheet: str | None,
+        choices: QuirkChoices,
     ) -> None:
         def store() -> list[int]:
             with session_scope(_engine) as session:
                 source_files = [
                     import_file(
-                        session, path, file_type, mapping, summary, source, sheet
+                        session,
+                        path,
+                        file_type,
+                        mapping,
+                        summary,
+                        source,
+                        sheet,
+                        choices,
                     )
                     for path, summary in files
                 ]

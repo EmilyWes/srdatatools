@@ -126,6 +126,26 @@ def test_run_migrations__source_file_mapping_columns_default_to_empty(
     assert row == ("{}", "{}", "{}")
 
 
+def test_run_migrations__source_file_quirk_choices_default_to_empty(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "migration_test.db"
+
+    run_migrations(db_path)
+
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.execute(
+            "insert into source_file (filename, format, imported_at, skipped_rows)"
+            " values ('export.ris', 'ris', '2026-01-01 00:00:00', '[]')"
+        )
+        row = connection.execute("select quirk_choices from source_file").fetchone()
+    finally:
+        connection.close()
+
+    assert row == ("{}",)
+
+
 def test_run_migrations__activity_log_status_defaults_to_ok(tmp_path: Path) -> None:
     db_path = tmp_path / "migration_test.db"
 
