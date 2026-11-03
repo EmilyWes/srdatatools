@@ -157,7 +157,7 @@ _LABELING = QuirkBox(
     (
         QuirkItem(
             "minus_one_unlabeled",
-            "ASReview -1 is unlabeled",
+            "-1 is unlabeled",
             "ASReview writes -1 for records nobody has screened yet;"
             " reads it as unlabeled instead of unknown.",
             "checkbox",
@@ -268,7 +268,7 @@ _RIS_NOTES_ITEM = QuirkItem(
 )
 _RIS_AUTHOR_DETAILS = QuirkItem(
     "ris.author_details",
-    "Author details attach to the author above",
+    "Author handling",
     "An AD/C1 (affiliation), ORCID or ID line only belongs to the author directly"
     " above it. Any other tag in between ends that author, so Scopus's"
     " affiliation block after all authors isn't pinned on the last one.",

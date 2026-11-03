@@ -34,13 +34,16 @@ _FIELD_CSS = """
     min-height: 0;
 }
 """
-# One label width in every box, so the controls line up across boxes.
-_GRID_STYLE = "grid-template-columns: 10rem auto"
+# Controls line up within a box, after its longest label.
+_GRID_STYLE = "grid-template-columns: max-content auto"
 _GRID_CLASSES = "grid items-center gap-x-3 gap-y-1 w-full"
 _CHECKBOX_SIZE = "32px"
-_FIELD_CLASSES = "quirk-field text-xs w-40"
+_FIELD_CLASSES = "quirk-field text-xs w-32"
 _TOOLTIP_CLASSES = "max-w-sm text-xs"
-_NOTE_CLASSES = "col-span-2 text-sm text-grey-6"
+_NOTE_CLASSES = "col-span-2 text-xs text-grey-6"
+# One width for every box; fits a label, a control and a remove button.
+_BOX_CLASSES = "w-72 border border-gray-300 rounded px-3 pb-2"
+_TITLE_CLASSES = "mx-auto px-1 text-sm font-bold"
 
 Widget = ui.checkbox | ui.input | ui.number | ui.select
 _W = TypeVar("_W", bound=Widget)
@@ -117,7 +120,7 @@ class QuirksScreen:
         return widget
 
     def _label(self, item: QuirkItem) -> None:
-        with ui.label(item.label).classes("text-sm"):
+        with ui.label(item.label).classes("text-xs"):
             ui.tooltip(item.hover).classes(_TOOLTIP_CLASSES)
 
     def _render_item(self, item: QuirkItem, value: Any) -> None:
@@ -241,8 +244,11 @@ class QuirksScreen:
             self.refresh_ordering()
 
     def render_box(self, box: QuirkBox, chosen: ParsingChoices) -> None:
-        ui.label(box.title).classes("text-base font-bold")
-        with ui.element("div").classes(_GRID_CLASSES).style(_GRID_STYLE):
+        with ui.element("fieldset").classes(_BOX_CLASSES):
+            with ui.element("legend").classes(_TITLE_CLASSES):
+                ui.label(box.title)
+            grid = ui.element("div").classes(_GRID_CLASSES).style(_GRID_STYLE)
+        with grid:
             for item in box.items:
                 if isinstance(item, QuirkList):
                     self._render_list(item)
@@ -271,14 +277,13 @@ def render_quirks_overview(
     )
     ui.add_css(_FIELD_CSS)
     container.clear()
-    with container, ui.column().classes("gap-1 w-full max-w-2xl"):
-        for i, box in enumerate(boxes):
-            if i:
-                ui.separator().classes("my-2")
-            screen.render_box(box, shown)
+    with container, ui.column().classes("gap-1 w-full"):
+        with ui.row().classes("w-full items-start gap-3"):
+            for box in boxes:
+                screen.render_box(box, shown)
         if not screen.readonly:
             with ui.row().classes("w-full justify-end"):
                 ui.button("Restore defaults", on_click=screen.restore_defaults).props(
                     "dense flat no-caps"
-                )
+                ).classes("text-xs")
     return screen

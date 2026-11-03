@@ -60,19 +60,25 @@ def test_render_quirks_overview__defaults_give_the_profile_defaults() -> None:
     assert screen.current_choices() == default_choices("csv", "scopus")
 
 
-def test_render_quirks_overview__boxes_in_order_separated_by_lines() -> None:
+def test_render_quirks_overview__boxes_in_order_with_title_in_the_border() -> None:
     middle = shell().middle
 
     _render("ris", middle=middle)
 
-    labels = _labels(middle)
-    titles = ["ISSN/ISBN", "Authors", "Labeling", "Empty values", "Ordering"]
-    titles += ["Identifiers", "Other", "RIS"]
-    assert [labels.index(title) for title in titles] == sorted(
-        labels.index(title) for title in titles
-    )
-    separators = [e for e in middle.descendants() if isinstance(e, ui.separator)]
-    assert len(separators) == len(titles) - 1
+    boxes = [e for e in middle.descendants() if e.tag == "fieldset"]
+    legends = [box.default_slot.children[0] for box in boxes]
+    assert all(legend.tag == "legend" for legend in legends)
+    assert [_labels(legend) for legend in legends] == [
+        ["ISSN/ISBN"],
+        ["Authors"],
+        ["Labeling"],
+        ["Empty values"],
+        ["Ordering"],
+        ["Identifiers"],
+        ["Other"],
+        ["RIS"],
+    ]
+    assert all("border" in box.classes for box in boxes)
 
 
 def test_render_quirks_overview__label_hover_shows_the_explanation() -> None:
