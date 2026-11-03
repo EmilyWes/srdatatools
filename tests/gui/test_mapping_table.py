@@ -281,10 +281,10 @@ def test_render_mapping_table__options_have_short_labels_with_full_tooltips() ->
         for name, label in labels.items()
     }
     assert {name: label.text for name, label in labels.items()} == {
-        "role": "role",
-        "delimiter": "aut",
-        "separator": "name",
-        "id_key": "key",
+        "role": "role:",
+        "delimiter": "aut:",
+        "separator": "name:",
+        "id_key": "key:",
     }
     assert tooltips == {
         "role": ["Role"],

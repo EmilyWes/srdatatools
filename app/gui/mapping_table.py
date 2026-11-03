@@ -75,7 +75,7 @@ class _Option:
 
 _OPTION_ROW_CLASSES = "w-full no-wrap items-center gap-1"
 # Fixed width so the boxes line up whatever the label.
-_OPTION_LABEL_CLASSES = "w-9 shrink-0 text-xs text-grey-7"
+_OPTION_LABEL_CLASSES = "w-11 shrink-0 text-xs text-grey-7"
 
 _OPTIONS: dict[str, tuple[_Option, ...]] = {
     DATE_TARGET: (
@@ -362,7 +362,7 @@ class MappingScreen:
         row.option_rows = {}
         for option in _OPTIONS.get(target, ()):
             with row.options, ui.row().classes(_OPTION_ROW_CLASSES) as option_row:
-                ui.label(option.short).classes(_OPTION_LABEL_CLASSES).tooltip(
+                ui.label(f"{option.short}:").classes(_OPTION_LABEL_CLASSES).tooltip(
                     option.label
                 )
                 widget: ui.select | ui.input
