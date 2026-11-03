@@ -754,3 +754,74 @@ def test_render_mapping_table__chosen_label_prefills_readonly_inputs() -> None:
     assert (phase.value, screener.value) == ("tiab", "Emily")
     assert "readonly" in phase.props
     assert "readonly" in screener.props
+
+
+def _option_color(screen: MappingScreen, header: str, name: str) -> str:
+    return str(screen._row_for(header).inputs[name].props["bg-color"])
+
+
+def test_render_mapping_table__options_fitting_the_example_are_green() -> None:
+    screen = _render_samples({"Authors": "Smith, J; Doe, J", "Year": "2020"})
+
+    assert _option_color(screen, "Authors", "role") == "green-2"
+    assert _option_color(screen, "Authors", "delimiter") == "green-2"
+    assert _option_color(screen, "Authors", "separator") == "green-2"
+    assert _option_color(screen, "Year", "part") == "green-2"
+
+
+def test_render_mapping_table__changed_option_turns_blue_and_back() -> None:
+    screen = _render_samples({"Authors": "Smith, J; Doe, J"})
+
+    screen.set_option("Authors", "role", "full_name")
+    assert _option_color(screen, "Authors", "role") == "blue-2"
+
+    screen.set_option("Authors", "role", "last_first")
+    assert _option_color(screen, "Authors", "role") == "green-2"
+
+
+def test_render_mapping_table__typing_the_placeholder_is_not_a_change() -> None:
+    screen = _render_samples({"Keywords": "a; b"})
+
+    screen.set_option("Keywords", "delimiter", ";")
+
+    assert _option_color(screen, "Keywords", "delimiter") == "green-2"
+
+
+def test_render_mapping_table__separators_missing_from_example_are_orange() -> None:
+    screen = _render_samples({"Authors": "Smith J; Doe J", "Keywords": "a, b"})
+
+    assert _option_color(screen, "Authors", "delimiter") == "green-2"
+    assert _option_color(screen, "Authors", "separator") == "orange-2"
+    assert _option_color(screen, "Keywords", "delimiter") == "orange-2"
+    assert _option_color(screen, "Keywords", "prefix") == "green-2"
+
+
+def test_render_mapping_table__changed_option_beats_orange() -> None:
+    screen = _render_samples({"Keywords": "a, b"})
+
+    screen.set_option("Keywords", "delimiter", ",")
+
+    assert _option_color(screen, "Keywords", "delimiter") == "blue-2"
+
+
+def test_render_mapping_table__ambiguous_example_date_makes_order_orange() -> None:
+    screen = _render_samples({"Date": "03/04/2020", "Created": "14/05/2020"})
+    screen.set_target("Created", "date")
+
+    assert _option_color(screen, "Date", "order") == "orange-2"
+    assert _option_color(screen, "Created", "order") == "green-2"
+
+
+def test_render_mapping_table__not_parsed_row_has_orange_options() -> None:
+    screen = _render_samples({"Pages": "x"})
+    screen.set_target("Pages", "date")
+
+    assert _result(screen, "Pages") == "not parsed"
+    assert _option_color(screen, "Pages", "part") == "orange-2"
+
+
+def test_render_mapping_table__empty_example_gives_no_orange() -> None:
+    screen = _render(["Authors"])
+
+    assert _option_color(screen, "Authors", "delimiter") == "green-2"
+    assert _option_color(screen, "Authors", "separator") == "green-2"

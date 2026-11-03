@@ -350,6 +350,15 @@ def _parse_numeric_date(match: re.Match[str], order: DateOrder) -> PartialDate |
     return _build_partial_date(int(match["year"]), month, day)
 
 
+def is_ambiguous_date(value: str) -> bool:
+    """A numeric date whose day/month order changes what it means."""
+    match = _NUMERIC_DATE.match(value.strip())
+    if match is None:
+        return False
+    first, second = int(match["first"]), int(match["second"])
+    return first != second and first <= _MAX_MONTH and second <= _MAX_MONTH
+
+
 def parse_date_string(value: str, order: DateOrder = "eu") -> PartialDate | None:
     stripped = value.strip()
     numeric = _NUMERIC_DATE.match(stripped)

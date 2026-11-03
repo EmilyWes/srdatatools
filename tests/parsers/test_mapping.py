@@ -18,6 +18,7 @@ from app.parsers.mapping import (
     Suggest,
     apply_mapping,
     default_row,
+    is_ambiguous_date,
     make_row,
     normalize_label,
     override_aliases,
@@ -446,6 +447,23 @@ def test_parse_date_string__rejects_impossible_or_mixed_numeric_date(
     value: str,
 ) -> None:
     assert parse_date_string(value) is None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("03/04/2020", True),
+        (" 3.4.2020 ", True),
+        ("03/03/2020", False),
+        ("14/05/2020", False),
+        ("2020-03-04", False),
+        ("March 4, 2020", False),
+    ],
+)
+def test_is_ambiguous_date__only_when_order_changes_the_date(
+    value: str, expected: bool
+) -> None:
+    assert is_ambiguous_date(value) is expected
 
 
 def test_apply_mapping__keywords_use_row_delimiter_and_prefix() -> None:

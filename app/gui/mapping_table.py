@@ -27,6 +27,7 @@ from app.parsers.mapping import (
     RowDefaults,
     RowMapping,
     default_row,
+    is_ambiguous_date,
     row_with,
 )
 
@@ -137,6 +138,20 @@ def _shows_option(row: RowMapping, name: str) -> bool:
         delimiter: str = getattr(row, name)
         return delimiter != LINE_DELIMITER
     return True
+
+
+def _needs_a_look(row: RowMapping, name: str, sample: str) -> bool:
+    if not sample:
+        return False
+    if name == "delimiter":
+        delimiter: str = getattr(row, name)
+        return delimiter not in sample
+    if isinstance(row, AuthorsRow) and name == "separator":
+        names = sample.split(row.delimiter)
+        return not any(row.separator in author for author in names)
+    if isinstance(row, DateRow) and name == "order":
+        return is_ambiguous_date(sample)
+    return False
 
 
 _FIELD_ORDER = (
@@ -368,6 +383,20 @@ class MappingScreen:
             if text:
                 with row.result:
                     ui.tooltip(text)
+            if mapped is not None:
+                self._refresh_option_colors(row, mapped, failed=status == "red")
+
+    def _refresh_option_colors(
+        self, row: _Row, mapped: RowMapping, failed: bool
+    ) -> None:
+        assert row.base is not None
+        for name, widget in row.inputs.items():
+            status: str = "green"
+            if getattr(mapped, name) != getattr(row.base, name):
+                status = _CHANGED
+            elif failed or _needs_a_look(mapped, name, row.sample.text):
+                status = "orange"
+            widget.props(f"bg-color={_STATUS_COLORS[status]}")
 
     def on_target_change(self, row: _Row) -> None:
         self._build_options(row)
