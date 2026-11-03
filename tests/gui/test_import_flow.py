@@ -33,7 +33,12 @@ from app.gui.layout import shell
 from app.gui.mapping_table import MappingScreen
 from app.parsers.common import FileSummary
 from app.parsers.mapping import AuthorsRow, FieldMapping
-from app.parsers.profiles.overview import QuirkChoice, QuirkChoices
+from app.parsers.profiles.overview import (
+    QuirkChoice,
+    QuirkChoices,
+    load_choices,
+    quirk_entries,
+)
 from tests.gui.clicks import click_and_wait
 from tests.mappings import mapping_of, targets_of
 
@@ -268,6 +273,28 @@ def test_import_file__saves_mapping_suggestion_and_summary(
         "filled": {"Title": 2, "DOI": 1},
         "total_rows": 2,
     }
+
+
+def test_import_file__saves_every_parsing_choice(
+    session: Session, tmp_path: Path
+) -> None:
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Title\nSome Paper\n")
+    choices = {"DropEtAl": QuirkChoice(on=False)}
+
+    source_file = import_file(
+        session,
+        csv_path,
+        "csv",
+        mapping_of({"Title": "title"}),
+        _summary("csv", csv_path),
+        choices=choices,
+    )
+
+    stored = load_choices(source_file.quirk_choices)
+    assert stored["DropEtAl"] == QuirkChoice(on=False)
+    assert stored["FirstValue.issn"] == QuirkChoice(on=True, values={"delimiter": "|"})
+    assert set(stored) == {e.key for e in quirk_entries("csv", "unknown")}
 
 
 def test_import_file__unsupported_type_raises(session: Session, tmp_path: Path) -> None:

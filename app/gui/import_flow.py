@@ -48,7 +48,12 @@ from app.parsers.profiles import (
     has_profile,
     profile_for,
 )
-from app.parsers.profiles.overview import QuirkChoices, profile_with, quirk_entries
+from app.parsers.profiles.overview import (
+    QuirkChoices,
+    dump_choices,
+    profile_with,
+    quirk_entries,
+)
 from app.parsers.quirks import ParseSettings
 from app.parsers.ris import (
     parse_ris_file,
@@ -283,6 +288,12 @@ def _store(
     source_file.field_mapping = mapping.model_dump()
     source_file.suggested_mapping = _suggestion(handlers, summary).model_dump()
     source_file.file_summary = asdict(summary)
+    source_file.quirk_choices = dump_choices(
+        {
+            entry.key: choices.get(entry.key, entry.default)
+            for entry in quirk_entries(file_type, source)
+        }
+    )
     log_import(session, source_file)
     return source_file
 

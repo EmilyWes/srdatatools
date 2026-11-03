@@ -59,6 +59,7 @@ class SourceFile(Base):
     field_mapping: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     suggested_mapping: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     file_summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    quirk_choices: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     record_sources: Mapped[list["RecordSource"]] = relationship(
         back_populates="source_file", cascade="all, delete-orphan"
