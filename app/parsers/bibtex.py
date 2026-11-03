@@ -1,13 +1,11 @@
 import logging
 import re
 import unicodedata
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from itertools import zip_longest
 from pathlib import Path
 
-from app.models.record import Author
-from app.parsers.authors import author_from_name
 from app.parsers.common import (
     FileSummary,
     ParsedRow,
@@ -16,7 +14,15 @@ from app.parsers.common import (
     SummaryBuilder,
     decode_file,
 )
-from app.parsers.mapping import FieldMapping, apply_mapping, override_aliases
+from app.parsers.mapping import (
+    LINE_DELIMITER,
+    AuthorsRow,
+    FieldMapping,
+    RowDefaults,
+    Suggest,
+    apply_mapping,
+    override_aliases,
+)
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
 from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
@@ -26,26 +32,31 @@ logger = logging.getLogger(__name__)
 TYPE_KEY = "@type"
 CITATION_KEY = "@key"
 
-_SUGGESTION_ALIASES: dict[str, list[str]] = {
-    "title": ["title"],
-    "authors": ["author"],
-    "abstract": ["abstract"],
-    "journal": ["journal", "booktitle"],
-    "volume": ["volume"],
-    "issue": ["number"],
-    "pages": ["pages"],
-    "doi": ["doi"],
-    "issn": ["issn"],
-    "isbn": ["isbn"],
-    "year": ["year"],
-    "month": ["month"],
-    "keywords": ["keywords"],
-    "publisher": ["publisher"],
-    "url": ["url"],
-    "notes": ["note"],
-    "language": ["language"],
-    "publication_type": [TYPE_KEY],
+_SCALARS = {
+    "title": "title",
+    "abstract": "abstract",
+    "journal": "journal",
+    "booktitle": "journal",
+    "volume": "volume",
+    "number": "issue",
+    "doi": "doi",
+    "publisher": "publisher",
+    "url": "url",
+    "note": "notes",
+    "language": "language",
+    TYPE_KEY: "publication_type",
 }
+_SUGGESTIONS: dict[str, Suggest] = {
+    **{alias: Suggest(target) for alias, target in _SCALARS.items()},
+    "author": Suggest("authors"),
+    "pages": Suggest("pages"),
+    "issn": Suggest("issn_isbn", {"kind": "issn"}),
+    "isbn": Suggest("issn_isbn", {"kind": "isbn"}),
+    "year": Suggest("date", {"part": "year"}),
+    "month": Suggest("date", {"part": "month"}),
+    "keywords": Suggest("keywords"),
+}
+ROW_DEFAULTS = RowDefaults(author_delimiter=LINE_DELIMITER)
 
 _IGNORED_ENTRY_TYPES = frozenset({"comment", "string", "preamble"})
 _ENTRY_START = re.compile(
@@ -61,8 +72,6 @@ _LITERAL_DASH_FIELDS = frozenset({"url", "doi"})
 
 _AUTHOR_SEPARATOR = re.compile(r"\s+and\s+", re.IGNORECASE)
 _AUTHOR_FIELD = "author"
-# BibTeX names are "Family, Given" or "Given Family"; only the first is split.
-_NAME_SEPARATOR = ","
 
 _COMBINING_ACCENTS = {
     '"': "\u0308",
@@ -225,15 +234,9 @@ def _split_authors(value: str) -> list[str]:
     return names
 
 
-def _authors_from_fields(
-    raw_fields: dict[str, str], keys: list[str], settings: ParseSettings
-) -> list[Author]:
-    return [
-        author_from_name(name, _NAME_SEPARATOR, settings.ambiguous_name_split)
-        for key in keys
-        for raw_name in _split_authors(raw_fields.get(key, ""))
-        if (name := clean_value(_AUTHOR_FIELD, raw_name))
-    ]
+def _author_lines(value: str) -> str:
+    names = (clean_value(_AUTHOR_FIELD, name) for name in _split_authors(value))
+    return LINE_DELIMITER.join(name for name in names if name)
 
 
 def parse_bibtex_record(
@@ -243,11 +246,10 @@ def parse_bibtex_record(
 ) -> ParsedRow:
     raw_fields = dict(lines)
     cleaned = {key: clean_value(key, value) for key, value in raw_fields.items()}
+    for key, _ in mapping.rows_of(AuthorsRow):
+        if key in raw_fields:
+            cleaned[key] = _author_lines(raw_fields[key])
     record = apply_mapping(cleaned, mapping, settings)
-    author_keys = [k for k, t in mapping.targets.items() if t == "authors"]
-    if author_keys:
-        authors = _authors_from_fields(raw_fields, author_keys, settings)
-        record = record.model_copy(update={"authors": authors})
     return ParsedRow(record=record, raw_fields=raw_fields)
 
 
@@ -284,7 +286,9 @@ def read_bibtex_fields(path: Path) -> FileSummary:
 
 
 def suggest_bibtex_mapping(
-    keys: list[str], alias_overrides: dict[str, list[str]] | None = None
+    keys: list[str],
+    overrides: Mapping[str, Suggest] | None = None,
+    defaults: RowDefaults = ROW_DEFAULTS,
 ) -> FieldMapping:
-    aliases = override_aliases(_SUGGESTION_ALIASES, alias_overrides or {})
-    return _suggest_mapping(keys, aliases, lenient=False)
+    suggestions = override_aliases(_SUGGESTIONS, overrides or {})
+    return _suggest_mapping(keys, suggestions, defaults, lenient=False)

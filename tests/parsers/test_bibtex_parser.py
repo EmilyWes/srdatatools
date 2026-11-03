@@ -1,19 +1,21 @@
 from pathlib import Path
 
 from app.parsers.bibtex import (
+    ROW_DEFAULTS,
     parse_bibtex_file,
     parse_bibtex_record,
     parse_bibtex_text,
     read_bibtex_fields,
     suggest_bibtex_mapping,
 )
-from app.parsers.mapping import FieldMapping
+from app.parsers.mapping import AuthorsRow, DateRow, Suggest
+from tests.mappings import mapping_of, targets_of
 from tests.vendor_data import vendor_file
 
 BIBTEX_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "general"
 
-_MAPPING = FieldMapping(
-    targets={
+_MAPPING = mapping_of(
+    {
         "@type": "publication_type",
         "title": "title",
         "journal": "journal",
@@ -21,11 +23,12 @@ _MAPPING = FieldMapping(
         "keywords": "keywords",
         "pages": "pages",
         "volume": "volume",
-        "year": "year",
-        "month": "month",
+        "year": Suggest("date", {"part": "year"}),
+        "month": Suggest("date", {"part": "month"}),
         "note": "notes",
         "author": "authors",
     },
+    ROW_DEFAULTS,
 )
 
 
@@ -292,7 +295,7 @@ def test_parse_bibtex_text__double_dash_becomes_en_dash() -> None:
 
 def test_parse_bibtex_text__keeps_double_dash_in_url_and_doi() -> None:
     text = "@article{key1, url = {https://x.org/a--b}, doi = {10.1/a--b}}"
-    mapping = FieldMapping(targets={"url": "url", "doi": "doi"})
+    mapping = mapping_of({"url": "url", "doi": "doi"})
 
     record = parse_bibtex_text(text, mapping).rows[0].record
 
@@ -312,7 +315,7 @@ def test_parse_bibtex_text__normalizes_page_ranges() -> None:
     assert [record.pages for record in records] == ["101-115", "19-65", "e1234"]
 
 
-def test_parse_bibtex_text__splits_keywords_on_list_delimiter() -> None:
+def test_parse_bibtex_text__splits_keywords_on_row_delimiter() -> None:
     text = "@article{key1, keywords = {machine learning; systematic review}}"
 
     record = parse_bibtex_text(text, _MAPPING).rows[0].record
@@ -372,7 +375,7 @@ def test_parse_bibtex_text__given_family_author_keeps_full_name_only() -> None:
     assert author.given_name is None
 
 
-def test_parse_bibtex_text__authors_ignore_list_delimiter() -> None:
+def test_parse_bibtex_text__authors_ignore_keyword_delimiter() -> None:
     text = "@article{key1, author = {Smith; Jr., John and Doe, Jane}}"
 
     authors = parse_bibtex_text(text, _MAPPING).rows[0].record.authors
@@ -381,7 +384,7 @@ def test_parse_bibtex_text__authors_ignore_list_delimiter() -> None:
 
 
 def test_parse_bibtex_record__unmapped_author_field_adds_no_authors() -> None:
-    mapping = FieldMapping(targets={"title": "title"})
+    mapping = mapping_of({"title": "title"})
 
     row = parse_bibtex_record([("title", "T"), ("author", "Doe, Jane")], mapping)
 
@@ -426,30 +429,31 @@ def test_suggest_bibtex_mapping__maps_common_fields() -> None:
 
     mapping = suggest_bibtex_mapping(keys)
 
-    assert mapping.targets == {
+    assert targets_of(mapping) == {
         "@type": "publication_type",
         "author": "authors",
         "title": "title",
         "journal": "journal",
-        "year": "year",
-        "month": "month",
+        "year": "date",
+        "month": "date",
         "number": "issue",
     }
-    assert mapping.list_delimiter == ";"
+    assert mapping.rows["author"] == AuthorsRow(delimiter="\n", id_key="author")
+    assert mapping.rows["year"] == DateRow(part="year")
 
 
 def test_suggest_bibtex_mapping__booktitle_maps_to_journal() -> None:
     mapping = suggest_bibtex_mapping(["booktitle"])
 
-    assert mapping.targets == {"booktitle": "journal"}
+    assert targets_of(mapping) == {"booktitle": "journal"}
 
 
 def test_suggest_bibtex_mapping__applies_alias_overrides() -> None:
     mapping = suggest_bibtex_mapping(
-        ["type", "@type"], alias_overrides={"publication_type": ["type"]}
+        ["type", "@type"], overrides={"type": Suggest("publication_type")}
     )
 
-    assert mapping.targets == {"type": "publication_type"}
+    assert targets_of(mapping) == {"type": "publication_type"}
 
 
 def test_parse_bibtex_file__default_mapping_on_realistic_export() -> None:

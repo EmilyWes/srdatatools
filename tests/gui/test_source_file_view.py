@@ -10,8 +10,8 @@ from app.db.models import SourceFile
 from app.gui.layout import shell
 from app.gui.source_file_view import render_source_file_view
 from app.parsers.common import FileSummary
-from app.parsers.mapping import FieldMapping
 from tests.gui.clicks import click_and_wait
+from tests.mappings import mapping_of
 
 
 def _source_file(skipped_rows: list[dict[str, Any]]) -> SourceFile:
@@ -23,12 +23,8 @@ def _source_file(skipped_rows: list[dict[str, Any]]) -> SourceFile:
         imported_at=datetime.datetime(2026, 1, 1, 9, 5),
         row_count=3,
         skipped_rows=skipped_rows,
-        field_mapping=asdict(
-            FieldMapping(targets={"TI": "title"}, list_delimiter="\n")
-        ),
-        suggested_mapping=asdict(
-            FieldMapping(targets={"TI": "title", "AB": "abstract"}, list_delimiter="\n")
-        ),
+        field_mapping=mapping_of({"TI": "title"}).model_dump(),
+        suggested_mapping=mapping_of({"TI": "title", "AB": "abstract"}).model_dump(),
         file_summary=asdict(
             FileSummary({"TI": "A title", "AB": "An abstract"}, {"TI": 3, "AB": 2}, 3)
         ),

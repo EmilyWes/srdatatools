@@ -8,18 +8,26 @@ from nicegui.element import Element
 from app.models.record import Author, PartialDate, Record
 from app.parsers.common import FileSummary
 from app.parsers.mapping import (
-    DATE_TARGETS,
-    DEFAULT_PHASE,
-    DEFAULT_SCREENER,
-    EXCLUSIVE_TARGETS,
+    AUTHORS_TARGET,
+    DATE_TARGET,
     ISSN_ISBN_TARGET,
+    KEYWORDS_TARGET,
     LABEL_TARGET,
-    LIST_TARGETS,
-    OTHER_IDS_PREFIX,
-    PAGE_TARGETS,
-    SCALAR_FIELDS,
+    LINE_DELIMITER,
+    OTHER_IDS_TARGET,
+    PAGES_TARGET,
+    TARGETS,
+    AuthorsRow,
+    DateRow,
     FieldMapping,
-    default_other_id_key,
+    IssnIsbnRow,
+    LabelRow,
+    OtherIdRow,
+    PagesRow,
+    RowDefaults,
+    RowMapping,
+    default_row,
+    row_with,
 )
 
 _ROW_FIELD_CSS = """
@@ -39,29 +47,96 @@ _ROW_FIELD_CSS = """
 """
 
 _IGNORE = "ignore"
-_OTHER_IDS = "other_ids"
-
-_BASE_TARGET_KEYS = (
-    _IGNORE,
-    *sorted({*SCALAR_FIELDS, ISSN_ISBN_TARGET}),
-    *LIST_TARGETS,
-    _OTHER_IDS,
-    LABEL_TARGET,
-)
-_ALL_TARGET_KEYS = (*_BASE_TARGET_KEYS, *EXCLUSIVE_TARGETS)
+_TARGET_KEYS = (_IGNORE, *TARGETS)
 
 _LABELS: dict[str, str] = {
     "doi": "DOI",
-    "issn": "ISSN",
-    "isbn": "ISBN",
     ISSN_ISBN_TARGET: "ISSN/ISBN",
     "pmid": "PMID",
-    "date": "Publication date (full)",
-    "year": "Publication year",
-    "month": "Publication month",
-    "day": "Publication day",
-    _OTHER_IDS: "Other ID",
+    "date": "Publication date",
+    OTHER_IDS_TARGET: "Other ID",
 }
+
+
+@dataclass(frozen=True)
+class _Option:
+    """An option shown under the dropdown: a select when it has choices, else a
+    text box whose grey placeholder is the default used when left empty."""
+
+    name: str
+    label: str
+    choices: dict[str, str] | None = None
+    # Delimiters, separators and prefixes may be or end in a space.
+    strip: bool = True
+
+
+_OPTIONS: dict[str, tuple[_Option, ...]] = {
+    DATE_TARGET: (
+        _Option(
+            "part",
+            "Part",
+            {"full": "Full date", "year": "Year", "month": "Month", "day": "Day"},
+        ),
+        _Option(
+            "order",
+            "Ambiguous dates",
+            {"eu": "Day before month (EU)", "us": "Month before day (US)"},
+        ),
+    ),
+    PAGES_TARGET: (
+        _Option(
+            "part",
+            "Part",
+            {
+                "range": "Range",
+                "start": "Start page",
+                "end": "End page",
+                "count": "Number of pages",
+            },
+        ),
+    ),
+    ISSN_ISBN_TARGET: (
+        _Option(
+            "kind", "Kind", {"auto": "Auto (by length)", "issn": "ISSN", "isbn": "ISBN"}
+        ),
+    ),
+    OTHER_IDS_TARGET: (_Option("key", "ID key"),),
+    AUTHORS_TARGET: (
+        _Option(
+            "role",
+            "Role",
+            {
+                "full_name": "Full name (not split)",
+                "first_last": "Names: first, last",
+                "last_first": "Names: last, first",
+                "orcid": "ORCID",
+                "ids": "Author IDs",
+                "affiliations": "Affiliations",
+            },
+        ),
+        _Option("delimiter", "Delimiter", strip=False),
+        _Option("separator", "Name separator", strip=False),
+        _Option("id_key", "ID key"),
+    ),
+    KEYWORDS_TARGET: (
+        _Option("delimiter", "Delimiter", strip=False),
+        _Option("prefix", "Prefix", strip=False),
+    ),
+    LABEL_TARGET: (_Option("phase", "Phase"), _Option("screener", "Screener")),
+}
+
+
+def _shows_option(row: RowMapping, name: str) -> bool:
+    if isinstance(row, DateRow) and name == "order":
+        return row.part == "full"
+    if isinstance(row, AuthorsRow) and name == "separator":
+        return row.role in ("first_last", "last_first")
+    if isinstance(row, AuthorsRow) and name == "id_key":
+        return row.role == "ids"
+    if name == "delimiter":
+        delimiter: str = getattr(row, name)
+        return delimiter != LINE_DELIMITER
+    return True
 
 
 _FIELD_ORDER = (
@@ -76,20 +151,13 @@ _FIELD_ORDER = (
     "conference_name",
     "publication_type",
     "date",
-    "year",
-    "month",
-    "day",
     ISSN_ISBN_TARGET,
-    "issn",
-    "isbn",
     "volume",
     "issue",
     "pages",
-    "page_start",
-    "page_end",
     "language",
     "url",
-    _OTHER_IDS,
+    OTHER_IDS_TARGET,
     LABEL_TARGET,
     "notes",
 )
@@ -106,10 +174,10 @@ _STATUS_COLORS = {
 
 
 def _initial_status(header: str, suggestion: FieldMapping) -> Status:
-    target = suggestion.targets.get(header)
-    if target is None:
+    row = suggestion.rows.get(header)
+    if row is None:
         return "red"
-    shared = sum(t == target for t in suggestion.targets.values()) > 1
+    shared = sum(r.target == row.target for r in suggestion.rows.values()) > 1
     if shared or suggestion.match_kinds.get(header) != "exact":
         return "orange"
     return "green"
@@ -118,10 +186,8 @@ def _initial_status(header: str, suggestion: FieldMapping) -> Status:
 def _sorted_headers(headers: list[str], suggestion: FieldMapping) -> list[str]:
     def sort_key(header: str) -> tuple[int, int]:
         status = _initial_status(header, suggestion)
-        target = suggestion.targets.get(header, "")
-        if target.startswith(OTHER_IDS_PREFIX):
-            target = _OTHER_IDS
-        position = _FIELD_ORDER.index(target) if status != "red" else 0
+        row = suggestion.rows.get(header)
+        position = _FIELD_ORDER.index(row.target) if row is not None else 0
         return _STATUS_ORDER.index(status), position
 
     return sorted(headers, key=sort_key)
@@ -146,11 +212,7 @@ def _input_width_ch(headers: list[str]) -> int:
 
 
 def _mapping_width_ch() -> int:
-    return max(len(_option_label(key)) for key in _ALL_TARGET_KEYS) + _SELECT_CHROME_CH
-
-
-def _exclusive_available(header: str, target: str, taken: dict[str, str]) -> bool:
-    return taken.get(target) in (None, header)
+    return max(len(_option_label(key)) for key in _TARGET_KEYS) + _SELECT_CHROME_CH
 
 
 _LIST_SEPARATOR = " | "
@@ -195,21 +257,21 @@ def _date_text(date: PartialDate | None) -> str:
     return "-".join(part for part in parts if part)
 
 
-def _result_text(target: str, record: Record) -> str:
-    if target in DATE_TARGETS:
+def _result_text(row: RowMapping, record: Record) -> str:
+    if isinstance(row, DateRow):
         return _date_text(record.publication_date)
-    if target in PAGE_TARGETS:
+    if isinstance(row, PagesRow):
         return record.pages or ""
-    if target == ISSN_ISBN_TARGET:
+    if isinstance(row, IssnIsbnRow):
         ids = (("ISSN", record.issn), ("ISBN", record.isbn))
         return _LIST_SEPARATOR.join(f"{label} {value}" for label, value in ids if value)
-    if target.startswith(OTHER_IDS_PREFIX):
-        return record.other_ids.get(target.removeprefix(OTHER_IDS_PREFIX), "")
-    if target == "authors":
+    if isinstance(row, OtherIdRow):
+        return record.other_ids.get(row.key, "")
+    if row.target == "authors":
         return _LIST_SEPARATOR.join(map(_author_text, record.authors))
-    if target == "keywords":
+    if row.target == "keywords":
         return _LIST_SEPARATOR.join(record.keywords)
-    value: str | None = getattr(record, target)
+    value: str | None = getattr(record, row.target)
     return value or ""
 
 
@@ -220,11 +282,14 @@ class _Row:
     result: ui.label
     count: ui.linear_progress
     select: ui.select
-    phase: ui.input
-    screener: ui.input
-    other_id_key: str
+    options: ui.column
+    mapped: RowMapping | None
     status: Status
     initial_target: str
+    # The row the options start from: the suggested or chosen one while the
+    # target is unchanged, else the target's default.
+    base: RowMapping | None = None
+    inputs: dict[str, ui.select | ui.input] = field(default_factory=dict)
 
     @property
     def display_status(self) -> str:
@@ -234,48 +299,64 @@ class _Row:
 @dataclass
 class MappingScreen:
     preview: Callable[[FieldMapping], Record]
+    defaults: RowDefaults
+    # Read-only text boxes show the stored value itself rather than a placeholder.
+    readonly: bool = False
     rows: list[_Row] = field(default_factory=list)
-    list_delimiter: str = ";"
-    list_delimiter_input: ui.input | None = None
 
     def _row_for(self, header: str) -> _Row:
         return next(row for row in self.rows if row.header == header)
-
-    def _refresh_options(self) -> None:
-        taken: dict[str, str] = {}
-        for row in self.rows:
-            if row.select.value in EXCLUSIVE_TARGETS:
-                taken[row.select.value] = row.header
-
-        for row in self.rows:
-            keys = list(_BASE_TARGET_KEYS) + [
-                target
-                for target in EXCLUSIVE_TARGETS
-                if _exclusive_available(row.header, target, taken)
-            ]
-            row.select.set_options(_sorted_options(keys))
 
     def _refresh_colors(self) -> None:
         for row in self.rows:
             row.select.props(f"bg-color={_STATUS_COLORS[row.display_status]}")
 
-    def _refresh_label_inputs(self) -> None:
-        for row in self.rows:
-            is_label = row.select.value == LABEL_TARGET
-            row.phase.set_visibility(is_label)
-            row.screener.set_visibility(is_label)
+    def _build_options(self, row: _Row) -> None:
+        target = row.select.value
+        if target == _IGNORE:
+            row.base = None
+        elif row.mapped is not None and row.mapped.target == target:
+            row.base = row.mapped
+        else:
+            row.base = default_row(target, row.header, self.defaults)
+        row.inputs = {}
+        row.options.clear()
+        base = row.base.model_dump() if row.base is not None else {}
+        with row.options:
+            for option in _OPTIONS.get(target, ()):
+                widget: ui.select | ui.input
+                if option.choices is not None:
+                    widget = ui.select(option.choices, value=base[option.name])
+                    widget.props("dense options-dense outlined")
+                elif self.readonly:
+                    widget = ui.input(value=base[option.name]).props("dense outlined")
+                else:
+                    widget = ui.input(placeholder=base[option.name])
+                    widget.props("dense outlined")
+                if self.readonly:
+                    widget.props("readonly")
+                widget.classes("mapping-field text-xs w-full").tooltip(option.label)
+                widget.on_value_change(lambda _e: self.on_option_change(row))
+                row.inputs[option.name] = widget
+        self._refresh_option_visibility(row)
+
+    def _refresh_option_visibility(self, row: _Row) -> None:
+        mapped = self._row_mapping(row)
+        for name, widget in row.inputs.items():
+            widget.set_visibility(mapped is not None and _shows_option(mapped, name))
 
     def _refresh_results(self) -> None:
         mapping = self.current_mapping()
         record = self.preview(mapping)
-        label_headers = [k for k, t in mapping.targets.items() if t == LABEL_TARGET]
+        label_headers = [key for key, _ in mapping.rows_of(LabelRow)]
         for row in self.rows:
-            target = mapping.targets.get(row.header)
+            mapped = mapping.rows.get(row.header)
+            target = mapped.target if mapped is not None else None
             text: str
             if target == LABEL_TARGET:
                 text = record.labels[label_headers.index(row.header)].value
             else:
-                text = _result_text(target, record) if target else ""
+                text = _result_text(mapped, record) if mapped is not None else ""
             not_parsed = bool(target and row.sample.text and not text)
             row.result.set_text(_NOT_PARSED if not_parsed else text)
             status = _result_status(text, row.sample.text, not_parsed)
@@ -288,46 +369,41 @@ class MappingScreen:
                 with row.result:
                     ui.tooltip(text)
 
-    def on_target_change(self) -> None:
-        self._refresh_label_inputs()
-        self._refresh_options()
+    def on_target_change(self, row: _Row) -> None:
+        self._build_options(row)
         self._refresh_colors()
         self._refresh_results()
 
-    def set_target(self, header: str, target: str) -> None:
-        row = self._row_for(header)
-        row.select.value = target
-        self._refresh_options()
+    def on_option_change(self, row: _Row) -> None:
+        self._refresh_option_visibility(row)
+        self._refresh_results()
 
-    def available_targets(self, header: str) -> set[str]:
-        return set(self._row_for(header).select.options)
+    def set_target(self, header: str, target: str) -> None:
+        self._row_for(header).select.value = target
+
+    def set_option(self, header: str, name: str, value: str) -> None:
+        self._row_for(header).inputs[name].value = value
+
+    def _row_mapping(self, row: _Row) -> RowMapping | None:
+        if row.base is None:
+            return None
+        options = {
+            option.name: _option_value(option, row.inputs[option.name].value)
+            for option in _OPTIONS.get(row.base.target, ())
+            if option.name in row.inputs
+        }
+        defaults = row.base.model_dump()
+        return row_with(row.base, {k: v or defaults[k] for k, v in options.items()})
 
     def current_mapping(self) -> FieldMapping:
-        targets: dict[str, str] = {}
-        phases: dict[str, str] = {}
-        screeners: dict[str, str] = {}
-        for row in self.rows:
-            target = row.select.value
-            if target == _IGNORE:
-                continue
-            if target == _OTHER_IDS:
-                target = OTHER_IDS_PREFIX + row.other_id_key
-            if target == LABEL_TARGET:
-                phases[row.header] = row.phase.value.strip() or DEFAULT_PHASE
-                screeners[row.header] = row.screener.value.strip() or DEFAULT_SCREENER
-            targets[row.header] = target
-
-        delimiter = (
-            self.list_delimiter_input.value
-            if self.list_delimiter_input
-            else self.list_delimiter
-        )
+        rows = {row.header: self._row_mapping(row) for row in self.rows}
         return FieldMapping(
-            targets=targets,
-            list_delimiter=delimiter or ";",
-            label_phases=phases,
-            label_screeners=screeners,
+            rows={header: row for header, row in rows.items() if row is not None}
         )
+
+
+def _option_value(option: _Option, value: str) -> str:
+    return value.strip() if option.strip else value
 
 
 def render_mapping_table(
@@ -335,28 +411,25 @@ def render_mapping_table(
     summary: FileSummary,
     suggestion: FieldMapping,
     *,
-    show_delimiter: bool,
+    defaults: RowDefaults,
     preview: Callable[[FieldMapping], Record],
     chosen: FieldMapping | None = None,
 ) -> MappingScreen:
-    delimiter = (chosen or suggestion).list_delimiter
-    screen = MappingScreen(preview=preview, list_delimiter=delimiter)
+    screen = MappingScreen(
+        preview=preview, defaults=defaults, readonly=chosen is not None
+    )
     samples = summary.samples
     headers = _sorted_headers(list(samples), suggestion)
     input_width = _input_width_ch(headers)
     input_style = f"width: {input_width}ch"
     mapping_style = f"width: {_mapping_width_ch()}ch"
 
-    suggested = suggestion.targets
-    initial_targets: dict[str, str] = {}
-    initial_keys: dict[str, str] = {}
-    for header in headers:
-        target = suggested.get(header, _IGNORE)
-        initial_keys[header] = default_other_id_key(header)
-        if target.startswith(OTHER_IDS_PREFIX):
-            initial_keys[header] = target.removeprefix(OTHER_IDS_PREFIX)
-            target = _OTHER_IDS
-        initial_targets[header] = target
+    initial_targets = {
+        header: (
+            suggested.target if (suggested := suggestion.rows.get(header)) else _IGNORE
+        )
+        for header in headers
+    }
 
     ui.add_css(_ROW_FIELD_CSS)
 
@@ -403,7 +476,7 @@ def render_mapping_table(
                     with ui.column().classes("gap-0").style(mapping_style):
                         select = (
                             ui.select(
-                                _sorted_options(_ALL_TARGET_KEYS),
+                                _sorted_options(_TARGET_KEYS),
                                 value=initial_targets[header],
                             )
                             .classes("mapping-field text-xs w-full")
@@ -412,16 +485,7 @@ def render_mapping_table(
                                 f"bg-color={_STATUS_COLORS[status]}"
                             )
                         )
-                        phase, screener = (
-                            ui.input(placeholder=placeholder)
-                            .classes("mapping-field text-xs w-full")
-                            .props("dense outlined")
-                            .tooltip(name)
-                            for placeholder, name in (
-                                (DEFAULT_PHASE, "Phase"),
-                                (DEFAULT_SCREENER, "Screener"),
-                            )
-                        )
+                        options = ui.column().classes("gap-0 w-full")
                     sample = ui.label(samples[header]).classes(
                         "w-48 truncate text-xs text-grey-7"
                     )
@@ -429,47 +493,25 @@ def render_mapping_table(
                         sample.tooltip(samples[header])
                     result = ui.label().classes(_RESULT_CLASSES)
 
-                screen.rows.append(
-                    _Row(
-                        header=header,
-                        sample=sample,
-                        result=result,
-                        count=count,
-                        select=select,
-                        phase=phase,
-                        screener=screener,
-                        other_id_key=initial_keys[header],
-                        status=status,
-                        initial_target=initial_targets[header],
-                    )
+                mapped = (chosen or suggestion).rows.get(header)
+                if chosen is not None:
+                    select.value = mapped.target if mapped is not None else _IGNORE
+                    select.props("readonly")
+                row = _Row(
+                    header=header,
+                    sample=sample,
+                    result=result,
+                    count=count,
+                    select=select,
+                    options=options,
+                    mapped=mapped,
+                    status=status,
+                    initial_target=initial_targets[header],
                 )
-                select.on_value_change(lambda _e: screen.on_target_change())
+                screen.rows.append(row)
+                screen._build_options(row)
+                select.on_value_change(lambda _e, row=row: screen.on_target_change(row))
 
-        if show_delimiter:
-            screen.list_delimiter_input = (
-                ui.input("List delimiter", value=delimiter)
-                .classes("pl-6 text-xs")
-                .props("dense")
-            )
-            screen.list_delimiter_input.on_value_change(
-                lambda _e: screen._refresh_results()
-            )
-
-    if chosen is not None:
-        for row in screen.rows:
-            target = chosen.targets.get(row.header, _IGNORE)
-            if target.startswith(OTHER_IDS_PREFIX):
-                target = _OTHER_IDS
-            row.select.value = target
-            row.select.props("readonly")
-            row.phase.value = chosen.label_phases.get(row.header, "")
-            row.screener.value = chosen.label_screeners.get(row.header, "")
-            row.phase.props("readonly")
-            row.screener.props("readonly")
-        if screen.list_delimiter_input is not None:
-            screen.list_delimiter_input.props("readonly")
-
-    screen._refresh_label_inputs()
-    screen._refresh_options()
+    screen._refresh_colors()
     screen._refresh_results()
     return screen

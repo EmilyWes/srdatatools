@@ -1,12 +1,21 @@
 import difflib
 import logging
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Annotated, Any, Literal, TypeVar, get_args
 
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
-from app.models.record import Author, Label, LabelValue, PartialDate, Record
+from app.models.record import (
+    Affiliation,
+    Author,
+    Label,
+    LabelValue,
+    PartialDate,
+    Record,
+)
+from app.parsers.authors import author_from_name
 from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
 logger = logging.getLogger(__name__)
@@ -53,22 +62,177 @@ _NUMERIC_DATE = re.compile(
     r"^(?P<first>\d{1,2})(?P<sep>[/.-])(?P<second>\d{1,2})(?P=sep)(?P<year>\d{4})$"
 )
 _MAX_MONTH = 12
+_DATE_PARTS = ("year", "month", "day")
 
 DateOrder = Literal["eu", "us"]
 
-SCALAR_FIELDS = frozenset(
-    name for name, info in Record.model_fields.items() if info.annotation == str | None
-)
+ScalarTarget = Literal[
+    "title",
+    "abstract",
+    "journal",
+    "conference_name",
+    "volume",
+    "issue",
+    "doi",
+    "pmid",
+    "publication_type",
+    "language",
+    "publisher",
+    "url",
+    "notes",
+]
+SCALAR_FIELDS = frozenset(get_args(ScalarTarget))
 
-LIST_TARGETS = ("authors", "keywords")
-DATE_TARGETS = ("date", "year", "month", "day")
-PAGE_TARGETS = ("page_start", "page_end")
-EXCLUSIVE_TARGETS = (*DATE_TARGETS, *PAGE_TARGETS)
+DATE_TARGET = "date"
+PAGES_TARGET = "pages"
 ISSN_ISBN_TARGET = "issn_isbn"
-OTHER_IDS_PREFIX = "other_ids."
+OTHER_IDS_TARGET = "other_ids"
+AUTHORS_TARGET = "authors"
+KEYWORDS_TARGET = "keywords"
 LABEL_TARGET = "label"
 DEFAULT_PHASE = "ft"
 DEFAULT_SCREENER = "screener 1"
+DEFAULT_NAME_SEPARATOR = ","
+# RIS and NBIB repeat a tag per value, and BibTeX authors are split before mapping.
+LINE_DELIMITER = "\n"
+
+AuthorRole = Literal[
+    "full_name", "first_last", "last_first", "orcid", "ids", "affiliations"
+]
+NAME_ROLES: tuple[AuthorRole, ...] = ("full_name", "first_last", "last_first")
+_ORCID_URL = re.compile(r"^https?://orcid\.org/")
+
+
+class ScalarRow(BaseModel):
+    target: ScalarTarget
+
+
+class DateRow(BaseModel):
+    target: Literal["date"] = "date"
+    part: Literal["full", "year", "month", "day"] = "full"
+    order: DateOrder = "eu"
+
+
+class PagesRow(BaseModel):
+    target: Literal["pages"] = "pages"
+    part: Literal["range", "start", "end", "count"] = "range"
+
+
+class IssnIsbnRow(BaseModel):
+    target: Literal["issn_isbn"] = "issn_isbn"
+    kind: Literal["auto", "issn", "isbn"] = "auto"
+
+
+class OtherIdRow(BaseModel):
+    target: Literal["other_ids"] = "other_ids"
+    key: str = Field(min_length=1)
+
+
+class AuthorsRow(BaseModel):
+    target: Literal["authors"] = "authors"
+    role: AuthorRole = "last_first"
+    delimiter: str
+    separator: str = DEFAULT_NAME_SEPARATOR
+    id_key: str = Field(min_length=1)
+
+
+class KeywordsRow(BaseModel):
+    target: Literal["keywords"] = "keywords"
+    delimiter: str
+    prefix: str = ""
+
+
+class LabelRow(BaseModel):
+    target: Literal["label"] = "label"
+    phase: str = DEFAULT_PHASE
+    screener: str = DEFAULT_SCREENER
+
+
+RowMapping = Annotated[
+    ScalarRow
+    | DateRow
+    | PagesRow
+    | IssnIsbnRow
+    | OtherIdRow
+    | AuthorsRow
+    | KeywordsRow
+    | LabelRow,
+    Field(discriminator="target"),
+]
+_ROW_ADAPTER: TypeAdapter[RowMapping] = TypeAdapter(RowMapping)
+
+TARGETS = (
+    *sorted(SCALAR_FIELDS),
+    DATE_TARGET,
+    PAGES_TARGET,
+    ISSN_ISBN_TARGET,
+    OTHER_IDS_TARGET,
+    AUTHORS_TARGET,
+    KEYWORDS_TARGET,
+    LABEL_TARGET,
+)
+
+MatchKind = Literal["exact", "fuzzy", "id_fallback"]
+
+_Row = TypeVar("_Row", bound=BaseModel)
+
+
+class FieldMapping(BaseModel):
+    rows: dict[str, RowMapping] = Field(default_factory=dict)
+    match_kinds: dict[str, MatchKind] = Field(default_factory=dict)
+
+    def rows_of(self, row_type: type[_Row]) -> list[tuple[str, _Row]]:
+        return [(k, row) for k, row in self.rows.items() if isinstance(row, row_type)]
+
+
+@dataclass(frozen=True)
+class RowDefaults:
+    delimiter: str = ";"
+    author_delimiter: str | None = None
+    date_order: DateOrder = "eu"
+
+
+@dataclass(frozen=True)
+class Suggest:
+    """A suggested row: its target plus any options that differ from the defaults."""
+
+    target: str
+    options: Mapping[str, str] = field(default_factory=dict)
+
+
+def default_other_id_key(header: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", header.strip().lower()).strip("_")
+    return slug or "id"
+
+
+def default_row(target: str, key: str, defaults: RowDefaults) -> RowMapping:
+    if target == DATE_TARGET:
+        return DateRow(order=defaults.date_order)
+    if target == PAGES_TARGET:
+        return PagesRow()
+    if target == ISSN_ISBN_TARGET:
+        return IssnIsbnRow()
+    if target == OTHER_IDS_TARGET:
+        return OtherIdRow(key=default_other_id_key(key))
+    if target == AUTHORS_TARGET:
+        delimiter = defaults.author_delimiter or defaults.delimiter
+        return AuthorsRow(delimiter=delimiter, id_key=default_other_id_key(key))
+    if target == KEYWORDS_TARGET:
+        return KeywordsRow(delimiter=defaults.delimiter)
+    if target == LABEL_TARGET:
+        return LabelRow()
+    if target in SCALAR_FIELDS:
+        return ScalarRow.model_validate({"target": target})
+    raise ValueError(f"{key!r} maps to unknown Record field {target!r}")
+
+
+def row_with(row: RowMapping, options: Mapping[str, str]) -> RowMapping:
+    return _ROW_ADAPTER.validate_python({**row.model_dump(), **options})
+
+
+def make_row(suggest: Suggest, key: str, defaults: RowDefaults) -> RowMapping:
+    return row_with(default_row(suggest.target, key, defaults), suggest.options)
+
 
 _LABEL_SPELLINGS: dict[str, LabelValue] = {
     **dict.fromkeys(
@@ -88,50 +252,6 @@ _ISSN_LENGTH = 8
 _ISBN_LENGTHS = (10, 13)
 
 
-def _is_valid_target(target: str) -> bool:
-    if (
-        target in SCALAR_FIELDS
-        or target in LIST_TARGETS
-        or target in EXCLUSIVE_TARGETS
-        or target == ISSN_ISBN_TARGET
-        or target == LABEL_TARGET
-    ):
-        return True
-    return target.startswith(OTHER_IDS_PREFIX) and len(target) > len(OTHER_IDS_PREFIX)
-
-
-MatchKind = Literal["exact", "fuzzy", "id_fallback"]
-
-
-@dataclass
-class FieldMapping:
-    targets: dict[str, str] = field(default_factory=dict)
-    list_delimiter: str = ";"
-    match_kinds: dict[str, MatchKind] = field(default_factory=dict)
-    label_phases: dict[str, str] = field(default_factory=dict)
-    label_screeners: dict[str, str] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        for key, target in self.targets.items():
-            if not _is_valid_target(target):
-                raise ValueError(f"{key!r} maps to unknown Record field {target!r}")
-        for target in EXCLUSIVE_TARGETS:
-            keys = [k for k, t in self.targets.items() if t == target]
-            if len(keys) > 1:
-                raise ValueError(f"{target!r} is mapped from several inputs {keys}")
-
-    def key_for(self, target: str) -> str | None:
-        return next((k for k, t in self.targets.items() if t == target), None)
-
-    def keys_for(self, target: str) -> set[str]:
-        return {k for k, t in self.targets.items() if t == target}
-
-    def label_context(self, key: str) -> tuple[str, str]:
-        phase = self.label_phases.get(key, "").strip()
-        screener = self.label_screeners.get(key, "").strip()
-        return phase or DEFAULT_PHASE, screener or DEFAULT_SCREENER
-
-
 def normalize_label(value: str, minus_one_unlabeled: bool = False) -> LabelValue:
     normalized = value.strip().lower()
     if minus_one_unlabeled and normalized == _MINUS_ONE:
@@ -143,17 +263,23 @@ def normalize_label(value: str, minus_one_unlabeled: bool = False) -> LabelValue
     return label
 
 
-def _classify_issn_isbn(value: str, skip_qualifiers: bool) -> dict[str, str]:
-    """RIS keeps both in SN; tell them apart by length. First of each kind wins.
+def _issn_isbn_pieces(value: str, skip_qualifiers: bool) -> list[str]:
+    """skip_qualifiers skips pieces like Scopus's "(ISSN)" / "(ISBN)"."""
+    return [
+        piece
+        for piece in _ISSN_ISBN_SEPARATORS.split(value)
+        if piece
+        and not (skip_qualifiers and piece.startswith("(") and piece.endswith(")"))
+    ]
 
-    skip_qualifiers skips pieces like Scopus's "(ISSN)" / "(ISBN)".
-    """
+
+def _classify_issn_isbn(row: IssnIsbnRow, value: str, skip: bool) -> dict[str, str]:
+    """RIS keeps both in SN; auto tells them apart by length. First of each wins."""
+    pieces = _issn_isbn_pieces(value, skip)
+    if row.kind != "auto":
+        return {row.kind: pieces[0]} if pieces else {}
     found: dict[str, str] = {}
-    for piece in _ISSN_ISBN_SEPARATORS.split(value):
-        if not piece or (
-            skip_qualifiers and piece.startswith("(") and piece.endswith(")")
-        ):
-            continue
+    for piece in pieces:
         length = len(piece.replace("-", ""))
         if length in _ISBN_LENGTHS:
             found.setdefault("isbn", piece)
@@ -168,9 +294,7 @@ def _split_list(value: str, delimiter: str) -> list[str]:
     return [piece.strip() for piece in value.split(delimiter) if piece.strip()]
 
 
-def _parse_int_field(value: str | None, field_name: str) -> int | None:
-    if value is None or not value.strip():
-        return None
+def _parse_int_field(value: str, field_name: str) -> int | None:
     try:
         return int(value.strip())
     except ValueError:
@@ -238,30 +362,45 @@ def parse_date_string(value: str, order: DateOrder = "eu") -> PartialDate | None
 def _parse_publication_date(
     raw_fields: dict[str, str], mapping: FieldMapping
 ) -> PartialDate | None:
-    def cell(target: str) -> str | None:
-        key = mapping.key_for(target)
-        return raw_fields.get(key) if key is not None else None
+    """Each part comes from the first row giving it; a year/month/day row beats a
+    full date."""
+    explicit: dict[str, int] = {}
+    from_full: dict[str, int] = {}
+    for key, row in mapping.rows_of(DateRow):
+        value = (raw_fields.get(key) or "").strip()
+        if not value:
+            continue
+        if row.part == "full":
+            date = parse_date_string(value, row.order)
+            for part in _DATE_PARTS if date is not None else ():
+                if (number := getattr(date, part)) is not None:
+                    from_full.setdefault(part, number)
+            continue
+        if row.part == "month":
+            number = _parse_month(value)
+        else:
+            number = _parse_int_field(value, row.part)
+        if number is not None:
+            explicit.setdefault(row.part, number)
+    parts = {**from_full, **explicit}
+    return _build_partial_date(parts.get("year"), parts.get("month"), parts.get("day"))
 
-    raw_date = cell("date")
-    from_date = parse_date_string(raw_date) if raw_date and raw_date.strip() else None
-    year = _parse_int_field(cell("year"), "year")
-    month = _parse_month(cell("month"))
-    day = _parse_int_field(cell("day"), "day")
-    if from_date is not None:
-        year = year if year is not None else from_date.year
-        month = month if month is not None else from_date.month
-        day = day if day is not None else from_date.day
-    return _build_partial_date(year, month, day)
 
-
-def _join_pages(raw_fields: dict[str, str], mapping: FieldMapping) -> str | None:
-    pieces = []
-    for target in PAGE_TARGETS:
-        key = mapping.key_for(target)
-        value = (raw_fields.get(key) or "").strip() if key is not None else ""
+def _parse_pages(raw_fields: dict[str, str], mapping: FieldMapping) -> str | None:
+    parts: dict[str, str] = {}
+    for key, row in mapping.rows_of(PagesRow):
+        value = (raw_fields.get(key) or "").strip()
         if value:
-            pieces.append(value)
-    return "-".join(pieces) or None
+            parts.setdefault(row.part, value)
+    if "range" in parts:
+        return parts["range"]
+    start, end, count = parts.get("start"), parts.get("end"), parts.get("count")
+    if start and count and not end:
+        try:
+            end = str(int(start) + int(count) - 1)
+        except ValueError:
+            logger.warning("Could not add %r pages to start page %r", count, start)
+    return "-".join(piece for piece in (start, end) if piece) or None
 
 
 def _continues_to_next(target: str, value: str, settings: ParseSettings) -> bool:
@@ -271,6 +410,72 @@ def _continues_to_next(target: str, value: str, settings: ParseSettings) -> bool
     )
 
 
+def author_for_name(name: str, row: AuthorsRow, settings: ParseSettings) -> Author:
+    if row.role == "full_name":
+        return Author(full_name=name)
+    return author_from_name(
+        name,
+        row.separator,
+        settings.ambiguous_name_split,
+        family_first=row.role == "last_first",
+    )
+
+
+def add_author_detail(author: Author, row: AuthorsRow, value: str) -> None:
+    if row.role == "orcid":
+        author.orcid = author.orcid or _ORCID_URL.sub("", value)
+    elif row.role == "ids":
+        author.other_ids.setdefault(row.id_key, value)
+    elif row.role == "affiliations":
+        author.affiliations.append(Affiliation(name=value))
+
+
+def _split_positions(value: str | None, delimiter: str) -> list[str]:
+    """Keeps empty pieces so positions line up across the columns."""
+    if not value or not value.strip():
+        return []
+    return [piece.strip() for piece in value.split(delimiter)]
+
+
+def _zip_authors(
+    raw_fields: dict[str, str], mapping: FieldMapping, settings: ParseSettings
+) -> list[Author]:
+    """Authors zipped by position from parallel, delimited columns.
+
+    The first non-empty name column sets the authors; with none, the first
+    non-empty other column sets the count. A column with a different count is
+    ignored with a warning.
+    """
+    columns = [
+        (key, row, values)
+        for key, row in mapping.rows_of(AuthorsRow)
+        if (values := _split_positions(raw_fields.get(key), row.delimiter))
+    ]
+    names = next(((r, v) for _, r, v in columns if r.role in NAME_ROLES), None)
+    details = [(k, r, v) for k, r, v in columns if r.role not in NAME_ROLES]
+    if names is not None:
+        name_row, name_values = names
+        authors = [
+            author_for_name(name, name_row, settings) if name else Author()
+            for name in name_values
+        ]
+    else:
+        authors = [Author() for _ in (details[0][2] if details else [])]
+    for key, row, values in details:
+        if len(values) != len(authors):
+            logger.warning(
+                "%r has %d entries for %d authors; ignoring it",
+                key,
+                len(values),
+                len(authors),
+            )
+            continue
+        for author, value in zip(authors, values, strict=True):
+            if value:
+                add_author_detail(author, row, value)
+    return [a for a in authors if a.full_name or a.orcid or a.other_ids]
+
+
 def apply_mapping(
     raw_fields: dict[str, str],
     mapping: FieldMapping,
@@ -278,121 +483,81 @@ def apply_mapping(
 ) -> Record:
     values: dict[str, Any] = {}
     other_ids: dict[str, str] = {}
-    author_names: list[str] = []
     keywords: list[str] = []
     labels: list[Label] = []
-    for key, target in mapping.targets.items():
+    for key, row in mapping.rows.items():
         value = (raw_fields.get(key) or "").strip()
-        if target == LABEL_TARGET:
-            phase, screener = mapping.label_context(key)
+        if isinstance(row, LabelRow):
             labels.append(
                 Label(
-                    phase=phase,
-                    screener=screener,
+                    phase=row.phase,
+                    screener=row.screener,
                     value=normalize_label(value, settings.minus_one_unlabeled),
                 )
             )
             continue
         if not value:
             continue
-        if target in SCALAR_FIELDS:
-            if not _continues_to_next(target, value, settings):
-                values.setdefault(target, value)
-        elif target == ISSN_ISBN_TARGET:
+        if isinstance(row, ScalarRow):
+            if not _continues_to_next(row.target, value, settings):
+                values.setdefault(row.target, value)
+        elif isinstance(row, IssnIsbnRow):
             skip = settings.skip_issn_isbn_qualifiers
-            for scalar, piece in _classify_issn_isbn(value, skip).items():
+            for scalar, piece in _classify_issn_isbn(row, value, skip).items():
                 values.setdefault(scalar, piece)
-        elif target.startswith(OTHER_IDS_PREFIX):
-            other_ids[target.removeprefix(OTHER_IDS_PREFIX)] = value
-        elif target == "authors":
-            author_names.extend(_split_list(value, mapping.list_delimiter))
-        elif target == "keywords":
-            prefix = settings.keyword_prefixes.get(key, "")
+        elif isinstance(row, OtherIdRow):
+            other_ids[row.key] = value
+        elif isinstance(row, KeywordsRow):
             keywords.extend(
-                prefix + keyword
-                for keyword in _split_list(value, mapping.list_delimiter)
+                row.prefix + keyword for keyword in _split_list(value, row.delimiter)
             )
-
-    if "pages" not in values:
-        pages = _join_pages(raw_fields, mapping)
-        if pages is not None:
-            values["pages"] = pages
 
     return Record(
         **values,
+        pages=_parse_pages(raw_fields, mapping),
         other_ids=other_ids,
-        authors=[Author(full_name=name) for name in author_names],
+        authors=_zip_authors(raw_fields, mapping, settings),
         keywords=keywords,
         labels=labels,
         publication_date=_parse_publication_date(raw_fields, mapping),
     )
 
 
-def default_other_id_key(header: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "_", header.strip().lower()).strip("_")
-    return slug or "id"
-
-
 def override_aliases(
-    aliases: dict[str, list[str]], overrides: dict[str, list[str]]
-) -> dict[str, list[str]]:
-    """An overridden alias is also removed from the target it had before."""
-    taken = {alias for names in overrides.values() for alias in names}
-    merged = {
-        target: [alias for alias in names if alias not in taken]
-        for target, names in aliases.items()
-    }
-    merged.update(overrides)
-    return merged
+    base: Mapping[str, Suggest], overrides: Mapping[str, Suggest]
+) -> dict[str, Suggest]:
+    """A target the overrides suggest for drops every base alias of that target."""
+    replaced = {suggest.target for suggest in overrides.values()}
+    kept = {a: s for a, s in base.items() if s.target not in replaced}
+    return {**kept, **overrides}
 
 
 def suggest_mapping(
-    keys: list[str], aliases: dict[str, list[str]], *, lenient: bool
+    keys: list[str],
+    suggestions: Mapping[str, Suggest],
+    defaults: RowDefaults,
+    *,
+    lenient: bool,
 ) -> FieldMapping:
-    """lenient adds fuzzy matching and an ID-header fallback, for free-text headers.
-
-    When several keys suggest the same exclusive target, the one whose alias comes
-    earliest in that target's alias list wins (ties: first key).
-    """
-    alias_to_target = {
-        alias: target for target, names in aliases.items() for alias in names
-    }
-
-    candidates: list[tuple[str, str, int, MatchKind]] = []
+    """lenient adds fuzzy matching and an ID-header fallback, for free-text headers."""
+    rows: dict[str, RowMapping] = {}
+    match_kinds: dict[str, MatchKind] = {}
     for key in keys:
         normalized = key.strip().lower()
         kind: MatchKind = "exact"
-        alias = normalized if normalized in alias_to_target else None
+        alias = normalized if normalized in suggestions else None
         if alias is None and lenient:
             matches = difflib.get_close_matches(
-                normalized, alias_to_target.keys(), n=1, cutoff=_SUGGESTION_CUTOFF
+                normalized, suggestions.keys(), n=1, cutoff=_SUGGESTION_CUTOFF
             )
             alias = matches[0] if matches else None
             kind = "fuzzy"
         if alias is not None:
-            target = alias_to_target[alias]
-            rank = aliases[target].index(alias)
+            suggest = suggestions[alias]
         elif lenient and _ID_HEADER.search(key):
-            target, rank, kind = "other_ids", 0, "id_fallback"
+            suggest, kind = Suggest(OTHER_IDS_TARGET), "id_fallback"
         else:
             continue
-        if target == "other_ids":
-            target = OTHER_IDS_PREFIX + default_other_id_key(key)
-        candidates.append((key, target, rank, kind))
-
-    best: dict[str, tuple[str, int]] = {}
-    for key, target, rank, _ in candidates:
-        if target in EXCLUSIVE_TARGETS and (
-            target not in best or rank < best[target][1]
-        ):
-            best[target] = (key, rank)
-
-    kept = [
-        (key, target, kind)
-        for key, target, _, kind in candidates
-        if target not in EXCLUSIVE_TARGETS or best[target][0] == key
-    ]
-    return FieldMapping(
-        targets={key: target for key, target, _ in kept},
-        match_kinds={key: kind for key, _, kind in kept},
-    )
+        rows[key] = make_row(suggest, key, defaults)
+        match_kinds[key] = kind
+    return FieldMapping(rows=rows, match_kinds=match_kinds)

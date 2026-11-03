@@ -6,7 +6,8 @@ import pytest
 from openpyxl import Workbook
 
 from app.parsers.excel import parse_excel_file, read_excel_headers, read_excel_sheets
-from app.parsers.mapping import FieldMapping
+from app.parsers.mapping import FieldMapping, Suggest
+from tests.mappings import mapping_of
 
 
 def _workbook(tmp_path: Path, sheets: dict[str, list[list[object]]]) -> Path:
@@ -39,9 +40,7 @@ def test_parse_excel_file__maps_scalar_fields(tmp_path: Path) -> None:
         tmp_path,
         {"Sheet1": [["Title", "DOI", "Journal"], ["Some Paper", "10.1/xyz", "Nature"]]},
     )
-    mapping = FieldMapping(
-        targets={"Title": "title", "DOI": "doi", "Journal": "journal"}
-    )
+    mapping = mapping_of({"Title": "title", "DOI": "doi", "Journal": "journal"})
 
     result = parse_excel_file(path, mapping)
 
@@ -59,7 +58,7 @@ def test_parse_excel_file__keeps_raw_fields_including_unmapped_columns(
     path = _workbook(
         tmp_path, {"Sheet1": [["Title", "Extra"], ["Some Paper", "unmapped value"]]}
     )
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_excel_file(path, mapping)
 
@@ -74,7 +73,7 @@ def test_parse_excel_file__reads_first_sheet_by_default(tmp_path: Path) -> None:
         tmp_path,
         {"Records": [["Title"], ["First"]], "Other": [["Title"], ["Second"]]},
     )
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_excel_file(path, mapping)
 
@@ -86,7 +85,7 @@ def test_parse_excel_file__reads_named_sheet(tmp_path: Path) -> None:
         tmp_path,
         {"Records": [["Title"], ["First"]], "Other": [["Title"], ["Second"]]},
     )
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_excel_file(path, mapping, sheet="Other")
 
@@ -135,7 +134,7 @@ def test_parse_excel_file__converts_cell_values_to_text(tmp_path: Path) -> None:
 def test_parse_excel_file__reads_cached_formula_value(tmp_path: Path) -> None:
     path = _workbook(tmp_path, {"Sheet1": [["Year"], ["=2000+20"]]})
     _set_cached_values(path, "2020")
-    mapping = FieldMapping(targets={"Year": "year"})
+    mapping = mapping_of({"Year": Suggest("date", {"part": "year"})})
 
     result = parse_excel_file(path, mapping)
 
@@ -149,7 +148,7 @@ def test_parse_excel_file__pads_short_row_with_empty_cells(tmp_path: Path) -> No
     path = _workbook(
         tmp_path, {"Sheet1": [["Title", "DOI", "Journal"], ["Only title"]]}
     )
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_excel_file(path, mapping)
 
@@ -166,7 +165,7 @@ def test_parse_excel_file__skips_row_with_cells_beyond_header(tmp_path: Path) ->
         tmp_path,
         {"Sheet1": [["Title"], ["Kept"], ["Dropped", "stray note"]]},
     )
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_excel_file(path, mapping)
 
@@ -188,7 +187,7 @@ def test_parse_excel_file__ignores_empty_row(tmp_path: Path) -> None:
     path = _workbook(
         tmp_path, {"Sheet1": [["Title", "DOI"], ["First"], [None, None], ["Third"]]}
     )
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_excel_file(path, mapping)
 
@@ -200,7 +199,7 @@ def test_parse_excel_file__skips_whitespace_only_row(tmp_path: Path) -> None:
     path = _workbook(
         tmp_path, {"Sheet1": [["Title", "DOI"], ["First", ""], [None, " "], ["Third"]]}
     )
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_excel_file(path, mapping)
 
@@ -212,7 +211,7 @@ def test_parse_excel_file__skips_whitespace_only_row(tmp_path: Path) -> None:
 
 def test_parse_excel_file__splits_authors_on_delimiter(tmp_path: Path) -> None:
     path = _workbook(tmp_path, {"Sheet1": [["Authors"], ["Jane Smith; John Doe"]]})
-    mapping = FieldMapping(targets={"Authors": "authors"})
+    mapping = mapping_of({"Authors": "authors"})
 
     result = parse_excel_file(path, mapping)
 

@@ -9,17 +9,27 @@ from app.parsers.csv_ import (
     read_csv_headers,
     suggest_mapping,
 )
-from app.parsers.mapping import FieldMapping
+from app.parsers.mapping import (
+    AuthorsRow,
+    DateRow,
+    FieldMapping,
+    IssnIsbnRow,
+    KeywordsRow,
+    OtherIdRow,
+    PagesRow,
+    RowMapping,
+    ScalarRow,
+    Suggest,
+)
 from app.parsers.quirks import ParseSettings
+from tests.mappings import mapping_of, targets_of
 
 CSV_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "general"
 
 
 def test_parse_csv_text__maps_scalar_fields() -> None:
     text = "Title,DOI,Journal\nSome Paper,10.1/xyz,Nature\n"
-    mapping = FieldMapping(
-        targets={"Title": "title", "DOI": "doi", "Journal": "journal"}
-    )
+    mapping = mapping_of({"Title": "title", "DOI": "doi", "Journal": "journal"})
 
     result = parse_csv_text(text, mapping)
 
@@ -33,7 +43,7 @@ def test_parse_csv_text__maps_scalar_fields() -> None:
 
 def test_parse_csv_text__keeps_raw_fields_including_unmapped_columns() -> None:
     text = "Title,Extra\nSome Paper,unmapped value\n"
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_csv_text(text, mapping)
 
@@ -45,7 +55,7 @@ def test_parse_csv_text__keeps_raw_fields_including_unmapped_columns() -> None:
 
 def test_parse_csv_text__normalizes_doi_via_record_validator() -> None:
     text = "DOI\nhttps://doi.org/10.1/XYZ\n"
-    mapping = FieldMapping(targets={"DOI": "doi"})
+    mapping = mapping_of({"DOI": "doi"})
 
     result = parse_csv_text(text, mapping)
 
@@ -54,7 +64,7 @@ def test_parse_csv_text__normalizes_doi_via_record_validator() -> None:
 
 def test_parse_csv_text__skips_ragged_row_with_missing_fields() -> None:
     text = "Title,DOI,Journal\nOnly title\n"
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_csv_text(text, mapping)
 
@@ -66,7 +76,7 @@ def test_parse_csv_text__skips_ragged_row_with_missing_fields() -> None:
 
 def test_parse_csv_text__skips_ragged_row_with_extra_fields() -> None:
     text = "Title,DOI\nSome Paper,10.1/x,extra,stuff\n"
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_csv_text(text, mapping)
 
@@ -77,7 +87,7 @@ def test_parse_csv_text__skips_ragged_row_with_extra_fields() -> None:
 
 def test_parse_csv_text__skips_fully_blank_row() -> None:
     text = "Title,DOI\nSome Paper,10.1/x\n,\n"
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_csv_text(text, mapping)
 
@@ -89,7 +99,7 @@ def test_parse_csv_text__skips_fully_blank_row() -> None:
 def test_parse_csv_text__reads_cell_over_default_csv_limit() -> None:
     abstract = "x" * 200_000
     text = f"Title,Abstract\nSome Paper,{abstract}\n"
-    mapping = FieldMapping(targets={"Title": "title", "Abstract": "abstract"})
+    mapping = mapping_of({"Title": "title", "Abstract": "abstract"})
 
     result = parse_csv_text(text, mapping)
 
@@ -99,7 +109,7 @@ def test_parse_csv_text__reads_cell_over_default_csv_limit() -> None:
 
 def test_parse_csv_text__skips_row_with_cell_over_limit() -> None:
     text = f"Title,Abstract\nA,{'x' * 1_000_001}\nB,short\n"
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_csv_text(text, mapping)
 
@@ -111,7 +121,7 @@ def test_parse_csv_text__skips_row_with_cell_over_limit() -> None:
 
 def test_parse_csv_text__imports_row_with_only_unmapped_data() -> None:
     text = "Title,Extra\n,has data\n"
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_csv_text(text, mapping)
 
@@ -122,7 +132,7 @@ def test_parse_csv_text__imports_row_with_only_unmapped_data() -> None:
 
 def test_parse_csv_text__sniffs_semicolon_delimiter() -> None:
     text = "Title;DOI\nSome Paper;10.1/x\n"
-    mapping = FieldMapping(targets={"Title": "title", "DOI": "doi"})
+    mapping = mapping_of({"Title": "title", "DOI": "doi"})
 
     result = parse_csv_text(text, mapping)
 
@@ -135,7 +145,7 @@ def test_parse_csv_text__doubled_quote_after_sniff_sample_is_an_escape() -> None
         f'"Paper {n}","Plain abstract, no quotes"\n' for n in range(80)
     )
     text = f'"Title","Abstract"\n{plain_rows}"Late","The ""deep-water"" model, again"\n'
-    mapping = FieldMapping(targets={"Title": "title", "Abstract": "abstract"})
+    mapping = mapping_of({"Title": "title", "Abstract": "abstract"})
 
     result = parse_csv_text(text, mapping)
 
@@ -145,7 +155,7 @@ def test_parse_csv_text__doubled_quote_after_sniff_sample_is_an_escape() -> None
 
 def test_parse_csv_text__splits_authors_on_delimiter() -> None:
     text = "Authors\nJane Smith; John Doe\n"
-    mapping = FieldMapping(targets={"Authors": "authors"})
+    mapping = mapping_of({"Authors": "authors"})
 
     result = parse_csv_text(text, mapping)
 
@@ -155,7 +165,7 @@ def test_parse_csv_text__splits_authors_on_delimiter() -> None:
 
 def test_parse_csv_text__splits_keywords_on_delimiter() -> None:
     text = "Keywords\nmachine learning; nlp\n"
-    mapping = FieldMapping(targets={"Keywords": "keywords"})
+    mapping = mapping_of({"Keywords": "keywords"})
 
     result = parse_csv_text(text, mapping)
 
@@ -164,7 +174,9 @@ def test_parse_csv_text__splits_keywords_on_delimiter() -> None:
 
 def test_parse_csv_text__uses_custom_list_delimiter() -> None:
     text = "Authors\nJane Smith| John Doe\n"
-    mapping = FieldMapping(targets={"Authors": "authors"}, list_delimiter="|")
+    mapping = mapping_of(
+        {"Authors": Suggest("authors", {"delimiter": "|", "role": "full_name"})}
+    )
 
     result = parse_csv_text(text, mapping)
 
@@ -172,27 +184,19 @@ def test_parse_csv_text__uses_custom_list_delimiter() -> None:
     assert [author.full_name for author in authors] == ["Jane Smith", "John Doe"]
 
 
-def test_parse_csv_text__combines_multiple_author_columns_in_order() -> None:
-    text = "First Author,Other Authors\nJane Smith,John Doe; Alice Lee\n"
-    mapping = FieldMapping(
-        targets={"First Author": "authors", "Other Authors": "authors"}
-    )
+def test_parse_csv_text__first_non_empty_name_column_sets_the_authors() -> None:
+    text = "First Author,Other Authors\n,John Doe; Alice Lee\n"
+    mapping = mapping_of({"First Author": "authors", "Other Authors": "authors"})
 
     result = parse_csv_text(text, mapping)
 
     authors = result.rows[0].record.authors
-    assert [author.full_name for author in authors] == [
-        "Jane Smith",
-        "John Doe",
-        "Alice Lee",
-    ]
+    assert [author.full_name for author in authors] == ["John Doe", "Alice Lee"]
 
 
 def test_parse_csv_text__combines_multiple_keyword_columns_in_order() -> None:
     text = "Author Keywords,Index Keywords\nmachine learning,nlp; llms\n"
-    mapping = FieldMapping(
-        targets={"Author Keywords": "keywords", "Index Keywords": "keywords"}
-    )
+    mapping = mapping_of({"Author Keywords": "keywords", "Index Keywords": "keywords"})
 
     result = parse_csv_text(text, mapping)
 
@@ -201,7 +205,7 @@ def test_parse_csv_text__combines_multiple_keyword_columns_in_order() -> None:
 
 def test_parse_csv_text__empty_authors_column_gives_empty_list() -> None:
     text = "Title,Authors\nSome Paper,\n"
-    mapping = FieldMapping(targets={"Title": "title", "Authors": "authors"})
+    mapping = mapping_of({"Title": "title", "Authors": "authors"})
 
     result = parse_csv_text(text, mapping)
 
@@ -222,7 +226,7 @@ def test_parse_csv_text__parses_single_date_column(
     date_value: str, expected: tuple[int, int | None, int | None]
 ) -> None:
     text = f"Date\n{date_value}\n"
-    mapping = FieldMapping(targets={"Date": "date"})
+    mapping = mapping_of({"Date": "date"})
 
     result = parse_csv_text(text, mapping)
 
@@ -233,7 +237,13 @@ def test_parse_csv_text__parses_single_date_column(
 
 def test_parse_csv_text__parses_year_month_day_columns() -> None:
     text = "Year,Month,Day\n2020,5,14\n"
-    mapping = FieldMapping(targets={"Year": "year", "Month": "month", "Day": "day"})
+    mapping = mapping_of(
+        {
+            "Year": Suggest("date", {"part": "year"}),
+            "Month": Suggest("date", {"part": "month"}),
+            "Day": Suggest("date", {"part": "day"}),
+        }
+    )
 
     result = parse_csv_text(text, mapping)
 
@@ -244,7 +254,12 @@ def test_parse_csv_text__parses_year_month_day_columns() -> None:
 
 def test_parse_csv_text__accepts_month_abbreviation() -> None:
     text = "Year,Month\n2020,May\n"
-    mapping = FieldMapping(targets={"Year": "year", "Month": "month"})
+    mapping = mapping_of(
+        {
+            "Year": Suggest("date", {"part": "year"}),
+            "Month": Suggest("date", {"part": "month"}),
+        }
+    )
 
     result = parse_csv_text(text, mapping)
 
@@ -255,7 +270,12 @@ def test_parse_csv_text__accepts_month_abbreviation() -> None:
 
 def test_parse_csv_text__drops_day_when_month_missing() -> None:
     text = "Year,Day\n2020,14\n"
-    mapping = FieldMapping(targets={"Year": "year", "Day": "day"})
+    mapping = mapping_of(
+        {
+            "Year": Suggest("date", {"part": "year"}),
+            "Day": Suggest("date", {"part": "day"}),
+        }
+    )
 
     result = parse_csv_text(text, mapping)
 
@@ -266,7 +286,9 @@ def test_parse_csv_text__drops_day_when_month_missing() -> None:
 
 def test_parse_csv_text__routes_column_into_other_ids() -> None:
     text = "Title,EID\nSome Paper,2-s2.0-123\n"
-    mapping = FieldMapping(targets={"Title": "title", "EID": "other_ids.eid"})
+    mapping = mapping_of(
+        {"Title": "title", "EID": Suggest("other_ids", {"key": "eid"})}
+    )
 
     result = parse_csv_text(text, mapping)
 
@@ -275,10 +297,10 @@ def test_parse_csv_text__routes_column_into_other_ids() -> None:
 
 def test_parse_csv_text__routes_multiple_columns_into_other_ids() -> None:
     text = "EID,Scopus Author ID\n2-s2.0-123,456\n"
-    mapping = FieldMapping(
-        targets={
-            "EID": "other_ids.eid",
-            "Scopus Author ID": "other_ids.scopus_author_id",
+    mapping = mapping_of(
+        {
+            "EID": Suggest("other_ids", {"key": "eid"}),
+            "Scopus Author ID": Suggest("other_ids", {"key": "scopus_author_id"}),
         }
     )
 
@@ -298,8 +320,13 @@ def _ymd(text: str, mapping: FieldMapping) -> tuple[int | None, ...]:
 
 def test_parse_csv_text__ymd_overrides_date_on_conflict() -> None:
     text = "Year,Month,Day,Created\n2019,3,7,2020-05-14\n"
-    mapping = FieldMapping(
-        targets={"Year": "year", "Month": "month", "Day": "day", "Created": "date"}
+    mapping = mapping_of(
+        {
+            "Year": Suggest("date", {"part": "year"}),
+            "Month": Suggest("date", {"part": "month"}),
+            "Day": Suggest("date", {"part": "day"}),
+            "Created": "date",
+        }
     )
 
     assert _ymd(text, mapping) == (2019, 3, 7)
@@ -307,34 +334,36 @@ def test_parse_csv_text__ymd_overrides_date_on_conflict() -> None:
 
 def test_parse_csv_text__fills_missing_parts_from_date_column() -> None:
     text = "Year,Created\n2020,2020-05-14\n"
-    mapping = FieldMapping(targets={"Year": "year", "Created": "date"})
+    mapping = mapping_of({"Year": Suggest("date", {"part": "year"}), "Created": "date"})
 
     assert _ymd(text, mapping) == (2020, 5, 14)
 
 
 def test_parse_csv_text__falls_back_to_date_when_ymd_cells_blank() -> None:
     text = "Year,Created\n,2020-05-14\n"
-    mapping = FieldMapping(targets={"Year": "year", "Created": "date"})
+    mapping = mapping_of({"Year": Suggest("date", {"part": "year"}), "Created": "date"})
 
     assert _ymd(text, mapping) == (2020, 5, 14)
 
 
 def test_parse_csv_text__unparseable_date_column_keeps_ymd() -> None:
     text = "Year,Created\n2020,sometime in May\n"
-    mapping = FieldMapping(targets={"Year": "year", "Created": "date"})
+    mapping = mapping_of({"Year": Suggest("date", {"part": "year"}), "Created": "date"})
 
     assert _ymd(text, mapping) == (2020, None, None)
 
 
 def test_parse_csv_text__maps_publication_year_and_create_date_together() -> None:
     text = "Publication Year,Create Date\n2018,2020-05-14\n"
-    mapping = FieldMapping(targets={"Publication Year": "year", "Create Date": "date"})
+    mapping = mapping_of(
+        {"Publication Year": Suggest("date", {"part": "year"}), "Create Date": "date"}
+    )
 
     assert _ymd(text, mapping) == (2018, 5, 14)
 
 
 def test_parse_csv_file__falls_back_to_cp1252_on_decode_error() -> None:
-    mapping = FieldMapping(targets={"Title": "title", "Author": "notes"})
+    mapping = mapping_of({"Title": "title", "Author": "notes"})
 
     result = parse_csv_file(CSV_FIXTURES_DIR / "cp1252_encoded.csv", mapping)
 
@@ -415,44 +444,48 @@ def test_read_csv_headers__decodes_cp1252_file() -> None:
 
 
 @pytest.mark.parametrize(
-    ("header", "expected_target"),
+    ("header", "expected_row"),
     [
-        ("Article Title", "title"),
-        ("Source title", "journal"),
-        ("Author full names", "authors"),
-        ("Author Keywords", "keywords"),
-        ("DOI", "doi"),
-        ("Document Type", "publication_type"),
-        ("Year", "year"),
-        ("Page start", "page_start"),
-        ("Page end", "page_end"),
-        ("PMID", "pmid"),
-        ("PMCID", "other_ids.pmcid"),
-        ("PMC ID", "other_ids.pmc_id"),
+        ("Article Title", ScalarRow(target="title")),
+        ("Source title", ScalarRow(target="journal")),
+        ("Author full names", AuthorsRow(delimiter=";", id_key="author_full_names")),
+        ("Author Keywords", KeywordsRow(delimiter=";")),
+        ("DOI", ScalarRow(target="doi")),
+        ("Document Type", ScalarRow(target="publication_type")),
+        ("Year", DateRow(part="year")),
+        ("Date", DateRow(part="full")),
+        ("Page start", PagesRow(part="start")),
+        ("Page end", PagesRow(part="end")),
+        ("Page range", PagesRow(part="range")),
+        ("ISSN", IssnIsbnRow(kind="issn")),
+        ("ISBN", IssnIsbnRow(kind="isbn")),
+        ("PMID", ScalarRow(target="pmid")),
+        ("PMCID", OtherIdRow(key="pmcid")),
+        ("PMC ID", OtherIdRow(key="pmc_id")),
     ],
 )
 def test_suggest_mapping__matches_known_vendor_headers(
-    header: str, expected_target: str
+    header: str, expected_row: RowMapping
 ) -> None:
     suggestions = suggest_mapping([header])
 
-    assert suggestions.targets == {header: expected_target}
+    assert suggestions.rows == {header: expected_row}
 
 
 @pytest.mark.parametrize(
-    ("header", "expected_target"),
+    ("header", "expected_key"),
     [
-        ("Scopus Author ID", "other_ids.scopus_author_id"),
-        ("Custom ID", "other_ids.custom_id"),
-        ("Zotero ID", "other_ids.zotero_id"),
+        ("Scopus Author ID", "scopus_author_id"),
+        ("Custom ID", "custom_id"),
+        ("Zotero ID", "zotero_id"),
     ],
 )
 def test_suggest_mapping__unmatched_id_header_falls_back_to_other_ids(
-    header: str, expected_target: str
+    header: str, expected_key: str
 ) -> None:
     suggestions = suggest_mapping([header])
 
-    assert suggestions.targets == {header: expected_target}
+    assert suggestions.rows == {header: OtherIdRow(key=expected_key)}
 
 
 @pytest.mark.parametrize("header", ["Valid", "Wide", "Identifier", "Provider"])
@@ -461,7 +494,7 @@ def test_suggest_mapping__non_id_words_containing_id_stay_unmapped(
 ) -> None:
     suggestions = suggest_mapping([header])
 
-    assert suggestions.targets == {}
+    assert targets_of(suggestions) == {}
 
 
 def test_suggest_mapping__ignored_keys_stay_unmapped() -> None:
@@ -470,19 +503,23 @@ def test_suggest_mapping__ignored_keys_stay_unmapped() -> None:
         ignored_keys=frozenset({"conference date"}),
     )
 
-    assert mapping.targets == {"Conference name": "conference_name"}
+    assert targets_of(mapping) == {"Conference name": "conference_name"}
 
 
 def test_suggest_mapping__leaves_unrecognized_header_out() -> None:
     suggestions = suggest_mapping(["Zzzqqqxx123"])
 
-    assert suggestions.targets == {}
+    assert targets_of(suggestions) == {}
 
 
-def test_suggest_mapping__keeps_only_first_column_per_date_part() -> None:
+def test_suggest_mapping__keeps_every_column_per_date_part() -> None:
     suggestions = suggest_mapping(["Year", "Publication Year", "Date"])
 
-    assert suggestions.targets == {"Year": "year", "Date": "date"}
+    assert suggestions.rows == {
+        "Year": DateRow(part="year"),
+        "Publication Year": DateRow(part="year"),
+        "Date": DateRow(part="full"),
+    }
 
 
 def test_read_csv_headers__counts_rows_and_non_empty_cells_per_column(
@@ -530,7 +567,7 @@ def test_read_csv_headers__header_only_and_empty_files_have_zero_rows(
 
 
 def test_parse_csv_record__applies_mapping() -> None:
-    mapping = FieldMapping(targets={"Title": "title", "Authors": "authors"})
+    mapping = mapping_of({"Title": "title", "Authors": "authors"})
     raw_fields = {"Title": "Some Paper", "Authors": "Smith, J; Doe, J"}
 
     row = parse_csv_record(raw_fields, mapping)
@@ -541,13 +578,13 @@ def test_parse_csv_record__applies_mapping() -> None:
 
 
 def test_parse_csv_file__tab_delimiter_maps_fields() -> None:
-    mapping = FieldMapping(
-        targets={
+    mapping = mapping_of(
+        {
             "title": "title",
             "authors": "authors",
             "doi": "doi",
             "keywords": "keywords",
-            "year": "year",
+            "year": Suggest("date", {"part": "year"}),
         }
     )
 
@@ -568,7 +605,7 @@ def test_parse_csv_file__tab_delimiter_maps_fields() -> None:
 
 def test_parse_csv_text__tab_delimiter_keeps_commas_in_cells() -> None:
     text = "Title\tAuthors\nA, B, and C\tSmith, J\nD, E\tDoe, J\n"
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_csv_text(text, mapping, delimiter="\t")
 
@@ -578,7 +615,7 @@ def test_parse_csv_text__tab_delimiter_keeps_commas_in_cells() -> None:
 
 def test_parse_csv_text__tab_delimiter_reads_quoted_multiline_cell() -> None:
     text = 'Title\tAbstract\nSome Paper\t"First line.\nSecond line with a\ttab."\n'
-    mapping = FieldMapping(targets={"Abstract": "abstract"})
+    mapping = mapping_of({"Abstract": "abstract"})
 
     result = parse_csv_text(text, mapping, delimiter="\t")
 
@@ -588,7 +625,7 @@ def test_parse_csv_text__tab_delimiter_reads_quoted_multiline_cell() -> None:
 
 def test_parse_csv_text__tab_delimiter_skips_ragged_row() -> None:
     text = "Title\tDOI\nSome Paper\t10.1/x\nOnly title\n"
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     result = parse_csv_text(text, mapping, delimiter="\t")
 
@@ -620,7 +657,7 @@ def test_read_csv_headers__tab_delimiter_returns_headers_and_counts() -> None:
 def test_suggest_mapping__matches_label_headers(header: str) -> None:
     suggestions = suggest_mapping([header])
 
-    assert suggestions.targets == {header: "label"}
+    assert targets_of(suggestions) == {header: "label"}
 
 
 def test_parse_csv_text__reads_asreview_style_included_column() -> None:

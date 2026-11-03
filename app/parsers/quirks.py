@@ -1,10 +1,10 @@
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from app.models.record import Affiliation, Author, Record
-from app.parsers.authors import AmbiguousNameSplit, author_from_name
+from app.models.record import Affiliation, Record
+from app.parsers.authors import AmbiguousNameSplit
 
 # mapping.py imports ParseSettings at runtime, so FieldMapping is only for annotations.
 if TYPE_CHECKING:
@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 _OTHER_IDS_PREFIX = "other_ids."
 _PAGE_RANGE = re.compile(r"^(?P<start>\d+)-(?P<end>\d+)$")
 _ET_AL = "et al."
-# "Teng, Yu (60652739200)": Scopus appends the author id to each full name.
 _NAME_WITH_ID = re.compile(r"^(?P<name>.*?)\s*\((?P<id>\d+)\)$")
 
 
@@ -37,7 +36,6 @@ class ContinueToNextField:
 class ParseSettings:
     skip_issn_isbn_qualifiers: bool = False
     minus_one_unlabeled: bool = False
-    keyword_prefixes: dict[str, str] = field(default_factory=dict)
     ambiguous_name_split: AmbiguousNameSplit = "none"
     # Python's csv limit is process-wide, so the parser sets it before each parse.
     csv_field_size_limit: int = 1_000_000
@@ -211,51 +209,10 @@ class RisNotes:
 
 
 @dataclass(frozen=True)
-class ParallelAuthorColumns:
-    """Authors zipped by position from parallel, delimited columns.
+class EmbeddedAuthorIds:
+    """Scopus appends the author id to each full name: "Teng, Yu (60652739200)"."""
 
-    Only columns mapped to authors are read. The first non-empty one sets the
-    author count; a column with a different count is ignored with a warning.
-    The first non-empty name column wins, e.g. Scopus full names over abbreviated.
-    """
-
-    delimiter: str
-    name_columns: tuple[str, ...]
-    name_separator: str | None = None
-    embedded_ids: bool = False
-    orcid_column: str | None = None
-    orcid_prefix: str = ""
-    id_column: str | None = None
-    id_key: str = ""
-    affiliation_column: str | None = None
-    # "Teng Y., Guangxi Cartier Technology Ltd., ...": the leading name is dropped.
-    affiliation_separator: str = ", "
-
-    def _split(self, value: str | None) -> list[str]:
-        """Keeps empty pieces so positions line up across the columns."""
-        if not value or not value.strip():
-            return []
-        return [piece.strip() for piece in value.split(self.delimiter)]
-
-    def _aligned(self, column: str, values: list[str], count: int) -> list[str]:
-        if values and len(values) != count:
-            logger.warning(
-                "%r has %d entries for %d authors; ignoring it",
-                column,
-                len(values),
-                count,
-            )
-            return [""] * count
-        return values or [""] * count
-
-    def _author(self, name: str, settings: ParseSettings) -> Author:
-        if not name:
-            return Author()
-        if self.name_separator is None:
-            return Author(full_name=name)
-        return author_from_name(
-            name, self.name_separator, settings.ambiguous_name_split
-        )
+    id_key: str
 
     def apply(
         self,
@@ -264,44 +221,44 @@ class ParallelAuthorColumns:
         mapping: "FieldMapping",
         settings: ParseSettings,
     ) -> Record:
-        mapped = mapping.keys_for("authors")
-        name_columns = [c for c in self.name_columns if c in mapped]
-        other_columns = [
-            c
-            for c in (self.orcid_column, self.id_column, self.affiliation_column)
-            if c is not None and c in mapped
-        ]
-        if not name_columns and not other_columns:
-            return record
-        values = {c: self._split(raw_fields.get(c)) for c in other_columns}
-        names = next(
-            (split for c in name_columns if (split := self._split(raw_fields.get(c)))),
-            [],
-        )
-        count = next((len(v) for v in (names, *values.values()) if v), 0)
-        names = names or [""] * count
-        aligned = {c: self._aligned(c, v, count) for c, v in values.items()}
-
-        def column(name: str | None) -> list[str]:
-            return aligned.get(name, [""] * count) if name is not None else [""] * count
-
-        orcids = column(self.orcid_column)
-        ids = column(self.id_column)
-        affiliations = column(self.affiliation_column)
         authors = []
-        for name, orcid, author_id, affiliation in zip(
-            names, orcids, ids, affiliations, strict=True
-        ):
-            embedded_id = ""
-            if self.embedded_ids and (match := _NAME_WITH_ID.match(name)):
-                name, embedded_id = match["name"], match["id"]
-            author = self._author(name, settings)
-            author.orcid = orcid.removeprefix(self.orcid_prefix) or None
-            if author_id := embedded_id or author_id:
-                author.other_ids = {self.id_key: author_id}
-            _, _, affiliation_name = affiliation.partition(self.affiliation_separator)
-            if affiliation_name:
-                author.affiliations = [Affiliation(name=affiliation_name)]
-            if author.full_name or author.orcid or author.other_ids:
+        for author in record.authors:
+            match = _NAME_WITH_ID.match(author.full_name or "")
+            if match is None:
                 authors.append(author)
+                continue
+            names = {
+                name: _NAME_WITH_ID.sub(r"\g<name>", value)
+                for name in ("full_name", "family_name", "given_name")
+                if (value := getattr(author, name))
+            }
+            other_ids = {**author.other_ids, self.id_key: match["id"]}
+            authors.append(author.model_copy(update={**names, "other_ids": other_ids}))
+        return record.model_copy(update={"authors": authors})
+
+
+@dataclass(frozen=True)
+class AffiliationLeadingName:
+    """Scopus starts each affiliation with the author's name: "Teng Y., Guangxi ...".
+
+    An affiliation without the separator is only the name, so it is dropped.
+    """
+
+    separator: str = ", "
+
+    def apply(
+        self,
+        raw_fields: dict[str, str],
+        record: Record,
+        mapping: "FieldMapping",
+        settings: ParseSettings,
+    ) -> Record:
+        authors = []
+        for author in record.authors:
+            affiliations = [
+                Affiliation(name=name)
+                for affiliation in author.affiliations
+                if (name := (affiliation.name or "").partition(self.separator)[2])
+            ]
+            authors.append(author.model_copy(update={"affiliations": affiliations}))
         return record.model_copy(update={"authors": authors})

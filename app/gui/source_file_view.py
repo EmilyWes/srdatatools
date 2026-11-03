@@ -4,7 +4,7 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import SourceFile
-from app.gui.import_flow import preview_for, shows_delimiter
+from app.gui.import_flow import preview_for, row_defaults_for
 from app.gui.library_overview import format_count, source_label
 from app.gui.mapping_table import render_mapping_table
 from app.parsers.common import FileSummary
@@ -77,13 +77,12 @@ def render_source_file_view(
             with ui.column().classes("gap-1"):
                 ui.label("Field mapping").classes("text-sm text-grey-7")
                 summary = FileSummary(**source_file.file_summary)
+                source = source_file.source or "unknown"
                 render_mapping_table(
                     ui.column(),
                     summary,
-                    FieldMapping(**source_file.suggested_mapping),
-                    show_delimiter=shows_delimiter(source_file.format),
-                    preview=preview_for(
-                        source_file.format, source_file.source or "unknown", summary
-                    ),
-                    chosen=FieldMapping(**source_file.field_mapping),
+                    FieldMapping.model_validate(source_file.suggested_mapping),
+                    defaults=row_defaults_for(source_file.format, source),
+                    preview=preview_for(source_file.format, source, summary),
+                    chosen=FieldMapping.model_validate(source_file.field_mapping),
                 )

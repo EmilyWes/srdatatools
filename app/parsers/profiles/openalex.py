@@ -1,9 +1,10 @@
 import csv
 from io import StringIO
 
+from app.parsers.mapping import Suggest
 from app.parsers.profiles.base import FormatProfile, Profile, never_matches
-from app.parsers.profiles.default import default_settings
-from app.parsers.quirks import FirstValue, ParallelAuthorColumns, StripPrefix
+from app.parsers.profiles.default import default_row_defaults, default_settings
+from app.parsers.quirks import FirstValue, StripPrefix
 
 _LIST_DELIMITER = "|"
 _CSV_MARKER_HEADERS = frozenset({"work id", "concept ids"})
@@ -20,30 +21,26 @@ OPENALEX = Profile(
     label="OpenAlex",
     formats={
         "csv": FormatProfile(
-            aliases={
-                "authors": ["author", "orcid", "author ids"],
-                "journal": ["source"],
-                "keywords": ["keyword", "concept", "topic"],
-                "publication_type": ["type"],
-                "other_ids.openalex": ["work id"],
+            suggestions={
+                "author": Suggest("authors", {"role": "full_name"}),
+                "orcid": Suggest("authors", {"role": "orcid"}),
+                "author ids": Suggest(
+                    "authors", {"role": "ids", "id_key": "openalex_author_id"}
+                ),
+                "source": Suggest("journal"),
+                "keyword": Suggest("keywords"),
+                "concept": Suggest("keywords", {"prefix": "[Concept] "}),
+                "topic": Suggest("keywords", {"prefix": "[Topic] "}),
+                "type": Suggest("publication_type"),
+                "work id": Suggest("other_ids", {"key": "openalex"}),
             },
             matches=_matches_csv,
-            settings=default_settings(
-                "csv", keyword_prefixes={"Concept": "[Concept] ", "Topic": "[Topic] "}
-            ),
+            settings=default_settings("csv"),
+            row_defaults=default_row_defaults("csv", delimiter=_LIST_DELIMITER),
             quirks=(
-                ParallelAuthorColumns(
-                    delimiter=_LIST_DELIMITER,
-                    name_columns=("Author",),
-                    orcid_column="ORCID",
-                    orcid_prefix="https://orcid.org/",
-                    id_column="Author IDs",
-                    id_key="openalex_author_id",
-                ),
                 FirstValue("issn", _LIST_DELIMITER),
                 StripPrefix("pmid", "https://pubmed.ncbi.nlm.nih.gov/"),
             ),
-            list_delimiter=_LIST_DELIMITER,
             ignored_keys=frozenset(
                 {
                     "concept ids",
@@ -63,15 +60,19 @@ OPENALEX = Profile(
             ),
         ),
         "ris": FormatProfile(
-            aliases={"authors": ["au", "c1"]},
+            suggestions={
+                "au": Suggest("authors"),
+                "c1": Suggest("authors", {"role": "affiliations"}),
+            },
             matches=never_matches,
             settings=default_settings("ris"),
+            row_defaults=default_row_defaults("ris"),
         ),
         "bibtex": FormatProfile(
-            aliases={},
+            suggestions={},
             matches=never_matches,
             settings=default_settings("bibtex"),
-            list_delimiter=",",
+            row_defaults=default_row_defaults("bibtex", delimiter=","),
         ),
     },
 )

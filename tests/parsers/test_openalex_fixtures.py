@@ -1,4 +1,3 @@
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -29,16 +28,18 @@ def _parse(path: Path, file_format: str) -> ParseResult:
     mapping: FieldMapping
     if file_format == "csv":
         headers = list(read_csv_headers(path).samples)
-        mapping = suggest_mapping(headers, profile.aliases, profile.ignored_keys)
+        mapping = suggest_mapping(
+            headers, profile.suggestions, profile.row_defaults, profile.ignored_keys
+        )
     elif file_format == "ris":
         mapping = suggest_ris_mapping(
-            list(read_ris_tags(path).samples), profile.aliases
+            list(read_ris_tags(path).samples), profile.suggestions, profile.row_defaults
         )
     else:
         keys = list(read_bibtex_fields(path).samples)
-        mapping = suggest_bibtex_mapping(keys, profile.aliases)
-    if profile.list_delimiter is not None:
-        mapping = replace(mapping, list_delimiter=profile.list_delimiter)
+        mapping = suggest_bibtex_mapping(
+            keys, profile.suggestions, profile.row_defaults
+        )
     if file_format == "csv":
         result = parse_csv_file(path, mapping, settings=profile.settings)
     elif file_format == "ris":

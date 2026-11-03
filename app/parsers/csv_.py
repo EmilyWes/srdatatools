@@ -1,5 +1,6 @@
 import csv
 import logging
+from collections.abc import Mapping
 from io import StringIO
 from pathlib import Path
 
@@ -11,40 +12,66 @@ from app.parsers.common import (
     SummaryBuilder,
     decode_file,
 )
-from app.parsers.mapping import FieldMapping, apply_mapping, override_aliases
+from app.parsers.mapping import (
+    FieldMapping,
+    RowDefaults,
+    Suggest,
+    apply_mapping,
+    override_aliases,
+)
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
 from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
-_SUGGESTION_ALIASES: dict[str, list[str]] = {
-    "title": ["article title", "document title", "title"],
-    "abstract": ["abstract"],
-    "journal": ["source title", "journal", "publication title"],
-    "conference_name": ["conference name", "proceedings title"],
-    "volume": ["volume"],
-    "issue": ["issue"],
-    "pages": ["pages", "page range"],
-    "page_start": ["page start"],
-    "page_end": ["page end"],
-    "doi": ["doi"],
-    "pmid": ["pubmed id", "pmid"],
-    "issn": ["issn"],
-    "isbn": ["isbn"],
-    "publication_type": ["document type", "publication type"],
-    "language": ["language of original document", "language"],
-    "publisher": ["publisher"],
-    "url": ["link", "url"],
-    "notes": ["notes"],
-    "authors": ["authors", "author full names", "author(s)"],
-    "keywords": ["author keywords", "index keywords", "keywords"],
-    "year": ["year", "publication year"],
-    "month": ["month"],
-    "day": ["day"],
-    "date": ["date", "publication date", "coverdate"],
-    "other_ids": ["eid", "pmcid", "pmc id"],
-    "label": ["included", "label_included", "label", "decision", "inclusion"],
+_SCALARS = {
+    "article title": "title",
+    "document title": "title",
+    "title": "title",
+    "abstract": "abstract",
+    "source title": "journal",
+    "journal": "journal",
+    "publication title": "journal",
+    "conference name": "conference_name",
+    "proceedings title": "conference_name",
+    "volume": "volume",
+    "issue": "issue",
+    "doi": "doi",
+    "pubmed id": "pmid",
+    "pmid": "pmid",
+    "document type": "publication_type",
+    "publication type": "publication_type",
+    "language of original document": "language",
+    "language": "language",
+    "publisher": "publisher",
+    "link": "url",
+    "url": "url",
+    "notes": "notes",
 }
+_SUGGESTIONS: dict[str, Suggest] = {
+    **{alias: Suggest(target) for alias, target in _SCALARS.items()},
+    "pages": Suggest("pages"),
+    "page range": Suggest("pages"),
+    "page start": Suggest("pages", {"part": "start"}),
+    "page end": Suggest("pages", {"part": "end"}),
+    "issn": Suggest("issn_isbn", {"kind": "issn"}),
+    "isbn": Suggest("issn_isbn", {"kind": "isbn"}),
+    **dict.fromkeys(("authors", "author full names", "author(s)"), Suggest("authors")),
+    **dict.fromkeys(
+        ("author keywords", "index keywords", "keywords"), Suggest("keywords")
+    ),
+    "year": Suggest("date", {"part": "year"}),
+    "publication year": Suggest("date", {"part": "year"}),
+    "month": Suggest("date", {"part": "month"}),
+    "day": Suggest("date", {"part": "day"}),
+    **dict.fromkeys(("date", "publication date", "coverdate"), Suggest("date")),
+    **dict.fromkeys(("eid", "pmcid", "pmc id"), Suggest("other_ids")),
+    **dict.fromkeys(
+        ("included", "label_included", "label", "decision", "inclusion"),
+        Suggest("label"),
+    ),
+}
+ROW_DEFAULTS = RowDefaults()
 
 _EXTRA_FIELDS_KEY = "__extra__"
 
@@ -160,9 +187,10 @@ def read_csv_headers(
 
 def suggest_mapping(
     headers: list[str],
-    alias_overrides: dict[str, list[str]] | None = None,
+    overrides: Mapping[str, Suggest] | None = None,
+    defaults: RowDefaults = ROW_DEFAULTS,
     ignored_keys: frozenset[str] = frozenset(),
 ) -> FieldMapping:
-    aliases = override_aliases(_SUGGESTION_ALIASES, alias_overrides or {})
+    suggestions = override_aliases(_SUGGESTIONS, overrides or {})
     kept = [h for h in headers if h.strip().lower() not in ignored_keys]
-    return _suggest_mapping(kept, aliases, lenient=True)
+    return _suggest_mapping(kept, suggestions, defaults, lenient=True)

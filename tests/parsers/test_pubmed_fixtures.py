@@ -1,4 +1,3 @@
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -18,14 +17,12 @@ def _parse(path: Path, file_format: str) -> ParseResult:
     profile = PUBMED.formats[file_format]
     if file_format == "nbib":
         tags = list(read_nbib_tags(path).samples)
-        mapping = suggest_nbib_mapping(tags, profile.aliases)
+        mapping = suggest_nbib_mapping(tags, profile.suggestions, profile.row_defaults)
         return apply_profile(
             parse_nbib_file(path, mapping, settings=profile.settings), profile, mapping
         )
     headers = list(read_csv_headers(path).samples)
-    mapping = suggest_mapping(headers, profile.aliases)
-    if profile.list_delimiter is not None:
-        mapping = replace(mapping, list_delimiter=profile.list_delimiter)
+    mapping = suggest_mapping(headers, profile.suggestions, profile.row_defaults)
     return apply_profile(
         parse_csv_file(path, mapping, settings=profile.settings), profile, mapping
     )

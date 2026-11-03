@@ -1,6 +1,5 @@
 ﻿import asyncio
 import datetime
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -32,8 +31,9 @@ from app.gui.import_flow import (
 from app.gui.layout import shell
 from app.gui.mapping_table import MappingScreen
 from app.parsers.common import FileSummary
-from app.parsers.mapping import FieldMapping
+from app.parsers.mapping import AuthorsRow, FieldMapping
 from tests.gui.clicks import click_and_wait
+from tests.mappings import mapping_of, targets_of
 
 
 class _FakeWindow:
@@ -127,7 +127,7 @@ def test_render_mapping__renders_mapping_screen_with_file_headers(
 
     assert screen is not None
     middle_children = panes.middle.default_slot.children
-    assert len(middle_children) == 2  # header rows column + delimiter input, no button
+    assert len(middle_children) == 1  # header rows column, no button
     header_rows = middle_children[0].default_slot.children
     assert len(header_rows) == 3  # column header labels row + one row per CSV column
 
@@ -164,7 +164,7 @@ def test_import_csv__stores_records_and_returns_source_file_with_row_count(
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\nOther Paper,10.1/abc\n")
-    mapping = FieldMapping(targets={"Title": "title", "DOI": "doi"})
+    mapping = mapping_of({"Title": "title", "DOI": "doi"})
 
     source_file = import_csv(session, csv_path, mapping, _summary("csv", csv_path))
     session.commit()
@@ -180,7 +180,7 @@ def test_import_csv__stores_skipped_rows_on_source_file(
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\n,\n")
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     source_file = import_csv(session, csv_path, mapping, _summary("csv", csv_path))
 
@@ -193,7 +193,7 @@ def test_import_file__dispatches_csv_to_import_csv(
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title\nSome Paper\n")
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     source_file = import_file(
         session, csv_path, "csv", mapping, _summary("csv", csv_path)
@@ -208,7 +208,7 @@ def test_import_tsv__stores_records_with_tsv_format(
 ) -> None:
     tsv_path = tmp_path / "export.tsv"
     tsv_path.write_text("Title\tDOI\nA, B study\t10.1/xyz\nOther Paper\t10.1/abc\n")
-    mapping = FieldMapping(targets={"Title": "title", "DOI": "doi"})
+    mapping = mapping_of({"Title": "title", "DOI": "doi"})
 
     source_file = import_tsv(session, tsv_path, mapping, _summary("tsv", tsv_path))
     session.commit()
@@ -223,7 +223,7 @@ def test_import_file__dispatches_tsv_to_import_tsv(
 ) -> None:
     tsv_path = tmp_path / "export.tsv"
     tsv_path.write_text("Title\nSome Paper\n")
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     source_file = import_file(
         session, tsv_path, "tsv", mapping, _summary("tsv", tsv_path)
@@ -236,7 +236,7 @@ def test_import_file__dispatches_tsv_to_import_tsv(
 def test_import_file__writes_activity_log_row(session: Session, tmp_path: Path) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\n,\nOther Paper,10.1/abc\n")
-    mapping = FieldMapping(targets={"Title": "title"})
+    mapping = mapping_of({"Title": "title"})
 
     import_file(session, csv_path, "csv", mapping, _summary("csv", csv_path))
     session.commit()
@@ -250,14 +250,14 @@ def test_import_file__saves_mapping_suggestion_and_summary(
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\nOther Paper,\n")
-    mapping = FieldMapping(targets={"Title": "title"}, list_delimiter="|")
+    mapping = mapping_of({"Title": "title"})
 
     source_file = import_file(
         session, csv_path, "csv", mapping, _summary("csv", csv_path)
     )
 
-    assert source_file.field_mapping == asdict(mapping)
-    assert source_file.suggested_mapping["targets"] == {
+    assert FieldMapping.model_validate(source_file.field_mapping) == mapping
+    assert targets_of(FieldMapping.model_validate(source_file.suggested_mapping)) == {
         "Title": "title",
         "DOI": "doi",
     }
@@ -286,7 +286,7 @@ def test_import_ris__stores_records_and_skipped_rows(
 ) -> None:
     ris_path = tmp_path / "export.ris"
     ris_path.write_text(_RIS_TEXT)
-    mapping = FieldMapping(targets={"TI": "title"})
+    mapping = mapping_of({"TI": "title"})
 
     source_file = import_ris(session, ris_path, mapping, _summary("ris", ris_path))
     session.commit()
@@ -312,7 +312,7 @@ def test_import_file__dispatches_ris_to_import_ris(
     assert source_file.format == "ris"
 
 
-def test_import_file__saves_ris_suggestion_with_newline_delimiter(
+def test_import_file__saves_ris_suggestion_with_row_options(
     session: Session, tmp_path: Path
 ) -> None:
     ris_path = tmp_path / "export.ris"
@@ -322,11 +322,12 @@ def test_import_file__saves_ris_suggestion_with_newline_delimiter(
         session, ris_path, "ris", FieldMapping(), _summary("ris", ris_path)
     )
 
-    assert source_file.suggested_mapping["list_delimiter"] == "\n"
+    suggested = FieldMapping.model_validate(source_file.suggested_mapping)
+    assert suggested.rows["AU"] == AuthorsRow(delimiter="\n", id_key="au")
     assert set(source_file.file_summary["samples"]) == {"TI", "AU", "TY"}
 
 
-def test_render_mapping__ris_lists_distinct_tags_without_delimiter_input(
+def test_render_mapping__ris_lists_distinct_tags_without_delimiter_box(
     tmp_path: Path,
 ) -> None:
     ris_path = tmp_path / "export.ris"
@@ -337,8 +338,10 @@ def test_render_mapping__ris_lists_distinct_tags_without_delimiter_input(
 
     assert screen is not None
     assert [row.header for row in screen.rows] == ["TI", "AU", "TY"]
-    assert screen.list_delimiter_input is None
-    assert screen.current_mapping().list_delimiter == "\n"
+    assert [name for name, w in screen._row_for("AU").inputs.items() if w.visible] == [
+        "role",
+        "separator",
+    ]
 
 
 def test_render_mapping__ris_without_tags_notifies_and_returns_none(
@@ -376,7 +379,7 @@ def test_import_nbib__stores_records_and_skipped_rows(
 ) -> None:
     nbib_path = tmp_path / "export.nbib"
     nbib_path.write_text(_NBIB_TEXT)
-    mapping = FieldMapping(targets={"TI": "title"})
+    mapping = mapping_of({"TI": "title"})
 
     source_file = import_nbib(session, nbib_path, mapping, _summary("nbib", nbib_path))
     session.commit()
@@ -402,7 +405,7 @@ def test_import_file__dispatches_nbib_to_import_nbib(
     assert source_file.format == "nbib"
 
 
-def test_render_mapping__nbib_lists_distinct_tags_without_delimiter_input(
+def test_render_mapping__nbib_lists_distinct_tags_without_delimiter_box(
     tmp_path: Path,
 ) -> None:
     nbib_path = tmp_path / "export.nbib"
@@ -413,8 +416,10 @@ def test_render_mapping__nbib_lists_distinct_tags_without_delimiter_input(
 
     assert screen is not None
     assert [row.header for row in screen.rows] == ["PMID", "TI", "FAU"]
-    assert screen.list_delimiter_input is None
-    assert screen.current_mapping().list_delimiter == "\n"
+    assert [name for name, w in screen._row_for("FAU").inputs.items() if w.visible] == [
+        "role",
+        "separator",
+    ]
 
 
 def test_render_mapping__nbib_without_tags_notifies_and_returns_none(
@@ -455,7 +460,7 @@ def test_import_bibtex__stores_records_and_skipped_rows(
 ) -> None:
     bibtex_path = tmp_path / "export.bib"
     bibtex_path.write_text(_BIBTEX_TEXT)
-    mapping = FieldMapping(targets={"title": "title"})
+    mapping = mapping_of({"title": "title"})
 
     source_file = import_bibtex(
         session, bibtex_path, mapping, _summary("bibtex", bibtex_path)
@@ -483,7 +488,7 @@ def test_import_file__dispatches_bibtex_to_import_bibtex(
     assert source_file.format == "bibtex"
 
 
-def test_render_mapping__bibtex_lists_fields_with_delimiter_input(
+def test_render_mapping__bibtex_lists_fields_and_hides_author_delimiter(
     tmp_path: Path,
 ) -> None:
     bibtex_path = tmp_path / "export.bib"
@@ -494,8 +499,9 @@ def test_render_mapping__bibtex_lists_fields_with_delimiter_input(
 
     assert screen is not None
     assert [row.header for row in screen.rows] == ["title", "author", "@type", "@key"]
-    assert screen.list_delimiter_input is not None
-    assert screen.current_mapping().list_delimiter == ";"
+    assert [
+        name for name, w in screen._row_for("author").inputs.items() if w.visible
+    ] == ["role", "separator"]
 
 
 def test_render_mapping__bibtex_without_entries_notifies_and_returns_none(
@@ -525,7 +531,7 @@ def test_render_import_view__bibtex_file_is_detected_and_enables_import(
     assert view.import_button.enabled is True
 
 
-def test_render_mapping__tsv_lists_columns_with_delimiter_input(
+def test_render_mapping__tsv_lists_columns_with_delimiter_box(
     tmp_path: Path,
 ) -> None:
     tsv_path = tmp_path / "export.tsv"
@@ -536,7 +542,9 @@ def test_render_mapping__tsv_lists_columns_with_delimiter_input(
 
     assert screen is not None
     assert [row.header for row in screen.rows] == ["Title", "Authors"]
-    assert screen.list_delimiter_input is not None
+    assert [
+        name for name, w in screen._row_for("Authors").inputs.items() if w.visible
+    ] == ["role", "delimiter", "separator"]
 
 
 def test_render_import_view__tsv_file_is_detected_and_enables_import(
@@ -683,7 +691,7 @@ def test_render_import_view__import_reads_live_mapping_edits(
                 )
             ],
             "csv",
-            FieldMapping(targets={"Scopus Author ID": "authors"}),
+            mapping_of({"Scopus Author ID": "authors"}),
             "unknown",
         )
     ]
@@ -770,12 +778,14 @@ def test_render_mapping__pubmed_nbib_suggests_jt_not_ta(tmp_path: Path) -> None:
     screen = _render_mapping(panes.middle, "nbib", nbib_path, "pubmed")
 
     assert screen is not None
-    targets = screen.current_mapping().targets
+    targets = targets_of(screen.current_mapping())
     assert targets["JT"] == "journal"
     assert "TA" not in targets
 
 
-def test_render_mapping__pubmed_csv_uses_comma_delimiter(tmp_path: Path) -> None:
+def test_render_mapping__pubmed_csv_splits_full_names_on_comma(
+    tmp_path: Path,
+) -> None:
     csv_path = tmp_path / "pubmed.csv"
     csv_path.write_text('PMID,Authors\n1,"Romano M, Novacek MJ."\n')
     panes = shell()
@@ -783,7 +793,9 @@ def test_render_mapping__pubmed_csv_uses_comma_delimiter(tmp_path: Path) -> None
     screen = _render_mapping(panes.middle, "csv", csv_path, "pubmed")
 
     assert screen is not None
-    assert screen.current_mapping().list_delimiter == ","
+    assert screen.current_mapping().rows["Authors"] == AuthorsRow(
+        role="full_name", delimiter=",", id_key="authors"
+    )
 
 
 def test_render_mapping__scopus_csv_leaves_ignored_columns_unmapped(
@@ -796,7 +808,7 @@ def test_render_mapping__scopus_csv_leaves_ignored_columns_unmapped(
     screen = _render_mapping(panes.middle, "csv", csv_path, "scopus")
 
     assert screen is not None
-    targets = screen.current_mapping().targets
+    targets = targets_of(screen.current_mapping())
     assert targets["Conference name"] == "conference_name"
     assert "Conference date" not in targets
 
@@ -809,7 +821,7 @@ def test_render_mapping__scopus_ris_uses_profile_aliases(tmp_path: Path) -> None
     screen = _render_mapping(panes.middle, "ris", ris_path, "scopus")
 
     assert screen is not None
-    targets = screen.current_mapping().targets
+    targets = targets_of(screen.current_mapping())
     assert targets["M3"] == "publication_type"
     assert "TY" not in targets
 
@@ -819,7 +831,7 @@ def test_import_file__pubmed_applies_profile_and_stores_source(
 ) -> None:
     nbib_path = tmp_path / "pubmed.nbib"
     nbib_path.write_text(_PUBMED_NBIB_TEXT)
-    mapping = FieldMapping(targets={"TI": "title", "TT": "title", "PG": "pages"})
+    mapping = mapping_of({"TI": "title", "TT": "title", "PG": "pages"})
 
     source_file = import_file(
         session, nbib_path, "nbib", mapping, _summary("nbib", nbib_path), "pubmed"
@@ -851,7 +863,7 @@ def test_import_file__unknown_source_stores_no_source(
 ) -> None:
     nbib_path = tmp_path / "pubmed.nbib"
     nbib_path.write_text(_PUBMED_NBIB_TEXT)
-    mapping = FieldMapping(targets={"PG": "pages"})
+    mapping = mapping_of({"PG": "pages"})
 
     source_file = import_file(
         session, nbib_path, "nbib", mapping, _summary("nbib", nbib_path), "unknown"
@@ -879,7 +891,7 @@ def test_render_import_view__source_change_rerenders_mapping_and_is_passed_on(
     view._set_source("pubmed")
 
     assert view.mapping_screen is not None
-    assert "TA" not in view.mapping_screen.current_mapping().targets
+    assert "TA" not in view.mapping_screen.current_mapping().rows
     view._import()
     assert calls == ["pubmed"]
 
@@ -899,7 +911,7 @@ def test_render_mapping__result_applies_pubmed_nbib_profile(tmp_path: Path) -> N
     assert screen is not None
     assert _result(screen, "PG") == "521-522"
     assert _result(screen, "TI") == "Original."
-    assert _result(screen, "IS") == "1234-5678"
+    assert _result(screen, "IS") == "ISSN 1234-5678"
 
 
 def test_render_mapping__result_without_source_skips_profile(tmp_path: Path) -> None:
@@ -1140,7 +1152,7 @@ def test_import_excel__stores_records_with_excel_format_and_sheet(
     session: Session, tmp_path: Path
 ) -> None:
     path = _workbook(tmp_path, _TWO_SHEETS)
-    mapping = FieldMapping(targets={"Name": "title"})
+    mapping = mapping_of({"Name": "title"})
     summary = read_summary("excel", path, "Other")
     assert summary is not None
 
@@ -1157,7 +1169,7 @@ def test_import_file__dispatches_excel_to_import_excel(
     session: Session, tmp_path: Path
 ) -> None:
     path = _workbook(tmp_path, _TWO_SHEETS)
-    mapping = FieldMapping(targets={"Name": "title"})
+    mapping = mapping_of({"Name": "title"})
 
     source_file = import_file(
         session, path, "excel", mapping, _summary("excel", path), sheet="Other"
@@ -1190,7 +1202,7 @@ def test_read_summary__excel_reads_first_sheet_by_default(tmp_path: Path) -> Non
     assert list(summary.samples) == ["Title", "DOI"]
 
 
-def test_render_mapping__excel_lists_columns_with_delimiter_input(
+def test_render_mapping__excel_lists_columns_with_delimiter_box(
     tmp_path: Path,
 ) -> None:
     path = _workbook(tmp_path, {"Sheet1": [["Title", "Authors"], ["A", "B; C"]]})
@@ -1200,7 +1212,9 @@ def test_render_mapping__excel_lists_columns_with_delimiter_input(
 
     assert screen is not None
     assert [row.header for row in screen.rows] == ["Title", "Authors"]
-    assert screen.list_delimiter_input is not None
+    assert [
+        name for name, w in screen._row_for("Authors").inputs.items() if w.visible
+    ] == ["role", "delimiter", "separator"]
 
 
 def _sheet_select(middle: Element) -> Any:
