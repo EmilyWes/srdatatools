@@ -254,10 +254,14 @@ def _result_status(text: str, sample: str, not_parsed: bool) -> Status | None:
 
 def _author_text(author: Author) -> str:
     details = [f"ORCID {author.orcid}"] if author.orcid else []
+    details += [f"{key} {value}" for key, value in author.other_ids.items()]
     details += [
         affiliation.name for affiliation in author.affiliations if affiliation.name
     ]
-    name = author.full_name or ""
+    if author.family_name and author.given_name:
+        name = f"{author.family_name}, {author.given_name}"
+    else:
+        name = author.full_name or ""
     return f"{name} ({'; '.join(details)})" if details else name
 
 
@@ -281,7 +285,8 @@ def _result_text(row: RowMapping, record: Record) -> str:
         ids = (("ISSN", record.issn), ("ISBN", record.isbn))
         return _LIST_SEPARATOR.join(f"{label} {value}" for label, value in ids if value)
     if isinstance(row, OtherIdRow):
-        return record.other_ids.get(row.key, "")
+        other_id = record.other_ids.get(row.key)
+        return f"{row.key}: {other_id}" if other_id else ""
     if row.target == "authors":
         return _LIST_SEPARATOR.join(map(_author_text, record.authors))
     if row.target == "keywords":
@@ -368,14 +373,17 @@ class MappingScreen:
             mapped = mapping.rows.get(row.header)
             target = mapped.target if mapped is not None else None
             text: str
+            unknown_label = False
             if target == LABEL_TARGET:
-                text = record.labels[label_headers.index(row.header)].value
+                label = record.labels[label_headers.index(row.header)]
+                text = f"{label.value} ({label.phase} / {label.screener})"
+                unknown_label = label.value == "unknown"
             else:
                 text = _result_text(mapped, record) if mapped is not None else ""
             not_parsed = bool(target and row.sample.text and not text)
             row.result.set_text(_NOT_PARSED if not_parsed else text)
             status = _result_status(text, row.sample.text, not_parsed)
-            if target == LABEL_TARGET and text == "unknown":
+            if unknown_label:
                 status = "red"
             color = _RESULT_TEXT_COLORS[status] if status else "text-grey-7"
             row.result.classes(replace=f"{_RESULT_CLASSES} {color}")

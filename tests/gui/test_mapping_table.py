@@ -732,8 +732,48 @@ def test_render_mapping_table__result_shows_normalized_label_per_row() -> None:
     screen = _render_samples({"included": "1", "Title": "x"})
     screen.set_target("Title", "label")
 
-    assert _result(screen, "included") == "include"
-    assert _result(screen, "Title") == "unknown"
+    assert _result(screen, "included") == "include (ft / screener 1)"
+    assert _result(screen, "Title") == "unknown (ft / screener 1)"
+
+
+def test_render_mapping_table__result_follows_typed_phase_and_screener() -> None:
+    screen = _render_samples({"included": "1"})
+
+    screen.set_option("included", "phase", "tiab")
+    screen.set_option("included", "screener", "Emily")
+
+    assert _result(screen, "included") == "include (tiab / Emily)"
+
+
+def test_render_mapping_table__result_shows_other_id_key_and_follows_it() -> None:
+    screen = _render_samples({"PMCID": "PMC1"})
+    assert _result(screen, "PMCID") == "pmcid: PMC1"
+
+    screen.set_option("PMCID", "key", "pmc")
+
+    assert _result(screen, "PMCID") == "pmc: PMC1"
+
+
+def test_render_mapping_table__result_shows_name_split_and_follows_it() -> None:
+    screen = _render_samples({"Authors": "Smith, John"})
+    assert _result(screen, "Authors") == "Smith, John"
+
+    screen.set_option("Authors", "role", "first_last")
+
+    assert _result(screen, "Authors") == "John, Smith"
+
+
+def test_render_mapping_table__result_shows_author_ids() -> None:
+    samples = {"Author": "Ann Lee", "Author IDs": "A1"}
+    screen = _render_samples(samples)
+    screen.set_target("Author", "authors")
+    screen.set_option("Author", "role", "full_name")
+    screen.set_target("Author IDs", "authors")
+    screen.set_option("Author IDs", "role", "ids")
+
+    screen.set_option("Author IDs", "id_key", "openalex")
+
+    assert _result(screen, "Author") == "Ann Lee (openalex A1)"
 
 
 def test_render_mapping_table__unknown_label_result_is_red() -> None:
