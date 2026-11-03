@@ -2,30 +2,42 @@ import pytest
 
 from app.parsers.profiles import PROFILES, profile_for
 from app.parsers.profiles.overview import (
-    QuirkChoice,
-    QuirkEntry,
+    ParsingChoices,
+    QuirkItem,
+    QuirkList,
+    default_choices,
     dump_choices,
     load_choices,
     profile_with,
-    quirk_entries,
+    quirk_boxes,
 )
+from app.parsers.profiles.scopus import EMBEDDED_AUTHOR_IDS, RIS_NOTES
 from app.parsers.quirks import (
     AffiliationLeadingName,
     DropEtAl,
-    EmbeddedAuthorIds,
-    FirstValue,
+    EmptyValues,
     StripLastAuthorTrailing,
 )
 
 _ALL_TYPES = ("ris", "nbib", "csv", "tsv", "excel", "bibtex")
 
 
-def _entries(file_type: str, source: str = "unknown") -> dict[str, QuirkEntry]:
-    return {entry.key: entry for entry in quirk_entries(file_type, source)}
+def _keys(file_type: str) -> list[str]:
+    return [
+        item.key
+        for box in quirk_boxes(file_type, "Type")
+        for item in box.items
+        if isinstance(item, QuirkItem)
+    ]
 
 
-def _choices(entries: dict[str, QuirkEntry]) -> dict[str, QuirkChoice]:
-    return {key: entry.default.model_copy(deep=True) for key, entry in entries.items()}
+def _type_box_keys(file_type: str) -> list[str]:
+    box = quirk_boxes(file_type, "Type")[-1]
+    return [item.key for item in box.items if isinstance(item, QuirkItem)]
+
+
+def _with(file_type: str, source: str = "unknown", **changes: object) -> ParsingChoices:
+    return default_choices(file_type, source).model_copy(update=changes)
 
 
 @pytest.mark.parametrize("source", ["unknown", *PROFILES], ids=["unknown", *PROFILES])
@@ -35,187 +47,221 @@ def test_profile_with__defaults_reproduce_the_profile(
 ) -> None:
     profile = profile_for(source, file_type)
 
-    assert profile_with(file_type, source, {}) == profile
-    assert profile_with(file_type, source, _choices(_entries(file_type, source))) == (
+    assert profile_with(file_type, source) == profile
+    assert profile_with(file_type, source, default_choices(file_type, source)) == (
         profile
     )
 
 
-def test_quirk_entries__column_types_list_every_column_profile_quirk() -> None:
-    for file_type in ("csv", "tsv", "excel"):
-        entries = _entries(file_type)
+def test_quirk_boxes__titles_in_order_ending_with_the_type_label() -> None:
+    titles = [box.title for box in quirk_boxes("ris", "RIS")]
 
-        assert entries["DropEtAl"].default.on
-        assert entries["FirstValue.issn"].default.on
-        assert not entries["EmbeddedAuthorIds"].default.on
-        assert not entries["AffiliationLeadingName"].default.on
-        assert not entries["StripLastAuthorTrailing"].default.on
-
-
-def test_quirk_entries__field_size_limit_only_for_csv_and_tsv() -> None:
-    assert _entries("csv")["csv_field_size_limit"].kind == "setting"
-    assert "csv_field_size_limit" in _entries("tsv")
-    assert "csv_field_size_limit" not in _entries("excel")
-    assert "csv_field_size_limit" not in _entries("ris")
+    assert titles == [
+        "ISSN/ISBN",
+        "Authors",
+        "Labeling",
+        "Empty values",
+        "Ordering",
+        "Identifiers",
+        "Other",
+        "RIS",
+    ]
 
 
-def test_quirk_entries__parser_behaviours_per_type() -> None:
-    assert _entries("ris")["ris.author_details"].kind == "parser"
-    assert _entries("bibtex")["bibtex.key_continuation"].kind == "parser"
-    assert "ris.author_details" not in _entries("bibtex")
-    for file_type in ("csv", "tsv", "excel", "bibtex"):
-        assert _entries(file_type)["author_columns"].kind == "parser"
-    assert "author_columns" not in _entries("ris")
-    assert "author_columns" not in _entries("nbib")
+@pytest.mark.parametrize("file_type", _ALL_TYPES)
+def test_quirk_boxes__every_control_key_is_a_choice(file_type: str) -> None:
+    for box in quirk_boxes(file_type, "Type"):
+        for item in box.items:
+            key = item.key
+            if isinstance(item, QuirkItem) and item.control == "note":
+                continue
+            assert key in ParsingChoices.model_fields
 
 
-def test_quirk_entries__origins() -> None:
-    entries = _entries("csv")
+def test_quirk_boxes__preferred_qualifier_is_enabled_by_only_one() -> None:
+    [_, _, preferred] = quirk_boxes("csv", "CSV")[0].items
 
-    for key in (
-        "skip_issn_isbn_qualifiers",
-        "FirstValue.isbn",
-        "FirstValue.issn",
-        "DropEtAl",
-        "StripPrefix.pmid",
-        "ExpandPageRange",
-        "ContinueToNextField.title",
-    ):
-        assert entries[key].origin == "general"
-    assert entries["csv_field_size_limit"].origin == "type"
-    assert entries["EmbeddedAuthorIds"].origin == "general"
-    assert _entries("nbib")["FirstValue.publication_type"].origin == "type"
-    assert _entries("ris")["RisNotes"].origin == "general"
+    assert isinstance(preferred, QuirkItem)
+    assert preferred.enabled_by == "only_one"
 
 
-def test_quirk_entries__used_by_names_the_declaring_profiles() -> None:
-    entries = _entries("tsv")
+def test_quirk_boxes__empty_values_and_ordering_are_lists() -> None:
+    boxes = {box.title: box for box in quirk_boxes("csv", "CSV")}
 
-    assert entries["EmbeddedAuthorIds"].used_by == ("Scopus",)
-    assert entries["StripLastAuthorTrailing"].used_by == ("PubMed",)
-    assert entries["DropEtAl"].used_by == ()
+    [empty] = boxes["Empty values"].items
+    [order] = boxes["Ordering"].items
 
-
-def test_quirk_entries__selected_profile_turns_its_own_quirks_on() -> None:
-    entries = _entries("csv", "scopus")
-
-    assert entries["EmbeddedAuthorIds"].default.on
-    assert entries["EmbeddedAuthorIds"].default.values == {"id_key": "scopus_author_id"}
-    assert entries["DropEtAl"].default.on
-    assert not entries["StripLastAuthorTrailing"].default.on
+    assert isinstance(empty, QuirkList)
+    assert [(p.label, p.control) for p in empty.parts] == [
+        ("Field", "select"),
+        ("Ignore", "text"),
+    ]
+    assert isinstance(order, QuirkList)
+    assert [(p.label, p.control) for p in order.parts] == [("Use first", "select")]
 
 
-def test_quirk_entries__nbib_prefers_electronic_issn() -> None:
-    entry = _entries("nbib")["skip_issn_isbn_qualifiers"]
-
-    assert entry.default == QuirkChoice(on=True, values={"preferred": "Electronic"})
-    assert _entries("csv")["skip_issn_isbn_qualifiers"].default.values == {
-        "preferred": ""
-    }
-
-
-def test_quirk_entries__first_isbn_and_issn_have_an_editable_delimiter() -> None:
-    entries = _entries("ris")
-
-    assert entries["FirstValue.isbn"].default.values == {"delimiter": "\n"}
-    assert entries["FirstValue.issn"].default.values == {"delimiter": "|"}
-    assert entries["FirstValue.isbn"].details == ()
-    assert not entries["FirstValue.isbn"].options[0].strip
+def test_quirk_boxes__type_box_per_type() -> None:
+    assert _type_box_keys("csv") == ["field_size_limit", "author_columns"]
+    assert _type_box_keys("tsv") == ["field_size_limit", "author_columns"]
+    assert _type_box_keys("excel") == ["author_columns"]
+    assert _type_box_keys("nbib") == ["first_publication_type"]
+    assert _type_box_keys("ris") == ["ris_notes", "ris.author_details"]
+    assert _type_box_keys("bibtex") == [
+        "author_columns",
+        "eid_from_url",
+        "bibtex.key_continuation",
+    ]
 
 
-def test_quirk_entries__first_publication_type_line_delimiter_is_read_only() -> None:
-    entry = _entries("nbib")["FirstValue.publication_type"]
-
-    assert entry.options == ()
-    assert entry.details == ("Delimiter: new line",)
-
-
-def test_quirk_entries__url_pattern_is_read_only() -> None:
-    eid = _entries("bibtex")["IdFromUrl"]
-
-    assert [option.name for option in eid.options] == ["id_key", "prefix"]
-    assert eid.details[0] == "Input key: 'url'"
-    assert eid.details[1].startswith("URL pattern: scopus")
+def test_quirk_boxes__type_specific_items_only_in_their_type() -> None:
+    assert "field_size_limit" not in _keys("excel")
+    assert "first_publication_type" not in _keys("ris")
+    assert "ris_notes" not in _keys("bibtex")
 
 
-def test_quirk_entries__unsupported_type_raises() -> None:
+def test_default_choices__unknown_source_defaults() -> None:
+    choices = default_choices("csv", "unknown")
+
+    assert choices.strip_extras and choices.only_one
+    assert choices.preferred_qualifier == ""
+    assert choices.drop_et_al and choices.strip_doi and choices.strip_pmid
+    assert choices.pages_set and choices.minus_one_unlabeled
+    assert not (choices.drop_trailing or choices.id_from_name)
+    assert choices.affiliation_start == ""
+    assert choices.name_split == "none"
+    assert choices.empty_values == [("title", "[Not Available].")]
+    assert choices.use_first == []
+    assert choices.field_size_limit == 1_000_000
+
+
+def test_default_choices__selected_profile_sets_its_own_quirks() -> None:
+    scopus = default_choices("csv", "scopus")
+
+    assert scopus.id_from_name
+    assert scopus.affiliation_start == ", "
+    assert not scopus.drop_trailing
+    assert default_choices("csv", "pubmed").drop_trailing
+    assert default_choices("ris", "scopus").ris_notes
+    assert not default_choices("ris", "unknown").ris_notes
+    assert default_choices("bibtex", "scopus").eid_from_url
+
+
+def test_default_choices__nbib_prefers_electronic_and_keeps_first_type() -> None:
+    choices = default_choices("nbib", "unknown")
+
+    assert choices.preferred_qualifier == "Electronic"
+    assert choices.first_publication_type
+
+
+def test_default_choices__unsupported_type_raises() -> None:
     with pytest.raises(ValueError):
-        quirk_entries("unknown", "unknown")
+        default_choices("unknown", "unknown")
 
 
 def test_profile_with__turns_a_type_default_off() -> None:
-    choices = {"DropEtAl": QuirkChoice(on=False)}
-
-    profile = profile_with("csv", "unknown", choices)
+    profile = profile_with("csv", "unknown", _with("csv", drop_et_al=False))
 
     assert DropEtAl() not in profile.quirks
 
 
-def test_profile_with__turns_another_profiles_quirk_on_with_its_arguments() -> None:
-    choices = {
-        "EmbeddedAuthorIds": QuirkChoice(on=True, values={"id_key": "my_id"}),
-        "AffiliationLeadingName": QuirkChoice(on=True, values={"separator": "; "}),
-    }
+def test_profile_with__turns_another_profiles_quirk_on() -> None:
+    choices = _with("excel", id_from_name=True, affiliation_start="; ")
 
     profile = profile_with("excel", "unknown", choices)
 
-    assert EmbeddedAuthorIds("my_id") in profile.quirks
+    assert EMBEDDED_AUTHOR_IDS in profile.quirks
     assert AffiliationLeadingName("; ") in profile.quirks
 
 
-def test_profile_with__edits_a_delimiter() -> None:
-    choices = {"FirstValue.issn": QuirkChoice(on=True, values={"delimiter": ";"})}
+def test_profile_with__ris_notes_on_for_any_ris_source() -> None:
+    profile = profile_with("ris", "unknown", _with("ris", ris_notes=True))
 
-    profile = profile_with("csv", "openalex", choices)
-
-    assert FirstValue("issn", ";") in profile.quirks
-    assert FirstValue("issn", "|") not in profile.quirks
+    assert RIS_NOTES in profile.quirks
 
 
-def test_profile_with__keeps_declaration_order() -> None:
-    choices = {"StripLastAuthorTrailing": QuirkChoice(on=True, values={"chars": "."})}
+def test_profile_with__empty_affiliation_start_is_off() -> None:
+    choices = _with("csv", "scopus", affiliation_start="")
 
-    quirks = profile_with("tsv", "unknown", choices).quirks
+    quirks = profile_with("csv", "scopus", choices).quirks
 
-    assert quirks.index(DropEtAl()) < quirks.index(StripLastAuthorTrailing("."))
+    assert not any(isinstance(q, AffiliationLeadingName) for q in quirks)
 
 
-def test_profile_with__applies_the_generic_settings() -> None:
-    choices = {
-        "skip_issn_isbn_qualifiers": QuirkChoice(on=True, values={"preferred": ""}),
-        "minus_one_unlabeled": QuirkChoice(on=False),
-        "ambiguous_name_split": QuirkChoice(on=True, values={"split": "last"}),
-        "csv_field_size_limit": QuirkChoice(on=True, values={"limit": "500"}),
-    }
+def test_profile_with__id_from_name_runs_before_drop_trailing() -> None:
+    choices = _with("csv", id_from_name=True, drop_trailing=True)
+
+    quirks = profile_with("csv", "unknown", choices).quirks
+
+    assert quirks.index(EMBEDDED_AUTHOR_IDS) < quirks.index(StripLastAuthorTrailing())
+    assert quirks.index(DropEtAl()) < quirks.index(StripLastAuthorTrailing())
+
+
+def test_profile_with__applies_the_settings() -> None:
+    choices = _with(
+        "csv",
+        strip_extras=False,
+        only_one=False,
+        preferred_qualifier=" print ",
+        minus_one_unlabeled=False,
+        name_split="last",
+        field_size_limit=500,
+        use_first=["B", "A"],
+    )
 
     settings = profile_with("csv", "unknown", choices).settings
 
-    assert settings.skip_issn_isbn_qualifiers
-    assert settings.preferred_issn_qualifier is None
+    assert not settings.issn_isbn_strip_extras
+    assert not settings.issn_isbn_only_one
+    assert settings.preferred_issn_qualifier == "print"
     assert not settings.minus_one_unlabeled
     assert settings.ambiguous_name_split == "last"
     assert settings.csv_field_size_limit == 500
+    assert settings.use_first == ("B", "A")
 
 
-def test_profile_with__placeholder_values_are_semicolon_separated() -> None:
-    values = {"values": "[Not Available].; n/a ;"}
-    choices = {"ContinueToNextField.title": QuirkChoice(on=True, values=values)}
+def test_profile_with__empty_preferred_qualifier_is_none() -> None:
+    choices = _with("nbib", preferred_qualifier=" ")
 
-    [placeholder] = profile_with("nbib", "pubmed", choices).settings.continue_to_next
-
-    assert placeholder.values == frozenset({"[Not Available].", "n/a"})
-    assert placeholder.case_sensitive
+    assert profile_with(
+        "nbib", "unknown", choices
+    ).settings.preferred_issn_qualifier is (None)
 
 
-def test_profile_with__placeholder_off_clears_it() -> None:
-    choices = {"ContinueToNextField.title": QuirkChoice(on=False)}
+def test_profile_with__empty_values_are_pipe_separated() -> None:
+    choices = _with(
+        "ris", empty_values=[("title", "[Not Available]. | n/a |"), ("doi", "none")]
+    )
 
     settings = profile_with("ris", "unknown", choices).settings
 
-    assert settings.continue_to_next == ()
+    assert settings.empty_values == (
+        EmptyValues("title", frozenset({"[Not Available].", "n/a"})),
+        EmptyValues("doi", frozenset({"none"})),
+    )
+
+
+def test_profile_with__empty_values_without_field_or_values_are_skipped() -> None:
+    choices = _with("ris", empty_values=[("", "n/a"), ("title", " ")])
+
+    assert profile_with("ris", "unknown", choices).settings.empty_values == ()
 
 
 def test_dump_choices__round_trips() -> None:
-    choices = _choices(_entries("csv", "scopus"))
+    choices = _with("csv", "scopus", empty_values=[("title", "a|b")], use_first=["X"])
 
-    assert load_choices(dump_choices(choices)) == choices
+    assert load_choices(dump_choices(choices), "csv", "scopus") == choices
+
+
+def test_load_choices__missing_keys_keep_the_profile_defaults() -> None:
+    choices = load_choices({"drop_et_al": False}, "csv", "scopus")
+
+    assert choices == _with("csv", "scopus", drop_et_al=False)
+
+
+def test_load_choices__old_style_choices_fall_back_to_defaults() -> None:
+    old = {
+        "FirstValue.issn": {"on": True, "values": {"delimiter": ";"}},
+        "minus_one_unlabeled": {"on": False, "values": {}},
+    }
+
+    assert load_choices(old, "ris", "unknown") == default_choices("ris", "unknown")
