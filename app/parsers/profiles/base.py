@@ -3,7 +3,7 @@ from dataclasses import dataclass, replace
 
 from app.models.record import Record
 from app.parsers.common import ParseResult
-from app.parsers.mapping import FieldMapping
+from app.parsers.mapping import FieldMapping, RowDefaults, Suggest
 from app.parsers.quirks import ParseSettings, RecordQuirk
 
 MatchesText = Callable[[str], bool]
@@ -11,11 +11,11 @@ MatchesText = Callable[[str], bool]
 
 @dataclass(frozen=True)
 class FormatProfile:
-    aliases: dict[str, list[str]]
+    suggestions: dict[str, Suggest]
     matches: MatchesText
     settings: ParseSettings
+    row_defaults: RowDefaults
     quirks: tuple[RecordQuirk, ...] = ()
-    list_delimiter: str | None = None
     ignored_keys: frozenset[str] = frozenset()
 
 

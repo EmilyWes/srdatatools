@@ -18,8 +18,8 @@ from app.gui.layout import ShellPanes
 from app.gui.library_nav import LeftPanelNav
 from app.gui.library_overview import save_sections
 from app.parsers.common import FileSummary
-from app.parsers.mapping import FieldMapping
 from tests.gui.clicks import click_and_wait
+from tests.mappings import mapping_of
 
 
 @pytest.fixture(autouse=True)
@@ -178,8 +178,8 @@ def _add_source_file_with_record(engine: Engine) -> int:
             format="ris",
             imported_at=datetime.datetime(2026, 1, 1),
             row_count=1,
-            field_mapping=asdict(FieldMapping(targets={"TI": "title"})),
-            suggested_mapping=asdict(FieldMapping(targets={"TI": "title"})),
+            field_mapping=mapping_of({"TI": "title"}).model_dump(),
+            suggested_mapping=mapping_of({"TI": "title"}).model_dump(),
             file_summary=asdict(FileSummary({"TI": "A title"}, {"TI": 1}, 1)),
         )
         session.add(
@@ -237,7 +237,7 @@ def test_home__import_stores_given_summary_and_selects_new_file(
             await on_imports[-1](
                 [(csv_path, summary)],
                 "csv",
-                FieldMapping(targets={"Title": "title"}),
+                mapping_of({"Title": "title"}),
                 "unknown",
                 None,
             )
@@ -277,7 +277,7 @@ def test_home__multi_file_import_stores_each_file_and_selects_overview(
             await on_imports[-1](
                 [(first_path, first_summary), (second_path, second_summary)],
                 "csv",
-                FieldMapping(targets={"Title": "title"}),
+                mapping_of({"Title": "title"}),
                 "unknown",
                 None,
             )

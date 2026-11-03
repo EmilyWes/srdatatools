@@ -2,8 +2,9 @@ import csv
 import re
 from io import StringIO
 
+from app.parsers.mapping import Suggest
 from app.parsers.profiles.base import FormatProfile, Profile
-from app.parsers.profiles.default import default_settings
+from app.parsers.profiles.default import default_row_defaults, default_settings
 from app.parsers.quirks import (
     ContinueToNextField,
     DropEtAl,
@@ -31,7 +32,12 @@ PUBMED = Profile(
     label="PubMed",
     formats={
         "nbib": FormatProfile(
-            aliases={"journal": ["jt", "bti"], "title": ["ti", "tt"]},
+            suggestions={
+                "jt": Suggest("journal"),
+                "bti": Suggest("journal"),
+                "ti": Suggest("title"),
+                "tt": Suggest("title"),
+            },
             matches=_matches_nbib,
             settings=default_settings(
                 "nbib",
@@ -41,6 +47,7 @@ PUBMED = Profile(
                     ),
                 ),
             ),
+            row_defaults=default_row_defaults("nbib"),
             quirks=(
                 ExpandPageRange(),
                 FirstValue("publication_type", "\n"),
@@ -48,15 +55,16 @@ PUBMED = Profile(
             ),
         ),
         "csv": FormatProfile(
-            aliases={
-                "journal": ["journal/book"],
-                "other_ids.pmc": ["pmcid"],
-                "other_ids.mid": ["nihms id"],
+            suggestions={
+                "authors": Suggest("authors", {"role": "full_name"}),
+                "journal/book": Suggest("journal"),
+                "pmcid": Suggest("other_ids", {"key": "pmc"}),
+                "nihms id": Suggest("other_ids", {"key": "mid"}),
             },
             matches=_matches_csv,
             settings=default_settings("csv"),
+            row_defaults=default_row_defaults("csv", delimiter=","),
             quirks=(DropEtAl(), StripLastAuthorTrailing(".")),
-            list_delimiter=",",
         ),
     },
 )

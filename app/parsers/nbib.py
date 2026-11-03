@@ -1,10 +1,9 @@
 import logging
 import re
-from dataclasses import replace
+from collections.abc import Mapping
 from pathlib import Path
 
-from app.models.record import Affiliation, Author
-from app.parsers.authors import author_from_name
+from app.models.record import Author
 from app.parsers.common import (
     FileSummary,
     ParsedRow,
@@ -13,49 +12,65 @@ from app.parsers.common import (
     SummaryBuilder,
     decode_file,
 )
-from app.parsers.mapping import FieldMapping, apply_mapping, override_aliases
+from app.parsers.mapping import (
+    LINE_DELIMITER,
+    NAME_ROLES,
+    AuthorsRow,
+    FieldMapping,
+    RowDefaults,
+    Suggest,
+    add_author_detail,
+    apply_mapping,
+    author_for_name,
+    override_aliases,
+)
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
 from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
+_SCALARS = {
+    "ti": "title",
+    "ab": "abstract",
+    "jt": "journal",
+    "ta": "journal",
+    "bti": "journal",
+    "vi": "volume",
+    "ip": "issue",
+    "doi": "doi",
+    "pmid": "pmid",
+    "la": "language",
+    "pt": "publication_type",
+    "pb": "publisher",
+}
 # AU is not an alias: mapping it next to FAU would add every author twice.
 # suggest_nbib_mapping falls back to it only when the file has no FAU.
-_SUGGESTION_ALIASES: dict[str, list[str]] = {
-    "title": ["ti"],
-    "authors": ["fau", "auid", "ad"],
-    "abstract": ["ab"],
-    "journal": ["jt", "ta", "bti"],
-    "volume": ["vi"],
-    "issue": ["ip"],
-    "pages": ["pg"],
-    "doi": ["doi"],
-    "pmid": ["pmid"],
-    "language": ["la"],
-    "publication_type": ["pt"],
-    "publisher": ["pb"],
-    "keywords": ["ot", "mh"],
-    "date": ["dp"],
-    "issn": ["is"],
-    "isbn": ["isbn"],
-    "other_ids": ["pmc", "mid"],
+_SUGGESTIONS: dict[str, Suggest] = {
+    **{alias: Suggest(target) for alias, target in _SCALARS.items()},
+    "fau": Suggest("authors"),
+    "auid": Suggest("authors", {"role": "ids"}),
+    "ad": Suggest("authors", {"role": "affiliations"}),
+    "pg": Suggest("pages"),
+    "ot": Suggest("keywords"),
+    "mh": Suggest("keywords", {"prefix": "MeSH"}),
+    "dp": Suggest("date"),
+    "is": Suggest("issn_isbn", {"kind": "issn"}),
+    "isbn": Suggest("issn_isbn", {"kind": "isbn"}),
+    "pmc": Suggest("other_ids"),
+    "mid": Suggest("other_ids"),
 }
+ROW_DEFAULTS = RowDefaults(delimiter=LINE_DELIMITER)
+_AU_TAG = "AU"
+_FAU_TAG = "FAU"
 
 _TAG_LINE = re.compile(r"^(?P<tag>[A-Z][A-Z0-9]{1,3}) *-(?: (?P<value>.*))?$")
 _ID_TAGS = ("AID", "LID")
 _DOI_SUFFIX = " [doi]"
 _DOI_TAG = "DOI"
 _REQUIRED_TAG = "PMID"
-_IS_TAG = "IS"
-_ELECTRONIC = "Electronic"
-_IS_QUALIFIER = re.compile(r"\s*\((?P<qualifier>[^)]*)\)$")
-_AUID_TAG = "AUID"
-_AD_TAG = "AD"
 _ORCID_SCHEME = "ORCID"
 _ORCID_URL = re.compile(r"^https?://orcid\.org/")
 _EDITOR_TAGS = ("FED", "ED")
-# FAU is "Family, Given"; AU ("Müller RT") and mononyms have no comma.
-_NAME_SEPARATOR = ", "
 
 
 def _doi_from_id(value: str) -> str | None:
@@ -65,55 +80,42 @@ def _doi_from_id(value: str) -> str | None:
     return stripped.removesuffix(_DOI_SUFFIX).strip() or None
 
 
-def _issn_from_is(values: list[str]) -> str | None:
-    """PubMed writes one IS line per medium, e.g. "1234-5678 (Print)"."""
-    issns: list[tuple[str, str | None]] = []
-    for value in values:
-        match = _IS_QUALIFIER.search(value)
-        issn = (value[: match.start()] if match else value).strip()
-        if issn:
-            issns.append((issn, match["qualifier"] if match else None))
-    if not issns:
-        return None
-    return next((i for i, q in issns if q == _ELECTRONIC), issns[0][0])
-
-
-def _add_auid(author: Author, value: str) -> None:
-    """AUID values look like "ORCID: 0000-0001-8894-9875"."""
-    scheme, _, identifier = value.partition(":")
+def _add_auid(author: Author, row: AuthorsRow, value: str) -> None:
+    """AUID values look like "ORCID: 0000-0001-8894-9875"; without a scheme the
+    row's ID key is used."""
+    scheme, colon, identifier = value.partition(":")
+    if not colon:
+        scheme, identifier = "", value
     scheme, identifier = scheme.strip(), identifier.strip()
     if not identifier:
         return
     if scheme.upper() == _ORCID_SCHEME:
         author.orcid = _ORCID_URL.sub("", identifier)
     else:
-        author.other_ids[scheme.lower()] = identifier
+        author.other_ids[scheme.lower() or row.id_key] = identifier
 
 
 def _authors_from_lines(
-    lines: list[tuple[str, str]], author_tags: set[str], settings: ParseSettings
+    lines: list[tuple[str, str]], rows: dict[str, AuthorsRow], settings: ParseSettings
 ) -> list[Author]:
-    """AUID and AD lines belong to the author or editor name line before them."""
+    """Detail lines (AUID, AD) belong to the author or editor name line before them."""
     authors: list[Author] = []
     current: Author | None = None
     for tag, value in lines:
-        if tag not in author_tags:
+        row = rows.get(tag)
+        if row is None:
             if tag in _EDITOR_TAGS:
                 current = None
             continue
         if not value:
             continue
-        if tag == _AUID_TAG:
-            if current is not None:
-                _add_auid(current, value)
-        elif tag == _AD_TAG:
-            if current is not None:
-                current.affiliations.append(Affiliation(name=value))
-        else:
-            current = author_from_name(
-                value, _NAME_SEPARATOR, settings.ambiguous_name_split
-            )
+        if row.role in NAME_ROLES:
+            current = author_for_name(value, row, settings)
             authors.append(current)
+        elif current is not None and row.role == "ids":
+            _add_auid(current, row, value)
+        elif current is not None:
+            add_author_detail(current, row, value)
     return authors
 
 
@@ -137,13 +139,10 @@ def parse_nbib_record(
     )
     if doi is not None:
         raw_fields[_DOI_TAG] = doi
-    mapping_fields = dict(raw_fields)
-    if (issn := _issn_from_is(values.get(_IS_TAG, []))) is not None:
-        mapping_fields[_IS_TAG] = issn
-    record = apply_mapping(mapping_fields, mapping, settings)
-    author_tags = {k for k, t in mapping.targets.items() if t == "authors"}
-    if author_tags:
-        authors = _authors_from_lines(lines, author_tags, settings)
+    record = apply_mapping(raw_fields, mapping, settings)
+    author_rows = dict(mapping.rows_of(AuthorsRow))
+    if author_rows:
+        authors = _authors_from_lines(lines, author_rows, settings)
         record = record.model_copy(update={"authors": authors})
     return ParsedRow(record=record, raw_fields=raw_fields)
 
@@ -215,15 +214,11 @@ def read_nbib_tags(path: Path) -> FileSummary:
 
 
 def suggest_nbib_mapping(
-    tags: list[str], alias_overrides: dict[str, list[str]] | None = None
+    tags: list[str],
+    overrides: Mapping[str, Suggest] | None = None,
+    defaults: RowDefaults = ROW_DEFAULTS,
 ) -> FieldMapping:
-    aliases = override_aliases(_SUGGESTION_ALIASES, alias_overrides or {})
-    mapping = _suggest_mapping(tags, aliases, lenient=False)
-    targets = dict(mapping.targets)
-    match_kinds = dict(mapping.match_kinds)
-    if "FAU" not in tags and "AU" in tags:
-        targets["AU"] = "authors"
-        match_kinds["AU"] = "exact"
-    return replace(
-        mapping, targets=targets, list_delimiter="\n", match_kinds=match_kinds
-    )
+    suggestions = override_aliases(_SUGGESTIONS, overrides or {})
+    if _FAU_TAG not in tags:
+        suggestions[_AU_TAG.lower()] = Suggest("authors")
+    return _suggest_mapping(tags, suggestions, defaults, lenient=False)

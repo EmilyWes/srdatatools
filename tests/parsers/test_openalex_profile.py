@@ -1,5 +1,4 @@
 import csv
-from dataclasses import replace
 from io import StringIO
 
 import pytest
@@ -11,6 +10,7 @@ from app.parsers.mapping import FieldMapping
 from app.parsers.profiles import apply_profile
 from app.parsers.profiles.openalex import OPENALEX
 from app.parsers.ris import parse_ris_text, suggest_ris_mapping
+from tests.mappings import targets_of
 
 _CSV_PROFILE = OPENALEX.formats["csv"]
 _RIS_PROFILE = OPENALEX.formats["ris"]
@@ -18,9 +18,12 @@ _BIBTEX_PROFILE = OPENALEX.formats["bibtex"]
 
 
 def _suggest_csv(headers: list[str]) -> FieldMapping:
-    mapping = suggest_mapping(headers, _CSV_PROFILE.aliases, _CSV_PROFILE.ignored_keys)
-    assert _CSV_PROFILE.list_delimiter is not None
-    return replace(mapping, list_delimiter=_CSV_PROFILE.list_delimiter)
+    return suggest_mapping(
+        headers,
+        _CSV_PROFILE.suggestions,
+        _CSV_PROFILE.row_defaults,
+        _CSV_PROFILE.ignored_keys,
+    )
 
 
 def _csv_text(row: dict[str, str]) -> str:
@@ -49,8 +52,9 @@ _AUTHOR_ROW = {
 
 
 def _without(mapping: FieldMapping, *ignored: str) -> FieldMapping:
-    targets = {k: t for k, t in mapping.targets.items() if k not in ignored}
-    return replace(mapping, targets=targets)
+    return FieldMapping(
+        rows={k: row for k, row in mapping.rows.items() if k not in ignored}
+    )
 
 
 def test_openalex_csv__suggests_only_exact_columns() -> None:
@@ -81,7 +85,7 @@ def test_openalex_csv__suggests_only_exact_columns() -> None:
 
     mapping = _suggest_csv(headers)
 
-    assert mapping.targets == {
+    assert targets_of(mapping) == {
         "Title": "title",
         "Author": "authors",
         "Author IDs": "authors",
@@ -92,7 +96,7 @@ def test_openalex_csv__suggests_only_exact_columns() -> None:
         "Source": "journal",
         "Abstract": "abstract",
         "PMID": "pmid",
-        "Work ID": "other_ids.openalex",
+        "Work ID": "other_ids",
         "Type": "publication_type",
     }
 
@@ -142,7 +146,7 @@ def test_openalex_csv__empty_id_columns_leave_authors_bare() -> None:
 
 
 def test_openalex_csv__unmapped_authors_stay_empty() -> None:
-    record = _parse_csv(_AUTHOR_ROW, FieldMapping(targets={}))
+    record = _parse_csv(_AUTHOR_ROW, FieldMapping())
 
     assert record.authors == []
 
@@ -251,7 +255,9 @@ def test_openalex_ris__attaches_c1_affiliations_to_authors() -> None:
         "TY  - JOUR\nAU  - Baron, Matthew\nC1  - Natural History Museum\n"
         "AU  - Norman, David\nC1  - University of Cambridge\nER  - \n"
     )
-    mapping = suggest_ris_mapping(["TY", "AU", "C1"], _RIS_PROFILE.aliases)
+    mapping = suggest_ris_mapping(
+        ["TY", "AU", "C1"], _RIS_PROFILE.suggestions, _RIS_PROFILE.row_defaults
+    )
 
     record = (
         apply_profile(
@@ -266,10 +272,14 @@ def test_openalex_ris__attaches_c1_affiliations_to_authors() -> None:
     assert record.authors == [
         Author(
             full_name="Baron, Matthew",
+            family_name="Baron",
+            given_name="Matthew",
             affiliations=[Affiliation(name="Natural History Museum")],
         ),
         Author(
             full_name="Norman, David",
+            family_name="Norman",
+            given_name="David",
             affiliations=[Affiliation(name="University of Cambridge")],
         ),
     ]
@@ -281,9 +291,9 @@ def test_openalex_ris__never_matches() -> None:
 
 def test_openalex_bibtex__splits_keywords_on_comma() -> None:
     text = "@article{baron2017new,\n  keywords = {dinosaur phylogeny, Ornithischia}\n}"
-    mapping = suggest_bibtex_mapping(["keywords"], _BIBTEX_PROFILE.aliases)
-    assert _BIBTEX_PROFILE.list_delimiter is not None
-    mapping = replace(mapping, list_delimiter=_BIBTEX_PROFILE.list_delimiter)
+    mapping = suggest_bibtex_mapping(
+        ["keywords"], _BIBTEX_PROFILE.suggestions, _BIBTEX_PROFILE.row_defaults
+    )
 
     result = apply_profile(
         parse_bibtex_text(text, mapping, settings=_BIBTEX_PROFILE.settings),

@@ -1,18 +1,29 @@
 ﻿from pathlib import Path
 
-from app.parsers.mapping import FieldMapping
+from app.parsers.mapping import (
+    AuthorsRow,
+    KeywordsRow,
+    OtherIdRow,
+    PagesRow,
+    Suggest,
+)
 from app.parsers.ris import (
+    ROW_DEFAULTS,
     parse_ris_file,
     parse_ris_record,
     parse_ris_text,
     read_ris_tags,
     suggest_ris_mapping,
 )
+from tests.mappings import mapping_of, targets_of
+
+_AFFILIATIONS = Suggest("authors", {"role": "affiliations"})
+_IDS = Suggest("authors", {"role": "ids"})
 
 RIS_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "general"
 
-_MAPPING = FieldMapping(
-    targets={
+_MAPPING = mapping_of(
+    {
         "TI": "title",
         "AU": "authors",
         "KW": "keywords",
@@ -20,7 +31,7 @@ _MAPPING = FieldMapping(
         "N1": "notes",
         "T2": "journal",
     },
-    list_delimiter="\n",
+    defaults=ROW_DEFAULTS,
 )
 
 
@@ -56,9 +67,9 @@ def test_parse_ris_text__repeated_author_tags_become_separate_authors() -> None:
     assert [author.full_name for author in authors] == ["Smith, John", "Doe, Jane"]
 
 
-_AFFILIATION_MAPPING = FieldMapping(
-    targets={"TI": "title", "AU": "authors", "AD": "authors", "C1": "authors"},
-    list_delimiter="\n",
+_AFFILIATION_MAPPING = mapping_of(
+    {"TI": "title", "AU": "authors", "AD": _AFFILIATIONS, "C1": _AFFILIATIONS},
+    defaults=ROW_DEFAULTS,
 )
 
 
@@ -245,15 +256,15 @@ def test_suggest_ris_mapping__maps_common_tags() -> None:
 
     suggestions = suggest_ris_mapping(tags)
 
-    assert suggestions.targets == {
+    assert targets_of(suggestions) == {
         "TY": "publication_type",
         "TI": "title",
         "AU": "authors",
         "T2": "journal",
         "VL": "volume",
         "IS": "issue",
-        "SP": "page_start",
-        "EP": "page_end",
+        "SP": "pages",
+        "EP": "pages",
         "DO": "doi",
         "KW": "keywords",
         "AB": "abstract",
@@ -261,20 +272,44 @@ def test_suggest_ris_mapping__maps_common_tags() -> None:
     }
 
 
-def test_suggest_ris_mapping__uses_newline_list_delimiter() -> None:
-    assert suggest_ris_mapping(["AU"]).list_delimiter == "\n"
+def test_suggest_ris_mapping__uses_newline_delimiter_and_row_options() -> None:
+    suggestions = suggest_ris_mapping(["AU", "AD", "KW", "SP", "EP"])
+
+    assert suggestions.rows == {
+        "AU": AuthorsRow(delimiter="\n", id_key="au"),
+        "AD": AuthorsRow(role="affiliations", delimiter="\n", id_key="ad"),
+        "KW": KeywordsRow(delimiter="\n"),
+        "SP": PagesRow(part="start"),
+        "EP": PagesRow(part="end"),
+    }
 
 
-def test_suggest_ris_mapping__prefers_da_over_py_for_date() -> None:
+def test_suggest_ris_mapping__maps_every_date_tag() -> None:
     suggestions = suggest_ris_mapping(["PY", "DA", "Y1"])
 
-    assert suggestions.targets == {"DA": "date"}
+    assert targets_of(suggestions) == {"PY": "date", "DA": "date", "Y1": "date"}
 
 
-def test_suggest_ris_mapping__falls_back_to_py_without_da() -> None:
-    suggestions = suggest_ris_mapping(["PY"])
+def test_parse_ris_text__py_and_da_combine_into_one_date() -> None:
+    text = "TY  - JOUR\nPY  - 2020\nDA  - 2020/03/15/\nER  - \n"
 
-    assert suggestions.targets == {"PY": "date"}
+    result = parse_ris_text(text, suggest_ris_mapping(["PY", "DA"]))
+
+    date = result.rows[0].record.publication_date
+    assert date is not None
+    assert (date.year, date.month, date.day) == (2020, 3, 15)
+
+
+def test_parse_ris_text__splits_names_into_family_and_given() -> None:
+    text = "TY  - JOUR\nAU  - Smith, John\nAU  - Madonna\nER  - \n"
+
+    result = parse_ris_text(text, suggest_ris_mapping(["AU"]))
+
+    authors = result.rows[0].record.authors
+    assert [(a.family_name, a.given_name) for a in authors] == [
+        ("Smith", "John"),
+        (None, None),
+    ]
 
 
 def test_suggest_ris_mapping__first_of_alternate_title_tags_wins_in_parse() -> None:
@@ -289,30 +324,30 @@ def test_suggest_ris_mapping__first_of_alternate_title_tags_wins_in_parse() -> N
 def test_suggest_ris_mapping__routes_accession_number_to_other_ids() -> None:
     suggestions = suggest_ris_mapping(["AN"])
 
-    assert suggestions.targets == {"AN": "other_ids.an"}
+    assert suggestions.rows == {"AN": OtherIdRow(key="an")}
 
 
 def test_suggest_ris_mapping__maps_ad_to_authors() -> None:
-    assert suggest_ris_mapping(["AU", "AD"]).targets == {
+    assert targets_of(suggest_ris_mapping(["AU", "AD"])) == {
         "AU": "authors",
         "AD": "authors",
     }
 
 
 def test_suggest_ris_mapping__maps_sn_to_issn_isbn() -> None:
-    assert suggest_ris_mapping(["SN"]).targets == {"SN": "issn_isbn"}
+    assert targets_of(suggest_ris_mapping(["SN"])) == {"SN": "issn_isbn"}
 
 
 def test_suggest_ris_mapping__applies_alias_overrides() -> None:
     mapping = suggest_ris_mapping(
-        ["TY", "M3"], alias_overrides={"publication_type": ["m3"]}
+        ["TY", "M3"], overrides={"m3": Suggest("publication_type")}
     )
 
-    assert mapping.targets == {"M3": "publication_type"}
+    assert targets_of(mapping) == {"M3": "publication_type"}
 
 
 def test_suggest_ris_mapping__leaves_unknown_tags_unmapped() -> None:
-    assert suggest_ris_mapping(["ZZ", "TZ"]).targets == {}
+    assert targets_of(suggest_ris_mapping(["ZZ", "TZ"])) == {}
 
 
 def test_parse_ris_text__sn_routes_to_issn_or_isbn_by_value() -> None:

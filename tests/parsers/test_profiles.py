@@ -1,9 +1,13 @@
 from app.models.record import Record
 from app.parsers.common import ParsedRow, ParseResult, SkippedRow
-from app.parsers.mapping import FieldMapping
+from app.parsers.mapping import FieldMapping, RowDefaults
 from app.parsers.profiles import apply_profile, has_profile, profile_for
 from app.parsers.profiles.base import FormatProfile, never_matches
-from app.parsers.profiles.default import DEFAULT_PROFILES, default_settings
+from app.parsers.profiles.default import (
+    DEFAULT_PROFILES,
+    default_row_defaults,
+    default_settings,
+)
 from app.parsers.profiles.pubmed import PUBMED
 from app.parsers.quirks import FirstValue, ParseSettings, StripPrefix
 
@@ -35,21 +39,34 @@ def test_default_profiles__turn_on_the_generic_quirks() -> None:
         assert settings.skip_issn_isbn_qualifiers
         assert settings.minus_one_unlabeled
         assert settings.ambiguous_name_split == "none"
-    assert DEFAULT_PROFILES["nbib"].settings.keyword_prefixes == {"MH": "[MeSH] "}
 
 
 def test_default_settings__overrides_the_type_default() -> None:
     settings = default_settings("nbib", minus_one_unlabeled=False)
 
     assert not settings.minus_one_unlabeled
-    assert settings.keyword_prefixes == {"MH": "[MeSH] "}
+    assert settings.skip_issn_isbn_qualifiers
+
+
+def test_default_profiles__use_each_types_row_defaults() -> None:
+    assert DEFAULT_PROFILES["csv"].row_defaults == RowDefaults()
+    assert DEFAULT_PROFILES["ris"].row_defaults == RowDefaults(delimiter="\n")
+    assert DEFAULT_PROFILES["nbib"].row_defaults == RowDefaults(delimiter="\n")
+    assert DEFAULT_PROFILES["bibtex"].row_defaults == RowDefaults(author_delimiter="\n")
+
+
+def test_default_row_defaults__overrides_the_type_default() -> None:
+    defaults = default_row_defaults("bibtex", delimiter=",")
+
+    assert defaults == RowDefaults(delimiter=",", author_delimiter="\n")
 
 
 def test_apply_profile__runs_quirks_in_order_and_keeps_raw_fields_and_skipped() -> None:
     profile = FormatProfile(
-        aliases={},
+        suggestions={},
         matches=never_matches,
         settings=ParseSettings(),
+        row_defaults=RowDefaults(),
         quirks=(StripPrefix("pmid", "https://x/"), FirstValue("pmid", "|")),
     )
     skipped = [SkippedRow(3, "bad")]

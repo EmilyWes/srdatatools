@@ -1,70 +1,130 @@
-import pytest
+import logging
 
-from app.models.record import Label
+import pytest
+from pydantic import ValidationError
+
+from app.models.record import Affiliation, Author, Label
 from app.parsers.mapping import (
-    SCALAR_FIELDS,
+    AuthorsRow,
+    DateRow,
     FieldMapping,
+    IssnIsbnRow,
+    KeywordsRow,
+    LabelRow,
+    OtherIdRow,
+    PagesRow,
+    RowDefaults,
+    ScalarRow,
+    Suggest,
     apply_mapping,
+    default_row,
+    is_ambiguous_date,
+    make_row,
     normalize_label,
     override_aliases,
+    parse_date_string,
     suggest_mapping,
 )
 from app.parsers.quirks import ContinueToNextField, ParseSettings
+from tests.mappings import mapping_of
+
+_DEFAULTS = RowDefaults()
 
 
-def test_field_mapping__rejects_other_ids_target_without_key() -> None:
-    with pytest.raises(ValueError):
-        FieldMapping(targets={"EID": "other_ids."})
-
-
-def test_field_mapping__rejects_exclusive_target_mapped_from_two_inputs() -> None:
-    with pytest.raises(ValueError, match="several inputs"):
-        FieldMapping(targets={"Year": "year", "Publication Year": "year"})
-
-
-def test_field_mapping__rejects_page_target_mapped_from_two_inputs() -> None:
-    with pytest.raises(ValueError, match="several inputs"):
-        FieldMapping(targets={"A": "page_start", "B": "page_start"})
-
-
-def test_field_mapping__allows_list_target_from_several_inputs() -> None:
-    mapping = FieldMapping(targets={"A": "authors", "B": "authors"})
-
-    assert mapping.targets == {"A": "authors", "B": "authors"}
+def test_field_mapping__rejects_other_id_without_key() -> None:
+    with pytest.raises(ValidationError):
+        FieldMapping.model_validate({"rows": {"EID": {"target": "other_ids"}}})
 
 
 def test_field_mapping__rejects_unknown_target_field() -> None:
-    with pytest.raises(ValueError):
-        FieldMapping(targets={"Title": "not_a_real_field"})
+    with pytest.raises(ValidationError):
+        FieldMapping.model_validate({"rows": {"Title": {"target": "not_a_field"}}})
 
 
-def test_scalar_fields__are_the_records_optional_string_fields() -> None:
-    assert SCALAR_FIELDS == {
-        "title",
-        "abstract",
-        "journal",
-        "conference_name",
-        "volume",
-        "issue",
-        "pages",
-        "doi",
-        "pmid",
-        "issn",
-        "isbn",
-        "publication_type",
-        "language",
-        "publisher",
-        "url",
-        "notes",
-    }
+def test_field_mapping__round_trips_through_a_dump() -> None:
+    mapping = mapping_of(
+        {"DA": Suggest("date", {"part": "year"}), "AU": "authors", "L": "label"}
+    )
+
+    assert FieldMapping.model_validate(mapping.model_dump()) == mapping
+
+
+def test_default_row__fills_each_targets_default_options() -> None:
+    defaults = RowDefaults(delimiter="|", date_order="us")
+
+    assert default_row("title", "TI", defaults) == ScalarRow(target="title")
+    assert default_row("date", "DA", defaults) == DateRow(part="full", order="us")
+    assert default_row("pages", "PG", defaults) == PagesRow(part="range")
+    assert default_row("issn_isbn", "SN", defaults) == IssnIsbnRow(kind="auto")
+    assert default_row("other_ids", "Work ID", defaults) == OtherIdRow(key="work_id")
+    assert default_row("authors", "Author IDs", defaults) == AuthorsRow(
+        role="last_first", delimiter="|", separator=",", id_key="author_ids"
+    )
+    assert default_row("keywords", "KW", defaults) == KeywordsRow(delimiter="|")
+    assert default_row("label", "L", defaults) == LabelRow(
+        phase="ft", screener="screener 1"
+    )
+
+
+def test_default_row__author_delimiter_overrides_list_delimiter() -> None:
+    defaults = RowDefaults(author_delimiter="\n")
+
+    authors = default_row("authors", "author", defaults)
+    keywords = default_row("keywords", "keywords", defaults)
+
+    assert isinstance(authors, AuthorsRow) and authors.delimiter == "\n"
+    assert isinstance(keywords, KeywordsRow) and keywords.delimiter == ";"
+
+
+def test_default_row__rejects_unknown_target() -> None:
+    with pytest.raises(ValueError, match="unknown Record field"):
+        default_row("not_a_field", "X", _DEFAULTS)
+
+
+def test_make_row__applies_suggested_options_over_defaults() -> None:
+    row = make_row(Suggest("authors", {"role": "orcid"}), "ORCID", _DEFAULTS)
+
+    assert row == AuthorsRow(role="orcid", delimiter=";", id_key="orcid")
+
+
+def test_make_row__rejects_invalid_option() -> None:
+    with pytest.raises(ValidationError):
+        make_row(Suggest("date", {"part": "week"}), "DA", _DEFAULTS)
 
 
 def test_apply_mapping__first_non_empty_value_wins_for_scalar() -> None:
-    mapping = FieldMapping(targets={"A": "title", "B": "title", "C": "title"})
+    mapping = mapping_of({"A": "title", "B": "title", "C": "title"})
 
     record = apply_mapping({"A": "", "B": "First", "C": "Second"}, mapping)
 
     assert record.title == "First"
+
+
+def test_apply_mapping__continue_to_next_field_uses_next_mapped_key() -> None:
+    mapping = mapping_of({"TI": "title", "TT": "title"})
+    settings = ParseSettings(
+        continue_to_next=(
+            ContinueToNextField("title", frozenset({"[Not Available]."}), True),
+        )
+    )
+    raw = {"TI": "[Not Available].", "TT": "Translated"}
+
+    assert apply_mapping(raw, mapping, settings).title == "Translated"
+    assert apply_mapping({"TI": "[Not Available]."}, mapping, settings).title is None
+
+
+def test_apply_mapping__other_id_uses_row_key() -> None:
+    mapping = mapping_of({"Work ID": Suggest("other_ids", {"key": "openalex"})})
+
+    record = apply_mapping({"Work ID": "W1"}, mapping)
+
+    assert record.other_ids == {"openalex": "W1"}
+
+
+_START_END = {
+    "SP": Suggest("pages", {"part": "start"}),
+    "EP": Suggest("pages", {"part": "end"}),
+}
 
 
 @pytest.mark.parametrize(
@@ -79,30 +139,63 @@ def test_apply_mapping__first_non_empty_value_wins_for_scalar() -> None:
 def test_apply_mapping__joins_page_start_and_end(
     raw_fields: dict[str, str], expected: str | None
 ) -> None:
-    mapping = FieldMapping(targets={"SP": "page_start", "EP": "page_end"})
-
-    assert apply_mapping(raw_fields, mapping).pages == expected
+    assert apply_mapping(raw_fields, mapping_of(_START_END)).pages == expected
 
 
-def test_apply_mapping__explicit_pages_win_over_start_and_end() -> None:
-    mapping = FieldMapping(
-        targets={"Pages": "pages", "SP": "page_start", "EP": "page_end"}
-    )
+def test_apply_mapping__page_range_wins_over_start_and_end() -> None:
+    mapping = mapping_of({"Pages": "pages", **_START_END})
 
     record = apply_mapping({"Pages": "5-9", "SP": "10", "EP": "20"}, mapping)
 
     assert record.pages == "5-9"
 
 
-def test_field_mapping__accepts_issn_isbn_target() -> None:
-    mapping = FieldMapping(targets={"SN": "issn_isbn"})
+def test_apply_mapping__page_count_gives_end_page() -> None:
+    mapping = mapping_of(
+        {
+            "SP": Suggest("pages", {"part": "start"}),
+            "N": Suggest("pages", {"part": "count"}),
+        }
+    )
 
-    assert mapping.targets == {"SN": "issn_isbn"}
+    assert apply_mapping({"SP": "10", "N": "5"}, mapping).pages == "10-14"
+
+
+def test_apply_mapping__end_page_wins_over_page_count() -> None:
+    mapping = mapping_of({**_START_END, "N": Suggest("pages", {"part": "count"})})
+
+    assert apply_mapping({"SP": "10", "EP": "12", "N": "5"}, mapping).pages == "10-12"
+
+
+def test_apply_mapping__non_numeric_page_count_keeps_start_and_warns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    mapping = mapping_of(
+        {
+            "SP": Suggest("pages", {"part": "start"}),
+            "N": Suggest("pages", {"part": "count"}),
+        }
+    )
+
+    with caplog.at_level(logging.WARNING):
+        pages = apply_mapping({"SP": "e12", "N": "5"}, mapping).pages
+
+    assert pages == "e12"
+    assert "e12" in caplog.text
+
+
+def test_apply_mapping__first_value_wins_per_page_part() -> None:
+    mapping = mapping_of({"A": "pages", "B": "pages"})
+
+    assert apply_mapping({"A": "", "B": "3-4"}, mapping).pages == "3-4"
+
+
+_SN = mapping_of({"SN": "issn_isbn"})
 
 
 @pytest.mark.parametrize("value", ["1234-5678", "12345678", "1234-567X"])
 def test_apply_mapping__issn_isbn_routes_issn(value: str) -> None:
-    record = apply_mapping({"SN": value}, FieldMapping(targets={"SN": "issn_isbn"}))
+    record = apply_mapping({"SN": value}, _SN)
 
     assert (record.issn, record.isbn) == (value, None)
 
@@ -112,23 +205,19 @@ def test_apply_mapping__issn_isbn_routes_issn(value: str) -> None:
     ["0-306-40615-2", "0306406152", "978-3-16-148410-0", "9783161484100"],
 )
 def test_apply_mapping__issn_isbn_routes_isbn(value: str) -> None:
-    record = apply_mapping({"SN": value}, FieldMapping(targets={"SN": "issn_isbn"}))
+    record = apply_mapping({"SN": value}, _SN)
 
     assert (record.issn, record.isbn) == (None, value)
 
 
 def test_apply_mapping__issn_isbn_splits_multiple_values() -> None:
-    mapping = FieldMapping(targets={"SN": "issn_isbn"})
-
-    record = apply_mapping({"SN": "1234-5678; 9783161484100"}, mapping)
+    record = apply_mapping({"SN": "1234-5678; 9783161484100"}, _SN)
 
     assert (record.issn, record.isbn) == ("1234-5678", "9783161484100")
 
 
 def test_apply_mapping__issn_isbn_keeps_first_of_each_kind() -> None:
-    mapping = FieldMapping(targets={"SN": "issn_isbn"})
-
-    record = apply_mapping({"SN": "1234-5678 8765-4321"}, mapping)
+    record = apply_mapping({"SN": "1234-5678 8765-4321"}, _SN)
 
     assert record.issn == "1234-5678"
 
@@ -136,10 +225,8 @@ def test_apply_mapping__issn_isbn_keeps_first_of_each_kind() -> None:
 def test_apply_mapping__issn_isbn_unrecognised_value_goes_to_issn_and_warns(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    mapping = FieldMapping(targets={"SN": "issn_isbn"})
-
     with caplog.at_level("WARNING"):
-        record = apply_mapping({"SN": "12345"}, mapping)
+        record = apply_mapping({"SN": "12345"}, _SN)
 
     assert (record.issn, record.isbn) == ("12345", None)
     assert "12345" in caplog.text
@@ -157,11 +244,9 @@ def test_apply_mapping__issn_isbn_skips_parenthesised_qualifier_when_on(
     expected: tuple[str | None, str | None],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    mapping = FieldMapping(targets={"SN": "issn_isbn"})
-
     with caplog.at_level("WARNING"):
         record = apply_mapping(
-            {"SN": value}, mapping, ParseSettings(skip_issn_isbn_qualifiers=True)
+            {"SN": value}, _SN, ParseSettings(skip_issn_isbn_qualifiers=True)
         )
 
     assert (record.issn, record.isbn) == expected
@@ -169,61 +254,61 @@ def test_apply_mapping__issn_isbn_skips_parenthesised_qualifier_when_on(
 
 
 def test_apply_mapping__issn_isbn_keeps_qualifier_when_off() -> None:
-    mapping = FieldMapping(targets={"SN": "issn_isbn"})
-
-    record = apply_mapping({"SN": "979-840072171-7 (ISBN)"}, mapping)
+    record = apply_mapping({"SN": "979-840072171-7 (ISBN)"}, _SN)
 
     assert (record.issn, record.isbn) == ("(ISBN)", "979-840072171-7")
 
 
 def test_apply_mapping__issn_isbn_empty_value_sets_nothing() -> None:
-    record = apply_mapping({"SN": "  "}, FieldMapping(targets={"SN": "issn_isbn"}))
+    record = apply_mapping({"SN": "  "}, _SN)
 
     assert (record.issn, record.isbn) == (None, None)
 
 
-def test_suggest_mapping__strict_matches_exact_aliases_only() -> None:
-    aliases = {"title": ["ti"], "doi": ["do"]}
+@pytest.mark.parametrize("kind", ["issn", "isbn"])
+def test_apply_mapping__fixed_kind_takes_first_piece_whatever_its_length(
+    kind: str,
+) -> None:
+    mapping = mapping_of({"X": Suggest("issn_isbn", {"kind": kind})})
 
-    suggestions = suggest_mapping(["TI", "tj", "Custom ID"], aliases, lenient=False)
+    record = apply_mapping({"X": "12345; 9783161484100"}, mapping)
 
-    assert suggestions.targets == {"TI": "title"}
-
-
-def test_suggest_mapping__alias_may_target_a_named_other_id() -> None:
-    aliases = {"other_ids.pmc": ["pmcid"]}
-
-    suggestions = suggest_mapping(["PMCID"], aliases, lenient=True)
-
-    assert suggestions.targets == {"PMCID": "other_ids.pmc"}
+    assert getattr(record, kind) == "12345"
 
 
-def test_override_aliases__replaces_alias_list_of_overridden_target() -> None:
-    merged = override_aliases({"journal": ["jt", "ta"]}, {"journal": ["jt"]})
+def test_apply_mapping__fixed_kind_skips_qualifier_when_on() -> None:
+    mapping = mapping_of({"ISSN": Suggest("issn_isbn", {"kind": "issn"})})
+    settings = ParseSettings(skip_issn_isbn_qualifiers=True)
 
-    assert merged == {"journal": ["jt"]}
+    record = apply_mapping({"ISSN": "(Print) 1234-5678"}, mapping, settings)
 
-
-def test_override_aliases__moves_alias_away_from_its_old_target() -> None:
-    merged = override_aliases({"other_ids": ["pmc", "mid"]}, {"other_ids.pmc": ["pmc"]})
-
-    assert merged == {"other_ids": ["mid"], "other_ids.pmc": ["pmc"]}
+    assert record.issn == "1234-5678"
 
 
-def test_suggest_mapping__exclusive_target_prefers_alias_rank_over_file_order() -> None:
-    aliases = {"date": ["da", "py", "y1"]}
-
-    suggestions = suggest_mapping(["PY", "Y1", "DA"], aliases, lenient=False)
-
-    assert suggestions.targets == {"DA": "date"}
+_IS_LINES = "1234-5678 (Print)\n8765-4321 (Electronic)\n1234-5678 (Linking)"
 
 
-def test_suggest_mapping__exclusive_target_tie_keeps_first_in_file() -> None:
-    aliases = {"year": ["year"]}
+def test_apply_mapping__preferred_qualifier_value_wins() -> None:
+    mapping = mapping_of({"IS": Suggest("issn_isbn", {"kind": "issn"})})
+    settings = ParseSettings(
+        skip_issn_isbn_qualifiers=True, preferred_issn_qualifier="Electronic"
+    )
 
-    suggestions = suggest_mapping(["Year", "YEAR"], aliases, lenient=False)
+    assert apply_mapping({"IS": _IS_LINES}, mapping, settings).issn == "8765-4321"
 
-    assert suggestions.targets == {"Year": "year"}
+
+def test_apply_mapping__without_preferred_qualifier_first_value_wins() -> None:
+    mapping = mapping_of({"IS": Suggest("issn_isbn", {"kind": "issn"})})
+    settings = ParseSettings(skip_issn_isbn_qualifiers=True)
+
+    assert apply_mapping({"IS": _IS_LINES}, mapping, settings).issn == "1234-5678"
+
+
+def test_apply_mapping__preferred_qualifier_is_ignored_when_skip_is_off() -> None:
+    mapping = mapping_of({"IS": Suggest("issn_isbn", {"kind": "issn"})})
+    settings = ParseSettings(preferred_issn_qualifier="Electronic")
+
+    assert apply_mapping({"IS": _IS_LINES}, mapping, settings).issn == "1234-5678"
 
 
 @pytest.mark.parametrize(
@@ -239,9 +324,7 @@ def test_suggest_mapping__exclusive_target_tie_keeps_first_in_file() -> None:
 def test_apply_mapping__parses_ris_style_date(
     value: str, expected: tuple[int, int | None, int | None]
 ) -> None:
-    mapping = FieldMapping(targets={"DA": "date"})
-
-    date = apply_mapping({"DA": value}, mapping).publication_date
+    date = apply_mapping({"DA": value}, mapping_of({"DA": "date"})).publication_date
 
     assert date is not None
     assert (date.year, date.month, date.day) == expected
@@ -259,47 +342,257 @@ def test_apply_mapping__parses_ris_style_date(
 def test_apply_mapping__parses_nbib_style_date(
     value: str, expected: tuple[int, int | None, int | None]
 ) -> None:
-    mapping = FieldMapping(targets={"DP": "date"})
-
-    date = apply_mapping({"DP": value}, mapping).publication_date
+    date = apply_mapping({"DP": value}, mapping_of({"DP": "date"})).publication_date
 
     assert date is not None
     assert (date.year, date.month, date.day) == expected
 
 
-def test_suggest_mapping__records_match_kind_per_key() -> None:
-    aliases = {"title": ["article title"], "doi": ["doi"]}
+def test_apply_mapping__date_order_comes_from_the_row() -> None:
+    mapping = mapping_of({"Date": Suggest("date", {"order": "us"})})
 
-    suggestions = suggest_mapping(
-        ["DOI", "Article Titles", "Custom ID", "Zzzqqqxx123"], aliases, lenient=True
+    date = apply_mapping({"Date": "03/04/2020"}, mapping).publication_date
+
+    assert date is not None
+    assert (date.month, date.day) == (3, 4)
+
+
+def test_apply_mapping__full_dates_combine_per_part_first_wins() -> None:
+    mapping = mapping_of({"PY": "date", "DA": "date"})
+
+    date = apply_mapping({"PY": "2020///", "DA": "2019/03/15/"}, mapping)
+
+    assert date.publication_date is not None
+    assert date.publication_date.model_dump() == {"year": 2020, "month": 3, "day": 15}
+
+
+def test_apply_mapping__date_part_rows_win_over_full_date() -> None:
+    mapping = mapping_of(
+        {
+            "Date": "date",
+            "Year": Suggest("date", {"part": "year"}),
+            "Month": Suggest("date", {"part": "month"}),
+        }
     )
 
-    assert suggestions.match_kinds == {
-        "DOI": "exact",
-        "Article Titles": "fuzzy",
-        "Custom ID": "id_fallback",
-    }
-
-
-def test_suggest_mapping__dropped_exclusive_loser_has_no_match_kind() -> None:
-    aliases = {"date": ["da", "py"]}
-
-    suggestions = suggest_mapping(["PY", "DA"], aliases, lenient=False)
-
-    assert suggestions.match_kinds == {"DA": "exact"}
-
-
-def test_suggest_mapping__lenient_fuzzy_matches_and_falls_back_to_id() -> None:
-    aliases = {"title": ["article title"]}
-
-    suggestions = suggest_mapping(
-        ["Article Titles", "Custom ID"], aliases, lenient=True
+    record = apply_mapping(
+        {"Date": "2019-01-05", "Year": "2020", "Month": "Mar"}, mapping
     )
 
-    assert suggestions.targets == {
-        "Article Titles": "title",
-        "Custom ID": "other_ids.custom_id",
+    assert record.publication_date is not None
+    assert record.publication_date.model_dump() == {"year": 2020, "month": 3, "day": 5}
+
+
+def test_apply_mapping__unparseable_year_part_is_skipped_and_warns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    mapping = mapping_of({"Year": Suggest("date", {"part": "year"})})
+
+    with caplog.at_level(logging.WARNING):
+        record = apply_mapping({"Year": "n.d."}, mapping)
+
+    assert record.publication_date is None
+    assert "n.d." in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("14/05/2020", (2020, 5, 14)),
+        ("05/14/2020", (2020, 5, 14)),
+        ("3.4.2020", (2020, 4, 3)),
+        ("03-04-2020", (2020, 4, 3)),
+        ("12 March 2020", (2020, 3, 12)),
+        ("12 Mar. 2020", (2020, 3, 12)),
+        ("March 12, 2020", (2020, 3, 12)),
+        ("Oct2021", (2021, 10, None)),
+        ("Oct 2021", (2021, 10, None)),
+        ("October 2021", (2021, 10, None)),
+        ("Fall2013", (2013, None, None)),
+        ("autumn 2013", (2013, None, None)),
+    ],
+)
+def test_parse_date_string__reads_day_month_and_named_forms(
+    value: str, expected: tuple[int, int | None, int | None]
+) -> None:
+    date = parse_date_string(value)
+
+    assert date is not None
+    assert (date.year, date.month, date.day) == expected
+
+
+def test_parse_date_string__ambiguous_numeric_date_defaults_to_eu_order() -> None:
+    date = parse_date_string("03/04/2020")
+
+    assert date is not None
+    assert (date.month, date.day) == (4, 3)
+
+
+def test_parse_date_string__ambiguous_numeric_date_uses_us_order() -> None:
+    date = parse_date_string("03/04/2020", "us")
+
+    assert date is not None
+    assert (date.month, date.day) == (3, 4)
+
+
+def test_parse_date_string__unambiguous_numeric_date_ignores_order() -> None:
+    date = parse_date_string("14/05/2020", "us")
+
+    assert date is not None
+    assert (date.month, date.day) == (5, 14)
+
+
+@pytest.mark.parametrize("value", ["13/14/2020", "03/04-2020"])
+def test_parse_date_string__rejects_impossible_or_mixed_numeric_date(
+    value: str,
+) -> None:
+    assert parse_date_string(value) is None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("03/04/2020", True),
+        (" 3.4.2020 ", True),
+        ("03/03/2020", False),
+        ("14/05/2020", False),
+        ("2020-03-04", False),
+        ("March 4, 2020", False),
+    ],
+)
+def test_is_ambiguous_date__only_when_order_changes_the_date(
+    value: str, expected: bool
+) -> None:
+    assert is_ambiguous_date(value) is expected
+
+
+def test_apply_mapping__keywords_use_row_delimiter_and_prefix() -> None:
+    mapping = mapping_of(
+        {
+            "A": Suggest("keywords", {"prefix": "A"}),
+            "B": Suggest("keywords", {"delimiter": "|"}),
+        }
+    )
+
+    record = apply_mapping({"A": "x; y", "B": "z|w"}, mapping)
+
+    assert record.keywords == ["[A] x", "[A] y", "z", "w"]
+
+
+@pytest.mark.parametrize("typed", ["Author", " Author ", "[Author]", "[Author] "])
+def test_keywords_row__prefix_is_stored_without_brackets(typed: str) -> None:
+    assert KeywordsRow(delimiter=";", prefix=typed).prefix == "Author"
+
+
+def test_keywords_row__tags_keyword_only_with_a_prefix() -> None:
+    assert KeywordsRow(delimiter=";", prefix="MeSH").tagged("Humans") == "[MeSH] Humans"
+    assert KeywordsRow(delimiter=";").tagged("Humans") == "Humans"
+
+
+def test_apply_mapping__name_roles_split_names() -> None:
+    raw = {"A": "Smith, John; Doe, Jane", "B": "John Smith", "C": "Smith, John"}
+
+    def names(role: str, key: str) -> list[tuple[str | None, str | None]]:
+        separator = " " if role == "first_last" else ","
+        mapping = mapping_of(
+            {key: Suggest("authors", {"role": role, "separator": separator})}
+        )
+        authors = apply_mapping(raw, mapping).authors
+        return [(a.family_name, a.given_name) for a in authors]
+
+    assert names("last_first", "A") == [("Smith", "John"), ("Doe", "Jane")]
+    assert names("first_last", "B") == [("Smith", "John")]
+    assert names("full_name", "C") == [(None, None)]
+
+
+def test_apply_mapping__ambiguous_name_follows_settings() -> None:
+    mapping = mapping_of({"AU": "authors"})
+    raw = {"AU": "Smith, Jr., John"}
+
+    unsplit = apply_mapping(raw, mapping).authors[0]
+    split = apply_mapping(
+        raw, mapping, ParseSettings(ambiguous_name_split="last")
+    ).authors[0]
+
+    assert unsplit.family_name is None
+    assert (split.family_name, split.given_name) == ("Smith, Jr.", "John")
+
+
+_PARALLEL = {
+    "Author": Suggest("authors", {"role": "full_name", "delimiter": "|"}),
+    "ORCID": Suggest("authors", {"role": "orcid", "delimiter": "|"}),
+    "Author IDs": Suggest(
+        "authors", {"role": "ids", "delimiter": "|", "id_key": "openalex_author_id"}
+    ),
+    "Affiliations": Suggest("authors", {"role": "affiliations", "delimiter": "|"}),
+}
+
+
+def test_apply_mapping__zips_parallel_author_columns() -> None:
+    raw = {
+        "Author": "Ann Lee|Bo Kim",
+        "ORCID": "|https://orcid.org/0000-0001-2345-6789",
+        "Author IDs": "A1|A2",
+        "Affiliations": "Uni A|",
     }
+
+    record = apply_mapping(raw, mapping_of(_PARALLEL))
+
+    assert record.authors == [
+        Author(
+            full_name="Ann Lee",
+            other_ids={"openalex_author_id": "A1"},
+            affiliations=[Affiliation(name="Uni A")],
+        ),
+        Author(
+            full_name="Bo Kim",
+            orcid="0000-0001-2345-6789",
+            other_ids={"openalex_author_id": "A2"},
+        ),
+    ]
+
+
+def test_apply_mapping__first_non_empty_name_column_wins() -> None:
+    mapping = mapping_of({"Full": "authors", "Short": "authors"})
+
+    record = apply_mapping({"Full": "", "Short": "Teng Y.; Han Y."}, mapping)
+
+    assert [a.full_name for a in record.authors] == ["Teng Y.", "Han Y."]
+
+
+def test_apply_mapping__ids_without_names_give_id_only_authors() -> None:
+    record = apply_mapping({"Author IDs": "A1|A2"}, mapping_of(_PARALLEL))
+
+    assert record.authors == [
+        Author(other_ids={"openalex_author_id": "A1"}),
+        Author(other_ids={"openalex_author_id": "A2"}),
+    ]
+
+
+def test_apply_mapping__ignores_misaligned_author_column_with_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    raw = {"Author": "Ann Lee|Bo Kim", "Author IDs": "A1|A2|A3"}
+
+    with caplog.at_level(logging.WARNING):
+        record = apply_mapping(raw, mapping_of(_PARALLEL))
+
+    assert [a.other_ids for a in record.authors] == [{}, {}]
+    assert "'Author IDs' has 3 entries for 2 authors" in caplog.text
+
+
+def test_apply_mapping__drops_fully_empty_authors() -> None:
+    record = apply_mapping({"Author": "Ann Lee||Bo Kim"}, mapping_of(_PARALLEL))
+
+    assert [a.full_name for a in record.authors] == ["Ann Lee", "Bo Kim"]
+
+
+def test_apply_mapping__unmapped_author_columns_are_not_read() -> None:
+    mapping = mapping_of({"Author": _PARALLEL["Author"]})
+
+    record = apply_mapping({"Author": "Ann Lee", "Author IDs": "A1"}, mapping)
+
+    assert record.authors == [Author(full_name="Ann Lee")]
 
 
 @pytest.mark.parametrize(
@@ -336,28 +629,6 @@ def test_normalize_label__minus_one_is_unlabeled_only_when_on() -> None:
     assert normalize_label("-1") == "unknown"
 
 
-def test_apply_mapping__continue_to_next_field_uses_next_mapped_key() -> None:
-    mapping = FieldMapping(targets={"TI": "title", "TT": "title"})
-    settings = ParseSettings(
-        continue_to_next=(
-            ContinueToNextField("title", frozenset({"[Not Available]."}), True),
-        )
-    )
-    raw = {"TI": "[Not Available].", "TT": "Translated"}
-
-    assert apply_mapping(raw, mapping, settings).title == "Translated"
-    assert apply_mapping({"TI": "[Not Available]."}, mapping, settings).title is None
-
-
-def test_apply_mapping__keyword_prefix_applies_per_key() -> None:
-    mapping = FieldMapping(targets={"A": "keywords", "B": "keywords"})
-    settings = ParseSettings(keyword_prefixes={"A": "[A] "})
-
-    record = apply_mapping({"A": "x; y", "B": "z"}, mapping, settings)
-
-    assert record.keywords == ["[A] x", "[A] y", "z"]
-
-
 def test_normalize_label__unknown_spelling_is_unknown_and_warns(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -368,17 +639,9 @@ def test_normalize_label__unknown_spelling_is_unknown_and_warns(
     assert "conflict" in caplog.text
 
 
-def test_field_mapping__allows_label_target_from_several_inputs() -> None:
-    mapping = FieldMapping(targets={"TiAb": "label", "FT": "label"})
-
-    assert mapping.targets == {"TiAb": "label", "FT": "label"}
-
-
 def test_apply_mapping__label_uses_phase_and_screener() -> None:
-    mapping = FieldMapping(
-        targets={"included": "label"},
-        label_phases={"included": "tiab"},
-        label_screeners={"included": "Emily"},
+    mapping = mapping_of(
+        {"included": Suggest("label", {"phase": "tiab", "screener": "Emily"})}
     )
 
     record = apply_mapping({"included": "1"}, mapping)
@@ -386,35 +649,30 @@ def test_apply_mapping__label_uses_phase_and_screener() -> None:
     assert record.labels == [Label(phase="tiab", screener="Emily", value="include")]
 
 
-def test_apply_mapping__label_falls_back_to_default_phase_and_screener() -> None:
-    mapping = FieldMapping(
-        targets={"included": "label"},
-        label_phases={"included": "  "},
-    )
-
-    record = apply_mapping({"included": "0"}, mapping)
+def test_apply_mapping__label_defaults_to_ft_and_screener_1() -> None:
+    record = apply_mapping({"included": "0"}, mapping_of({"included": "label"}))
 
     assert record.labels == [Label(phase="ft", screener="screener 1", value="exclude")]
 
 
 def test_apply_mapping__empty_label_cell_is_unlabeled() -> None:
-    mapping = FieldMapping(targets={"included": "label"})
-
-    record = apply_mapping({"included": ""}, mapping)
+    record = apply_mapping({"included": ""}, mapping_of({"included": "label"}))
 
     assert [label.value for label in record.labels] == ["unlabeled"]
 
 
 def test_apply_mapping__missing_label_cell_is_unlabeled() -> None:
-    record = apply_mapping({}, FieldMapping(targets={"included": "label"}))
+    record = apply_mapping({}, mapping_of({"included": "label"}))
 
     assert [label.value for label in record.labels] == ["unlabeled"]
 
 
 def test_apply_mapping__several_label_columns_keep_mapping_order() -> None:
-    mapping = FieldMapping(
-        targets={"TiAb": "label", "FT": "label"},
-        label_phases={"TiAb": "tiab", "FT": "ft"},
+    mapping = mapping_of(
+        {
+            "TiAb": Suggest("label", {"phase": "tiab"}),
+            "FT": Suggest("label", {"phase": "ft"}),
+        }
     )
 
     record = apply_mapping({"TiAb": "Included", "FT": "maybe"}, mapping)
@@ -423,3 +681,89 @@ def test_apply_mapping__several_label_columns_keep_mapping_order() -> None:
         ("tiab", "include"),
         ("ft", "maybe"),
     ]
+
+
+def _targets(mapping: FieldMapping) -> dict[str, str]:
+    return {key: row.target for key, row in mapping.rows.items()}
+
+
+def test_suggest_mapping__strict_matches_exact_aliases_only() -> None:
+    suggestions = {"ti": Suggest("title"), "do": Suggest("doi")}
+
+    mapping = suggest_mapping(
+        ["TI", "tj", "Custom ID"], suggestions, _DEFAULTS, lenient=False
+    )
+
+    assert _targets(mapping) == {"TI": "title"}
+
+
+def test_suggest_mapping__builds_rows_with_suggested_options() -> None:
+    suggestions = {"pmcid": Suggest("other_ids", {"key": "pmc"})}
+
+    mapping = suggest_mapping(["PMCID"], suggestions, _DEFAULTS, lenient=True)
+
+    assert mapping.rows == {"PMCID": OtherIdRow(key="pmc")}
+
+
+def test_suggest_mapping__several_keys_may_share_a_target() -> None:
+    suggestions = {"da": Suggest("date"), "py": Suggest("date")}
+
+    mapping = suggest_mapping(["PY", "DA"], suggestions, _DEFAULTS, lenient=False)
+
+    assert _targets(mapping) == {"PY": "date", "DA": "date"}
+
+
+def test_suggest_mapping__uses_row_defaults() -> None:
+    defaults = RowDefaults(delimiter="\n")
+
+    mapping = suggest_mapping(
+        ["KW"], {"kw": Suggest("keywords")}, defaults, lenient=False
+    )
+
+    assert mapping.rows == {"KW": KeywordsRow(delimiter="\n")}
+
+
+def test_suggest_mapping__records_match_kind_per_key() -> None:
+    suggestions = {"article title": Suggest("title"), "doi": Suggest("doi")}
+
+    mapping = suggest_mapping(
+        ["DOI", "Article Titles", "Custom ID", "Zzzqqqxx123"],
+        suggestions,
+        _DEFAULTS,
+        lenient=True,
+    )
+
+    assert mapping.match_kinds == {
+        "DOI": "exact",
+        "Article Titles": "fuzzy",
+        "Custom ID": "id_fallback",
+    }
+
+
+def test_suggest_mapping__lenient_fuzzy_matches_and_falls_back_to_id() -> None:
+    suggestions = {"article title": Suggest("title")}
+
+    mapping = suggest_mapping(
+        ["Article Titles", "Custom ID"], suggestions, _DEFAULTS, lenient=True
+    )
+
+    assert mapping.rows == {
+        "Article Titles": ScalarRow(target="title"),
+        "Custom ID": OtherIdRow(key="custom_id"),
+    }
+
+
+def test_override_aliases__drops_base_aliases_of_an_overridden_target() -> None:
+    base = {"jt": Suggest("journal"), "ta": Suggest("journal"), "ti": Suggest("title")}
+
+    merged = override_aliases(base, {"jt": Suggest("journal")})
+
+    assert merged == {"ti": Suggest("title"), "jt": Suggest("journal")}
+
+
+def test_override_aliases__moves_alias_to_a_new_target() -> None:
+    base = {"type": Suggest("notes"), "ty": Suggest("publication_type")}
+
+    merged = override_aliases(base, {"type": Suggest("publication_type")})
+
+    assert merged == {"type": Suggest("publication_type")}

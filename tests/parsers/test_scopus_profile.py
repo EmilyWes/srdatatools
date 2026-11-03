@@ -1,5 +1,4 @@
 import csv
-from dataclasses import replace
 from io import StringIO
 
 import pytest
@@ -7,10 +6,11 @@ import pytest
 from app.models.record import Affiliation, Author, Record
 from app.parsers.bibtex import parse_bibtex_text, suggest_bibtex_mapping
 from app.parsers.csv_ import parse_csv_text, suggest_mapping
-from app.parsers.mapping import FieldMapping
+from app.parsers.mapping import AuthorsRow, FieldMapping, Suggest, make_row
 from app.parsers.profiles import apply_profile
 from app.parsers.profiles.scopus import SCOPUS
 from app.parsers.ris import parse_ris_text, suggest_ris_mapping
+from tests.mappings import mapping_of, targets_of
 
 _CSV_PROFILE = SCOPUS.formats["csv"]
 _RIS_PROFILE = SCOPUS.formats["ris"]
@@ -18,7 +18,12 @@ _BIBTEX_PROFILE = SCOPUS.formats["bibtex"]
 
 
 def _suggest_csv(headers: list[str]) -> FieldMapping:
-    return suggest_mapping(headers, _CSV_PROFILE.aliases, _CSV_PROFILE.ignored_keys)
+    return suggest_mapping(
+        headers,
+        _CSV_PROFILE.suggestions,
+        _CSV_PROFILE.row_defaults,
+        _CSV_PROFILE.ignored_keys,
+    )
 
 
 def _csv_text(row: dict[str, str]) -> str:
@@ -50,10 +55,18 @@ _AUTHOR_ROW = {
 }
 
 
-def test_scopus_csv__suggests_all_author_columns_as_authors() -> None:
+def test_scopus_csv__suggests_author_columns_but_not_abbreviated_names() -> None:
     mapping = _suggest_csv(list(_AUTHOR_ROW))
 
-    assert mapping.targets == {header: "authors" for header in _AUTHOR_ROW}
+    assert mapping.rows == {
+        "Author full names": AuthorsRow(delimiter=";", id_key="author_full_names"),
+        "Author(s) ID": AuthorsRow(
+            role="ids", delimiter=";", id_key="scopus_author_id"
+        ),
+        "Authors with affiliations": AuthorsRow(
+            role="affiliations", delimiter=";", id_key="authors_with_affiliations"
+        ),
+    }
 
 
 def test_scopus_csv__ignores_conference_details_and_publication_stage() -> None:
@@ -68,7 +81,7 @@ def test_scopus_csv__ignores_conference_details_and_publication_stage() -> None:
 
     mapping = _suggest_csv(headers)
 
-    assert mapping.targets == {
+    assert targets_of(mapping) == {
         "Conference name": "conference_name",
         "Document Type": "publication_type",
     }
@@ -97,10 +110,10 @@ def test_scopus_csv__zips_author_columns_by_position() -> None:
     ]
 
 
-def test_scopus_csv__abbreviated_names_and_id_column_without_full_names() -> None:
-    record = _parse_csv(
-        {"Authors": "Teng Y.; Han Y.", "Author(s) ID": "60652739200; 59534195400"}
-    )
+def test_scopus_csv__abbreviated_names_mapped_by_hand_zip_with_ids() -> None:
+    row = {"Authors": "Teng Y.; Han Y.", "Author(s) ID": "60652739200; 59534195400"}
+
+    record = _parse_csv(row, _with_abbreviated_names(_suggest_csv(list(row))))
 
     assert record.authors == [
         Author(full_name="Teng Y.", other_ids={"scopus_author_id": "60652739200"}),
@@ -140,8 +153,14 @@ def test_scopus_csv__mismatched_column_is_ignored_with_warning(
 
 
 def _without(mapping: FieldMapping, *ignored: str) -> FieldMapping:
-    targets = {k: t for k, t in mapping.targets.items() if k not in ignored}
-    return replace(mapping, targets=targets)
+    return FieldMapping(
+        rows={k: row for k, row in mapping.rows.items() if k not in ignored}
+    )
+
+
+def _with_abbreviated_names(mapping: FieldMapping) -> FieldMapping:
+    row = make_row(Suggest("authors"), "Authors", _CSV_PROFILE.row_defaults)
+    return FieldMapping(rows={"Authors": row, **mapping.rows})
 
 
 def test_scopus_csv__ignored_author_id_column_is_not_used() -> None:
@@ -149,7 +168,7 @@ def test_scopus_csv__ignored_author_id_column_is_not_used() -> None:
         "Authors": "Teng Y.; Han Y.",
         "Author(s) ID": "60652739200; 59534195400",
     }
-    mapping = _without(_suggest_csv(list(row)), "Author(s) ID")
+    mapping = _without(_with_abbreviated_names(_suggest_csv(list(row))), "Author(s) ID")
 
     record = _parse_csv(row, mapping)
 
@@ -165,12 +184,12 @@ def test_scopus_csv__ignored_affiliations_column_is_not_used() -> None:
     assert record.authors[0].family_name == "Teng"
 
 
-def test_scopus_csv__ignored_full_names_fall_back_to_abbreviated_names() -> None:
+def test_scopus_csv__ignored_full_names_give_id_only_authors() -> None:
     mapping = _without(_suggest_csv(list(_AUTHOR_ROW)), "Author full names")
 
     record = _parse_csv(_AUTHOR_ROW, mapping)
 
-    assert [author.full_name for author in record.authors] == ["Teng Y.", "Han Y."]
+    assert [author.full_name for author in record.authors] == [None, None]
     assert record.authors[0].other_ids == {"scopus_author_id": "60652739200"}
 
 
@@ -184,7 +203,7 @@ def test_scopus_csv__ignored_index_keywords_column_is_not_used() -> None:
 
 
 def test_scopus_csv__unmapped_authors_stay_empty() -> None:
-    record = _parse_csv(_AUTHOR_ROW, FieldMapping(targets={}))
+    record = _parse_csv(_AUTHOR_ROW, FieldMapping())
 
     assert record.authors == []
 
@@ -208,7 +227,7 @@ def test_scopus_csv__prefixes_author_keywords_only() -> None:
 def test_scopus_csv__unmapped_keywords_stay_empty() -> None:
     row = {"Author Keywords": "ANSYS Simulation", "Index Keywords": "Bionics"}
 
-    record = _parse_csv(row, FieldMapping(targets={}))
+    record = _parse_csv(row, FieldMapping())
 
     assert record.keywords == []
 
@@ -231,7 +250,9 @@ def test_scopus_csv__does_not_match_header_without_eid() -> None:
 def _parse_ris(body: str) -> Record:
     text = f"TY  - JOUR\n{body}ER  - \n"
     tags = list(dict.fromkeys(line[:2] for line in text.splitlines()))
-    mapping = suggest_ris_mapping(tags, _RIS_PROFILE.aliases)
+    mapping = suggest_ris_mapping(
+        tags, _RIS_PROFILE.suggestions, _RIS_PROFILE.row_defaults
+    )
     result = apply_profile(
         parse_ris_text(text, mapping, settings=_RIS_PROFILE.settings),
         _RIS_PROFILE,
@@ -241,9 +262,9 @@ def _parse_ris(body: str) -> Record:
 
 
 def test_scopus_ris__publication_type_from_m3_not_ty() -> None:
-    mapping = suggest_ris_mapping(["TY", "M3"], _RIS_PROFILE.aliases)
+    mapping = suggest_ris_mapping(["TY", "M3"], _RIS_PROFILE.suggestions)
 
-    assert mapping.targets == {"M3": "publication_type"}
+    assert targets_of(mapping) == {"M3": "publication_type"}
 
 
 def test_scopus_ris__document_type_and_pmid() -> None:
@@ -274,7 +295,7 @@ def test_scopus_ris__ignored_notes_still_give_eid_and_conference_name() -> None:
         "TY  - JOUR\nN1  - EID: 2-s2.0-105040180364\n"
         "N1  - Conference name: 5th Conference on Control Engineering\nER  - \n"
     )
-    mapping = FieldMapping(targets={"TY": "publication_type"})
+    mapping = mapping_of({"TY": "publication_type"})
 
     record = (
         apply_profile(
@@ -313,7 +334,9 @@ def _parse_bibtex(fields: str, mapping: FieldMapping | None = None) -> Record:
             "@key",
             *(line.split("=")[0].strip() for line in fields.splitlines()),
         ]
-        mapping = suggest_bibtex_mapping(keys, _BIBTEX_PROFILE.aliases)
+        mapping = suggest_bibtex_mapping(
+            keys, _BIBTEX_PROFILE.suggestions, _BIBTEX_PROFILE.row_defaults
+        )
     result = apply_profile(
         parse_bibtex_text(text, mapping, settings=_BIBTEX_PROFILE.settings),
         _BIBTEX_PROFILE,
@@ -325,9 +348,9 @@ def _parse_bibtex(fields: str, mapping: FieldMapping | None = None) -> Record:
 def test_scopus_bibtex__suggests_scopus_fields() -> None:
     keys = ["@type", "type", "pmid", "author_keywords", "keywords"]
 
-    mapping = suggest_bibtex_mapping(keys, _BIBTEX_PROFILE.aliases)
+    mapping = suggest_bibtex_mapping(keys, _BIBTEX_PROFILE.suggestions)
 
-    assert mapping.targets == {
+    assert targets_of(mapping) == {
         "type": "publication_type",
         "pmid": "pmid",
         "author_keywords": "keywords",
@@ -353,7 +376,7 @@ def test_scopus_bibtex__prefixes_cleaned_author_keywords_only() -> None:
 def test_scopus_bibtex__ignored_author_keywords_field_is_not_used() -> None:
     record = _parse_bibtex(
         "author_keywords = {Asia},\nkeywords = {Thermal},\n",
-        FieldMapping(targets={"keywords": "keywords"}),
+        mapping_of({"keywords": "keywords"}),
     )
 
     assert record.keywords == ["Thermal"]
@@ -363,7 +386,7 @@ def test_scopus_bibtex__ignored_url_still_gives_eid() -> None:
     url = "https://www.scopus.com/pages/publications/105040180364"
 
     record = _parse_bibtex(
-        f"url = {{{url}}},\npmid = {{1}},\n", FieldMapping(targets={"pmid": "pmid"})
+        f"url = {{{url}}},\npmid = {{1}},\n", mapping_of({"pmid": "pmid"})
     )
 
     assert record.other_ids == {"eid": "2-s2.0-105040180364"}
@@ -371,7 +394,7 @@ def test_scopus_bibtex__ignored_url_still_gives_eid() -> None:
 
 def test_scopus_bibtex__unmapped_keywords_stay_empty() -> None:
     record = _parse_bibtex(
-        "author_keywords = {Asia},\nkeywords = {Thermal},\n", FieldMapping(targets={})
+        "author_keywords = {Asia},\nkeywords = {Thermal},\n", FieldMapping()
     )
 
     assert record.keywords == []

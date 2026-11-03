@@ -1,5 +1,5 @@
 ﻿from collections.abc import Awaitable, Callable
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass, field
 from functools import partial
 from pathlib import Path
 
@@ -32,7 +32,7 @@ from app.parsers.excel import (
     read_excel_headers,
     read_excel_sheets,
 )
-from app.parsers.mapping import FieldMapping
+from app.parsers.mapping import FieldMapping, RowDefaults
 from app.parsers.nbib import (
     parse_nbib_file,
     parse_nbib_record,
@@ -111,24 +111,26 @@ def _handlers(file_type: str, source: str) -> _FormatHandlers | None:
     profile = profile_for(source, file_type)
     if profile is None:
         return None
-    overrides, settings = profile.aliases, profile.settings
+    overrides, settings = profile.suggestions, profile.settings
+    defaults = profile.row_defaults
     parse_csv = partial(_parse_csv_lines, settings=settings)
     if file_type in (_TYPE_CSV, _TYPE_TSV):
         suggest = partial(
             suggest_mapping,
-            alias_overrides=overrides,
+            overrides=overrides,
+            defaults=defaults,
             ignored_keys=profile.ignored_keys,
         )
         delimiter = _TSV_DELIMITER if file_type == _TYPE_TSV else None
         read_keys = partial(read_csv_headers, delimiter=delimiter, settings=settings)
         return _FormatHandlers(read_keys, suggest, parse_csv, "columns", profile)
     if file_type == _TYPE_EXCEL:
-        suggest = partial(suggest_mapping, alias_overrides=overrides)
+        suggest = partial(suggest_mapping, overrides=overrides, defaults=defaults)
         return _FormatHandlers(
             read_excel_headers, suggest, parse_csv, "columns", profile
         )
     if file_type == _TYPE_RIS:
-        suggest = partial(suggest_ris_mapping, alias_overrides=overrides)
+        suggest = partial(suggest_ris_mapping, overrides=overrides, defaults=defaults)
         return _FormatHandlers(
             read_ris_tags,
             suggest,
@@ -137,7 +139,7 @@ def _handlers(file_type: str, source: str) -> _FormatHandlers | None:
             profile,
         )
     if file_type == _TYPE_NBIB:
-        suggest = partial(suggest_nbib_mapping, alias_overrides=overrides)
+        suggest = partial(suggest_nbib_mapping, overrides=overrides, defaults=defaults)
         return _FormatHandlers(
             read_nbib_tags,
             suggest,
@@ -146,7 +148,9 @@ def _handlers(file_type: str, source: str) -> _FormatHandlers | None:
             profile,
         )
     if file_type == _TYPE_BIBTEX:
-        suggest = partial(suggest_bibtex_mapping, alias_overrides=overrides)
+        suggest = partial(
+            suggest_bibtex_mapping, overrides=overrides, defaults=defaults
+        )
         return _FormatHandlers(
             read_bibtex_fields,
             suggest,
@@ -158,11 +162,7 @@ def _handlers(file_type: str, source: str) -> _FormatHandlers | None:
 
 
 def _suggestion(handlers: _FormatHandlers, summary: FileSummary) -> FieldMapping:
-    suggestion = handlers.suggest(list(summary.samples))
-    profile = handlers.profile
-    if profile.list_delimiter is not None:
-        suggestion = replace(suggestion, list_delimiter=profile.list_delimiter)
-    return suggestion
+    return handlers.suggest(list(summary.samples))
 
 
 def _preview(
@@ -184,8 +184,11 @@ def preview_for(
     return _preview(handlers, summary)
 
 
-def shows_delimiter(file_type: str) -> bool:
-    return file_type in (_TYPE_CSV, _TYPE_TSV, _TYPE_EXCEL, _TYPE_BIBTEX)
+def row_defaults_for(file_type: str, source: str) -> RowDefaults:
+    profile = profile_for(source, file_type)
+    if profile is None:
+        raise ValueError(f"unsupported file type: {file_type!r}")
+    return profile.row_defaults
 
 
 def _detect(path: Path) -> tuple[str, str]:
@@ -232,7 +235,7 @@ def render_mapping(
         container,
         summary,
         _suggestion(handlers, summary),
-        show_delimiter=shows_delimiter(file_type),
+        defaults=handlers.profile.row_defaults,
         preview=_preview(handlers, summary),
     )
 
@@ -260,8 +263,8 @@ def _store(
         parsed_rows=[(row.record, row.raw_fields) for row in result.rows],
         skipped_rows=[(row.row_number, row.reason) for row in result.skipped],
     )
-    source_file.field_mapping = asdict(mapping)
-    source_file.suggested_mapping = asdict(_suggestion(handlers, summary))
+    source_file.field_mapping = mapping.model_dump()
+    source_file.suggested_mapping = _suggestion(handlers, summary).model_dump()
     source_file.file_summary = asdict(summary)
     log_import(session, source_file)
     return source_file

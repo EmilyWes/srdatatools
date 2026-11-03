@@ -1,20 +1,32 @@
 from pathlib import Path
 
 from app.models.record import Author
-from app.parsers.mapping import FieldMapping
+from app.parsers.mapping import (
+    AuthorsRow,
+    FieldMapping,
+    IssnIsbnRow,
+    KeywordsRow,
+    OtherIdRow,
+    Suggest,
+)
 from app.parsers.nbib import (
+    ROW_DEFAULTS,
     parse_nbib_file,
     parse_nbib_record,
     parse_nbib_text,
     read_nbib_tags,
     suggest_nbib_mapping,
 )
-from app.parsers.quirks import ParseSettings
+from app.parsers.profiles.default import DEFAULT_PROFILES
+from tests.mappings import mapping_of, targets_of
+
+_AFFILIATIONS = Suggest("authors", {"role": "affiliations"})
+_IDS = Suggest("authors", {"role": "ids"})
 
 NBIB_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "general"
 
-_MAPPING = FieldMapping(
-    targets={
+_MAPPING = mapping_of(
+    {
         "TI": "title",
         "FAU": "authors",
         "OT": "keywords",
@@ -22,7 +34,7 @@ _MAPPING = FieldMapping(
         "JT": "journal",
         "DOI": "doi",
     },
-    list_delimiter="\n",
+    defaults=ROW_DEFAULTS,
 )
 
 
@@ -208,7 +220,7 @@ def test_suggest_nbib_mapping__maps_common_tags() -> None:
 
     suggestions = suggest_nbib_mapping(tags)
 
-    assert suggestions.targets == {
+    assert targets_of(suggestions) == {
         "PMID": "pmid",
         "TI": "title",
         "FAU": "authors",
@@ -223,40 +235,53 @@ def test_suggest_nbib_mapping__maps_common_tags() -> None:
     }
 
 
-def test_suggest_nbib_mapping__uses_newline_list_delimiter() -> None:
-    assert suggest_nbib_mapping(["FAU"]).list_delimiter == "\n"
+def test_suggest_nbib_mapping__uses_newline_delimiter_and_row_options() -> None:
+    suggestions = suggest_nbib_mapping(["FAU", "AUID", "AD", "MH"])
+
+    assert suggestions.rows == {
+        "FAU": AuthorsRow(delimiter="\n", id_key="fau"),
+        "AUID": AuthorsRow(role="ids", delimiter="\n", id_key="auid"),
+        "AD": AuthorsRow(role="affiliations", delimiter="\n", id_key="ad"),
+        "MH": KeywordsRow(delimiter="\n", prefix="MeSH"),
+    }
 
 
 def test_suggest_nbib_mapping__alias_overrides_replace_defaults() -> None:
-    suggestions = suggest_nbib_mapping(["TA", "JT"], {"journal": ["jt"]})
+    suggestions = suggest_nbib_mapping(["TA", "JT"], {"jt": Suggest("journal")})
 
-    assert suggestions.targets == {"JT": "journal"}
+    assert targets_of(suggestions) == {"JT": "journal"}
 
 
 def test_suggest_nbib_mapping__prefers_fau_over_au_for_authors() -> None:
-    assert suggest_nbib_mapping(["AU", "FAU"]).targets == {"FAU": "authors"}
+    assert targets_of(suggest_nbib_mapping(["AU", "FAU"])) == {"FAU": "authors"}
 
 
 def test_suggest_nbib_mapping__falls_back_to_au_without_fau() -> None:
-    assert suggest_nbib_mapping(["AU"]).targets == {"AU": "authors"}
+    assert targets_of(suggest_nbib_mapping(["AU"])) == {"AU": "authors"}
 
 
 def test_suggest_nbib_mapping__maps_dp_to_date_and_keywords_from_ot_and_mh() -> None:
     suggestions = suggest_nbib_mapping(["DP", "OT", "MH"])
 
-    assert suggestions.targets == {"DP": "date", "OT": "keywords", "MH": "keywords"}
+    assert targets_of(suggestions) == {"DP": "date", "OT": "keywords", "MH": "keywords"}
 
 
 def test_suggest_nbib_mapping__routes_pmc_and_mid_to_other_ids() -> None:
     suggestions = suggest_nbib_mapping(["PMC", "MID"])
 
-    assert suggestions.targets == {"PMC": "other_ids.pmc", "MID": "other_ids.mid"}
+    assert suggestions.rows == {
+        "PMC": OtherIdRow(key="pmc"),
+        "MID": OtherIdRow(key="mid"),
+    }
 
 
 def test_suggest_nbib_mapping__maps_is_to_issn_and_isbn_tag_to_isbn() -> None:
     suggestions = suggest_nbib_mapping(["IS", "ISBN"])
 
-    assert suggestions.targets == {"IS": "issn", "ISBN": "isbn"}
+    assert suggestions.rows == {
+        "IS": IssnIsbnRow(kind="issn"),
+        "ISBN": IssnIsbnRow(kind="isbn"),
+    }
 
 
 def test_parse_nbib_text__isbn_tag_fills_isbn() -> None:
@@ -269,7 +294,9 @@ def test_parse_nbib_text__isbn_tag_fills_isbn() -> None:
 
 
 def _parse_issn(text: str) -> str | None:
-    return parse_nbib_text(text, suggest_nbib_mapping(["IS"])).rows[0].record.issn
+    settings = DEFAULT_PROFILES["nbib"].settings
+    result = parse_nbib_text(text, suggest_nbib_mapping(["IS"]), settings)
+    return result.rows[0].record.issn
 
 
 def test_parse_nbib_text__is_strips_print_electronic_qualifier() -> None:
@@ -306,7 +333,7 @@ def test_parse_nbib_text__is_without_qualifier_unchanged() -> None:
 
 
 def test_suggest_nbib_mapping__leaves_unknown_tags_unmapped() -> None:
-    assert suggest_nbib_mapping(["OWN", "STAT", "ZZ"]).targets == {}
+    assert targets_of(suggest_nbib_mapping(["OWN", "STAT", "ZZ"])) == {}
 
 
 def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
@@ -332,7 +359,7 @@ def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
         first.publication_date.month,
         first.publication_date.day,
     ) == (2020, 5, 14)
-    assert second.keywords == ["Humans", "Review Literature as Topic"]
+    assert second.keywords == ["[MeSH] Humans", "[MeSH] Review Literature as Topic"]
     assert second.publication_date is not None
     assert (second.publication_date.year, second.publication_date.month) == (2019, 1)
 
@@ -397,9 +424,9 @@ def test_read_nbib_tags__empty_file_has_zero_rows(tmp_path: Path) -> None:
     assert read_nbib_tags(path).total_rows == 0
 
 
-_AUTHOR_MAPPING = FieldMapping(
-    targets={"FAU": "authors", "AUID": "authors", "AD": "authors"},
-    list_delimiter="\n",
+_AUTHOR_MAPPING = mapping_of(
+    {"FAU": "authors", "AUID": _IDS, "AD": _AFFILIATIONS},
+    defaults=ROW_DEFAULTS,
 )
 
 
@@ -510,9 +537,9 @@ def test_parse_nbib_text__auid_ad_before_first_author_are_ignored() -> None:
 
 
 def test_parse_nbib_text__au_fallback_author_tag_groups_auid_ad() -> None:
-    mapping = FieldMapping(
-        targets={"AU": "authors", "AUID": "authors", "AD": "authors"},
-        list_delimiter="\n",
+    mapping = mapping_of(
+        {"AU": "authors", "AUID": _IDS, "AD": _AFFILIATIONS},
+        defaults=ROW_DEFAULTS,
     )
     text = (
         "PMID- 1\n"
@@ -557,9 +584,7 @@ def test_parse_nbib_text__auid_ad_values_are_not_author_names() -> None:
 
 
 def test_parse_nbib_text__ad_mapped_elsewhere_behaves_like_normal_tag() -> None:
-    mapping = FieldMapping(
-        targets={"FAU": "authors", "AD": "notes"}, list_delimiter="\n"
-    )
+    mapping = mapping_of({"FAU": "authors", "AD": "notes"}, defaults=ROW_DEFAULTS)
     text = "PMID- 1\nFAU - Smith, John\nAD  - Department A.\n"
 
     record = parse_nbib_text(text, mapping).rows[0].record
@@ -569,7 +594,7 @@ def test_parse_nbib_text__ad_mapped_elsewhere_behaves_like_normal_tag() -> None:
 
 
 def test_suggest_nbib_mapping__maps_auid_and_ad_to_authors() -> None:
-    assert suggest_nbib_mapping(["FAU", "AUID", "AD"]).targets == {
+    assert targets_of(suggest_nbib_mapping(["FAU", "AUID", "AD"])) == {
         "FAU": "authors",
         "AUID": "authors",
         "AD": "authors",
@@ -597,7 +622,7 @@ def test_parse_nbib_text__name_without_comma_is_not_split() -> None:
 
 
 def test_parse_nbib_text__au_fallback_name_is_not_split() -> None:
-    mapping = FieldMapping(targets={"AU": "authors"}, list_delimiter="\n")
+    mapping = mapping_of({"AU": "authors"}, defaults=ROW_DEFAULTS)
 
     author = _parse_authors("PMID- 1\nAU  - Müller RT\n", mapping)[0]
 
@@ -605,16 +630,13 @@ def test_parse_nbib_text__au_fallback_name_is_not_split() -> None:
     assert author.full_name == "Müller RT"
 
 
-_MESH = ParseSettings(keyword_prefixes={"MH": "[MeSH] "})
-_KEYWORD_MAPPING = FieldMapping(
-    targets={"OT": "keywords", "MH": "keywords"}, list_delimiter="\n"
-)
+_KEYWORD_MAPPING = suggest_nbib_mapping(["OT", "MH"])
 
 
 def test_parse_nbib_text__mh_keywords_get_mesh_prefix() -> None:
     text = "PMID- 1\nMH  - *Dinosaurs/anatomy & histology\nMH  - Animals\n"
 
-    record = parse_nbib_text(text, _KEYWORD_MAPPING, _MESH).rows[0].record
+    record = parse_nbib_text(text, _KEYWORD_MAPPING).rows[0].record
 
     assert record.keywords == [
         "[MeSH] *Dinosaurs/anatomy & histology",
@@ -625,17 +647,15 @@ def test_parse_nbib_text__mh_keywords_get_mesh_prefix() -> None:
 def test_parse_nbib_text__ot_keywords_have_no_prefix() -> None:
     text = "PMID- 1\nOT  - Quality control\nMH  - Quality Control\n"
 
-    record = parse_nbib_text(text, _KEYWORD_MAPPING, _MESH).rows[0].record
+    record = parse_nbib_text(text, _KEYWORD_MAPPING).rows[0].record
 
     assert record.keywords == ["Quality control", "[MeSH] Quality Control"]
 
 
 def test_parse_nbib_text__mh_mapped_elsewhere_has_no_prefix() -> None:
-    mapping = FieldMapping(targets={"MH": "notes"}, list_delimiter="\n")
+    mapping = mapping_of({"MH": "notes"}, defaults=ROW_DEFAULTS)
 
-    record = (
-        parse_nbib_text("PMID- 1\nMH  - *Dinosaurs\n", mapping, _MESH).rows[0].record
-    )
+    record = parse_nbib_text("PMID- 1\nMH  - *Dinosaurs\n", mapping).rows[0].record
 
     assert record.notes == "*Dinosaurs"
 
@@ -649,7 +669,7 @@ def test_parse_nbib_text__mh_raw_fields_keep_original_values() -> None:
 
 
 def test_suggest_nbib_mapping__maps_bti_to_journal() -> None:
-    assert suggest_nbib_mapping(["BTI"]).targets == {"BTI": "journal"}
+    assert targets_of(suggest_nbib_mapping(["BTI"])) == {"BTI": "journal"}
 
 
 def test_parse_nbib_text__bti_fills_journal() -> None:
@@ -701,7 +721,9 @@ def test_parse_nbib_text__author_after_editor_gets_its_own_ad() -> None:
 
 
 def test_parse_nbib_record__strips_is_qualifier() -> None:
-    mapping = FieldMapping(targets={"IS": "issn"}, list_delimiter="\n")
+    mapping = mapping_of(
+        {"IS": Suggest("issn_isbn", {"kind": "issn"})}, defaults=ROW_DEFAULTS
+    )
 
     row = parse_nbib_record([("IS", "1234-5678 (Print)")], mapping)
 
@@ -710,9 +732,9 @@ def test_parse_nbib_record__strips_is_qualifier() -> None:
 
 
 def test_parse_nbib_record__attaches_auid_and_ad_to_preceding_fau() -> None:
-    mapping = FieldMapping(
-        targets={"FAU": "authors", "AUID": "authors", "AD": "authors"},
-        list_delimiter="\n",
+    mapping = mapping_of(
+        {"FAU": "authors", "AUID": _IDS, "AD": _AFFILIATIONS},
+        defaults=ROW_DEFAULTS,
     )
     lines = [
         ("FAU", "Smith, John"),

@@ -1,4 +1,3 @@
-import logging
 import re
 
 import pytest
@@ -6,12 +5,13 @@ import pytest
 from app.models.record import Affiliation, Author, Record
 from app.parsers.mapping import FieldMapping
 from app.parsers.quirks import (
+    AffiliationLeadingName,
     ContinueToNextField,
     DropEtAl,
+    EmbeddedAuthorIds,
     ExpandPageRange,
     FirstValue,
     IdFromUrl,
-    ParallelAuthorColumns,
     ParseSettings,
     RecordQuirk,
     RisNotes,
@@ -19,26 +19,9 @@ from app.parsers.quirks import (
     StripPrefix,
     expand_page_range,
 )
+from tests.mappings import mapping_of
 
 _SETTINGS = ParseSettings()
-
-_SCOPUS_AUTHORS = ParallelAuthorColumns(
-    delimiter=";",
-    name_columns=("Author full names", "Authors"),
-    name_separator=",",
-    embedded_ids=True,
-    id_column="Author(s) ID",
-    id_key="scopus_author_id",
-    affiliation_column="Authors with affiliations",
-)
-_OPENALEX_AUTHORS = ParallelAuthorColumns(
-    delimiter="|",
-    name_columns=("Author",),
-    orcid_column="ORCID",
-    orcid_prefix="https://orcid.org/",
-    id_column="Author IDs",
-    id_key="openalex_author_id",
-)
 
 
 def _apply(
@@ -49,10 +32,6 @@ def _apply(
     settings: ParseSettings = _SETTINGS,
 ) -> Record:
     return quirk.apply(raw_fields or {}, record, mapping or FieldMapping(), settings)
-
-
-def _authors_mapping(raw_fields: dict[str, str]) -> FieldMapping:
-    return FieldMapping(targets=dict.fromkeys(raw_fields, "authors"))
 
 
 @pytest.mark.parametrize(
@@ -175,7 +154,7 @@ _NOTES = {"N1": "Export Date: 1 May 2026\nEID: 2-s2.0-1\nConference name: ICSE"}
 
 
 def test_ris_notes__sets_other_id_and_fills_scalar() -> None:
-    mapping = FieldMapping(targets={"N1": "notes"})
+    mapping = mapping_of({"N1": "notes"})
 
     record = _apply(_SCOPUS_NOTES, Record(), _NOTES, mapping)
 
@@ -184,7 +163,7 @@ def test_ris_notes__sets_other_id_and_fills_scalar() -> None:
 
 
 def test_ris_notes__scalar_only_fills_an_empty_field() -> None:
-    mapping = FieldMapping(targets={"N1": "notes"})
+    mapping = mapping_of({"N1": "notes"})
 
     record = _apply(_SCOPUS_NOTES, Record(conference_name="Mapped"), _NOTES, mapping)
 
@@ -198,21 +177,17 @@ def test_ris_notes__runs_when_tag_is_not_mapped() -> None:
     assert record.conference_name == "ICSE"
 
 
-_SCOPUS_ROW = {
-    "Authors": "Teng Y.; Han Y.",
-    "Author full names": "Teng, Yu (60652739200); Han, Yiyong (59534195400)",
-    "Author(s) ID": "60652739200; 59534195400",
-    "Authors with affiliations": (
-        "Teng Y., Guangxi Cartier Technology Ltd., Nanning, China; "
-        "Han Y., Nanning University, Guangxi, China"
-    ),
-}
+_EMBEDDED_IDS = EmbeddedAuthorIds("scopus_author_id")
 
 
-def test_parallel_author_columns__zips_names_embedded_ids_and_affiliations() -> None:
-    record = _apply(
-        _SCOPUS_AUTHORS, Record(), _SCOPUS_ROW, _authors_mapping(_SCOPUS_ROW)
+def test_embedded_author_ids__moves_id_out_of_split_name() -> None:
+    author = Author(
+        full_name="Teng, Yu (60652739200)",
+        family_name="Teng",
+        given_name="Yu (60652739200)",
     )
+
+    record = _apply(_EMBEDDED_IDS, Record(authors=[author]))
 
     assert record.authors == [
         Author(
@@ -220,105 +195,37 @@ def test_parallel_author_columns__zips_names_embedded_ids_and_affiliations() -> 
             family_name="Teng",
             given_name="Yu",
             other_ids={"scopus_author_id": "60652739200"},
-            affiliations=[
-                Affiliation(name="Guangxi Cartier Technology Ltd., Nanning, China")
-            ],
-        ),
-        Author(
-            full_name="Han, Yiyong",
-            family_name="Han",
-            given_name="Yiyong",
-            other_ids={"scopus_author_id": "59534195400"},
-            affiliations=[Affiliation(name="Nanning University, Guangxi, China")],
-        ),
+        )
     ]
 
 
-def test_parallel_author_columns__falls_back_to_next_name_column() -> None:
-    raw = {"Author full names": "", "Authors": "Teng Y.; Han Y."}
+def test_embedded_author_ids__overrides_id_from_column() -> None:
+    author = Author(full_name="Teng (1)", other_ids={"scopus_author_id": "2"})
 
-    record = _apply(_SCOPUS_AUTHORS, Record(), raw, _authors_mapping(raw))
-
-    assert [a.full_name for a in record.authors] == ["Teng Y.", "Han Y."]
-
-
-def test_parallel_author_columns__reads_only_mapped_columns() -> None:
-    mapping = FieldMapping(targets={"Authors": "authors"})
-
-    record = _apply(_SCOPUS_AUTHORS, Record(), _SCOPUS_ROW, mapping)
-
-    assert record.authors == [Author(full_name="Teng Y."), Author(full_name="Han Y.")]
-
-
-def test_parallel_author_columns__without_mapped_columns_leaves_authors() -> None:
-    record = Record(authors=[Author(full_name="Kept")])
-    mapping = FieldMapping(targets={"Editors": "authors"})
-
-    assert _apply(_SCOPUS_AUTHORS, record, {"Editors": "Kept"}, mapping) == record
-
-
-def test_parallel_author_columns__ids_without_names_give_id_only_authors() -> None:
-    raw = {"Author(s) ID": "1; 2"}
-
-    record = _apply(_SCOPUS_AUTHORS, Record(), raw, _authors_mapping(raw))
+    record = _apply(_EMBEDDED_IDS, Record(authors=[author]))
 
     assert record.authors == [
-        Author(other_ids={"scopus_author_id": "1"}),
-        Author(other_ids={"scopus_author_id": "2"}),
+        Author(full_name="Teng", other_ids={"scopus_author_id": "1"})
     ]
 
 
-def test_parallel_author_columns__ignores_misaligned_column_with_warning(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    raw = {"Author full names": "Teng, Yu; Han, Yiyong", "Author(s) ID": "1; 2; 3"}
+def test_embedded_author_ids__leaves_name_without_id_unchanged() -> None:
+    record = Record(authors=[Author(full_name="Teng, Yu (Jr)")])
 
-    with caplog.at_level(logging.WARNING):
-        record = _apply(_SCOPUS_AUTHORS, Record(), raw, _authors_mapping(raw))
-
-    assert [a.other_ids for a in record.authors] == [{}, {}]
-    assert "'Author(s) ID' has 3 entries for 2 authors" in caplog.text
+    assert _apply(_EMBEDDED_IDS, record) == record
 
 
-def test_parallel_author_columns__ambiguous_name_follows_settings() -> None:
-    raw = {"Author full names": "Smith, Jr., John"}
-    mapping = _authors_mapping(raw)
+def test_affiliation_leading_name__drops_name_before_separator() -> None:
+    author = Author(
+        full_name="Teng Y.",
+        affiliations=[
+            Affiliation(name="Teng Y., Guangxi Cartier Technology Ltd., Nanning"),
+            Affiliation(name="Teng Y."),
+        ],
+    )
 
-    unsplit = _apply(_SCOPUS_AUTHORS, Record(), raw, mapping).authors[0]
-    split = _apply(
-        _SCOPUS_AUTHORS,
-        Record(),
-        raw,
-        mapping,
-        ParseSettings(ambiguous_name_split="last"),
-    ).authors[0]
+    record = _apply(AffiliationLeadingName(), Record(authors=[author]))
 
-    assert unsplit.family_name is None
-    assert (split.family_name, split.given_name) == ("Smith, Jr.", "John")
-
-
-def test_parallel_author_columns__strips_orcid_prefix_and_keeps_empty_slots() -> None:
-    raw = {
-        "Author": "Ann Lee|Bo Kim",
-        "ORCID": "|https://orcid.org/0000-0001-2345-6789",
-        "Author IDs": "A1|A2",
-    }
-
-    record = _apply(_OPENALEX_AUTHORS, Record(), raw, _authors_mapping(raw))
-
-    assert record.authors == [
-        Author(full_name="Ann Lee", other_ids={"openalex_author_id": "A1"}),
-        Author(
-            full_name="Bo Kim",
-            orcid="0000-0001-2345-6789",
-            other_ids={"openalex_author_id": "A2"},
-        ),
+    assert record.authors[0].affiliations == [
+        Affiliation(name="Guangxi Cartier Technology Ltd., Nanning")
     ]
-
-
-def test_parallel_author_columns__drops_fully_empty_authors() -> None:
-    raw = {"Author": "Ann Lee||Bo Kim"}
-
-    record = _apply(_OPENALEX_AUTHORS, Record(), raw, _authors_mapping(raw))
-
-    assert [a.full_name for a in record.authors] == ["Ann Lee", "Bo Kim"]
