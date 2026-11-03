@@ -215,11 +215,11 @@ def test_render_source_file_view__parsing_shows_stored_choices_readonly() -> Non
         }
     )
 
-    switches = [e for e in middle.descendants() if isinstance(e, ui.switch)]
+    checkboxes = [e for e in middle.descendants() if isinstance(e, ui.checkbox)]
     inputs = {
         e.value: e for e in middle.descendants() if isinstance(e, ui.input) and e.value
     }
-    assert switches and all("disable" in switch.props for switch in switches)
+    assert checkboxes and all("disable" in box.props for box in checkboxes)
     assert ";" in inputs
     assert "readonly" in inputs[";"].props
-    assert "Expand short page ranges" in _labels(middle)
+    assert "Expand short page ranges" in [box.text for box in checkboxes]

@@ -48,13 +48,59 @@ def test_render_quirks_overview__skips_an_empty_block() -> None:
     assert "Profiles" not in texts
 
 
-def test_render_quirks_overview__shows_used_by() -> None:
+def _tooltip(screen: QuirksScreen, key: str) -> str:
+    checkbox = screen._widgets_for(key).checkbox
+    assert checkbox is not None
+    [tooltip] = [e for e in checkbox.descendants() if isinstance(e, ui.tooltip)]
+    text: str = tooltip.text
+    return text
+
+
+def test_render_quirks_overview__hover_shows_explanation_used_by_and_details() -> None:
+    screen = _render("bibtex")
+
+    hover = _tooltip(screen, "IdFromUrl").splitlines()
+
+    assert hover[0].startswith("Scopus BibTeX has no EID field")
+    assert hover[1] == "Used by: Scopus."
+    assert hover[2] == "Input key: 'url'"
+
+
+def test_render_quirks_overview__explanation_is_not_shown_inline() -> None:
     texts = _texts()
 
-    assert any(text.endswith("Used by: Scopus.") for text in texts)
+    assert not any(text.startswith("Scopus appends") for text in texts)
 
 
-def test_render_quirks_overview__switch_turns_a_quirk_off() -> None:
+def test_render_quirks_overview__checkbox_carries_the_title() -> None:
+    screen = _render()
+
+    checkbox = screen._widgets_for("DropEtAl").checkbox
+
+    assert checkbox is not None and checkbox.text == 'Drop "et al."'
+
+
+def test_render_quirks_overview__changed_checkbox_is_blue() -> None:
+    screen = _render()
+    checkbox = screen._widgets_for("DropEtAl").checkbox
+    assert checkbox is not None
+    assert "color" not in checkbox.props
+
+    screen.set_on("DropEtAl", False)
+    assert checkbox.props["color"] == "blue"
+
+    screen.set_on("DropEtAl", True)
+    assert "color" not in checkbox.props
+
+
+def test_render_quirks_overview__settings_have_no_checkbox() -> None:
+    screen = _render()
+
+    assert screen._widgets_for("ambiguous_name_split").checkbox is None
+    assert screen._widgets_for("csv_field_size_limit").checkbox is None
+
+
+def test_render_quirks_overview__checkbox_turns_a_quirk_off() -> None:
     screen = _render()
 
     screen.set_on("DropEtAl", False)
@@ -94,11 +140,13 @@ def test_render_quirks_overview__new_line_is_shown_and_typed_as_escape() -> None
 def test_render_quirks_overview__changed_option_is_tinted_blue() -> None:
     screen = _render()
     widget = screen._widgets_for("FirstValue.issn").inputs["delimiter"]
-    assert "green-2" in widget.props["bg-color"]
+    assert "bg-color" not in widget.props
 
     screen.set_option("FirstValue.issn", "delimiter", ";")
-
     assert widget.props["bg-color"] == "blue-2"
+
+    screen.set_option("FirstValue.issn", "delimiter", "")
+    assert "bg-color" not in widget.props
 
 
 def test_render_quirks_overview__field_size_limit_is_numeric() -> None:
@@ -125,7 +173,7 @@ def test_render_quirks_overview__chosen_is_read_only_and_shows_stored_values() -
 
     screen = _render(chosen=chosen)
 
-    drop = screen._widgets_for("DropEtAl").switch
+    drop = screen._widgets_for("DropEtAl").checkbox
     issn = screen._widgets_for("FirstValue.issn").inputs["delimiter"]
     assert drop is not None and drop.value is False
     assert "disable" in drop.props

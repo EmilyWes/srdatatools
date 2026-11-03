@@ -13,15 +13,11 @@ from app.parsers.profiles.overview import (
 )
 
 _KIND_ORDER: tuple[Kind, ...] = ("toggleable", "setting", "parser")
-_KIND_LABELS: dict[Kind, str] = {
-    "toggleable": "on/off",
-    "setting": "always on",
-    "parser": "parser",
-}
 _ORIGIN_ORDER: tuple[Origin, ...] = ("general", "type", "profile")
-_DEFAULT_COLOR = "green-2"
-_CHANGED_COLOR = "blue-2"
-_OPTION_LABEL_CLASSES = "w-40 shrink-0 text-xs text-grey-7"
+_CHANGED_BG_COLOR = "blue-2"
+_CHANGED_CHECKBOX_COLOR = "blue"
+_OPTION_LABEL_CLASSES = "shrink-0 text-xs text-grey-7"
+_TOOLTIP_CLASSES = "max-w-sm text-xs whitespace-pre-line"
 _NEW_LINE = "\n"
 _NEW_LINE_ESCAPE = "\\n"
 
@@ -37,7 +33,7 @@ def _unescape(value: str) -> str:
 @dataclass
 class _EntryWidgets:
     entry: QuirkEntry
-    switch: ui.switch | None
+    checkbox: ui.checkbox | None
     inputs: dict[str, ui.select | ui.input | ui.number] = field(default_factory=dict)
 
 
@@ -67,7 +63,7 @@ class QuirksScreen:
             )
             for option in widgets.entry.options
         }
-        on = widgets.switch.value if widgets.switch is not None else default.on
+        on = widgets.checkbox.value if widgets.checkbox else default.on
         return QuirkChoice(on=on, values=values)
 
     def current_choices(self) -> QuirkChoices:
@@ -75,15 +71,22 @@ class QuirksScreen:
 
     def _refresh_colors(self, widgets: _EntryWidgets) -> None:
         choice = self._choice(widgets)
+        default = widgets.entry.default
+        if widgets.checkbox is not None:
+            if choice.on != default.on:
+                widgets.checkbox.props(f"color={_CHANGED_CHECKBOX_COLOR}")
+            else:
+                widgets.checkbox.props(remove="color")
         for name, widget in widgets.inputs.items():
-            changed = choice.values[name] != widgets.entry.default.values[name]
-            color = _CHANGED_COLOR if changed else _DEFAULT_COLOR
-            widget.props(f"bg-color={color}")
+            if choice.values[name] != default.values[name]:
+                widget.props(f"bg-color={_CHANGED_BG_COLOR}")
+            else:
+                widget.props(remove="bg-color")
 
     def set_on(self, key: str, on: bool) -> None:
         widgets = self._widgets_for(key)
-        assert widgets.switch is not None
-        widgets.switch.value = on
+        assert widgets.checkbox is not None
+        widgets.checkbox.value = on
 
     def set_option(self, key: str, name: str, value: str) -> None:
         self._widgets_for(key).inputs[name].value = value
@@ -95,7 +98,7 @@ class QuirksScreen:
         self, widgets: _EntryWidgets, option: QuirkOption, value: str
     ) -> None:
         widget: ui.select | ui.input | ui.number
-        with ui.row().classes("w-full no-wrap items-center gap-1"):
+        with ui.row().classes("no-wrap items-center gap-1"):
             ui.label(option.label).classes(_OPTION_LABEL_CLASSES)
             if option.choices is not None:
                 widget = ui.select(option.choices, value=value)
@@ -114,29 +117,33 @@ class QuirksScreen:
                 widget = ui.input(placeholder=_escape(value)).props("dense outlined")
             if self.readonly:
                 widget.props("readonly")
-            widget.classes("text-xs w-48")
+            widget.classes("text-xs w-32")
             widget.on_value_change(lambda _e: self._refresh_colors(widgets))
         widgets.inputs[option.name] = widget
 
     def _render_entry(self, entry: QuirkEntry, choice: QuirkChoice) -> None:
-        with ui.column().classes("gap-1 w-full"):
-            with ui.row().classes("items-center no-wrap gap-2"):
-                switch = None
-                if entry.kind == "toggleable":
-                    switch = ui.switch(value=choice.on).props("dense")
-                    if self.readonly:
-                        switch.props("disable")
-                ui.label(entry.title).classes("text-sm")
-                ui.badge(_KIND_LABELS[entry.kind], color="grey-6").props("outline")
-            explanation = entry.explanation
-            if entry.used_by:
-                explanation += f" Used by: {', '.join(entry.used_by)}."
-            ui.label(explanation).classes("text-xs text-grey-7")
-            widgets = _EntryWidgets(entry=entry, switch=switch)
+        hover = [entry.explanation]
+        if entry.used_by:
+            hover.append(f"Used by: {', '.join(entry.used_by)}.")
+        hover += entry.details
+        with ui.row().classes("items-center no-wrap gap-3 w-full"):
+            title: ui.checkbox | ui.label
+            checkbox = None
+            if entry.kind == "toggleable":
+                title = checkbox = ui.checkbox(entry.title, value=choice.on)
+                checkbox.props("dense keep-color")
+                if self.readonly:
+                    checkbox.props("disable")
+            else:
+                title = ui.label(entry.title)
+            title.classes("text-sm")
+            with title:
+                ui.tooltip(_NEW_LINE.join(hover)).classes(_TOOLTIP_CLASSES)
+            widgets = _EntryWidgets(entry=entry, checkbox=checkbox)
             for option in entry.options:
                 self._render_option(widgets, option, choice.values[option.name])
-            for detail in entry.details:
-                ui.label(detail).classes("text-xs text-grey-7")
+        if checkbox is not None:
+            checkbox.on_value_change(lambda _e: self._refresh_colors(widgets))
         self.entries.append(widgets)
         self._refresh_colors(widgets)
 
@@ -158,10 +165,10 @@ def render_quirks_overview(
         (origin, [e for e in entries if e.origin == origin]) for origin in _ORIGIN_ORDER
     ]
     container.clear()
-    with container, ui.column().classes("gap-3 w-full max-w-2xl"):
+    with container, ui.column().classes("gap-1 w-full max-w-2xl"):
         for i, (origin, block) in enumerate(b for b in blocks if b[1]):
             if i:
-                ui.separator()
+                ui.separator().classes("my-2")
             ui.label(origin_labels[origin]).classes("text-base font-bold")
             for entry in sorted(block, key=lambda e: _KIND_ORDER.index(e.kind)):
                 choice = (chosen or {}).get(entry.key, entry.default)
