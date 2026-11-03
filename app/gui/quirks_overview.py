@@ -36,13 +36,45 @@ _FIELD_CSS = """
 """
 # Controls line up within a box, after its longest label.
 _GRID_STYLE = "grid-template-columns: max-content auto"
-_GRID_CLASSES = "grid items-center gap-x-3 gap-y-1 w-full"
+_GRID_CLASSES = "grid items-center gap-x-3 gap-y-1"
 _CHECKBOX_SIZE = "32px"
-_FIELD_CLASSES = "quirk-field text-xs w-32"
+_FIELD_CLASSES = "quirk-field text-xs w-[5.5rem]"
 _TOOLTIP_CLASSES = "max-w-sm text-xs"
 _NOTE_CLASSES = "col-span-2 text-xs text-grey-6"
-# One width for every box; fits a label, a control and a remove button.
-_BOX_CLASSES = "w-72 border border-gray-300 rounded px-3 pb-2"
+_BOXES_CLASS = "quirk-boxes"
+_BOX_CLASSES = "quirk-box w-fit border border-gray-300 rounded px-3 pb-2"
+# CSS can't give wrapping boxes the width of the widest one, so a script does:
+# again whenever rows change, and when the hidden Parsing view is shown (hidden
+# boxes measure 0). Run, not added to the head: a script added late never runs.
+_EQUAL_WIDTH_JS = """
+(() => {
+  if (window.quirkBoxesWatched) return;
+  window.quirkBoxesWatched = true;
+  const equalize = (row) => {
+    const boxes = [...row.querySelectorAll(":scope > .quirk-box")];
+    boxes.forEach((box) => (box.style.width = ""));
+    const width = Math.max(...boxes.map((box) => box.offsetWidth));
+    if (width > 0) boxes.forEach((box) => (box.style.width = `${width}px`));
+  };
+  const watched = new WeakSet();
+  const resize = new ResizeObserver((entries) =>
+    entries.forEach((entry) => equalize(entry.target))
+  );
+  const scan = () =>
+    document.querySelectorAll(".quirk-boxes").forEach((row) => {
+      if (!watched.has(row)) {
+        watched.add(row);
+        resize.observe(row);
+      }
+      equalize(row);
+    });
+  new MutationObserver(scan).observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+  scan();
+})();
+"""
 _TITLE_CLASSES = "mx-auto px-1 text-sm font-bold"
 
 Widget = ui.checkbox | ui.input | ui.number | ui.select
@@ -278,7 +310,9 @@ def render_quirks_overview(
     ui.add_css(_FIELD_CSS)
     container.clear()
     with container, ui.column().classes("gap-1 w-full"):
-        with ui.row().classes("w-full items-start gap-3"):
+        # Deferred: a once-timer waits for the browser connection before running.
+        ui.timer(0, lambda: ui.run_javascript(_EQUAL_WIDTH_JS), once=True)
+        with ui.row().classes(f"{_BOXES_CLASS} w-full items-start gap-3 pl-3"):
             for box in boxes:
                 screen.render_box(box, shown)
         if not screen.readonly:

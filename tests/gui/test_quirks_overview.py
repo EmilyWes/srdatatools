@@ -81,6 +81,17 @@ def test_render_quirks_overview__boxes_in_order_with_title_in_the_border() -> No
     assert all("border" in box.classes for box in boxes)
 
 
+def test_render_quirks_overview__boxes_are_marked_for_equal_widths() -> None:
+    middle = shell().middle
+
+    _render(middle=middle)
+
+    boxes = [e for e in middle.descendants() if e.tag == "fieldset"]
+    rows = {box.parent_slot.parent for box in boxes if box.parent_slot}
+    assert all("quirk-box" in box.classes for box in boxes)
+    assert [("quirk-boxes" in row.classes) for row in rows] == [True]
+
+
 def test_render_quirks_overview__label_hover_shows_the_explanation() -> None:
     middle = shell().middle
 
