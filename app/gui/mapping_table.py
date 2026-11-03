@@ -75,7 +75,7 @@ class _Option:
 
 _OPTION_ROW_CLASSES = "w-full no-wrap items-center gap-1"
 # Fixed width so the boxes line up whatever the label.
-_OPTION_LABEL_CLASSES = "w-11 shrink-0 text-xs text-grey-7"
+_OPTION_LABEL_CLASSES = "w-10 shrink-0 text-xs text-grey-7"
 
 _OPTIONS: dict[str, tuple[_Option, ...]] = {
     DATE_TARGET: (
