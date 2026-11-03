@@ -35,6 +35,7 @@ class ContinueToNextField:
 @dataclass(frozen=True)
 class ParseSettings:
     skip_issn_isbn_qualifiers: bool = False
+    preferred_issn_qualifier: str | None = None
     minus_one_unlabeled: bool = False
     ambiguous_name_split: AmbiguousNameSplit = "none"
     # Python's csv limit is process-wide, so the parser sets it before each parse.

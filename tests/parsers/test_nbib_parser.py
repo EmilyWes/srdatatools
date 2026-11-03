@@ -17,6 +17,7 @@ from app.parsers.nbib import (
     read_nbib_tags,
     suggest_nbib_mapping,
 )
+from app.parsers.profiles.default import DEFAULT_PROFILES
 from tests.mappings import mapping_of, targets_of
 
 _AFFILIATIONS = Suggest("authors", {"role": "affiliations"})
@@ -293,7 +294,9 @@ def test_parse_nbib_text__isbn_tag_fills_isbn() -> None:
 
 
 def _parse_issn(text: str) -> str | None:
-    return parse_nbib_text(text, suggest_nbib_mapping(["IS"])).rows[0].record.issn
+    settings = DEFAULT_PROFILES["nbib"].settings
+    result = parse_nbib_text(text, suggest_nbib_mapping(["IS"]), settings)
+    return result.rows[0].record.issn
 
 
 def test_parse_nbib_text__is_strips_print_electronic_qualifier() -> None:

@@ -263,19 +263,29 @@ def normalize_label(value: str, minus_one_unlabeled: bool = False) -> LabelValue
     return label
 
 
-def _issn_isbn_pieces(value: str, skip_qualifiers: bool) -> list[str]:
-    """skip_qualifiers skips pieces like Scopus's "(ISSN)" / "(ISBN)"."""
-    return [
-        piece
-        for piece in _ISSN_ISBN_SEPARATORS.split(value)
-        if piece
-        and not (skip_qualifiers and piece.startswith("(") and piece.endswith(")"))
-    ]
+def _issn_isbn_pieces(value: str, settings: ParseSettings) -> list[str]:
+    """Skipping qualifiers drops pieces like Scopus's "(ISSN)" or PubMed's "(Print)",
+    after moving the values they follow with the preferred qualifier to the front.
+    """
+    pieces = [p for p in _ISSN_ISBN_SEPARATORS.split(value) if p]
+    if not settings.skip_issn_isbn_qualifiers:
+        return pieces
+    qualified: list[tuple[str, str | None]] = []
+    for piece in pieces:
+        if not (piece.startswith("(") and piece.endswith(")")):
+            qualified.append((piece, None))
+        elif qualified and qualified[-1][1] is None:
+            qualified[-1] = (qualified[-1][0], piece[1:-1])
+    preferred = settings.preferred_issn_qualifier
+    qualified.sort(key=lambda pair: preferred is None or pair[1] != preferred)
+    return [piece for piece, _ in qualified]
 
 
-def _classify_issn_isbn(row: IssnIsbnRow, value: str, skip: bool) -> dict[str, str]:
+def _classify_issn_isbn(
+    row: IssnIsbnRow, value: str, settings: ParseSettings
+) -> dict[str, str]:
     """RIS keeps both in SN; auto tells them apart by length. First of each wins."""
-    pieces = _issn_isbn_pieces(value, skip)
+    pieces = _issn_isbn_pieces(value, settings)
     if row.kind != "auto":
         return {row.kind: pieces[0]} if pieces else {}
     found: dict[str, str] = {}
@@ -502,8 +512,7 @@ def apply_mapping(
             if not _continues_to_next(row.target, value, settings):
                 values.setdefault(row.target, value)
         elif isinstance(row, IssnIsbnRow):
-            skip = settings.skip_issn_isbn_qualifiers
-            for scalar, piece in _classify_issn_isbn(row, value, skip).items():
+            for scalar, piece in _classify_issn_isbn(row, value, settings).items():
                 values.setdefault(scalar, piece)
         elif isinstance(row, OtherIdRow):
             other_ids[row.key] = value

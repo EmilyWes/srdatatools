@@ -284,6 +284,32 @@ def test_apply_mapping__fixed_kind_skips_qualifier_when_on() -> None:
     assert record.issn == "1234-5678"
 
 
+_IS_LINES = "1234-5678 (Print)\n8765-4321 (Electronic)\n1234-5678 (Linking)"
+
+
+def test_apply_mapping__preferred_qualifier_value_wins() -> None:
+    mapping = mapping_of({"IS": Suggest("issn_isbn", {"kind": "issn"})})
+    settings = ParseSettings(
+        skip_issn_isbn_qualifiers=True, preferred_issn_qualifier="Electronic"
+    )
+
+    assert apply_mapping({"IS": _IS_LINES}, mapping, settings).issn == "8765-4321"
+
+
+def test_apply_mapping__without_preferred_qualifier_first_value_wins() -> None:
+    mapping = mapping_of({"IS": Suggest("issn_isbn", {"kind": "issn"})})
+    settings = ParseSettings(skip_issn_isbn_qualifiers=True)
+
+    assert apply_mapping({"IS": _IS_LINES}, mapping, settings).issn == "1234-5678"
+
+
+def test_apply_mapping__preferred_qualifier_is_ignored_when_skip_is_off() -> None:
+    mapping = mapping_of({"IS": Suggest("issn_isbn", {"kind": "issn"})})
+    settings = ParseSettings(preferred_issn_qualifier="Electronic")
+
+    assert apply_mapping({"IS": _IS_LINES}, mapping, settings).issn == "1234-5678"
+
+
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
