@@ -69,7 +69,7 @@ class _Option:
     short: str
     label: str
     choices: dict[str, str] | None = None
-    # Delimiters, separators and prefixes may be or end in a space.
+    # Delimiters and separators may be or end in a space.
     strip: bool = True
 
 
@@ -134,7 +134,7 @@ _OPTIONS: dict[str, tuple[_Option, ...]] = {
     ),
     KEYWORDS_TARGET: (
         _Option("delimiter", "sep", "Delimiter", strip=False),
-        _Option("prefix", "pre", "Prefix", strip=False),
+        _Option("prefix", "pre", "Prefix"),
     ),
     LABEL_TARGET: (
         _Option("phase", "phase", "Phase"),

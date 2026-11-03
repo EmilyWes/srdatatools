@@ -215,15 +215,21 @@ def test_render_mapping_table__empty_text_box_uses_placeholder() -> None:
     assert screen.current_mapping().rows == {"Keywords": KeywordsRow(delimiter=";")}
 
 
-def test_render_mapping_table__delimiter_and_prefix_keep_spaces() -> None:
+def test_render_mapping_table__delimiter_keeps_spaces() -> None:
     screen = _render(["Keywords"])
 
     screen.set_option("Keywords", "delimiter", " ")
-    screen.set_option("Keywords", "prefix", "[A] ")
 
-    assert screen.current_mapping().rows == {
-        "Keywords": KeywordsRow(delimiter=" ", prefix="[A] ")
-    }
+    assert screen.current_mapping().rows == {"Keywords": KeywordsRow(delimiter=" ")}
+
+
+def test_render_mapping_table__typed_prefix_loses_brackets_and_spaces() -> None:
+    screen = _render_samples({"Keywords": "a; b"})
+
+    screen.set_option("Keywords", "prefix", " [Author] ")
+
+    assert screen.current_mapping().rows["Keywords"].model_dump()["prefix"] == "Author"
+    assert _result(screen, "Keywords") == "[Author] a | [Author] b"
 
 
 def test_render_mapping_table__date_order_only_shows_for_full_date() -> None:

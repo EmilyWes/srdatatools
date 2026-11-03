@@ -12,7 +12,7 @@ from app.parsers.quirks import (
     RisNotes,
 )
 
-_AUTHOR_KEYWORD_PREFIX = "[Author] "
+_AUTHOR_KEYWORD_PREFIX = "Author"
 _AUTHOR_ID_KEY = "scopus_author_id"
 
 _CSV_EID_HEADER = "eid"

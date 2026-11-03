@@ -52,7 +52,7 @@ _SUGGESTIONS: dict[str, Suggest] = {
     "ad": Suggest("authors", {"role": "affiliations"}),
     "pg": Suggest("pages"),
     "ot": Suggest("keywords"),
-    "mh": Suggest("keywords", {"prefix": "[MeSH] "}),
+    "mh": Suggest("keywords", {"prefix": "MeSH"}),
     "dp": Suggest("date"),
     "is": Suggest("issn_isbn", {"kind": "issn"}),
     "isbn": Suggest("issn_isbn", {"kind": "isbn"}),

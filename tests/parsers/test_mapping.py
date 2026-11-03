@@ -469,7 +469,7 @@ def test_is_ambiguous_date__only_when_order_changes_the_date(
 def test_apply_mapping__keywords_use_row_delimiter_and_prefix() -> None:
     mapping = mapping_of(
         {
-            "A": Suggest("keywords", {"prefix": "[A] "}),
+            "A": Suggest("keywords", {"prefix": "A"}),
             "B": Suggest("keywords", {"delimiter": "|"}),
         }
     )
@@ -477,6 +477,16 @@ def test_apply_mapping__keywords_use_row_delimiter_and_prefix() -> None:
     record = apply_mapping({"A": "x; y", "B": "z|w"}, mapping)
 
     assert record.keywords == ["[A] x", "[A] y", "z", "w"]
+
+
+@pytest.mark.parametrize("typed", ["Author", " Author ", "[Author]", "[Author] "])
+def test_keywords_row__prefix_is_stored_without_brackets(typed: str) -> None:
+    assert KeywordsRow(delimiter=";", prefix=typed).prefix == "Author"
+
+
+def test_keywords_row__tags_keyword_only_with_a_prefix() -> None:
+    assert KeywordsRow(delimiter=";", prefix="MeSH").tagged("Humans") == "[MeSH] Humans"
+    assert KeywordsRow(delimiter=";").tagged("Humans") == "Humans"
 
 
 def test_apply_mapping__name_roles_split_names() -> None:

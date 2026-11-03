@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal, TypeVar, get_args
 
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_validator
 
 from app.models.record import (
     Affiliation,
@@ -137,9 +137,20 @@ class AuthorsRow(BaseModel):
 
 
 class KeywordsRow(BaseModel):
+    """prefix is a bare name; keywords get it as "[name] keyword", so an export can
+    split the prefix off again."""
+
     target: Literal["keywords"] = "keywords"
     delimiter: str
     prefix: str = ""
+
+    @field_validator("prefix")
+    @classmethod
+    def strip_brackets(cls, value: str) -> str:
+        return value.strip().removeprefix("[").removesuffix("]").strip()
+
+    def tagged(self, keyword: str) -> str:
+        return f"[{self.prefix}] {keyword}" if self.prefix else keyword
 
 
 class LabelRow(BaseModel):
@@ -527,7 +538,7 @@ def apply_mapping(
             other_ids[row.key] = value
         elif isinstance(row, KeywordsRow):
             keywords.extend(
-                row.prefix + keyword for keyword in _split_list(value, row.delimiter)
+                row.tagged(keyword) for keyword in _split_list(value, row.delimiter)
             )
 
     return Record(

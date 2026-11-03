@@ -242,7 +242,7 @@ def test_suggest_nbib_mapping__uses_newline_delimiter_and_row_options() -> None:
         "FAU": AuthorsRow(delimiter="\n", id_key="fau"),
         "AUID": AuthorsRow(role="ids", delimiter="\n", id_key="auid"),
         "AD": AuthorsRow(role="affiliations", delimiter="\n", id_key="ad"),
-        "MH": KeywordsRow(delimiter="\n", prefix="[MeSH] "),
+        "MH": KeywordsRow(delimiter="\n", prefix="MeSH"),
     }
 
 
