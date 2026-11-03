@@ -26,16 +26,15 @@ _SETTINGS = ParseSettings(
 # PubMed writes one IS line per medium, e.g. "1234-5678 (Print)".
 _NBIB_SETTINGS = replace(_SETTINGS, preferred_issn_qualifier="Electronic")
 
-_GENERIC_QUIRKS: tuple[RecordQuirk, ...] = (FirstValue("isbn", LINE_DELIMITER),)
-_COLUMN_QUIRKS: tuple[RecordQuirk, ...] = (
-    *_GENERIC_QUIRKS,
-    DropEtAl(),
+_GENERIC_QUIRKS: tuple[RecordQuirk, ...] = (
+    FirstValue("isbn", LINE_DELIMITER),
     FirstValue("issn", "|"),
+    DropEtAl(),
     StripPrefix("pmid", "https://pubmed.ncbi.nlm.nih.gov/"),
+    ExpandPageRange(),
 )
 _NBIB_QUIRKS: tuple[RecordQuirk, ...] = (
     *_GENERIC_QUIRKS,
-    ExpandPageRange(),
     FirstValue("publication_type", LINE_DELIMITER),
 )
 
@@ -50,9 +49,9 @@ DEFAULT_PROFILES: dict[str, FormatProfile] = {
     for file_type, (settings, row_defaults, quirks) in {
         "ris": (_SETTINGS, ris.ROW_DEFAULTS, _GENERIC_QUIRKS),
         "nbib": (_NBIB_SETTINGS, nbib.ROW_DEFAULTS, _NBIB_QUIRKS),
-        "csv": (_SETTINGS, csv_.ROW_DEFAULTS, _COLUMN_QUIRKS),
-        "tsv": (_SETTINGS, csv_.ROW_DEFAULTS, _COLUMN_QUIRKS),
-        "excel": (_SETTINGS, csv_.ROW_DEFAULTS, _COLUMN_QUIRKS),
+        "csv": (_SETTINGS, csv_.ROW_DEFAULTS, _GENERIC_QUIRKS),
+        "tsv": (_SETTINGS, csv_.ROW_DEFAULTS, _GENERIC_QUIRKS),
+        "excel": (_SETTINGS, csv_.ROW_DEFAULTS, _GENERIC_QUIRKS),
         "bibtex": (_SETTINGS, bibtex.ROW_DEFAULTS, _GENERIC_QUIRKS),
     }.items()
 }

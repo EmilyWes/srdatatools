@@ -51,29 +51,23 @@ def test_default_profiles__turn_on_the_generic_quirks() -> None:
         assert settings.ambiguous_name_split == "none"
 
 
-def test_default_profiles__turn_on_the_generic_isbn_and_title_placeholder() -> None:
+def test_default_profiles__turn_on_the_generic_quirks_for_every_type() -> None:
     for profile in DEFAULT_PROFILES.values():
         assert FirstValue("isbn", "\n") in profile.quirks
+        assert FirstValue("issn", "|") in profile.quirks
+        assert DropEtAl() in profile.quirks
+        assert StripPrefix("pmid", "https://pubmed.ncbi.nlm.nih.gov/") in (
+            profile.quirks
+        )
+        assert ExpandPageRange() in profile.quirks
         [placeholder] = profile.settings.continue_to_next
         assert placeholder.field == "title"
         assert placeholder.matches("[Not Available].")
 
 
-def test_default_profiles__column_types_share_their_quirks() -> None:
-    column_quirks = DEFAULT_PROFILES["csv"].quirks
-
-    assert DropEtAl() in column_quirks
-    assert FirstValue("issn", "|") in column_quirks
-    assert StripPrefix("pmid", "https://pubmed.ncbi.nlm.nih.gov/") in column_quirks
-    assert DEFAULT_PROFILES["tsv"].quirks == column_quirks
-    assert DEFAULT_PROFILES["excel"].quirks == column_quirks
-
-
-def test_default_profiles__nbib_expands_pages_and_keeps_first_type() -> None:
-    quirks = DEFAULT_PROFILES["nbib"].quirks
-
-    assert ExpandPageRange() in quirks
-    assert FirstValue("publication_type", "\n") in quirks
+def test_default_profiles__nbib_keeps_first_publication_type() -> None:
+    assert FirstValue("publication_type", "\n") in DEFAULT_PROFILES["nbib"].quirks
+    assert FirstValue("publication_type", "\n") not in DEFAULT_PROFILES["ris"].quirks
 
 
 def test_default_quirks__profile_quirks_come_after_the_type_defaults() -> None:
