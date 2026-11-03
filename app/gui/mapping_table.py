@@ -114,7 +114,7 @@ _OPTIONS: dict[str, tuple[_Option, ...]] = {
                 "affiliations": "Affiliations",
             },
         ),
-        _Option("delimiter", "Delimiter", strip=False),
+        _Option("delimiter", "Author separator", strip=False),
         _Option("separator", "Name separator", strip=False),
         _Option("id_key", "ID key"),
     ),
