@@ -37,3 +37,19 @@ def test_author_from_name__without_separator_keeps_full_name_only() -> None:
     assert author.full_name == "Müller RT"
     assert author.family_name is None
     assert author.given_name is None
+
+
+def test_author_from_name__splits_given_first_name() -> None:
+    author = author_from_name("John Smith", " ", family_first=False)
+
+    assert author.family_name == "Smith"
+    assert author.given_name == "John"
+
+
+def test_author_from_name__given_first_ambiguous_name_splits_at_last_separator() -> (
+    None
+):
+    author = author_from_name("John Paul Smith", " ", "last", family_first=False)
+
+    assert author.family_name == "Smith"
+    assert author.given_name == "John Paul"

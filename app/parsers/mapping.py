@@ -43,7 +43,18 @@ _DATE_PATTERNS = [
         r"^(?P<year>\d{4}) (?P<month>[A-Za-z]{3,9})(?:-[A-Za-z]{3,9})?"
         r"(?: (?P<day>\d{1,2}))?$"
     ),
+    re.compile(r"^(?P<day>\d{1,2}) (?P<month>[A-Za-z]{3,9})\.? (?P<year>\d{4})$"),
+    re.compile(r"^(?P<month>[A-Za-z]{3,9})\.? (?P<day>\d{1,2}), (?P<year>\d{4})$"),
+    # A season names no month: which months it covers depends on the hemisphere.
+    re.compile(r"^(?:spring|summer|fall|autumn|winter) ?(?P<year>\d{4})$", re.I),
+    re.compile(r"^(?P<month>[A-Za-z]{3,9})\.? ?(?P<year>\d{4})$"),
 ]
+_NUMERIC_DATE = re.compile(
+    r"^(?P<first>\d{1,2})(?P<sep>[/.-])(?P<second>\d{1,2})(?P=sep)(?P<year>\d{4})$"
+)
+_MAX_MONTH = 12
+
+DateOrder = Literal["eu", "us"]
 
 SCALAR_FIELDS = frozenset(
     name for name, info in Record.model_fields.items() if info.annotation == str | None
@@ -192,8 +203,24 @@ def _build_partial_date(
         return PartialDate(year=year, month=month, day=None)
 
 
-def parse_date_string(value: str) -> PartialDate | None:
+def _parse_numeric_date(match: re.Match[str], order: DateOrder) -> PartialDate | None:
+    """The order only decides when both numbers could be the month."""
+    first, second = int(match["first"]), int(match["second"])
+    if first > _MAX_MONTH and second > _MAX_MONTH:
+        logger.warning("Could not parse date value %r", match.string)
+        return None
+    if first > _MAX_MONTH or (second <= _MAX_MONTH and order == "eu"):
+        day, month = first, second
+    else:
+        month, day = first, second
+    return _build_partial_date(int(match["year"]), month, day)
+
+
+def parse_date_string(value: str, order: DateOrder = "eu") -> PartialDate | None:
     stripped = value.strip()
+    numeric = _NUMERIC_DATE.match(stripped)
+    if numeric is not None:
+        return _parse_numeric_date(numeric, order)
     for pattern in _DATE_PATTERNS:
         match = pattern.match(stripped)
         if match is None:
