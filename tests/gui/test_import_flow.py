@@ -875,7 +875,7 @@ def test_import_file__unknown_source_stores_no_source(
     session.commit()
 
     assert source_file.source is None
-    assert session.query(Record).one().pages == "521-2"
+    assert source_file.row_count == 1
 
 
 def test_render_import_view__source_change_rerenders_mapping_and_is_passed_on(
@@ -919,6 +919,19 @@ def test_render_mapping__result_applies_pubmed_nbib_profile(tmp_path: Path) -> N
 
 
 def test_render_mapping__result_without_source_skips_profile(tmp_path: Path) -> None:
+    csv_path = tmp_path / "scopus.csv"
+    csv_path.write_text('Authors,EID\n"Teng, Yu (60652739200)",2-s2.0-1\n')
+    panes = shell()
+
+    screen = _render_mapping(panes.middle, "csv", csv_path)
+
+    assert screen is not None
+    assert _result(screen, "Authors") == "Teng, Yu (60652739200)"
+
+
+def test_render_mapping__result_without_source_applies_type_defaults(
+    tmp_path: Path,
+) -> None:
     nbib_path = tmp_path / "pubmed.nbib"
     nbib_path.write_text(_PUBMED_NBIB_TEXT)
     panes = shell()
@@ -926,7 +939,7 @@ def test_render_mapping__result_without_source_skips_profile(tmp_path: Path) -> 
     screen = _render_mapping(panes.middle, "nbib", nbib_path)
 
     assert screen is not None
-    assert _result(screen, "PG") == "521-2"
+    assert _result(screen, "PG") == "521-522"
 
 
 def test_render_mapping__nbib_result_combines_fau_auid_and_ad(tmp_path: Path) -> None:
