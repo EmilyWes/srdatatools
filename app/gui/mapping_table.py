@@ -388,7 +388,7 @@ class MappingScreen:
             shown = mapped is not None and _shows_option(mapped, name)
             option_row.set_visibility(shown)
 
-    def _refresh_results(self) -> None:
+    def refresh_results(self) -> None:
         mapping = self.current_mapping()
         record = self.preview(mapping)
         label_headers = [key for key, _ in mapping.rows_of(LabelRow)]
@@ -432,11 +432,11 @@ class MappingScreen:
     def on_target_change(self, row: _Row) -> None:
         self._build_options(row)
         self._refresh_colors()
-        self._refresh_results()
+        self.refresh_results()
 
     def on_option_change(self, row: _Row) -> None:
         self._refresh_option_visibility(row)
-        self._refresh_results()
+        self.refresh_results()
 
     def set_target(self, header: str, target: str) -> None:
         self._row_for(header).select.value = target
@@ -573,5 +573,5 @@ def render_mapping_table(
                 select.on_value_change(lambda _e, row=row: screen.on_target_change(row))
 
     screen._refresh_colors()
-    screen._refresh_results()
+    screen.refresh_results()
     return screen

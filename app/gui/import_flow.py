@@ -12,6 +12,7 @@ from app.db.store import store_parsed_rows
 from app.gui.activity_log import log_import
 from app.gui.busy import run_busy
 from app.gui.mapping_table import MappingScreen, render_mapping_table
+from app.gui.quirks_overview import QuirksScreen, render_quirks_overview
 from app.models.record import Record
 from app.parsers.bibtex import (
     parse_bibtex_file,
@@ -47,6 +48,7 @@ from app.parsers.profiles import (
     has_profile,
     profile_for,
 )
+from app.parsers.profiles.overview import QuirkChoices, profile_with, quirk_entries
 from app.parsers.quirks import ParseSettings
 from app.parsers.ris import (
     parse_ris_file,
@@ -72,6 +74,11 @@ _TYPE_OPTIONS = {
     _TYPE_BIBTEX: "BibTeX",
 }
 _TSV_DELIMITER = "\t"
+_COLUMN_TYPES = (_TYPE_CSV, _TYPE_TSV, _TYPE_EXCEL)
+
+_VIEW_MAPPING = "mapping"
+_VIEW_PARSING = "parsing"
+_VIEW_OPTIONS = {_VIEW_MAPPING: "Mapping", _VIEW_PARSING: "Parsing"}
 
 _SOURCE_UNKNOWN = "unknown"
 _SOURCE_OPTIONS = {
@@ -107,10 +114,12 @@ class _FormatHandlers:
     profile: FormatProfile
 
 
-def _handlers(file_type: str, source: str) -> _FormatHandlers | None:
-    profile = profile_for(source, file_type)
-    if profile is None:
+def _handlers(
+    file_type: str, source: str, choices: QuirkChoices | None = None
+) -> _FormatHandlers | None:
+    if profile_for(source, file_type) is None:
         return None
+    profile = profile_with(file_type, source, choices or {})
     overrides, settings = profile.suggestions, profile.settings
     defaults = profile.row_defaults
     parse_csv = partial(_parse_csv_lines, settings=settings)
@@ -165,23 +174,29 @@ def _suggestion(handlers: _FormatHandlers, summary: FileSummary) -> FieldMapping
     return handlers.suggest(list(summary.samples))
 
 
-def _preview(
-    handlers: _FormatHandlers, summary: FileSummary
+def preview_for(
+    file_type: str,
+    source: str,
+    summary: FileSummary,
+    choices: Callable[[], QuirkChoices] = dict,
 ) -> Callable[[FieldMapping], Record]:
+    """`choices` is read on every preview, so the Result follows the Parsing view."""
+    if profile_for(source, file_type) is None:
+        raise ValueError(f"unsupported file type: {file_type!r}")
+
     def preview(mapping: FieldMapping) -> Record:
+        handlers = _handlers(file_type, source, choices())
+        assert handlers is not None
         row = handlers.parse_record(list(summary.samples.items()), mapping)
         return fix_record(handlers.profile, row.raw_fields, row.record, mapping)
 
     return preview
 
 
-def preview_for(
-    file_type: str, source: str, summary: FileSummary
-) -> Callable[[FieldMapping], Record]:
-    handlers = _handlers(file_type, source)
-    if handlers is None:
-        raise ValueError(f"unsupported file type: {file_type!r}")
-    return _preview(handlers, summary)
+def type_group_label(file_type: str) -> str:
+    if file_type in _COLUMN_TYPES:
+        return " / ".join(_TYPE_OPTIONS[t] for t in _COLUMN_TYPES)
+    return _TYPE_OPTIONS[file_type]
 
 
 def row_defaults_for(file_type: str, source: str) -> RowDefaults:
@@ -221,6 +236,7 @@ def render_mapping(
     name: str,
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
+    choices: Callable[[], QuirkChoices] = dict,
 ) -> MappingScreen | None:
     handlers = _handlers(file_type, source)
     if handlers is None:
@@ -236,7 +252,7 @@ def render_mapping(
         summary,
         _suggestion(handlers, summary),
         defaults=handlers.profile.row_defaults,
-        preview=_preview(handlers, summary),
+        preview=preview_for(file_type, source, summary, choices),
     )
 
 
@@ -248,9 +264,10 @@ def _store(
     summary: FileSummary,
     result: ParseResult,
     source: str,
+    choices: QuirkChoices,
     sheet: str | None = None,
 ) -> SourceFile:
-    handlers = _handlers(file_type, source)
+    handlers = _handlers(file_type, source, choices)
     assert handlers is not None
     result = apply_profile(result, handlers.profile, mapping)
     source_file = store_parsed_rows(
@@ -270,10 +287,8 @@ def _store(
     return source_file
 
 
-def _settings(file_type: str, source: str) -> ParseSettings:
-    profile = profile_for(source, file_type)
-    assert profile is not None
-    return profile.settings
+def _settings(file_type: str, source: str, choices: QuirkChoices) -> ParseSettings:
+    return profile_with(file_type, source, choices).settings
 
 
 def import_csv(
@@ -282,9 +297,12 @@ def import_csv(
     mapping: FieldMapping,
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
+    choices: QuirkChoices | None = None,
 ) -> SourceFile:
-    result = parse_csv_file(path, mapping, settings=_settings(_TYPE_CSV, source))
-    return _store(session, path, _TYPE_CSV, mapping, summary, result, source)
+    choices = choices or {}
+    settings = _settings(_TYPE_CSV, source, choices)
+    result = parse_csv_file(path, mapping, settings=settings)
+    return _store(session, path, _TYPE_CSV, mapping, summary, result, source, choices)
 
 
 def import_tsv(
@@ -293,10 +311,12 @@ def import_tsv(
     mapping: FieldMapping,
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
+    choices: QuirkChoices | None = None,
 ) -> SourceFile:
-    settings = _settings(_TYPE_TSV, source)
+    choices = choices or {}
+    settings = _settings(_TYPE_TSV, source, choices)
     result = parse_csv_file(path, mapping, _TSV_DELIMITER, settings)
-    return _store(session, path, _TYPE_TSV, mapping, summary, result, source)
+    return _store(session, path, _TYPE_TSV, mapping, summary, result, source, choices)
 
 
 def import_excel(
@@ -306,10 +326,14 @@ def import_excel(
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
     sheet: str | None = None,
+    choices: QuirkChoices | None = None,
 ) -> SourceFile:
-    settings = _settings(_TYPE_EXCEL, source)
+    choices = choices or {}
+    settings = _settings(_TYPE_EXCEL, source, choices)
     result = parse_excel_file(path, mapping, sheet, settings)
-    return _store(session, path, _TYPE_EXCEL, mapping, summary, result, source, sheet)
+    return _store(
+        session, path, _TYPE_EXCEL, mapping, summary, result, source, choices, sheet
+    )
 
 
 def import_ris(
@@ -318,9 +342,11 @@ def import_ris(
     mapping: FieldMapping,
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
+    choices: QuirkChoices | None = None,
 ) -> SourceFile:
-    result = parse_ris_file(path, mapping, _settings(_TYPE_RIS, source))
-    return _store(session, path, _TYPE_RIS, mapping, summary, result, source)
+    choices = choices or {}
+    result = parse_ris_file(path, mapping, _settings(_TYPE_RIS, source, choices))
+    return _store(session, path, _TYPE_RIS, mapping, summary, result, source, choices)
 
 
 def import_nbib(
@@ -329,9 +355,11 @@ def import_nbib(
     mapping: FieldMapping,
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
+    choices: QuirkChoices | None = None,
 ) -> SourceFile:
-    result = parse_nbib_file(path, mapping, _settings(_TYPE_NBIB, source))
-    return _store(session, path, _TYPE_NBIB, mapping, summary, result, source)
+    choices = choices or {}
+    result = parse_nbib_file(path, mapping, _settings(_TYPE_NBIB, source, choices))
+    return _store(session, path, _TYPE_NBIB, mapping, summary, result, source, choices)
 
 
 def import_bibtex(
@@ -340,9 +368,13 @@ def import_bibtex(
     mapping: FieldMapping,
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
+    choices: QuirkChoices | None = None,
 ) -> SourceFile:
-    result = parse_bibtex_file(path, mapping, _settings(_TYPE_BIBTEX, source))
-    return _store(session, path, _TYPE_BIBTEX, mapping, summary, result, source)
+    choices = choices or {}
+    result = parse_bibtex_file(path, mapping, _settings(_TYPE_BIBTEX, source, choices))
+    return _store(
+        session, path, _TYPE_BIBTEX, mapping, summary, result, source, choices
+    )
 
 
 def import_file(
@@ -353,24 +385,25 @@ def import_file(
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
     sheet: str | None = None,
+    choices: QuirkChoices | None = None,
 ) -> SourceFile:
     if file_type == _TYPE_CSV:
-        return import_csv(session, path, mapping, summary, source)
+        return import_csv(session, path, mapping, summary, source, choices)
     if file_type == _TYPE_TSV:
-        return import_tsv(session, path, mapping, summary, source)
+        return import_tsv(session, path, mapping, summary, source, choices)
     if file_type == _TYPE_EXCEL:
-        return import_excel(session, path, mapping, summary, source, sheet)
+        return import_excel(session, path, mapping, summary, source, sheet, choices)
     if file_type == _TYPE_RIS:
-        return import_ris(session, path, mapping, summary, source)
+        return import_ris(session, path, mapping, summary, source, choices)
     if file_type == _TYPE_NBIB:
-        return import_nbib(session, path, mapping, summary, source)
+        return import_nbib(session, path, mapping, summary, source, choices)
     if file_type == _TYPE_BIBTEX:
-        return import_bibtex(session, path, mapping, summary, source)
+        return import_bibtex(session, path, mapping, summary, source, choices)
     raise ValueError(f"unsupported file type: {file_type!r}")
 
 
 OnImport = Callable[
-    [list[tuple[Path, FileSummary]], str, FieldMapping, str, str | None],
+    [list[tuple[Path, FileSummary]], str, FieldMapping, str, str | None, QuirkChoices],
     Awaitable[None] | None,
 ]
 
@@ -386,7 +419,11 @@ class ImportView:
     summaries: list[FileSummary] = field(default_factory=list)
     sheets: list[str] = field(default_factory=list)
     sheet: str | None = None
+    view: str = _VIEW_MAPPING
     mapping_screen: MappingScreen | None = None
+    quirks_screen: QuirksScreen | None = None
+    mapping_container: Element | None = None
+    quirks_container: Element | None = None
     import_button: ui.button | None = None
 
     def _name(self) -> str:
@@ -463,13 +500,51 @@ class ImportView:
     def _import(self) -> Awaitable[None] | None:
         assert self.paths
         assert self.mapping_screen is not None
+        assert self.quirks_screen is not None
         return self.on_import(
             list(zip(self.paths, self.summaries, strict=True)),
             self.file_type,
             self.mapping_screen.current_mapping(),
             self.source,
             self.sheet,
+            self.quirks_screen.current_choices(),
         )
+
+    def _show_view(self, view: str) -> None:
+        self.view = view
+        assert self.mapping_container is not None
+        assert self.quirks_container is not None
+        self.mapping_container.set_visibility(view == _VIEW_MAPPING)
+        self.quirks_container.set_visibility(view == _VIEW_PARSING)
+        if view == _VIEW_MAPPING and self.mapping_screen is not None:
+            self.mapping_screen.refresh_results()
+
+    def _render_mapping_and_parsing(self) -> None:
+        toggle = ui.toggle(_VIEW_OPTIONS, value=self.view).props("dense no-caps")
+        quirks_container = ui.column().classes("items-center w-full")
+        mapping_container = ui.column().classes("items-center w-full")
+        quirks_screen = render_quirks_overview(
+            quirks_container,
+            quirk_entries(self.file_type, self.source),
+            type_group_label(self.file_type),
+        )
+        mapping_screen = render_mapping(
+            mapping_container,
+            self.file_type,
+            self._name(),
+            merge_summaries(self.summaries),
+            self.source,
+            quirks_screen.current_choices,
+        )
+        if mapping_screen is None:
+            toggle.delete()
+            quirks_container.delete()
+            return
+        self.mapping_screen, self.quirks_screen = mapping_screen, quirks_screen
+        self.mapping_container = mapping_container
+        self.quirks_container = quirks_container
+        toggle.on_value_change(lambda e: self._show_view(e.value))
+        self._show_view(self.view)
 
     def render(self) -> None:
         type_known = self.file_type != _TYPE_UNKNOWN
@@ -533,17 +608,10 @@ class ImportView:
                     else:
                         notice.classes("invisible")
 
-                mapping_container = ui.column().classes("items-center w-full")
-                if self.paths and self.summaries:
-                    self.mapping_screen = render_mapping(
-                        mapping_container,
-                        self.file_type,
-                        self._name(),
-                        merge_summaries(self.summaries),
-                        self.source,
-                    )
-                else:
-                    self.mapping_screen = None
+                self.mapping_screen = self.quirks_screen = None
+                self.mapping_container = self.quirks_container = None
+                if self.paths and self.summaries and type_known:
+                    self._render_mapping_and_parsing()
                 has_mapping = self.mapping_screen is not None
 
                 with ui.row().classes("items-center gap-2"):

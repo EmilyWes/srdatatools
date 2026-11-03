@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from nicegui import ui
 from nicegui.element import Element
 from nicegui.elements.icon import Icon
 from nicegui.elements.tooltip import Tooltip
@@ -32,6 +33,7 @@ from app.gui.layout import shell
 from app.gui.mapping_table import MappingScreen
 from app.parsers.common import FileSummary
 from app.parsers.mapping import AuthorsRow, FieldMapping
+from app.parsers.profiles.overview import QuirkChoice, QuirkChoices
 from tests.gui.clicks import click_and_wait
 from tests.mappings import mapping_of, targets_of
 
@@ -363,7 +365,7 @@ def test_render_import_view__ris_type_renders_mapping_and_enables_import(
     ris_path = tmp_path / "export.ris"
     ris_path.write_text(_RIS_TEXT)
     _pick(monkeypatch, ris_path)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
     asyncio.run(view._select_files())
 
     asyncio.run(view._set_type("ris"))
@@ -443,7 +445,7 @@ def test_render_import_view__nbib_type_renders_mapping_and_enables_import(
     nbib_path = tmp_path / "export.nbib"
     nbib_path.write_text(_NBIB_TEXT)
     _pick(monkeypatch, nbib_path)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
     asyncio.run(view._select_files())
 
     asyncio.run(view._set_type("nbib"))
@@ -525,7 +527,7 @@ def test_render_import_view__bibtex_file_is_detected_and_enables_import(
     bibtex_path = tmp_path / "export.bib"
     bibtex_path.write_text(_BIBTEX_TEXT)
     _pick(monkeypatch, bibtex_path)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     asyncio.run(view._select_files())
 
@@ -558,7 +560,7 @@ def test_render_import_view__tsv_file_is_detected_and_enables_import(
     tsv_path = tmp_path / "export.tsv"
     tsv_path.write_text("Title\tYear\nSome Paper\t2020\n")
     _pick(monkeypatch, tsv_path)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     asyncio.run(view._select_files())
 
@@ -579,7 +581,7 @@ def _pick(monkeypatch: pytest.MonkeyPatch, *paths: Path) -> None:
 def test_render_import_view__initial_state_has_no_file_and_disabled_buttons() -> None:
     panes = shell()
 
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     assert view.paths == []
     assert view.file_type == "unknown"
@@ -595,7 +597,7 @@ def test_render_import_view__selecting_file_updates_label(
     txt_path = tmp_path / "export.txt"
     txt_path.write_text("Title\nSome Paper\n")
     _pick(monkeypatch, txt_path)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     asyncio.run(view._select_files())
 
@@ -614,7 +616,7 @@ def test_render_import_view__mapping_renders_inline_and_enables_import_without_c
     txt_path = tmp_path / "export.txt"
     txt_path.write_text("Title\nSome Paper\n")
     _pick(monkeypatch, txt_path)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
     asyncio.run(view._select_files())
 
     assert view.import_button is not None
@@ -635,7 +637,7 @@ def test_render_import_view__selecting_file_prefills_detected_type_and_source(
     txt_path = tmp_path / "pubmed.txt"
     txt_path.write_text("PMID- 1\nOWN - NLM\nTI  - A title\n")
     _pick(monkeypatch, txt_path)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     asyncio.run(view._select_files())
 
@@ -653,7 +655,7 @@ def test_render_import_view__undetected_file_resets_type_and_source_to_unknown(
     txt_path = tmp_path / "notes.txt"
     txt_path.write_text("just some notes\n")
     _pick(monkeypatch, txt_path)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
     asyncio.run(view._set_type("csv"))
     view._set_source("pubmed")
 
@@ -675,7 +677,7 @@ def test_render_import_view__import_reads_live_mapping_edits(
     calls: list[tuple[list[tuple[Path, FileSummary]], str, FieldMapping, str]] = []
     view = render_import_view(
         panes.middle,
-        on_import=lambda f, t, m, s, sh: calls.append((f, t, m, s)),
+        on_import=lambda f, t, m, s, sh, q: calls.append((f, t, m, s)),
     )
     asyncio.run(view._select_files())
     asyncio.run(view._set_type("csv"))
@@ -716,6 +718,7 @@ def test_render_import_view__import_button_awaits_async_on_import(
         mapping: FieldMapping,
         source: str,
         sheet: str | None,
+        choices: QuirkChoices,
     ) -> None:
         calls.extend(path for path, _ in files)
 
@@ -735,7 +738,7 @@ def test_render_import_view__selecting_new_file_rerenders_mapping_from_new_heade
     first_csv = tmp_path / "export.csv"
     first_csv.write_text("Title\nSome Paper\n")
     _pick(monkeypatch, first_csv)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
     asyncio.run(view._select_files())
     asyncio.run(view._set_type("csv"))
     assert view.mapping_screen is not None
@@ -758,7 +761,7 @@ def test_render_import_view__import_disabled_when_csv_file_cannot_be_decoded(
     panes = shell()
     csv_path = tmp_path / "export.csv"
     csv_path.write_bytes(b"\x81")  # undefined in both utf-8-sig and cp1252
-    view = ImportView(middle=panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = ImportView(middle=panes.middle, on_import=lambda f, t, m, s, sh, q: None)
     view.paths = [csv_path]
 
     asyncio.run(view._set_type("csv"))  # must not raise
@@ -887,7 +890,7 @@ def test_render_import_view__source_change_rerenders_mapping_and_is_passed_on(
     _pick(monkeypatch, nbib_path)
     calls: list[str] = []
     view = render_import_view(
-        panes.middle, on_import=lambda f, t, m, s, sh: calls.append(s)
+        panes.middle, on_import=lambda f, t, m, s, sh, q: calls.append(s)
     )
     asyncio.run(view._select_files())
     asyncio.run(view._set_type("nbib"))
@@ -960,7 +963,7 @@ def test_render_mapping__nbib_result_combines_fau_auid_and_ad(tmp_path: Path) ->
 def test_render_import_view__unknown_type_shows_select_type_tooltip() -> None:
     panes = shell()
 
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     assert view.import_button is not None
     tooltips = [
@@ -993,7 +996,7 @@ def _visible_notices(middle: Any) -> list[str]:
 
 def test_render_import_view__mismatched_source_and_type_shows_notice() -> None:
     panes = shell()
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     view._set_source("pubmed")
     asyncio.run(view._set_type("ris"))
@@ -1009,7 +1012,7 @@ def test_render_import_view__no_notice_unless_both_set_without_profile(
     source: str, file_type: str
 ) -> None:
     panes = shell()
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     view._set_source(source)
     asyncio.run(view._set_type(file_type))
@@ -1047,7 +1050,7 @@ def test_render_import_view__multiple_files_shows_count_label(
     first.write_text(_RIS_TEXT)
     second.write_text(_RIS_TEXT)
     _pick(monkeypatch, first, second)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     asyncio.run(view._select_files())
 
@@ -1065,7 +1068,7 @@ def test_render_import_view__matching_files_no_warning(
     first.write_text(_DETECTED_PUBMED_TEXT)
     second.write_text(_DETECTED_PUBMED_TEXT)
     _pick(monkeypatch, first, second)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     asyncio.run(view._select_files())
 
@@ -1088,7 +1091,7 @@ def test_render_import_view__mixed_sources_warns_and_prefills_unknown(
         "notify",
         lambda message, type: notifications.append(type),
     )
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     asyncio.run(view._select_files())
 
@@ -1111,7 +1114,7 @@ def test_render_import_view__multiple_files_maps_merged_summary(
     first.write_text("Title,Year\nA title,2020\n")
     second.write_text("Title,DOI\nB title,10.1/xyz\n")
     _pick(monkeypatch, first, second)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     asyncio.run(view._select_files())
 
@@ -1131,7 +1134,7 @@ def test_render_import_view__multiple_files_passes_each_own_summary_to_on_import
     _pick(monkeypatch, first, second)
     calls: list[list[tuple[Path, FileSummary]]] = []
     view = render_import_view(
-        panes.middle, on_import=lambda f, t, m, s, sh: calls.append(f)
+        panes.middle, on_import=lambda f, t, m, s, sh, q: calls.append(f)
     )
     asyncio.run(view._select_files())
 
@@ -1245,7 +1248,7 @@ def test_render_import_view__xlsx_file_lists_sheets_and_enables_import(
     panes = shell()
     path = _workbook(tmp_path, _TWO_SHEETS)
     _pick(monkeypatch, path)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     asyncio.run(view._select_files())
 
@@ -1268,7 +1271,7 @@ def test_render_import_view__non_excel_file_has_no_sheet_dropdown(
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title\nSome Paper\n")
     _pick(monkeypatch, csv_path)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     asyncio.run(view._select_files())
 
@@ -1289,7 +1292,7 @@ def test_render_import_view__changing_sheet_rerenders_mapping_and_is_passed_on(
     calls: list[tuple[FileSummary, str | None]] = []
     view = render_import_view(
         panes.middle,
-        on_import=lambda f, t, m, s, sh: calls.append((f[0][1], sh)),
+        on_import=lambda f, t, m, s, sh, q: calls.append((f[0][1], sh)),
     )
     asyncio.run(view._select_files())
 
@@ -1312,7 +1315,7 @@ def test_render_import_view__new_file_resets_sheet_to_first(
         tmp_path, {"Main": [["Title"], ["A"]], "Other": [["DOI"], ["10.1/x"]]}
     )
     _pick(monkeypatch, first)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
     asyncio.run(view._select_files())
     asyncio.run(view._set_sheet("Other"))
 
@@ -1330,7 +1333,7 @@ def test_render_import_view__multiple_files_with_excel_type_disables_import(
     first = _workbook(tmp_path, _TWO_SHEETS, name="first.xlsx")
     second = _workbook(tmp_path, _TWO_SHEETS, name="second.xlsx")
     _pick(monkeypatch, first, second)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
     asyncio.run(view._select_files())
 
@@ -1353,7 +1356,7 @@ def test_render_import_view__multiple_files_switched_to_excel_disables_import(
     first.write_text("Title\nA\n")
     second.write_text("Title\nB\n")
     _pick(monkeypatch, first, second)
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
     asyncio.run(view._select_files())
 
     asyncio.run(view._set_type("excel"))
@@ -1369,7 +1372,7 @@ def test_render_import_view__import_disabled_when_file_is_not_a_workbook(
     panes = shell()
     path = tmp_path / "export.csv"
     path.write_text("Title\nSome Paper\n")
-    view = ImportView(middle=panes.middle, on_import=lambda f, t, m, s, sh: None)
+    view = ImportView(middle=panes.middle, on_import=lambda f, t, m, s, sh, q: None)
     view.paths = [path]
 
     asyncio.run(view._set_type("excel"))  # must not raise
@@ -1378,3 +1381,121 @@ def test_render_import_view__import_disabled_when_file_is_not_a_workbook(
     assert view.mapping_screen is None
     assert view.import_button is not None
     assert view.import_button.enabled is False
+
+
+def _nbib_view(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    on_import: import_flow.OnImport = lambda f, t, m, s, sh, q: None,
+) -> tuple[ImportView, Element]:
+    panes = shell()
+    nbib_path = tmp_path / "pubmed.nbib"
+    nbib_path.write_text(_PUBMED_NBIB_TEXT)
+    _pick(monkeypatch, nbib_path)
+    view = render_import_view(panes.middle, on_import=on_import)
+    asyncio.run(view._select_files())
+    return view, panes.middle
+
+
+def _toggle(middle: Element) -> ui.toggle:
+    return next(e for e in middle.descendants() if isinstance(e, ui.toggle))
+
+
+def test_render_import_view__starts_on_mapping_with_parsing_hidden(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view, middle = _nbib_view(monkeypatch, tmp_path)
+
+    assert _toggle(middle).value == "mapping"
+    assert view.mapping_container is not None and view.mapping_container.visible
+    assert view.quirks_container is not None and not view.quirks_container.visible
+
+
+def test_render_import_view__toggle_switches_to_parsing_and_keeps_edits(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view, middle = _nbib_view(monkeypatch, tmp_path)
+    assert view.mapping_screen is not None
+    view.mapping_screen.set_target("TA", "journal")
+
+    _toggle(middle).value = "parsing"
+
+    assert view.quirks_container is not None and view.quirks_container.visible
+    assert view.mapping_container is not None and not view.mapping_container.visible
+    _toggle(middle).value = "mapping"
+    assert view.mapping_screen.current_mapping().rows["TA"].target == "journal"
+
+
+def test_render_import_view__source_change_keeps_the_selected_view(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view, middle = _nbib_view(monkeypatch, tmp_path)
+    _toggle(middle).value = "parsing"
+
+    view._set_source("pubmed")
+
+    assert _toggle(middle).value == "parsing"
+    assert view.quirks_container is not None and view.quirks_container.visible
+
+
+def test_render_import_view__result_follows_parsing_after_switching_back(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view, middle = _nbib_view(monkeypatch, tmp_path)
+    assert view.mapping_screen is not None and view.quirks_screen is not None
+    assert _result(view.mapping_screen, "PG") == "521-522"
+    _toggle(middle).value = "parsing"
+
+    view.quirks_screen.set_on("ExpandPageRange", False)
+    _toggle(middle).value = "mapping"
+
+    assert _result(view.mapping_screen, "PG") == "521-2"
+
+
+def test_render_import_view__import_passes_parsing_choices(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[QuirkChoices] = []
+    view, _ = _nbib_view(
+        monkeypatch, tmp_path, lambda f, t, m, s, sh, q: calls.append(q)
+    )
+    assert view.quirks_screen is not None
+    view.quirks_screen.set_on("ExpandPageRange", False)
+
+    view._import()
+
+    [choices] = calls
+    assert not choices["ExpandPageRange"].on
+    assert choices["DropEtAl"].on
+
+
+def test_render_import_view__no_toggle_without_a_mapping() -> None:
+    panes = shell()
+
+    render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
+
+    assert not [e for e in panes.middle.descendants() if isinstance(e, ui.toggle)]
+
+
+def test_import_file__applies_parsing_choices(session: Session, tmp_path: Path) -> None:
+    nbib_path = tmp_path / "pubmed.nbib"
+    nbib_path.write_text(_PUBMED_NBIB_TEXT)
+    mapping = mapping_of({"PG": "pages"})
+    choices = {"ExpandPageRange": QuirkChoice(on=False)}
+
+    import_file(
+        session,
+        nbib_path,
+        "nbib",
+        mapping,
+        _summary("nbib", nbib_path),
+        choices=choices,
+    )
+    session.commit()
+
+    assert session.query(Record).one().pages == "521-2"
+
+
+def test_type_group_label__column_types_share_one_label() -> None:
+    assert import_flow.type_group_label("tsv") == "CSV / TSV / Excel"
+    assert import_flow.type_group_label("nbib") == "NBIB"
