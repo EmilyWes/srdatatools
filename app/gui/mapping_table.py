@@ -62,23 +62,31 @@ _LABELS: dict[str, str] = {
 @dataclass(frozen=True)
 class _Option:
     """An option shown under the dropdown: a select when it has choices, else a
-    text box whose grey placeholder is the default used when left empty."""
+    text box whose grey placeholder is the default used when left empty. A short
+    label goes in front of it, with the full one on hover."""
 
     name: str
+    short: str
     label: str
     choices: dict[str, str] | None = None
     # Delimiters, separators and prefixes may be or end in a space.
     strip: bool = True
 
 
+_OPTION_ROW_CLASSES = "w-full no-wrap items-center gap-1"
+# Fixed width so the boxes line up whatever the label.
+_OPTION_LABEL_CLASSES = "w-9 shrink-0 text-xs text-grey-7"
+
 _OPTIONS: dict[str, tuple[_Option, ...]] = {
     DATE_TARGET: (
         _Option(
+            "part",
             "part",
             "Part",
             {"full": "Full date", "year": "Year", "month": "Month", "day": "Day"},
         ),
         _Option(
+            "order",
             "order",
             "Ambiguous dates",
             {"eu": "Day before month (EU)", "us": "Month before day (US)"},
@@ -86,6 +94,7 @@ _OPTIONS: dict[str, tuple[_Option, ...]] = {
     ),
     PAGES_TARGET: (
         _Option(
+            "part",
             "part",
             "Part",
             {
@@ -98,12 +107,16 @@ _OPTIONS: dict[str, tuple[_Option, ...]] = {
     ),
     ISSN_ISBN_TARGET: (
         _Option(
-            "kind", "Kind", {"auto": "Auto (by length)", "issn": "ISSN", "isbn": "ISBN"}
+            "kind",
+            "kind",
+            "Kind",
+            {"auto": "Auto (by length)", "issn": "ISSN", "isbn": "ISBN"},
         ),
     ),
-    OTHER_IDS_TARGET: (_Option("key", "ID key"),),
+    OTHER_IDS_TARGET: (_Option("key", "key", "ID key"),),
     AUTHORS_TARGET: (
         _Option(
+            "role",
             "role",
             "Role",
             {
@@ -115,15 +128,18 @@ _OPTIONS: dict[str, tuple[_Option, ...]] = {
                 "affiliations": "Affiliations",
             },
         ),
-        _Option("delimiter", "Author separator", strip=False),
-        _Option("separator", "Name separator", strip=False),
-        _Option("id_key", "ID key"),
+        _Option("delimiter", "aut", "Author separator", strip=False),
+        _Option("separator", "name", "Name separator", strip=False),
+        _Option("id_key", "key", "ID key"),
     ),
     KEYWORDS_TARGET: (
-        _Option("delimiter", "Delimiter", strip=False),
-        _Option("prefix", "Prefix", strip=False),
+        _Option("delimiter", "sep", "Delimiter", strip=False),
+        _Option("prefix", "pre", "Prefix", strip=False),
     ),
-    LABEL_TARGET: (_Option("phase", "Phase"), _Option("screener", "Screener")),
+    LABEL_TARGET: (
+        _Option("phase", "phase", "Phase"),
+        _Option("screener", "scr", "Screener"),
+    ),
 }
 
 
@@ -310,6 +326,7 @@ class _Row:
     # target is unchanged, else the target's default.
     base: RowMapping | None = None
     inputs: dict[str, ui.select | ui.input] = field(default_factory=dict)
+    option_rows: dict[str, ui.row] = field(default_factory=dict)
 
     @property
     def display_status(self) -> str:
@@ -342,8 +359,12 @@ class MappingScreen:
         row.inputs = {}
         row.options.clear()
         base = row.base.model_dump() if row.base is not None else {}
-        with row.options:
-            for option in _OPTIONS.get(target, ()):
+        row.option_rows = {}
+        for option in _OPTIONS.get(target, ()):
+            with row.options, ui.row().classes(_OPTION_ROW_CLASSES) as option_row:
+                ui.label(option.short).classes(_OPTION_LABEL_CLASSES).tooltip(
+                    option.label
+                )
                 widget: ui.select | ui.input
                 if option.choices is not None:
                     widget = ui.select(option.choices, value=base[option.name])
@@ -355,15 +376,17 @@ class MappingScreen:
                     widget.props("dense outlined")
                 if self.readonly:
                     widget.props("readonly")
-                widget.classes("mapping-field text-xs w-full").tooltip(option.label)
+                widget.classes("mapping-field text-xs col")
                 widget.on_value_change(lambda _e: self.on_option_change(row))
-                row.inputs[option.name] = widget
+            row.inputs[option.name] = widget
+            row.option_rows[option.name] = option_row
         self._refresh_option_visibility(row)
 
     def _refresh_option_visibility(self, row: _Row) -> None:
         mapped = self._row_mapping(row)
-        for name, widget in row.inputs.items():
-            widget.set_visibility(mapped is not None and _shows_option(mapped, name))
+        for name, option_row in row.option_rows.items():
+            shown = mapped is not None and _shows_option(mapped, name)
+            option_row.set_visibility(shown)
 
     def _refresh_results(self) -> None:
         mapping = self.current_mapping()

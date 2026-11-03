@@ -75,8 +75,8 @@ def _render_ris(tags: list[str]) -> MappingScreen:
 
 
 def _visible_options(screen: MappingScreen, header: str) -> list[str]:
-    inputs = screen._row_for(header).inputs
-    return [name for name, widget in inputs.items() if widget.visible]
+    option_rows = screen._row_for(header).option_rows
+    return [name for name, option_row in option_rows.items() if option_row.visible]
 
 
 def _input(screen: MappingScreen, header: str, name: str) -> ui.input:
@@ -264,17 +264,34 @@ def test_render_mapping_table__switching_target_back_restores_suggested_options(
     assert screen.current_mapping().rows == {"Year": DateRow(part="year")}
 
 
-def test_render_mapping_table__option_inputs_have_tooltips() -> None:
-    screen = _render(["included"])
-    row = screen._row_for("included")
+def test_render_mapping_table__options_have_short_labels_with_full_tooltips() -> None:
+    screen = _render(["Authors"])
+    option_rows = screen._row_for("Authors").option_rows
 
-    tooltips = [
-        t.text
-        for box in row.inputs.values()
-        for t in box.client.layout.descendants()
-        if isinstance(t, Tooltip) and t.props.get("target") == f"#{box.html_id}"
-    ]
-    assert tooltips == ["Phase", "Screener"]
+    labels = {
+        name: next(e for e in option_row.descendants() if isinstance(e, Label))
+        for name, option_row in option_rows.items()
+    }
+    tooltips = {
+        name: [
+            t.text
+            for t in label.client.layout.descendants()
+            if isinstance(t, Tooltip) and t.props.get("target") == f"#{label.html_id}"
+        ]
+        for name, label in labels.items()
+    }
+    assert {name: label.text for name, label in labels.items()} == {
+        "role": "role",
+        "delimiter": "aut",
+        "separator": "name",
+        "id_key": "key",
+    }
+    assert tooltips == {
+        "role": ["Role"],
+        "delimiter": ["Author separator"],
+        "separator": ["Name separator"],
+        "id_key": ["ID key"],
+    }
 
 
 def test_render_mapping_table__shows_sample_value_for_each_row() -> None:

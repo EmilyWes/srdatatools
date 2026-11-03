@@ -338,7 +338,9 @@ def test_render_mapping__ris_lists_distinct_tags_without_delimiter_box(
 
     assert screen is not None
     assert [row.header for row in screen.rows] == ["TI", "AU", "TY"]
-    assert [name for name, w in screen._row_for("AU").inputs.items() if w.visible] == [
+    assert [
+        name for name, w in screen._row_for("AU").option_rows.items() if w.visible
+    ] == [
         "role",
         "separator",
     ]
@@ -416,7 +418,9 @@ def test_render_mapping__nbib_lists_distinct_tags_without_delimiter_box(
 
     assert screen is not None
     assert [row.header for row in screen.rows] == ["PMID", "TI", "FAU"]
-    assert [name for name, w in screen._row_for("FAU").inputs.items() if w.visible] == [
+    assert [
+        name for name, w in screen._row_for("FAU").option_rows.items() if w.visible
+    ] == [
         "role",
         "separator",
     ]
@@ -500,7 +504,7 @@ def test_render_mapping__bibtex_lists_fields_and_hides_author_delimiter(
     assert screen is not None
     assert [row.header for row in screen.rows] == ["title", "author", "@type", "@key"]
     assert [
-        name for name, w in screen._row_for("author").inputs.items() if w.visible
+        name for name, w in screen._row_for("author").option_rows.items() if w.visible
     ] == ["role", "separator"]
 
 
@@ -543,7 +547,7 @@ def test_render_mapping__tsv_lists_columns_with_delimiter_box(
     assert screen is not None
     assert [row.header for row in screen.rows] == ["Title", "Authors"]
     assert [
-        name for name, w in screen._row_for("Authors").inputs.items() if w.visible
+        name for name, w in screen._row_for("Authors").option_rows.items() if w.visible
     ] == ["role", "delimiter", "separator"]
 
 
@@ -1213,7 +1217,7 @@ def test_render_mapping__excel_lists_columns_with_delimiter_box(
     assert screen is not None
     assert [row.header for row in screen.rows] == ["Title", "Authors"]
     assert [
-        name for name, w in screen._row_for("Authors").inputs.items() if w.visible
+        name for name, w in screen._row_for("Authors").option_rows.items() if w.visible
     ] == ["role", "delimiter", "separator"]
 
 
