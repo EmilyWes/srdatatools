@@ -136,6 +136,7 @@ def test_default_choices__unknown_source_defaults() -> None:
     assert choices.empty_values == [("title", "[Not Available].")]
     assert choices.use_first == []
     assert choices.field_size_limit == 1_000_000
+    assert choices.label_values == []
 
 
 def test_default_choices__selected_profile_sets_its_own_quirks() -> None:
@@ -221,6 +222,16 @@ def test_profile_with__applies_the_settings() -> None:
     assert settings.ambiguous_name_split == "last"
     assert settings.csv_field_size_limit == 500
     assert settings.use_first == ("B", "A")
+
+
+def test_profile_with__label_values_are_lowercased_and_blanks_dropped() -> None:
+    choices = _with(
+        "ris", label_values=[(" ASReview_relevant ", "include"), ("  ", "exclude")]
+    )
+
+    settings = profile_with("ris", "unknown", choices).settings
+
+    assert settings.label_values == (("asreview_relevant", "include"),)
 
 
 def test_profile_with__empty_preferred_qualifier_is_none() -> None:

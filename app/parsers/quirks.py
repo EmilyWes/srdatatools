@@ -4,7 +4,7 @@ import string
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from app.models.record import Affiliation, Record
+from app.models.record import Affiliation, LabelValue, Record
 from app.parsers.authors import AmbiguousNameSplit
 
 # mapping.py imports ParseSettings at runtime, so FieldMapping is only for annotations.
@@ -39,6 +39,8 @@ class ParseSettings:
     issn_isbn_only_one: bool = False
     preferred_issn_qualifier: str | None = None
     minus_one_unlabeled: bool = False
+    # Lowercased value -> decision; overrides the built-in spellings.
+    label_values: tuple[tuple[str, LabelValue], ...] = ()
     ambiguous_name_split: AmbiguousNameSplit = "none"
     # Python's csv limit is process-wide, so the parser sets it before each parse.
     csv_field_size_limit: int = 1_000_000

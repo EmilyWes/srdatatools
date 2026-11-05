@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ValidationError
 
+from app.models.record import LabelValue
 from app.parsers.authors import AmbiguousNameSplit
 from app.parsers.mapping import LINE_DELIMITER
 from app.parsers.profiles import FormatProfile, profile_for
@@ -46,6 +47,7 @@ class ParsingChoices(BaseModel):
     affiliation_start: str
     name_split: AmbiguousNameSplit
     minus_one_unlabeled: bool
+    label_values: list[tuple[str, LabelValue]]
     empty_values: list[tuple[str, str]]
     use_first: list[str]
     strip_doi: bool
@@ -347,6 +349,7 @@ def default_choices(file_type: str, source: str) -> ParsingChoices:
         ),
         name_split=settings.ambiguous_name_split,
         minus_one_unlabeled=settings.minus_one_unlabeled,
+        label_values=list(settings.label_values),
         empty_values=[
             (empty.field, EMPTY_VALUES_SEPARATOR.join(sorted(empty.values)))
             for empty in settings.empty_values
@@ -400,6 +403,11 @@ def profile_with(
         issn_isbn_only_one=choices.only_one,
         preferred_issn_qualifier=choices.preferred_qualifier.strip() or None,
         minus_one_unlabeled=choices.minus_one_unlabeled,
+        label_values=tuple(
+            (value.strip().lower(), decision)
+            for value, decision in choices.label_values
+            if value.strip()
+        ),
         ambiguous_name_split=choices.name_split,
         csv_field_size_limit=choices.field_size_limit,
         empty_values=tuple(

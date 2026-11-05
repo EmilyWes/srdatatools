@@ -250,6 +250,7 @@ def test_apply_mapping__issn_isbn_routes_isbn(value: str) -> None:
     assert (record.issn, record.isbn) == (None, value)
 
 
+_MINUS_ONE = ParseSettings(minus_one_unlabeled=True)
 _ONLY_ONE = ParseSettings(issn_isbn_only_one=True)
 _STRIP = ParseSettings(issn_isbn_strip_extras=True)
 _BOTH = ParseSettings(issn_isbn_strip_extras=True, issn_isbn_only_one=True)
@@ -704,8 +705,48 @@ def test_normalize_label__maps_known_spellings(value: str, expected: str) -> Non
 
 
 def test_normalize_label__minus_one_is_unlabeled_only_when_on() -> None:
-    assert normalize_label("-1", minus_one_unlabeled=True) == "unlabeled"
+    assert normalize_label("-1", _MINUS_ONE) == "unlabeled"
     assert normalize_label("-1") == "unknown"
+
+
+_ASREVIEW_VALUES = ParseSettings(
+    label_values=(("asreview_relevant", "include"), ("1", "exclude"))
+)
+
+
+def test_normalize_label__custom_value_overrides_builtin() -> None:
+    assert normalize_label("1", _ASREVIEW_VALUES) == "exclude"
+    assert normalize_label("0", _ASREVIEW_VALUES) == "exclude"
+
+
+def test_normalize_label__custom_value_overrides_minus_one() -> None:
+    settings = ParseSettings(minus_one_unlabeled=True, label_values=(("-1", "maybe"),))
+
+    assert normalize_label("-1", settings) == "maybe"
+
+
+def test_normalize_label__custom_match_is_case_insensitive() -> None:
+    assert normalize_label(" ASReview_Relevant ", _ASREVIEW_VALUES) == "include"
+
+
+def test_normalize_label__multiline_first_match() -> None:
+    value = "EID: 2-s2.0-1\nASReview_relevant\nirrelevant"
+
+    assert normalize_label(value, _ASREVIEW_VALUES) == "include"
+
+
+def test_normalize_label__multiline_no_match_is_unlabeled(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level("WARNING"):
+        value = normalize_label("EID: 2-s2.0-1\nExport Date: 22 October 2026")
+
+    assert value == "unlabeled"
+    assert caplog.text == ""
+
+
+def test_normalize_label__single_line_unmatched_is_unknown() -> None:
+    assert normalize_label("asreview_not_seen", _ASREVIEW_VALUES) == "unknown"
 
 
 def test_normalize_label__unknown_spelling_is_unknown_and_warns(

@@ -267,11 +267,24 @@ _ISBN_LENGTHS = (10, 13)
 _ISSN_ISBN_JOINER = "; "
 
 
-def normalize_label(value: str, minus_one_unlabeled: bool = False) -> LabelValue:
-    normalized = value.strip().lower()
-    if minus_one_unlabeled and normalized == _MINUS_ONE:
+def _label_for_line(line: str, settings: ParseSettings) -> LabelValue | None:
+    normalized = line.strip().lower()
+    custom = dict(settings.label_values)
+    if normalized in custom:
+        return custom[normalized]
+    if settings.minus_one_unlabeled and normalized == _MINUS_ONE:
         return "unlabeled"
-    label = _LABEL_SPELLINGS.get(normalized)
+    return _LABEL_SPELLINGS.get(normalized)
+
+
+def normalize_label(value: str, settings: ParseSettings = NO_QUIRKS) -> LabelValue:
+    """In a multi-line value (RIS N1 notes) the first line that is a label wins;
+    the other lines are usually unrelated notes, so none matching is unlabeled."""
+    lines = [line for line in value.splitlines() if line.strip()]
+    if len(lines) > 1:
+        labels = (_label_for_line(line, settings) for line in lines)
+        return next((label for label in labels if label is not None), "unlabeled")
+    label = _label_for_line(value, settings)
     if label is None:
         logger.warning("Unknown label value %r", value)
         return "unknown"
@@ -539,7 +552,7 @@ def apply_mapping(
                 Label(
                     phase=row.phase,
                     screener=row.screener,
-                    value=normalize_label(value, settings.minus_one_unlabeled),
+                    value=normalize_label(value, settings),
                 )
             )
             continue
