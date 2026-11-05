@@ -18,6 +18,7 @@ from app.gui.layout import ShellPanes
 from app.gui.library_nav import LeftPanelNav
 from app.gui.library_overview import save_sections
 from app.parsers.common import FileSummary
+from app.parsers.profiles.overview import default_choices
 from tests.gui.clicks import click_and_wait
 from tests.mappings import mapping_of
 
@@ -240,7 +241,7 @@ def test_home__import_stores_given_summary_and_selects_new_file(
                 mapping_of({"Title": "title"}),
                 "unknown",
                 None,
-                {},
+                default_choices("csv", "unknown"),
             )
 
     asyncio.run(confirm())
@@ -281,7 +282,7 @@ def test_home__multi_file_import_stores_each_file_and_selects_overview(
                 mapping_of({"Title": "title"}),
                 "unknown",
                 None,
-                {},
+                default_choices("csv", "unknown"),
             )
 
     asyncio.run(confirm())

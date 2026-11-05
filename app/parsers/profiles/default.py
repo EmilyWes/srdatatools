@@ -5,32 +5,29 @@ from app.parsers import bibtex, csv_, nbib, ris
 from app.parsers.mapping import LINE_DELIMITER, RowDefaults
 from app.parsers.profiles.base import FormatProfile, never_matches
 from app.parsers.quirks import (
-    ContinueToNextField,
     DropEtAl,
+    EmptyValues,
     ExpandPageRange,
     FirstValue,
     ParseSettings,
     RecordQuirk,
-    StripPrefix,
+    StripDoi,
+    StripPmid,
 )
 
 _SETTINGS = ParseSettings(
-    skip_issn_isbn_qualifiers=True,
+    issn_isbn_strip_extras=True,
+    issn_isbn_only_one=True,
     minus_one_unlabeled=True,
-    continue_to_next=(
-        ContinueToNextField(
-            "title", frozenset({"[Not Available]."}), case_sensitive=True
-        ),
-    ),
+    empty_values=(EmptyValues("title", frozenset({"[Not Available]."})),),
 )
 # PubMed writes one IS line per medium, e.g. "1234-5678 (Print)".
 _NBIB_SETTINGS = replace(_SETTINGS, preferred_issn_qualifier="Electronic")
 
 _GENERIC_QUIRKS: tuple[RecordQuirk, ...] = (
-    FirstValue("isbn", LINE_DELIMITER),
-    FirstValue("issn", "|"),
     DropEtAl(),
-    StripPrefix("pmid", "https://pubmed.ncbi.nlm.nih.gov/"),
+    StripDoi(),
+    StripPmid(),
     ExpandPageRange(),
 )
 _NBIB_QUIRKS: tuple[RecordQuirk, ...] = (

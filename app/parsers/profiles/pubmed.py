@@ -51,7 +51,7 @@ PUBMED = Profile(
             matches=_matches_csv,
             settings=default_settings("csv"),
             row_defaults=default_row_defaults("csv", delimiter=","),
-            quirks=default_quirks("csv", StripLastAuthorTrailing(".")),
+            quirks=default_quirks("csv", StripLastAuthorTrailing()),
         ),
     },
 )

@@ -1,4 +1,4 @@
-from app.models.record import Record
+from app.models.record import Author, Record
 from app.parsers.common import ParsedRow, ParseResult, SkippedRow
 from app.parsers.mapping import FieldMapping, RowDefaults
 from app.parsers.profiles import apply_profile, has_profile, profile_for
@@ -17,8 +17,9 @@ from app.parsers.quirks import (
     ExpandPageRange,
     FirstValue,
     ParseSettings,
+    StripDoi,
     StripLastAuthorTrailing,
-    StripPrefix,
+    StripPmid,
 )
 
 
@@ -46,23 +47,21 @@ def test_has_profile__only_for_a_source_that_exports_the_type() -> None:
 
 def test_default_profiles__turn_on_the_generic_quirks() -> None:
     for settings in (profile.settings for profile in DEFAULT_PROFILES.values()):
-        assert settings.skip_issn_isbn_qualifiers
+        assert settings.issn_isbn_strip_extras
+        assert settings.issn_isbn_only_one
         assert settings.minus_one_unlabeled
         assert settings.ambiguous_name_split == "none"
 
 
 def test_default_profiles__turn_on_the_generic_quirks_for_every_type() -> None:
     for profile in DEFAULT_PROFILES.values():
-        assert FirstValue("isbn", "\n") in profile.quirks
-        assert FirstValue("issn", "|") in profile.quirks
         assert DropEtAl() in profile.quirks
-        assert StripPrefix("pmid", "https://pubmed.ncbi.nlm.nih.gov/") in (
-            profile.quirks
-        )
+        assert StripDoi() in profile.quirks
+        assert StripPmid() in profile.quirks
         assert ExpandPageRange() in profile.quirks
-        [placeholder] = profile.settings.continue_to_next
-        assert placeholder.field == "title"
-        assert placeholder.matches("[Not Available].")
+        [empty] = profile.settings.empty_values
+        assert empty.field == "title"
+        assert empty.matches("[Not Available].")
 
 
 def test_default_profiles__nbib_keeps_first_publication_type() -> None:
@@ -71,7 +70,7 @@ def test_default_profiles__nbib_keeps_first_publication_type() -> None:
 
 
 def test_default_quirks__profile_quirks_come_after_the_type_defaults() -> None:
-    own = StripPrefix("doi", "x")
+    own = FirstValue("doi", "x")
 
     assert default_quirks("ris", own) == (*DEFAULT_PROFILES["ris"].quirks, own)
 
@@ -83,8 +82,8 @@ def test_profiles__build_on_their_type_defaults() -> None:
     assert pubmed_csv[: len(DEFAULT_PROFILES["csv"].quirks)] == (
         DEFAULT_PROFILES["csv"].quirks
     )
-    assert StripLastAuthorTrailing(".") in pubmed_csv
-    assert StripLastAuthorTrailing(".") not in scopus_csv
+    assert StripLastAuthorTrailing() in pubmed_csv
+    assert StripLastAuthorTrailing() not in scopus_csv
     assert EmbeddedAuthorIds("scopus_author_id") not in DEFAULT_PROFILES["csv"].quirks
 
 
@@ -92,7 +91,7 @@ def test_default_settings__overrides_the_type_default() -> None:
     settings = default_settings("nbib", minus_one_unlabeled=False)
 
     assert not settings.minus_one_unlabeled
-    assert settings.skip_issn_isbn_qualifiers
+    assert settings.issn_isbn_strip_extras
 
 
 def test_default_profiles__use_each_types_row_defaults() -> None:
@@ -114,16 +113,17 @@ def test_apply_profile__runs_quirks_in_order_and_keeps_raw_fields_and_skipped() 
         matches=never_matches,
         settings=ParseSettings(),
         row_defaults=RowDefaults(),
-        quirks=(StripPrefix("pmid", "https://x/"), FirstValue("pmid", "|")),
+        quirks=(DropEtAl(), StripLastAuthorTrailing()),
     )
     skipped = [SkippedRow(3, "bad")]
-    raw = {"X": "https://x/1|2"}
+    raw = {"X": "Smith J.; et al."}
+    authors = [Author(full_name="Smith J."), Author(full_name="et al.")]
     result = ParseResult(
-        rows=[ParsedRow(Record(pmid="https://x/1|2"), raw)], skipped=skipped
+        rows=[ParsedRow(Record(authors=authors), raw)], skipped=skipped
     )
 
     fixed = apply_profile(result, profile, FieldMapping())
 
-    assert fixed.rows[0].record.pmid == "1"
+    assert fixed.rows[0].record.authors == [Author(full_name="Smith J")]
     assert fixed.rows[0].raw_fields == raw
     assert fixed.skipped == skipped

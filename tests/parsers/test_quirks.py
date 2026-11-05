@@ -6,17 +6,18 @@ from app.models.record import Affiliation, Author, Record
 from app.parsers.mapping import FieldMapping
 from app.parsers.quirks import (
     AffiliationLeadingName,
-    ContinueToNextField,
     DropEtAl,
     EmbeddedAuthorIds,
+    EmptyValues,
     ExpandPageRange,
     FirstValue,
     IdFromUrl,
     ParseSettings,
     RecordQuirk,
     RisNotes,
+    StripDoi,
     StripLastAuthorTrailing,
-    StripPrefix,
+    StripPmid,
     expand_page_range,
 )
 from tests.mappings import mapping_of
@@ -45,9 +46,10 @@ def _apply(
         ("121354", "121354"),
         ("e123", "e123"),
         ("S12-5", "S12-5"),
+        ("512-500", "512-500"),
     ],
 )
-def test_expand_page_range__expands_only_abbreviated_numeric_ranges(
+def test_expand_page_range__expands_only_numeric_ranges_ending_lower(
     pages: str, expected: str
 ) -> None:
     assert expand_page_range(pages) == expected
@@ -61,24 +63,11 @@ def test_expand_page_range_quirk__without_pages_leaves_record_unchanged() -> Non
     assert _apply(ExpandPageRange(), Record()).pages is None
 
 
-def test_continue_to_next_field__case_sensitive_matches_exact_value_only() -> None:
-    quirk = ContinueToNextField("title", frozenset({"[Not Available]."}), True)
+def test_empty_values__matches_whole_value_ignoring_case_and_spaces() -> None:
+    quirk = EmptyValues("title", frozenset({"[Not Available]."}))
 
-    assert quirk.matches(" [Not Available]. ")
-    assert not quirk.matches("[not available].")
-
-
-def test_continue_to_next_field__case_insensitive_ignores_case() -> None:
-    quirk = ContinueToNextField("title", frozenset({"No Title"}), False)
-
-    assert quirk.matches("no title")
-    assert not quirk.matches("No title given")
-
-
-def test_first_value__keeps_first_of_several_values() -> None:
-    record = _apply(FirstValue("issn", "|"), Record(issn="1234-5678 | 8765-4321"))
-
-    assert record.issn == "1234-5678"
+    assert quirk.matches(" [not available]. ")
+    assert not quirk.matches("[Not Available]. A title")
 
 
 def test_first_value__keeps_first_line() -> None:
@@ -89,13 +78,34 @@ def test_first_value__keeps_first_line() -> None:
     )
 
 
-def test_strip_prefix__removes_prefix_only_at_the_start() -> None:
-    quirk = StripPrefix("pmid", "https://pubmed.ncbi.nlm.nih.gov/")
+@pytest.mark.parametrize(
+    ("doi", "expected"),
+    [
+        ("https://doi.org/10.1038/nature12373", "10.1038/nature12373"),
+        ("doi: 10.1000/xyz-123 [doi]", "10.1000/xyz-123"),
+        ("10.1000/abc", "10.1000/abc"),
+        ("not a doi", "not a doi"),
+    ],
+)
+def test_strip_doi__keeps_only_the_doi(doi: str, expected: str) -> None:
+    assert _apply(StripDoi(), Record(doi=doi)).doi == expected
 
-    assert _apply(quirk, Record(pmid="https://pubmed.ncbi.nlm.nih.gov/123")).pmid == (
-        "123"
-    )
-    assert _apply(quirk, Record(pmid="123")).pmid == "123"
+
+@pytest.mark.parametrize(
+    ("pmid", "expected"),
+    [
+        ("https://pubmed.ncbi.nlm.nih.gov/123", "123"),
+        ("PMID: 456 [pmid]", "456"),
+        ("789", "789"),
+        ("none", "none"),
+    ],
+)
+def test_strip_pmid__keeps_only_the_digits(pmid: str, expected: str) -> None:
+    assert _apply(StripPmid(), Record(pmid=pmid)).pmid == expected
+
+
+def test_strip_doi__without_doi_leaves_record_unchanged() -> None:
+    assert _apply(StripDoi(), Record()).doi is None
 
 
 def test_drop_et_al__drops_placeholder_author() -> None:
@@ -107,13 +117,30 @@ def test_drop_et_al__drops_placeholder_author() -> None:
 def test_strip_last_author_trailing__strips_only_the_last_author() -> None:
     record = Record(authors=[Author(full_name="Smith J."), Author(full_name="Doe A.")])
 
-    authors = _apply(StripLastAuthorTrailing("."), record).authors
+    authors = _apply(StripLastAuthorTrailing(), record).authors
 
     assert [a.full_name for a in authors] == ["Smith J.", "Doe A"]
 
 
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("Doe ...", "Doe"),
+        ("Doe A.;, ", "Doe A"),
+        ("Doe…", "Doe"),
+        ("Doe (1).", "Doe (1)"),
+    ],
+)
+def test_strip_last_author_trailing__strips_punctuation_and_spaces(
+    name: str, expected: str
+) -> None:
+    record = Record(authors=[Author(full_name=name)])
+
+    assert _apply(StripLastAuthorTrailing(), record).authors[0].full_name == expected
+
+
 def test_strip_last_author_trailing__without_authors_leaves_record_unchanged() -> None:
-    assert _apply(StripLastAuthorTrailing("."), Record()).authors == []
+    assert _apply(StripLastAuthorTrailing(), Record()).authors == []
 
 
 _EID_FROM_URL = IdFromUrl(

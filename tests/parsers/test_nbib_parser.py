@@ -20,6 +20,8 @@ from app.parsers.nbib import (
 from app.parsers.profiles.default import DEFAULT_PROFILES
 from tests.mappings import mapping_of, targets_of
 
+_NBIB_SETTINGS = DEFAULT_PROFILES["nbib"].settings
+
 _AFFILIATIONS = Suggest("authors", {"role": "affiliations"})
 _IDS = Suggest("authors", {"role": "ids"})
 
@@ -287,15 +289,16 @@ def test_suggest_nbib_mapping__maps_is_to_issn_and_isbn_tag_to_isbn() -> None:
 def test_parse_nbib_text__isbn_tag_fills_isbn() -> None:
     text = "PMID- 1\nIS  - 1234-5678 (Print)\nISBN- 978-3-16-148410-0\n"
 
-    record = parse_nbib_text(text, suggest_nbib_mapping(["IS", "ISBN"])).rows[0].record
+    mapping = suggest_nbib_mapping(["IS", "ISBN"])
+
+    record = parse_nbib_text(text, mapping, _NBIB_SETTINGS).rows[0].record
 
     assert record.issn == "1234-5678"
     assert record.isbn == "978-3-16-148410-0"
 
 
 def _parse_issn(text: str) -> str | None:
-    settings = DEFAULT_PROFILES["nbib"].settings
-    result = parse_nbib_text(text, suggest_nbib_mapping(["IS"]), settings)
+    result = parse_nbib_text(text, suggest_nbib_mapping(["IS"]), _NBIB_SETTINGS)
     return result.rows[0].record.issn
 
 
@@ -340,7 +343,7 @@ def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
     path = NBIB_FIXTURES_DIR / "pubmed_style.nbib"
 
     result = parse_nbib_file(
-        path, suggest_nbib_mapping(list(read_nbib_tags(path).samples))
+        path, suggest_nbib_mapping(list(read_nbib_tags(path).samples)), _NBIB_SETTINGS
     )
 
     first, second = (row.record for row in result.rows)
@@ -725,7 +728,7 @@ def test_parse_nbib_record__strips_is_qualifier() -> None:
         {"IS": Suggest("issn_isbn", {"kind": "issn"})}, defaults=ROW_DEFAULTS
     )
 
-    row = parse_nbib_record([("IS", "1234-5678 (Print)")], mapping)
+    row = parse_nbib_record([("IS", "1234-5678 (Print)")], mapping, _NBIB_SETTINGS)
 
     assert row.record.issn == "1234-5678"
     assert row.raw_fields == {"IS": "1234-5678 (Print)"}

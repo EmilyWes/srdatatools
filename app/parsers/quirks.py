@@ -1,5 +1,6 @@
 import logging
 import re
+import string
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
@@ -16,31 +17,33 @@ _OTHER_IDS_PREFIX = "other_ids."
 _PAGE_RANGE = re.compile(r"^(?P<start>\d+)-(?P<end>\d+)$")
 _ET_AL = "et al."
 _NAME_WITH_ID = re.compile(r"^(?P<name>.*?)\s*\((?P<id>\d+)\)$")
+_DOI = re.compile(r"10\.\d{4,9}/\S+")
+_DIGITS = re.compile(r"\d+")
+_TRAILING_NON_NAME = ".,;:…" + string.whitespace
 
 
 @dataclass(frozen=True)
-class ContinueToNextField:
+class EmptyValues:
     """Listed values count as empty, so the next key mapped to the field is used."""
 
     field: str
     values: frozenset[str]
-    case_sensitive: bool
 
     def matches(self, value: str) -> bool:
-        if self.case_sensitive:
-            return value.strip() in self.values
         return value.strip().lower() in {v.lower() for v in self.values}
 
 
 @dataclass(frozen=True)
 class ParseSettings:
-    skip_issn_isbn_qualifiers: bool = False
+    issn_isbn_strip_extras: bool = False
+    issn_isbn_only_one: bool = False
     preferred_issn_qualifier: str | None = None
     minus_one_unlabeled: bool = False
     ambiguous_name_split: AmbiguousNameSplit = "none"
     # Python's csv limit is process-wide, so the parser sets it before each parse.
     csv_field_size_limit: int = 1_000_000
-    continue_to_next: tuple[ContinueToNextField, ...] = ()
+    empty_values: tuple[EmptyValues, ...] = ()
+    use_first: tuple[str, ...] = ()
 
 
 NO_QUIRKS = ParseSettings()
@@ -59,7 +62,7 @@ class RecordQuirk(Protocol):
 def expand_page_range(pages: str) -> str:
     """PubMed drops the leading digits the end page shares with the start: 521-2."""
     match = _PAGE_RANGE.match(pages)
-    if match is None or len(match["end"]) >= len(match["start"]):
+    if match is None or int(match["end"]) >= int(match["start"]):
         return pages
     start, end = match["start"], match["end"]
     return f"{start}-{start[: -len(end)]}{end}"
@@ -98,11 +101,16 @@ class FirstValue:
         return record.model_copy(update={self.field: first})
 
 
-@dataclass(frozen=True)
-class StripPrefix:
-    field: str
-    prefix: str
+def _keep_match(record: Record, field: str, pattern: re.Pattern[str]) -> Record:
+    value: str | None = getattr(record, field)
+    match = pattern.search(value or "")
+    if match is None:
+        return record
+    return record.model_copy(update={field: match[0]})
 
+
+@dataclass(frozen=True)
+class StripDoi:
     def apply(
         self,
         raw_fields: dict[str, str],
@@ -110,10 +118,19 @@ class StripPrefix:
         mapping: "FieldMapping",
         settings: ParseSettings,
     ) -> Record:
-        value: str | None = getattr(record, self.field)
-        if not value:
-            return record
-        return record.model_copy(update={self.field: value.removeprefix(self.prefix)})
+        return _keep_match(record, "doi", _DOI)
+
+
+@dataclass(frozen=True)
+class StripPmid:
+    def apply(
+        self,
+        raw_fields: dict[str, str],
+        record: Record,
+        mapping: "FieldMapping",
+        settings: ParseSettings,
+    ) -> Record:
+        return _keep_match(record, "pmid", _DIGITS)
 
 
 @dataclass(frozen=True)
@@ -131,8 +148,6 @@ class DropEtAl:
 
 @dataclass(frozen=True)
 class StripLastAuthorTrailing:
-    chars: str
-
     def apply(
         self,
         raw_fields: dict[str, str],
@@ -144,7 +159,7 @@ class StripLastAuthorTrailing:
         if not last_name:
             return record
         authors = list(record.authors)
-        full_name = last_name.rstrip(self.chars)
+        full_name = last_name.rstrip(_TRAILING_NON_NAME)
         authors[-1] = authors[-1].model_copy(update={"full_name": full_name})
         return record.model_copy(update={"authors": authors})
 

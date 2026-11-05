@@ -209,10 +209,7 @@ def test_render_source_file_view__toggle_switches_between_mapping_and_parsing() 
 
 def test_render_source_file_view__parsing_shows_stored_choices_readonly() -> None:
     middle, _ = _render(
-        quirk_choices={
-            "ExpandPageRange": {"on": False, "values": {}},
-            "FirstValue.issn": {"on": True, "values": {"delimiter": ";"}},
-        }
+        quirk_choices={"pages_set": False, "preferred_qualifier": "print"}
     )
 
     checkboxes = [e for e in middle.descendants() if isinstance(e, ui.checkbox)]
@@ -220,6 +217,6 @@ def test_render_source_file_view__parsing_shows_stored_choices_readonly() -> Non
         e.value: e for e in middle.descendants() if isinstance(e, ui.input) and e.value
     }
     assert checkboxes and all("disable" in box.props for box in checkboxes)
-    assert ";" in inputs
-    assert "readonly" in inputs[";"].props
-    assert "Expand short page ranges" in [box.text for box in checkboxes]
+    assert "print" in inputs
+    assert "readonly" in inputs["print"].props
+    assert False in [box.value for box in checkboxes]

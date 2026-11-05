@@ -258,9 +258,13 @@ _LABEL_SPELLINGS: dict[str, LabelValue] = {
 # ASReview writes -1 for records nobody has labeled yet.
 _MINUS_ONE = "-1"
 
-_ISSN_ISBN_SEPARATORS = re.compile(r"[\s;]+")
+# Hyphens may sit anywhere in an ID; a qualifier like "(Print)" may follow it.
+_ISSN_ISBN_TOKEN = re.compile(
+    r"(?<![\w-])(?P<id>\d[\d-]*[\dXx])(?![\w-])(?:\s*\((?P<qualifier>[^)]*)\))?"
+)
 _ISSN_LENGTH = 8
 _ISBN_LENGTHS = (10, 13)
+_ISSN_ISBN_JOINER = "; "
 
 
 def normalize_label(value: str, minus_one_unlabeled: bool = False) -> LabelValue:
@@ -274,40 +278,47 @@ def normalize_label(value: str, minus_one_unlabeled: bool = False) -> LabelValue
     return label
 
 
-def _issn_isbn_pieces(value: str, settings: ParseSettings) -> list[str]:
-    """Skipping qualifiers drops pieces like Scopus's "(ISSN)" or PubMed's "(Print)",
-    after moving the values they follow with the preferred qualifier to the front.
-    """
-    pieces = [p for p in _ISSN_ISBN_SEPARATORS.split(value) if p]
-    if not settings.skip_issn_isbn_qualifiers:
-        return pieces
-    qualified: list[tuple[str, str | None]] = []
-    for piece in pieces:
-        if not (piece.startswith("(") and piece.endswith(")")):
-            qualified.append((piece, None))
-        elif qualified and qualified[-1][1] is None:
-            qualified[-1] = (qualified[-1][0], piece[1:-1])
-    preferred = settings.preferred_issn_qualifier
-    qualified.sort(key=lambda pair: preferred is None or pair[1] != preferred)
-    return [piece for piece, _ in qualified]
+def _issn_isbn_kind(row: IssnIsbnRow, token: re.Match[str]) -> str:
+    """RIS keeps both in SN; auto tells them apart by length."""
+    if row.kind != "auto":
+        return row.kind
+    return "isbn" if len(token["id"].replace("-", "")) in _ISBN_LENGTHS else "issn"
+
+
+def _preferred_token(
+    tokens: list[re.Match[str]], preferred: str | None
+) -> re.Match[str]:
+    wanted = (preferred or "").strip().lower()
+    return next(
+        (t for t in tokens if wanted and (t["qualifier"] or "").lower() == wanted),
+        tokens[0],
+    )
 
 
 def _classify_issn_isbn(
     row: IssnIsbnRow, value: str, settings: ParseSettings
 ) -> dict[str, str]:
-    """RIS keeps both in SN; auto tells them apart by length. First of each wins."""
-    pieces = _issn_isbn_pieces(value, settings)
-    if row.kind != "auto":
-        return {row.kind: pieces[0]} if pieces else {}
+    tokens = [
+        token
+        for token in _ISSN_ISBN_TOKEN.finditer(value)
+        if len(token["id"].replace("-", "")) in (_ISSN_LENGTH, *_ISBN_LENGTHS)
+    ]
+    if not tokens:
+        if row.kind == "auto":
+            logger.warning("Value %r is neither an ISSN nor an ISBN", value)
+        return {"issn" if row.kind == "auto" else row.kind: value}
+    strip, only_one = settings.issn_isbn_strip_extras, settings.issn_isbn_only_one
+    if not (strip or only_one):
+        return {_issn_isbn_kind(row, tokens[0]): value}
+    by_kind: dict[str, list[re.Match[str]]] = {}
+    for token in tokens:
+        by_kind.setdefault(_issn_isbn_kind(row, token), []).append(token)
     found: dict[str, str] = {}
-    for piece in pieces:
-        length = len(piece.replace("-", ""))
-        if length in _ISBN_LENGTHS:
-            found.setdefault("isbn", piece)
-            continue
-        if length != _ISSN_LENGTH:
-            logger.warning("Value %r is neither an ISSN nor an ISBN", piece)
-        found.setdefault("issn", piece)
+    for kind, kept in by_kind.items():
+        if only_one:
+            kept = [_preferred_token(kept, settings.preferred_issn_qualifier)]
+        texts = (token["id"] if strip else token[0] for token in kept)
+        found[kind] = _ISSN_ISBN_JOINER.join(texts)
     return found
 
 
@@ -433,11 +444,16 @@ def _parse_pages(raw_fields: dict[str, str], mapping: FieldMapping) -> str | Non
     return "-".join(piece for piece in (start, end) if piece) or None
 
 
-def _continues_to_next(target: str, value: str, settings: ParseSettings) -> bool:
+def _counts_as_empty(target: str, value: str, settings: ParseSettings) -> bool:
     return any(
         quirk.field == target and quirk.matches(value)
-        for quirk in settings.continue_to_next
+        for quirk in settings.empty_values
     )
+
+
+def _ordered(mapping: FieldMapping, use_first: tuple[str, ...]) -> FieldMapping:
+    first = {key: mapping.rows[key] for key in use_first if key in mapping.rows}
+    return mapping.model_copy(update={"rows": {**first, **mapping.rows}})
 
 
 def author_for_name(name: str, row: AuthorsRow, settings: ParseSettings) -> Author:
@@ -511,6 +527,7 @@ def apply_mapping(
     mapping: FieldMapping,
     settings: ParseSettings = NO_QUIRKS,
 ) -> Record:
+    mapping = _ordered(mapping, settings.use_first)
     values: dict[str, Any] = {}
     other_ids: dict[str, str] = {}
     keywords: list[str] = []
@@ -529,7 +546,7 @@ def apply_mapping(
         if not value:
             continue
         if isinstance(row, ScalarRow):
-            if not _continues_to_next(row.target, value, settings):
+            if not _counts_as_empty(row.target, value, settings):
                 values.setdefault(row.target, value)
         elif isinstance(row, IssnIsbnRow):
             for scalar, piece in _classify_issn_isbn(row, value, settings).items():

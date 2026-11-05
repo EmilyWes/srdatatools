@@ -30,6 +30,13 @@ _URL_EID = re.compile(
 )
 
 
+EMBEDDED_AUTHOR_IDS = EmbeddedAuthorIds(_AUTHOR_ID_KEY)
+RIS_NOTES = RisNotes(
+    "N1", {"EID: ": "other_ids.eid", "Conference name: ": "conference_name"}
+)
+URL_EID = IdFromUrl("url", _URL_EID, "eid", "2-s2.0-")
+
+
 def _matches_csv(text: str) -> bool:
     header = next(csv.reader(StringIO(text)), [])
     return _CSV_EID_HEADER in {column.strip().lower() for column in header}
@@ -64,9 +71,7 @@ SCOPUS = Profile(
             matches=_matches_csv,
             settings=default_settings("csv"),
             row_defaults=default_row_defaults("csv"),
-            quirks=default_quirks(
-                "csv", EmbeddedAuthorIds(_AUTHOR_ID_KEY), AffiliationLeadingName()
-            ),
+            quirks=default_quirks("csv", EMBEDDED_AUTHOR_IDS, AffiliationLeadingName()),
             # "Authors" abbreviates the given names in "Author full names".
             ignored_keys=frozenset(
                 {
@@ -86,13 +91,7 @@ SCOPUS = Profile(
             matches=_matches_ris,
             settings=default_settings("ris"),
             row_defaults=default_row_defaults("ris"),
-            quirks=default_quirks(
-                "ris",
-                RisNotes(
-                    "N1",
-                    {"EID: ": "other_ids.eid", "Conference name: ": "conference_name"},
-                ),
-            ),
+            quirks=default_quirks("ris", RIS_NOTES),
         ),
         "bibtex": FormatProfile(
             suggestions={
@@ -106,9 +105,7 @@ SCOPUS = Profile(
             matches=_matches_bibtex,
             settings=default_settings("bibtex"),
             row_defaults=default_row_defaults("bibtex"),
-            quirks=default_quirks(
-                "bibtex", IdFromUrl("url", _URL_EID, "eid", "2-s2.0-")
-            ),
+            quirks=default_quirks("bibtex", URL_EID),
         ),
     },
 )

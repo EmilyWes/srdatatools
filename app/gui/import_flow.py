@@ -49,10 +49,11 @@ from app.parsers.profiles import (
     profile_for,
 )
 from app.parsers.profiles.overview import (
-    QuirkChoices,
+    ParsingChoices,
+    default_choices,
     dump_choices,
     profile_with,
-    quirk_entries,
+    quirk_boxes,
 )
 from app.parsers.quirks import ParseSettings
 from app.parsers.ris import (
@@ -79,7 +80,6 @@ _TYPE_OPTIONS = {
     _TYPE_BIBTEX: "BibTeX",
 }
 _TSV_DELIMITER = "\t"
-_COLUMN_TYPES = (_TYPE_CSV, _TYPE_TSV, _TYPE_EXCEL)
 
 _VIEW_MAPPING = "mapping"
 _VIEW_PARSING = "parsing"
@@ -120,11 +120,11 @@ class _FormatHandlers:
 
 
 def _handlers(
-    file_type: str, source: str, choices: QuirkChoices | None = None
+    file_type: str, source: str, choices: ParsingChoices | None = None
 ) -> _FormatHandlers | None:
     if profile_for(source, file_type) is None:
         return None
-    profile = profile_with(file_type, source, choices or {})
+    profile = profile_with(file_type, source, choices)
     overrides, settings = profile.suggestions, profile.settings
     defaults = profile.row_defaults
     parse_csv = partial(_parse_csv_lines, settings=settings)
@@ -183,7 +183,7 @@ def preview_for(
     file_type: str,
     source: str,
     summary: FileSummary,
-    choices: Callable[[], QuirkChoices] = dict,
+    choices: Callable[[], ParsingChoices | None] = lambda: None,
 ) -> Callable[[FieldMapping], Record]:
     """`choices` is read on every preview, so the Result follows the Parsing view."""
     if profile_for(source, file_type) is None:
@@ -198,9 +198,7 @@ def preview_for(
     return preview
 
 
-def type_group_label(file_type: str) -> str:
-    if file_type in _COLUMN_TYPES:
-        return " / ".join(_TYPE_OPTIONS[t] for t in _COLUMN_TYPES)
+def type_label(file_type: str) -> str:
     return _TYPE_OPTIONS[file_type]
 
 
@@ -241,7 +239,7 @@ def render_mapping(
     name: str,
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
-    choices: Callable[[], QuirkChoices] = dict,
+    choices: Callable[[], ParsingChoices | None] = lambda: None,
 ) -> MappingScreen | None:
     handlers = _handlers(file_type, source)
     if handlers is None:
@@ -269,7 +267,7 @@ def _store(
     summary: FileSummary,
     result: ParseResult,
     source: str,
-    choices: QuirkChoices,
+    choices: ParsingChoices | None,
     sheet: str | None = None,
 ) -> SourceFile:
     handlers = _handlers(file_type, source, choices)
@@ -289,16 +287,15 @@ def _store(
     source_file.suggested_mapping = _suggestion(handlers, summary).model_dump()
     source_file.file_summary = asdict(summary)
     source_file.quirk_choices = dump_choices(
-        {
-            entry.key: choices.get(entry.key, entry.default)
-            for entry in quirk_entries(file_type, source)
-        }
+        choices or default_choices(file_type, source)
     )
     log_import(session, source_file)
     return source_file
 
 
-def _settings(file_type: str, source: str, choices: QuirkChoices) -> ParseSettings:
+def _settings(
+    file_type: str, source: str, choices: ParsingChoices | None
+) -> ParseSettings:
     return profile_with(file_type, source, choices).settings
 
 
@@ -308,9 +305,8 @@ def import_csv(
     mapping: FieldMapping,
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
-    choices: QuirkChoices | None = None,
+    choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    choices = choices or {}
     settings = _settings(_TYPE_CSV, source, choices)
     result = parse_csv_file(path, mapping, settings=settings)
     return _store(session, path, _TYPE_CSV, mapping, summary, result, source, choices)
@@ -322,9 +318,8 @@ def import_tsv(
     mapping: FieldMapping,
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
-    choices: QuirkChoices | None = None,
+    choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    choices = choices or {}
     settings = _settings(_TYPE_TSV, source, choices)
     result = parse_csv_file(path, mapping, _TSV_DELIMITER, settings)
     return _store(session, path, _TYPE_TSV, mapping, summary, result, source, choices)
@@ -337,9 +332,8 @@ def import_excel(
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
     sheet: str | None = None,
-    choices: QuirkChoices | None = None,
+    choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    choices = choices or {}
     settings = _settings(_TYPE_EXCEL, source, choices)
     result = parse_excel_file(path, mapping, sheet, settings)
     return _store(
@@ -353,9 +347,8 @@ def import_ris(
     mapping: FieldMapping,
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
-    choices: QuirkChoices | None = None,
+    choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    choices = choices or {}
     result = parse_ris_file(path, mapping, _settings(_TYPE_RIS, source, choices))
     return _store(session, path, _TYPE_RIS, mapping, summary, result, source, choices)
 
@@ -366,9 +359,8 @@ def import_nbib(
     mapping: FieldMapping,
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
-    choices: QuirkChoices | None = None,
+    choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    choices = choices or {}
     result = parse_nbib_file(path, mapping, _settings(_TYPE_NBIB, source, choices))
     return _store(session, path, _TYPE_NBIB, mapping, summary, result, source, choices)
 
@@ -379,9 +371,8 @@ def import_bibtex(
     mapping: FieldMapping,
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
-    choices: QuirkChoices | None = None,
+    choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    choices = choices or {}
     result = parse_bibtex_file(path, mapping, _settings(_TYPE_BIBTEX, source, choices))
     return _store(
         session, path, _TYPE_BIBTEX, mapping, summary, result, source, choices
@@ -396,7 +387,7 @@ def import_file(
     summary: FileSummary,
     source: str = _SOURCE_UNKNOWN,
     sheet: str | None = None,
-    choices: QuirkChoices | None = None,
+    choices: ParsingChoices | None = None,
 ) -> SourceFile:
     if file_type == _TYPE_CSV:
         return import_csv(session, path, mapping, summary, source, choices)
@@ -414,7 +405,14 @@ def import_file(
 
 
 OnImport = Callable[
-    [list[tuple[Path, FileSummary]], str, FieldMapping, str, str | None, QuirkChoices],
+    [
+        list[tuple[Path, FileSummary]],
+        str,
+        FieldMapping,
+        str,
+        str | None,
+        ParsingChoices,
+    ],
     Awaitable[None] | None,
 ]
 
@@ -521,6 +519,12 @@ class ImportView:
             self.quirks_screen.current_choices(),
         )
 
+    def _current_mapping(self) -> FieldMapping:
+        # Parsing renders before the mapping table exists.
+        if self.mapping_screen is None:
+            return FieldMapping()
+        return self.mapping_screen.current_mapping()
+
     def _show_view(self, view: str) -> None:
         self.view = view
         assert self.mapping_container is not None
@@ -529,6 +533,8 @@ class ImportView:
         self.quirks_container.set_visibility(view == _VIEW_PARSING)
         if view == _VIEW_MAPPING and self.mapping_screen is not None:
             self.mapping_screen.refresh_results()
+        if view == _VIEW_PARSING and self.quirks_screen is not None:
+            self.quirks_screen.refresh_ordering()
 
     def _render_mapping_and_parsing(self) -> None:
         toggle = ui.toggle(_VIEW_OPTIONS, value=self.view).props("dense no-caps")
@@ -536,8 +542,9 @@ class ImportView:
         mapping_container = ui.column().classes("items-center w-full")
         quirks_screen = render_quirks_overview(
             quirks_container,
-            quirk_entries(self.file_type, self.source),
-            type_group_label(self.file_type),
+            quirk_boxes(self.file_type, type_label(self.file_type)),
+            default_choices(self.file_type, self.source),
+            current_mapping=self._current_mapping,
         )
         mapping_screen = render_mapping(
             mapping_container,
