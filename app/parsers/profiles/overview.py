@@ -274,6 +274,13 @@ _RIS_AUTHOR_DETAILS = QuirkItem(
     " affiliation block after all authors isn't pinned on the last one.",
     "note",
 )
+_RIS_OUTSIDE_TEXT = QuirkItem(
+    "ris.outside_text",
+    "Text outside records",
+    "Lines between an ER and the next record's first tag are ignored, such as"
+    " ASReview's record numbers (1., 2., …).",
+    "note",
+)
 _EID_FROM_URL_ITEM = QuirkItem(
     "eid_from_url",
     "Scopus EID from URL",
@@ -299,7 +306,7 @@ def _type_items(file_type: str) -> tuple[QuirkItem, ...]:
     if file_type == "nbib":
         items.append(_FIRST_PUBLICATION_TYPE_ITEM)
     if file_type == "ris":
-        items += [_RIS_NOTES_ITEM, _RIS_AUTHOR_DETAILS]
+        items += [_RIS_NOTES_ITEM, _RIS_AUTHOR_DETAILS, _RIS_OUTSIDE_TEXT]
     if file_type == "bibtex":
         items += [_EID_FROM_URL_ITEM, _KEY_CONTINUATION]
     return tuple(items)

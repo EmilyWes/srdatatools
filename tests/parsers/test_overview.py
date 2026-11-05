@@ -105,7 +105,11 @@ def test_quirk_boxes__type_box_per_type() -> None:
     assert _type_box_keys("tsv") == ["field_size_limit", "author_columns"]
     assert _type_box_keys("excel") == ["author_columns"]
     assert _type_box_keys("nbib") == ["first_publication_type"]
-    assert _type_box_keys("ris") == ["ris_notes", "ris.author_details"]
+    assert _type_box_keys("ris") == [
+        "ris_notes",
+        "ris.author_details",
+        "ris.outside_text",
+    ]
     assert _type_box_keys("bibtex") == [
         "author_columns",
         "eid_from_url",
