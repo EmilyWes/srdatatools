@@ -663,7 +663,7 @@ def test_suggest_mapping__matches_label_headers(header: str) -> None:
 def test_parse_csv_text__reads_asreview_style_included_column() -> None:
     text = "title,included\nA,1\nB,0\nC,-1\nD,\n"
     mapping = suggest_mapping(["title", "included"])
-    settings = ParseSettings(minus_one_unlabeled=True)
+    settings = ParseSettings(label_values=(("-1", "unlabeled"),))
 
     result = parse_csv_text(text, mapping, settings=settings)
 

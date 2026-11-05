@@ -150,6 +150,19 @@ def test_render_quirks_overview__text_box_is_prefilled_and_tinted_when_changed()
     assert screen.current_choices().affiliation_start == ""
 
 
+def test_render_quirks_overview__labeling_box_has_a_text_box_per_decision() -> None:
+    middle = shell().middle
+    screen = _render(middle=middle)
+
+    assert {"Include", "Exclude", "Maybe", "Unlabeled"} <= set(_labels(middle))
+    assert isinstance(screen.widgets["label_include"], ui.input)
+    assert screen.widgets["label_unlabeled"].value == "-1"
+
+    screen.set_value("label_include", "asreview_relevant")
+
+    assert screen.current_choices().label_include == "asreview_relevant"
+
+
 def test_render_quirks_overview__changed_dropdown_is_tinted_blue() -> None:
     screen = _render()
     widget = screen.widgets["name_split"]

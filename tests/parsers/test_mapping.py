@@ -250,7 +250,6 @@ def test_apply_mapping__issn_isbn_routes_isbn(value: str) -> None:
     assert (record.issn, record.isbn) == (None, value)
 
 
-_MINUS_ONE = ParseSettings(minus_one_unlabeled=True)
 _ONLY_ONE = ParseSettings(issn_isbn_only_one=True)
 _STRIP = ParseSettings(issn_isbn_strip_extras=True)
 _BOTH = ParseSettings(issn_isbn_strip_extras=True, issn_isbn_only_one=True)
@@ -704,8 +703,10 @@ def test_normalize_label__maps_known_spellings(value: str, expected: str) -> Non
     assert normalize_label(value) == expected
 
 
-def test_normalize_label__minus_one_is_unlabeled_only_when_on() -> None:
-    assert normalize_label("-1", _MINUS_ONE) == "unlabeled"
+def test_normalize_label__minus_one_is_only_unlabeled_when_listed() -> None:
+    settings = ParseSettings(label_values=(("-1", "unlabeled"),))
+
+    assert normalize_label("-1", settings) == "unlabeled"
     assert normalize_label("-1") == "unknown"
 
 
@@ -717,12 +718,6 @@ _ASREVIEW_VALUES = ParseSettings(
 def test_normalize_label__custom_value_overrides_builtin() -> None:
     assert normalize_label("1", _ASREVIEW_VALUES) == "exclude"
     assert normalize_label("0", _ASREVIEW_VALUES) == "exclude"
-
-
-def test_normalize_label__custom_value_overrides_minus_one() -> None:
-    settings = ParseSettings(minus_one_unlabeled=True, label_values=(("-1", "maybe"),))
-
-    assert normalize_label("-1", settings) == "maybe"
 
 
 def test_normalize_label__custom_match_is_case_insensitive() -> None:

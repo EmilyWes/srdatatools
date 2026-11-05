@@ -18,7 +18,8 @@ from app.parsers.quirks import (
 _SETTINGS = ParseSettings(
     issn_isbn_strip_extras=True,
     issn_isbn_only_one=True,
-    minus_one_unlabeled=True,
+    # ASReview writes -1 for records nobody has labeled yet.
+    label_values=(("-1", "unlabeled"),),
     empty_values=(EmptyValues("title", frozenset({"[Not Available]."})),),
 )
 # PubMed writes one IS line per medium, e.g. "1234-5678 (Print)".

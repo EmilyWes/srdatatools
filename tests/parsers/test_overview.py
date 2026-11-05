@@ -129,14 +129,14 @@ def test_default_choices__unknown_source_defaults() -> None:
     assert choices.strip_extras and choices.only_one
     assert choices.preferred_qualifier == ""
     assert choices.drop_et_al and choices.strip_doi and choices.strip_pmid
-    assert choices.pages_set and choices.minus_one_unlabeled
+    assert choices.pages_set
     assert not (choices.drop_trailing or choices.id_from_name)
     assert choices.affiliation_start == ""
     assert choices.name_split == "none"
     assert choices.empty_values == [("title", "[Not Available].")]
     assert choices.use_first == []
     assert choices.field_size_limit == 1_000_000
-    assert choices.label_values == []
+    assert (choices.label_include, choices.label_unlabeled) == ("", "-1")
 
 
 def test_default_choices__selected_profile_sets_its_own_quirks() -> None:
@@ -207,7 +207,7 @@ def test_profile_with__applies_the_settings() -> None:
         strip_extras=False,
         only_one=False,
         preferred_qualifier=" print ",
-        minus_one_unlabeled=False,
+        label_unlabeled="",
         name_split="last",
         field_size_limit=500,
         use_first=["B", "A"],
@@ -218,20 +218,27 @@ def test_profile_with__applies_the_settings() -> None:
     assert not settings.issn_isbn_strip_extras
     assert not settings.issn_isbn_only_one
     assert settings.preferred_issn_qualifier == "print"
-    assert not settings.minus_one_unlabeled
+    assert settings.label_values == ()
     assert settings.ambiguous_name_split == "last"
     assert settings.csv_field_size_limit == 500
     assert settings.use_first == ("B", "A")
 
 
-def test_profile_with__label_values_are_lowercased_and_blanks_dropped() -> None:
+def test_profile_with__label_values_are_split_lowercased_and_trimmed() -> None:
     choices = _with(
-        "ris", label_values=[(" ASReview_relevant ", "include"), ("  ", "exclude")]
+        "ris",
+        label_include=" ASReview_relevant | Yes please ",
+        label_exclude=" | ",
+        label_unlabeled="-1",
     )
 
     settings = profile_with("ris", "unknown", choices).settings
 
-    assert settings.label_values == (("asreview_relevant", "include"),)
+    assert settings.label_values == (
+        ("asreview_relevant", "include"),
+        ("yes please", "include"),
+        ("-1", "unlabeled"),
+    )
 
 
 def test_profile_with__empty_preferred_qualifier_is_none() -> None:

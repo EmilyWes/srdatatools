@@ -255,8 +255,6 @@ _LABEL_SPELLINGS: dict[str, LabelValue] = {
     **dict.fromkeys(("maybe", "unsure", "undecided", "?"), "maybe"),
     "": "unlabeled",
 }
-# ASReview writes -1 for records nobody has labeled yet.
-_MINUS_ONE = "-1"
 
 # Hyphens may sit anywhere in an ID; a qualifier like "(Print)" may follow it.
 _ISSN_ISBN_TOKEN = re.compile(
@@ -272,8 +270,6 @@ def _label_for_line(line: str, settings: ParseSettings) -> LabelValue | None:
     custom = dict(settings.label_values)
     if normalized in custom:
         return custom[normalized]
-    if settings.minus_one_unlabeled and normalized == _MINUS_ONE:
-        return "unlabeled"
     return _LABEL_SPELLINGS.get(normalized)
 
 

@@ -38,7 +38,6 @@ class ParseSettings:
     issn_isbn_strip_extras: bool = False
     issn_isbn_only_one: bool = False
     preferred_issn_qualifier: str | None = None
-    minus_one_unlabeled: bool = False
     # Lowercased value -> decision; overrides the built-in spellings.
     label_values: tuple[tuple[str, LabelValue], ...] = ()
     ambiguous_name_split: AmbiguousNameSplit = "none"

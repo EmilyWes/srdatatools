@@ -28,6 +28,13 @@ Control = Literal["checkbox", "text", "number", "select", "note"]
 _FIELD_SIZE_TYPES = frozenset({"csv", "tsv"})
 _AUTHOR_COLUMN_TYPES = frozenset({"csv", "tsv", "excel", "bibtex"})
 EMPTY_VALUES_SEPARATOR = "|"
+_LABEL_VALUES_SEPARATOR = "|"
+_LABEL_KEYS: dict[str, LabelValue] = {
+    "label_include": "include",
+    "label_exclude": "exclude",
+    "label_maybe": "maybe",
+    "label_unlabeled": "unlabeled",
+}
 
 _FIRST_PUBLICATION_TYPE = FirstValue("publication_type", LINE_DELIMITER)
 _NAME_SPLIT_CHOICES: dict[str, str] = {
@@ -46,8 +53,10 @@ class ParsingChoices(BaseModel):
     id_from_name: bool
     affiliation_start: str
     name_split: AmbiguousNameSplit
-    minus_one_unlabeled: bool
-    label_values: list[tuple[str, LabelValue]]
+    label_include: str
+    label_exclude: str
+    label_maybe: str
+    label_unlabeled: str
     empty_values: list[tuple[str, str]]
     use_first: list[str]
     strip_doi: bool
@@ -157,12 +166,15 @@ _AUTHORS = QuirkBox(
 _LABELING = QuirkBox(
     "Labeling",
     (
-        QuirkItem(
-            "minus_one_unlabeled",
-            "-1 is unlabeled",
-            "ASReview writes -1 for records nobody has screened yet;"
-            " reads it as unlabeled instead of unknown.",
-            "checkbox",
+        *(
+            QuirkItem(
+                key,
+                decision.capitalize(),
+                f"Label values that mean {decision}, besides the built-in"
+                " spellings. Separate values with |; not case-sensitive.",
+                "text",
+            )
+            for key, decision in _LABEL_KEYS.items()
         ),
     ),
 )
@@ -348,8 +360,12 @@ def default_choices(file_type: str, source: str) -> ParsingChoices:
             (q.separator for q in quirks if isinstance(q, AffiliationLeadingName)), ""
         ),
         name_split=settings.ambiguous_name_split,
-        minus_one_unlabeled=settings.minus_one_unlabeled,
-        label_values=list(settings.label_values),
+        **{
+            key: _LABEL_VALUES_SEPARATOR.join(
+                value for value, label in settings.label_values if label == decision
+            )
+            for key, decision in _LABEL_KEYS.items()
+        },
         empty_values=[
             (empty.field, EMPTY_VALUES_SEPARATOR.join(sorted(empty.values)))
             for empty in settings.empty_values
@@ -368,6 +384,15 @@ def default_choices(file_type: str, source: str) -> ParsingChoices:
 def _empty_values(field: str, values: str) -> EmptyValues:
     split = (value.strip() for value in values.split(EMPTY_VALUES_SEPARATOR))
     return EmptyValues(field, frozenset(value for value in split if value))
+
+
+def _label_values(choices: ParsingChoices) -> tuple[tuple[str, LabelValue], ...]:
+    pairs: list[tuple[str, LabelValue]] = []
+    for key, decision in _LABEL_KEYS.items():
+        for value in getattr(choices, key).split(_LABEL_VALUES_SEPARATOR):
+            if value.strip():
+                pairs.append((value.strip().lower(), decision))
+    return tuple(pairs)
 
 
 def _quirks(choices: ParsingChoices) -> tuple[RecordQuirk, ...]:
@@ -402,12 +427,7 @@ def profile_with(
         issn_isbn_strip_extras=choices.strip_extras,
         issn_isbn_only_one=choices.only_one,
         preferred_issn_qualifier=choices.preferred_qualifier.strip() or None,
-        minus_one_unlabeled=choices.minus_one_unlabeled,
-        label_values=tuple(
-            (value.strip().lower(), decision)
-            for value, decision in choices.label_values
-            if value.strip()
-        ),
+        label_values=_label_values(choices),
         ambiguous_name_split=choices.name_split,
         csv_field_size_limit=choices.field_size_limit,
         empty_values=tuple(
