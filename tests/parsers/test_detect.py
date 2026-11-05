@@ -202,13 +202,13 @@ def test_detect_source__no_matching_profile_returns_none() -> None:
     assert detect_source(_DATA_DIR / "scopus_style.ris", "ris") is None
 
 
-def test_detect_source__tsv_has_no_profile(tmp_path: Path) -> None:
+def test_detect_source__tsv_without_marker_returns_none(tmp_path: Path) -> None:
     path = _write(tmp_path, "scopus.tsv", "Authors\tTitle\tEID\nA\tT\tE\n")
 
     assert detect_source(path, "tsv") is None
 
 
-def test_detect_source__excel_has_no_profile(tmp_path: Path) -> None:
+def test_detect_source__excel_without_marker_returns_none(tmp_path: Path) -> None:
     path = _workbook(tmp_path, "scopus.xlsx", [["Authors", "Title", "EID"]])
 
     assert detect_source(path, "excel") is None
@@ -219,3 +219,41 @@ def test_detect_source__undecodable_file_returns_none(tmp_path: Path) -> None:
     path.write_bytes(b"\x81\x8d\x8f\x90\x9d")
 
     assert detect_source(path, "nbib") is None
+
+
+def test_detect_source__asreview_csv(tmp_path: Path) -> None:
+    path = _write(tmp_path, "a.csv", ",title,asreview_label\n0,A,1\n")
+
+    assert detect_source(path, "csv") == "asreview"
+
+
+def test_detect_source__asreview_tsv(tmp_path: Path) -> None:
+    path = _write(tmp_path, "a.tsv", "\ttitle\tasreview_label\n0\tA\t1\n")
+
+    assert detect_source(path, "tsv") == "asreview"
+
+
+def test_detect_source__asreview_excel(tmp_path: Path) -> None:
+    path = _workbook(tmp_path, "a.xlsx", [[None, "title", "asreview_label"]])
+
+    assert detect_source(path, "excel") == "asreview"
+
+
+def test_detect_source__asreview_beats_pubmed_csv(tmp_path: Path) -> None:
+    text = ",PMID,Title,Citation,Journal/Book,asreview_label\n0,1,A,B,C,1\n"
+    path = _write(tmp_path, "a.csv", text)
+
+    assert detect_source(path, "csv") == "asreview"
+
+
+def test_detect_source__asreview_beats_scopus_ris(tmp_path: Path) -> None:
+    text = "1.\nTY  - JOUR\nN1  - ASReview_relevant\nDB  - Scopus\nER  - \n"
+    path = _write(tmp_path, "a.ris", text)
+
+    assert detect_source(path, "ris") == "asreview"
+
+
+def test_detect_source__unreadable_workbook_returns_none(tmp_path: Path) -> None:
+    path = _write(tmp_path, "a.xlsx", "not a workbook")
+
+    assert detect_source(path, "excel") is None
