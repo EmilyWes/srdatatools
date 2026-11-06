@@ -156,6 +156,8 @@ Core tables, kept normalized so the same paper found via two sources becomes one
 | `field_merge_policy` *(planned, Phase 2)* | The default conflict-resolution chain, plus named field-group overrides and which fields belong to each |
 | `app_settings` | Simple key/value local settings store — record-table column selection and label format, the Overview's hidden charts/tables; later OpenAlex polite-pool email, merge-policy defaults, etc. |
 
+**Migrations** start from a single Alembic baseline (the earlier migrations were squashed into it before the app had any other users). From here on every schema change gets its own migration, since existing libraries are upgraded in place at startup.
+
 **DOIs** are stored lowercased and without a `https://doi.org/` or `doi:` prefix (DOIs are case-insensitive, so this makes matching exact); the original value stays in `record_source`'s raw fields.
 
 **Key design choice:** never destroy the originally imported data. `record_source` keeps the raw parsed fields forever, so *what was imported* is never lost — this is for transparency and audit, not for in-app undo. There is no built-in undo/rollback for merges or enrichment: the safety net is that the app makes it clear, before running dedup, that the user should **export the current library first** if they want a restore point. This keeps the merge engine and its data model simpler, at the cost of relying on the user's own exported backup rather than an in-app history.
