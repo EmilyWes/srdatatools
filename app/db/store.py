@@ -1,5 +1,5 @@
 import datetime
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from typing import Any, cast
 
 from sqlalchemy import CursorResult, delete, select
@@ -88,3 +88,12 @@ def delete_library(session: Session) -> tuple[int, int]:
     records = cast(CursorResult[Any], session.execute(delete(Record)))
     source_files = cast(CursorResult[Any], session.execute(delete(SourceFile)))
     return source_files.rowcount, records.rowcount
+
+
+def delete_records(session: Session, ids: Collection[int]) -> int:
+    session.execute(delete(Label).where(Label.record_id.in_(ids)))
+    session.execute(delete(RecordSource).where(RecordSource.record_id.in_(ids)))
+    result = cast(
+        CursorResult[Any], session.execute(delete(Record).where(Record.id.in_(ids)))
+    )
+    return result.rowcount

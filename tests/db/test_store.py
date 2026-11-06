@@ -14,7 +14,12 @@ from app.db.models import (
     RecordSource,
     SourceFile,
 )
-from app.db.store import delete_library, remove_source_file, store_parsed_rows
+from app.db.store import (
+    delete_library,
+    delete_records,
+    remove_source_file,
+    store_parsed_rows,
+)
 from app.models.record import Affiliation, Author, PartialDate
 from app.models.record import Label as LabelSchema
 from app.models.record import Record as RecordSchema
@@ -476,3 +481,23 @@ def test_delete_library__keeps_activity_log_and_settings(session: Session) -> No
 
 def test_delete_library__empty_library_returns_zeros(session: Session) -> None:
     assert delete_library(session) == (0, 0)
+
+
+def test_delete_records__removes_records_their_sources_and_labels(
+    session: Session,
+) -> None:
+    source_file = _source_file("export.ris")
+    first = _record("First", source_file)
+    second = _record("Second", source_file)
+    kept = _record("Kept", source_file)
+    session.add_all([first, second, kept, _label(first, source_file, "ft")])
+    session.commit()
+
+    deleted = delete_records(session, {first.id, second.id})
+    session.commit()
+
+    assert deleted == 2
+    assert [r.title for r in session.query(Record)] == ["Kept"]
+    assert session.query(RecordSource).count() == 1
+    assert session.query(Label).count() == 0
+    assert [f.filename for f in session.query(SourceFile)] == ["export.ris"]

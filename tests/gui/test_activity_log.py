@@ -9,6 +9,7 @@ from app.gui.activity_log import (
     clear_activity_log,
     log_import,
     log_library_deleted,
+    log_records_deleted,
     log_removal,
 )
 
@@ -92,4 +93,14 @@ def test_log_library_deleted__writes_row_with_counts(session: Session) -> None:
         "Deleted library\nSource files removed: 2\nRecords removed: 1204"
     )
     assert entry.action_type == "delete_library"
+    assert entry.status == "ok"
+
+
+def test_log_records_deleted__writes_row_with_count(session: Session) -> None:
+    log_records_deleted(session, 3)
+    session.commit()
+
+    entry = session.query(ActivityLog).one()
+    assert entry.message == "Deleted records: 3"
+    assert entry.action_type == "delete_records"
     assert entry.status == "ok"

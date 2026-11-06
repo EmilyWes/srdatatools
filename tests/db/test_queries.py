@@ -14,12 +14,16 @@ from app.db.models import (
     SourceFile,
 )
 from app.db.queries import (
+    count_filled_fields,
+    count_keywords,
+    count_label_values,
+    count_publication_types,
     count_records,
     count_records_for_file,
-    count_records_per_file,
-    count_records_per_source,
+    count_records_per_source_file,
     count_records_per_year,
     list_activity_log,
+    list_keyword_prefixes,
     list_label_columns,
     list_record_labels,
     list_record_rows,
@@ -148,39 +152,6 @@ def test_count_records__counts_all_records(library: Session) -> None:
     assert count_records(library) == 4
 
 
-def test_count_records_per_source__empty_when_no_records(session: Session) -> None:
-    assert count_records_per_source(session) == []
-
-
-def test_count_records_per_source__groups_by_vendor_with_unknown_last(
-    library: Session,
-) -> None:
-    assert count_records_per_source(library) == [
-        ("pubmed", 2),
-        ("scopus", 2),
-        (None, 1),
-    ]
-
-
-def test_count_records_per_source__counts_record_once_per_vendor(
-    session: Session,
-) -> None:
-    first = _source_file("a.nbib", "pubmed", datetime.datetime(2026, 1, 1))
-    second = _source_file("b.nbib", "pubmed", datetime.datetime(2026, 1, 2))
-    session.add(_record(2020, first, second))
-    session.commit()
-
-    assert count_records_per_source(session) == [("pubmed", 1)]
-
-
-def test_count_records_per_file__in_import_order(library: Session) -> None:
-    assert count_records_per_file(library) == [
-        ("pubmed.nbib", 2),
-        ("scopus.csv", 2),
-        ("other.ris", 1),
-    ]
-
-
 def test_count_records_for_file__counts_only_that_file(library: Session) -> None:
     pubmed = library.query(SourceFile).filter_by(filename="pubmed.nbib").one()
 
@@ -258,3 +229,110 @@ def test_list_record_labels__values_per_record_and_pair(labeled: Session) -> Non
         1: {("tiab", "Emily"): ["include"], ("ft", "screener 1"): ["exclude"]},
         2: {("tiab", "Emily"): ["exclude", "maybe"]},
     }
+
+
+def test_count_label_values__records_per_value_with_missing_as_unlabeled(
+    labeled: Session,
+) -> None:
+    assert count_label_values(labeled) == {
+        ("tiab", "Emily"): {"include": 1, "exclude": 1, "maybe": 1, "unlabeled": 1},
+        ("ft", "screener 1"): {"exclude": 1, "unlabeled": 2},
+    }
+
+
+def test_count_label_values__empty_without_labels(session: Session) -> None:
+    assert count_label_values(session) == {}
+
+
+def test_count_filled_fields__counts_non_empty_values(session: Session) -> None:
+    session.add_all(
+        [
+            Record(title="Paper", doi="10.1/a", authors=[{"full_name": "A"}]),
+            Record(title="", keywords=["x"], authors=[]),
+            Record(title="Other", other_ids={}),
+        ]
+    )
+    session.commit()
+
+    assert count_filled_fields(
+        session, ["title", "doi", "authors", "keywords", "other_ids"]
+    ) == [("title", 2), ("doi", 1), ("authors", 1), ("keywords", 1), ("other_ids", 0)]
+
+
+@pytest.fixture
+def keyworded(session: Session) -> Session:
+    session.add_all(
+        [
+            Record(keywords=["Cancer", "[MeSH] Humans", "[MeSH] Mice", "cancer"]),
+            Record(keywords=["cancer", "[MeSH] Humans", "Diet"]),
+            Record(keywords=["[Author] diet", "Aging"]),
+            Record(keywords=[]),
+        ]
+    )
+    session.commit()
+    return session
+
+
+def test_count_keywords__per_prefix_case_insensitive_once_per_record(
+    keyworded: Session,
+) -> None:
+    assert count_keywords(keyworded) == {
+        None: [("Cancer", 2), ("Aging", 1), ("Diet", 1)],
+        "MeSH": [("Humans", 2), ("Mice", 1)],
+        "Author": [("diet", 1)],
+    }
+
+
+def test_list_keyword_prefixes__first_seen_order_without_unprefixed(
+    keyworded: Session,
+) -> None:
+    assert list_keyword_prefixes(keyworded) == ["MeSH", "Author"]
+
+
+def test_count_publication_types__case_insensitive_sorted_with_none(
+    session: Session,
+) -> None:
+    session.add_all(
+        [
+            Record(publication_type="JOUR"),
+            Record(publication_type="Book"),
+            Record(publication_type="jour"),
+            Record(publication_type=None),
+            Record(publication_type=""),
+            Record(publication_type="CONF"),
+        ]
+    )
+    session.commit()
+
+    assert count_publication_types(session) == [
+        ("JOUR", 2),
+        (None, 2),
+        ("Book", 1),
+        ("CONF", 1),
+    ]
+
+
+def test_count_records_per_source_file__shared_records_counted_separately(
+    library: Session,
+) -> None:
+    assert count_records_per_source_file(library) == (
+        [("pubmed.nbib", 1), ("scopus.csv", 1), ("other.ris", 1)],
+        1,
+    )
+
+
+def test_count_records_per_source_file__sorted_by_count(session: Session) -> None:
+    first = _source_file("first.ris", None, datetime.datetime(2026, 1, 1))
+    second = _source_file("second.ris", None, datetime.datetime(2026, 1, 2))
+    session.add_all([_record(None, first), _record(None, second)])
+    session.add(_record(None, second))
+    session.commit()
+
+    assert count_records_per_source_file(session) == (
+        [("second.ris", 2), ("first.ris", 1)],
+        0,
+    )
+
+
+def test_count_records_per_source_file__empty_library(session: Session) -> None:
+    assert count_records_per_source_file(session) == ([], 0)

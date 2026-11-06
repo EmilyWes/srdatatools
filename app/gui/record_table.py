@@ -1,5 +1,12 @@
 import json
-from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from collections.abc import (
+    Awaitable,
+    Callable,
+    Collection,
+    Iterable,
+    Mapping,
+    Sequence,
+)
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
@@ -9,6 +16,7 @@ from nicegui.events import GenericEventArguments
 from sqlalchemy.orm import Session
 
 from app.db.queries import (
+    list_keyword_prefixes,
     list_label_columns,
     list_record_labels,
     list_record_rows,
@@ -16,12 +24,21 @@ from app.db.queries import (
 )
 from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.library_overview import format_count, source_label
+from app.parsers.mapping import split_keyword
 
 _COLUMNS_KEY = "table_columns"
 _NUMBER_COLUMNS = {"publication_year", "publication_month", "publication_day"}
 _WIDE_COLUMNS = {"title", "abstract", "notes"}
 _SELECTION_TIMEOUT = 10.0
 _LABEL_PREFIX = "label:"
+_KEYWORD_PREFIX = "keywords:"
+_ROW_HEIGHT = 24
+_TABLE_CLASS = "record-table"
+_HEADER_CSS = (
+    f".{_TABLE_CLASS} .ag-header-cell {{ cursor: pointer; }}"
+    f" .{_TABLE_CLASS} .ag-header-cell:hover"
+    " { background-color: rgba(0, 0, 0, 0.06); }"
+)
 _LABEL_FORMAT_KEY = "table_label_format"
 
 LabelFormat = Literal["words", "numbers"]
@@ -58,7 +75,7 @@ COLUMNS: dict[str, str] = {
     "url": "URL",
     "notes": "Notes",
 }
-DEFAULT_COLUMNS = ["doi", "title", "authors", "publication_year", "journal", "sources"]
+DEFAULT_COLUMNS = ["doi", "title", "authors"]
 
 
 @dataclass
@@ -82,40 +99,69 @@ def _label_pair(key: str) -> tuple[str, str]:
     return phase, screener
 
 
-def label_field(key: str) -> str:
-    """ag-grid reads dots in a field as a nested path, so label keys are hex-encoded."""
-    return f"label_{key.encode().hex()}" if _is_label_column(key) else key
+def keyword_column_key(prefix: str) -> str:
+    return _KEYWORD_PREFIX + json.dumps(prefix)
+
+
+def _is_keyword_column(key: str) -> bool:
+    return key.startswith(_KEYWORD_PREFIX)
+
+
+def _keyword_prefix(key: str) -> str:
+    prefix: str = json.loads(key.removeprefix(_KEYWORD_PREFIX))
+    return prefix
+
+
+def column_field(key: str) -> str:
+    """ag-grid reads dots in a field as a nested path, so label and keyword keys are
+    hex-encoded."""
+    if _is_label_column(key):
+        return f"label_{key.encode().hex()}"
+    if _is_keyword_column(key):
+        return f"keywords_{key.encode().hex()}"
+    return key
 
 
 def _header(key: str) -> str:
     if _is_label_column(key):
         phase, screener = _label_pair(key)
         return f"Label: {phase} / {screener}"
+    if _is_keyword_column(key):
+        return f"Keywords: {_keyword_prefix(key)}"
     return COLUMNS[key]
 
 
 def _in_display_order(
-    columns: Collection[str], label_columns: Sequence[str]
+    columns: Collection[str], extra_columns: Sequence[str]
 ) -> list[str]:
     fixed = [key for key in COLUMNS if key in columns]
-    return fixed + [key for key in label_columns if key in columns]
+    return fixed + [key for key in extra_columns if key in columns]
 
 
 def load_label_columns(session: Session) -> list[str]:
     return [label_column_key(*pair) for pair in list_label_columns(session)]
 
 
+def load_keyword_columns(session: Session) -> list[str]:
+    return [keyword_column_key(prefix) for prefix in list_keyword_prefixes(session)]
+
+
 def load_columns(session: Session) -> list[str]:
     stored = get_setting(session, _COLUMNS_KEY)
     if stored is None:
         return DEFAULT_COLUMNS
-    return _in_display_order(json.loads(stored), load_label_columns(session))
+    return _in_display_order(
+        json.loads(stored),
+        load_label_columns(session) + load_keyword_columns(session),
+    )
 
 
 def save_columns(session: Session, columns: Sequence[str]) -> None:
-    label_columns = [key for key in columns if _is_label_column(key)]
+    extra_columns = [key for key in columns if _is_label_column(key)] + [
+        key for key in columns if _is_keyword_column(key)
+    ]
     set_setting(
-        session, _COLUMNS_KEY, json.dumps(_in_display_order(columns, label_columns))
+        session, _COLUMNS_KEY, json.dumps(_in_display_order(columns, extra_columns))
     )
 
 
@@ -176,8 +222,25 @@ def load_rows(
     session: Session, columns: Sequence[str], label_format: LabelFormat = "numbers"
 ) -> list[dict[str, Any]]:
     label_columns = [key for key in columns if _is_label_column(key)]
-    fields = [key for key in columns if key != "sources" and key not in label_columns]
-    rows = [row_for(values) for values in list_record_rows(session, fields)]
+    keyword_columns = [key for key in columns if _is_keyword_column(key)]
+    fields = [
+        key for key in columns if key in COLUMNS and key not in ("sources", "keywords")
+    ]
+    if "keywords" in columns or keyword_columns:
+        fields.append("keywords")
+    rows = []
+    for record in list_record_rows(session, fields):
+        keywords = [split_keyword(keyword) for keyword in record.pop("keywords", [])]
+        row = row_for(record)
+        if "keywords" in columns:
+            row["keywords"] = "; ".join(
+                text for prefix, text in keywords if prefix is None
+            )
+        for key in keyword_columns:
+            row[column_field(key)] = "; ".join(
+                text for prefix, text in keywords if prefix == _keyword_prefix(key)
+            )
+        rows.append(row)
     if "sources" in columns:
         sources = list_record_sources(session)
         for row in rows:
@@ -188,7 +251,7 @@ def load_rows(
             pairs = labels.get(row["id"], {})
             for key in label_columns:
                 values = pairs.get(_label_pair(key), [])
-                row[label_field(key)] = "; ".join(
+                row[column_field(key)] = "; ".join(
                     _label_text(value, label_format) for value in values
                 )
     return rows
@@ -196,8 +259,9 @@ def load_rows(
 
 def _column_def(key: str) -> dict[str, Any]:
     return {
-        "field": label_field(key),
+        "field": column_field(key),
         "headerName": _header(key),
+        "headerTooltip": _header(key),
         "width": 400 if key in _WIDE_COLUMNS else 160,
         "filter": (
             "agNumberColumnFilter" if key in _NUMBER_COLUMNS else "agTextColumnFilter"
@@ -210,8 +274,18 @@ def render_record_table(
     rows: Sequence[dict[str, Any]],
     columns: Sequence[str],
     selection: RecordSelection,
+    on_delete: Callable[[set[int]], Awaitable[None] | None] | None = None,
 ) -> None:
     selection.ids &= {row["id"] for row in rows}
+
+    def open_delete_dialog() -> None:
+        count = format_count(len(selection.ids))
+        delete_message.text = f"Delete {count} records? This can't be undone."
+        delete_dialog.open()
+
+    def delete() -> Awaitable[None] | None:
+        delete_dialog.close()
+        return None if on_delete is None else on_delete(set(selection.ids))
 
     def count_line(text: str, count: int) -> ui.label:
         ui.label(f"{text}:").classes("text-sm")
@@ -220,20 +294,30 @@ def render_record_table(
     middle.clear()
     with middle:
         with ui.column().classes("w-full h-screen p-4 gap-2 no-wrap"):
-            with ui.grid(columns="max-content 5rem max-content").classes(
+            with ui.grid(columns="max-content 5rem max-content max-content").classes(
                 "items-center gap-x-2 gap-y-1"
             ):
                 count_line("Total number of rows", len(rows))
                 ui.element("div")
+                ui.element("div")
                 filter_count = count_line("Rows in filter", len(rows))
                 clear_filters = ui.button("Clear all filters", color=None)
+                ui.element("div")
                 selection_count = count_line("Rows in selection", len(selection.ids))
                 clear_selection = ui.button("Clear selection", color=None)
+                delete_selected = ui.button(
+                    "Delete selected", color="negative", on_click=open_delete_dialog
+                )
             grid = ui.aggrid(
                 {
                     "columnDefs": [_column_def(key) for key in columns],
                     "rowData": list(rows),
-                    "defaultColDef": {"sortable": True, "resizable": True},
+                    "defaultColDef": {
+                        "sortable": True,
+                        "resizable": True,
+                        "cellStyle": {"fontSize": "12px"},
+                    },
+                    "rowHeight": _ROW_HEIGHT,
                     ":getRowId": "(params) => String(params.data.id)",
                     "rowSelection": {
                         "mode": "multiRow",
@@ -248,9 +332,18 @@ def render_record_table(
                     },
                 },
                 auto_size_columns=False,
-            ).classes("w-full flex-grow")
+            ).classes(f"w-full flex-grow {_TABLE_CLASS}")
+            with ui.dialog() as delete_dialog, ui.card():
+                delete_message = ui.label()
+                with ui.row().classes("w-full justify-end"):
+                    ui.button("Cancel", color=None, on_click=delete_dialog.close).props(
+                        "flat"
+                    )
+                    ui.button("Delete", color="negative", on_click=delete)
+        ui.add_css(_HEADER_CSS)
 
-    for button in (clear_filters, clear_selection):
+    delete_selected.set_enabled(bool(selection.ids))
+    for button in (clear_filters, clear_selection, delete_selected):
         button.classes("text-sm").props("dense no-caps")
     clear_filters.on_click(lambda: grid.run_grid_method("setFilterModel", None))
     clear_selection.on_click(lambda: grid.run_grid_method("deselectAll"))
@@ -264,6 +357,7 @@ def render_record_table(
         )
         selection.replace(ids)
         selection_count.text = format_count(len(selection.ids))
+        delete_selected.set_enabled(bool(selection.ids))
 
     async def sync_filter_count(_: GenericEventArguments) -> None:
         count = await grid.run_grid_method("getDisplayedRowCount")
@@ -282,15 +376,17 @@ def render_table_settings(
     on_restore: Callable[[], Any],
     on_back: Callable[[], Any],
     label_columns: Sequence[str] = (),
+    keyword_columns: Sequence[str] = (),
 ) -> None:
     selected = set(columns)
+    extra_columns = [*label_columns, *keyword_columns]
 
     def toggle(key: str, checked: bool) -> None:
         if checked:
             selected.add(key)
         else:
             selected.discard(key)
-        on_change(_in_display_order(selected, label_columns))
+        on_change(_in_display_order(selected, extra_columns))
 
     middle.clear()
     with middle:
@@ -298,7 +394,7 @@ def render_table_settings(
             ui.label("Table settings").classes("text-lg")
             ui.label("Columns").classes("text-sm text-grey-7")
             with ui.column().classes("gap-0"):
-                for key in [*COLUMNS, *label_columns]:
+                for key in [*COLUMNS, *extra_columns]:
                     ui.checkbox(
                         _header(key),
                         value=key in selected,

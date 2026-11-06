@@ -16,7 +16,7 @@ from app.gui.action_panel import ActionPanel
 from app.gui.home import home
 from app.gui.layout import ShellPanes
 from app.gui.library_nav import LeftPanelNav
-from app.gui.library_overview import save_sections
+from app.gui.library_overview import save_hidden
 from app.parsers.common import FileSummary
 from app.parsers.profiles.overview import default_choices
 from tests.gui.clicks import click_and_wait
@@ -125,14 +125,14 @@ def test_home__shows_library_overview_on_start(monkeypatch: pytest.MonkeyPatch) 
         for element in shells[0].middle.descendants()
         if isinstance(element, ui.label)
     ]
-    assert "Total records" in labels
+    assert "Field completeness" in labels
 
 
-def test_home__overview_shows_only_stored_sections(
+def test_home__overview_hides_stored_hidden_items(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with Session(engine) as session:
-        save_sections(session, ["per_year"])
+        save_hidden(session, ["completeness"])
         session.commit()
     shells: list[ShellPanes] = []
     shell = home_module.shell
@@ -151,8 +151,8 @@ def test_home__overview_shows_only_stored_sections(
         for element in shells[0].middle.descendants()
         if isinstance(element, ui.label)
     ]
-    assert "Records per year" in labels
-    assert "Total records" not in labels
+    assert "Publication year" in labels
+    assert "Field completeness" not in labels
 
 
 def test_home__builds_with_imported_source_file(engine: Engine) -> None:
@@ -393,3 +393,39 @@ def test_home__deleting_library_empties_db_logs_and_shows_overview(
         assert "Records removed: 1" in entry.message
     assert navs[-1].selected_key == "library:overview"
     assert f"source_file:{source_file_id}" not in navs[-1].buttons
+
+
+def test_home__deleting_selected_records_logs_and_reloads_table(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_source_file_with_record(engine)
+    navs = _capture_navs(monkeypatch)
+    on_deletes: list[Any] = []
+    render_record_table = home_module.render_record_table
+
+    def capture(*args: Any, **kwargs: Any) -> None:
+        on_deletes.append(kwargs["on_delete"])
+        render_record_table(*args, **kwargs)
+
+    monkeypatch.setattr(home_module, "render_record_table", capture)
+
+    home()
+    click_and_wait(navs[-1].buttons["library:table"], monkeypatch)
+    with Session(engine) as session:
+        record_id = session.query(Record).one().id
+    middle = navs[-1].middle
+
+    async def delete() -> None:
+        with middle:
+            await on_deletes[-1]({record_id})
+
+    asyncio.run(delete())
+
+    with Session(engine) as session:
+        assert session.query(Record).count() == 0
+        assert session.query(SourceFile).count() == 1
+        assert session.query(ActivityLog).one().message == "Deleted records: 1"
+    grid = next(
+        element for element in middle.descendants() if isinstance(element, ui.aggrid)
+    )
+    assert grid.options["rowData"] == []

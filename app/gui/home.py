@@ -5,20 +5,25 @@ from nicegui import ui
 
 from app.db.models import SourceFile
 from app.db.queries import (
+    count_filled_fields,
+    count_keywords,
+    count_label_values,
+    count_publication_types,
     count_records,
     count_records_for_file,
-    count_records_per_file,
-    count_records_per_source,
+    count_records_per_source_file,
     count_records_per_year,
     list_activity_log,
+    list_label_columns,
     list_source_files,
 )
 from app.db.session import get_engine, session_scope
-from app.db.store import delete_library, remove_source_file
+from app.db.store import delete_library, delete_records, remove_source_file
 from app.gui.action_panel import render_right_panel
 from app.gui.activity_log import (
     clear_activity_log,
     log_library_deleted,
+    log_records_deleted,
     log_removal,
 )
 from app.gui.busy import run_busy
@@ -26,16 +31,20 @@ from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
 from app.gui.library_nav import LeftPanelNav, render_left_panel
 from app.gui.library_overview import (
-    load_sections,
+    COMPLETENESS_FIELDS,
+    load_hidden,
+    overview_items,
     render_library_overview,
     render_overview_settings,
-    reset_sections,
-    save_sections,
+    reset_hidden,
+    save_hidden,
 )
 from app.gui.record_table import (
+    COLUMNS,
     LabelFormat,
     RecordSelection,
     load_columns,
+    load_keyword_columns,
     load_label_columns,
     load_label_format,
     load_rows,
@@ -97,32 +106,40 @@ def home() -> None:
 
     def show_overview() -> None:
         with session_scope(_engine) as session:
+            filled = count_filled_fields(session, COMPLETENESS_FIELDS)
             render_library_overview(
                 panes.middle,
                 count_records(session),
-                count_records_per_source(session),
-                count_records_per_file(session),
+                [(COLUMNS[key], count) for key, count in filled],
                 count_records_per_year(session),
-                load_sections(session),
+                count_publication_types(session),
+                count_records_per_source_file(session),
+                count_label_values(session),
+                count_keywords(session),
+                load_hidden(session),
             )
 
-    def save_overview_sections(sections: list[str]) -> None:
+    def save_overview_hidden(hidden: set[str]) -> None:
         with session_scope(_engine) as session:
-            save_sections(session, sections)
+            save_hidden(session, hidden)
 
-    def restore_overview_sections() -> None:
+    def restore_overview_hidden() -> None:
         with session_scope(_engine) as session:
-            reset_sections(session)
+            reset_hidden(session)
         show_overview_settings()
 
     def show_overview_settings() -> None:
         with session_scope(_engine) as session:
-            sections = load_sections(session)
+            items = overview_items(
+                list_label_columns(session), list(count_keywords(session))
+            )
+            hidden = load_hidden(session)
         render_overview_settings(
             panes.middle,
-            sections,
-            on_change=save_overview_sections,
-            on_restore=restore_overview_sections,
+            items,
+            hidden,
+            on_change=save_overview_hidden,
+            on_restore=restore_overview_hidden,
             on_back=show_overview,
         )
 
@@ -134,7 +151,19 @@ def home() -> None:
                 return load_rows(session, columns, label_format), columns
 
         rows, columns = await run_busy("Loading library table…", load)
-        render_record_table(panes.middle, rows, columns, selection)
+        render_record_table(
+            panes.middle, rows, columns, selection, on_delete=delete_selected
+        )
+
+    async def delete_selected(ids: set[int]) -> None:
+        def delete() -> None:
+            with session_scope(_engine) as session:
+                log_records_deleted(session, delete_records(session, ids))
+
+        await run_busy("Deleting records…", delete)
+        selection.ids.clear()
+        refresh_log()
+        await show_table()
 
     def save_table_columns(columns: list[str]) -> None:
         with session_scope(_engine) as session:
@@ -154,11 +183,13 @@ def home() -> None:
         with session_scope(_engine) as session:
             columns = load_columns(session)
             label_columns = load_label_columns(session)
+            keyword_columns = load_keyword_columns(session)
             label_format = load_label_format(session)
         render_table_settings(
             panes.middle,
             columns,
             label_columns=label_columns,
+            keyword_columns=keyword_columns,
             label_format=label_format,
             on_change=save_table_columns,
             on_label_format=save_table_label_format,

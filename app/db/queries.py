@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Sequence
 from typing import Any
 
@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import ActivityLog, Label, Record, RecordSource, SourceFile
+from app.parsers.mapping import split_keyword
 
 
 def list_source_files(session: Session) -> list[SourceFile]:
@@ -64,26 +65,6 @@ def count_records(session: Session) -> int:
     return session.scalar(select(func.count(Record.id))) or 0
 
 
-def count_records_per_source(session: Session) -> list[tuple[str | None, int]]:
-    statement = (
-        select(SourceFile.source, func.count(func.distinct(RecordSource.record_id)))
-        .join(RecordSource.source_file)
-        .group_by(SourceFile.source)
-        .order_by(SourceFile.source.asc().nulls_last())
-    )
-    return [(source, count) for source, count in session.execute(statement)]
-
-
-def count_records_per_file(session: Session) -> list[tuple[str, int]]:
-    statement = (
-        select(SourceFile.filename, func.count(func.distinct(RecordSource.record_id)))
-        .join(RecordSource.source_file)
-        .group_by(SourceFile.id)
-        .order_by(SourceFile.imported_at)
-    )
-    return [(filename, count) for filename, count in session.execute(statement)]
-
-
 def count_records_for_file(session: Session, source_file_id: int) -> int:
     statement = select(func.count(func.distinct(RecordSource.record_id))).where(
         RecordSource.source_file_id == source_file_id
@@ -98,3 +79,91 @@ def count_records_per_year(session: Session) -> list[tuple[int | None, int]]:
         .order_by(Record.publication_year.asc().nulls_last())
     )
     return [(year, count) for year, count in session.execute(statement)]
+
+
+def count_label_values(session: Session) -> dict[tuple[str, str], dict[str, int]]:
+    total = count_records(session)
+    labels = list_record_labels(session).values()
+    counts: dict[tuple[str, str], dict[str, int]] = {}
+    for pair in list_label_columns(session):
+        values = Counter(value for pairs in labels for value in pairs.get(pair, []))
+        missing = total - sum(pair in pairs for pairs in labels)
+        if missing:
+            values["unlabeled"] += missing
+        counts[pair] = dict(values)
+    return counts
+
+
+def count_filled_fields(
+    session: Session, fields: Sequence[str]
+) -> list[tuple[str, int]]:
+    counts = dict.fromkeys(fields, 0)
+    for row in list_record_rows(session, fields):
+        for field in fields:
+            if row[field] not in (None, "", [], {}):
+                counts[field] += 1
+    return list(counts.items())
+
+
+def count_keywords(session: Session) -> dict[str | None, list[tuple[str, int]]]:
+    """Grouped case-insensitively; the first spelling seen is shown."""
+    spellings: dict[tuple[str | None, str], str] = {}
+    counts: dict[str | None, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for keywords in session.scalars(select(Record.keywords).order_by(Record.id)):
+        seen = set()
+        for keyword in keywords:
+            prefix, text = split_keyword(keyword)
+            key = (prefix, text.casefold())
+            if key in seen:
+                continue
+            seen.add(key)
+            spelling = spellings.setdefault(key, text)
+            counts[prefix][spelling] += 1
+    return {
+        prefix: sorted(texts.items(), key=lambda item: (-item[1], item[0].casefold()))
+        for prefix, texts in counts.items()
+    }
+
+
+def list_keyword_prefixes(session: Session) -> list[str]:
+    return [prefix for prefix in count_keywords(session) if prefix is not None]
+
+
+def count_publication_types(session: Session) -> list[tuple[str | None, int]]:
+    """Grouped case-insensitively; the first spelling seen is shown. Empty is None."""
+    spellings: dict[str, str] = {}
+    counts: Counter[str | None] = Counter()
+    statement = select(Record.publication_type).order_by(Record.id)
+    for value in session.scalars(statement):
+        if not value:
+            counts[None] += 1
+            continue
+        counts[spellings.setdefault(value.casefold(), value)] += 1
+    return sorted(
+        counts.items(),
+        key=lambda item: (-item[1], item[0] is None, (item[0] or "").casefold()),
+    )
+
+
+def count_records_per_source_file(
+    session: Session,
+) -> tuple[list[tuple[str, int]], int]:
+    """Records from exactly one file count for that file; the second value counts
+    records linked to several files. Ties keep import order."""
+    statement = (
+        select(RecordSource.record_id, SourceFile.id, SourceFile.filename)
+        .join(RecordSource.source_file)
+        .order_by(SourceFile.imported_at, SourceFile.id)
+    )
+    files: dict[int, str] = {}
+    record_files: dict[int, set[int]] = defaultdict(set)
+    for record_id, file_id, filename in session.execute(statement):
+        files[file_id] = filename
+        record_files[record_id].add(file_id)
+    counts = Counter(next(iter(ids)) for ids in record_files.values() if len(ids) == 1)
+    multiple = sum(len(ids) > 1 for ids in record_files.values())
+    per_file = sorted(
+        ((filename, counts[file_id]) for file_id, filename in files.items()),
+        key=lambda item: -item[1],
+    )
+    return [(filename, count) for filename, count in per_file if count], multiple
