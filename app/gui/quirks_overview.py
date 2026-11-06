@@ -37,7 +37,9 @@ _FIELD_CSS = """
 _GRID_STYLE = "grid-template-columns: max-content auto"
 _GRID_CLASSES = "grid items-center gap-x-3 gap-y-1"
 _CHECKBOX_SIZE = "32px"
-_FIELD_CLASSES = "quirk-field text-xs w-[5.5rem]"
+_FIELD_CLASSES = "quirk-field text-xs"
+_FIELD_WIDTH = "w-[5.5rem]"
+_WIDE_FIELD_WIDTH = "w-[7rem]"
 _TOOLTIP_CLASSES = "max-w-sm text-xs"
 _NOTE_CLASSES = "col-span-2 text-xs text-grey-6"
 _BOXES_CLASS = "quirk-boxes"
@@ -139,13 +141,15 @@ class QuirksScreen:
         self._render_empty_values()
         self.refresh_ordering()
 
-    def _field(self, widget: _W) -> _W:
+    def _field(self, widget: _W, wide: bool = False) -> _W:
         if isinstance(widget, ui.checkbox):
             widget.props(f"dense keep-color size={_CHECKBOX_SIZE}")
             if self.readonly:
                 widget.props("disable")
         else:
-            widget.classes(_FIELD_CLASSES).props("dense options-dense outlined")
+            width = _WIDE_FIELD_WIDTH if wide else _FIELD_WIDTH
+            widget.classes(f"{_FIELD_CLASSES} {width}")
+            widget.props("dense options-dense outlined")
             if self.readonly:
                 widget.props("readonly")
         return widget
@@ -169,7 +173,7 @@ class QuirksScreen:
             widget = ui.number(value=value, min=1, precision=0)
         else:
             widget = ui.input(value=value)
-        self.widgets[item.key] = self._field(widget)
+        self.widgets[item.key] = self._field(widget, item.wide)
         widget.on_value_change(lambda _e: self._refresh_color(item.key))
         self._refresh_color(item.key)
 
@@ -205,7 +209,7 @@ class QuirksScreen:
         [part] = self.parts["empty_values"]
         self._label(part)
         with ui.row().classes("no-wrap items-center gap-1"):
-            text = self._field(ui.input(value=value))
+            text = self._field(ui.input(value=value), part.wide)
             if not (self.readonly or index == len(self.empty_values)):
                 self._remove_button(partial(self._remove_empty, index))
         text.on_value_change(lambda e, i=index: self._type_empty(i, e.value))

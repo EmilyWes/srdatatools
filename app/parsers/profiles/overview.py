@@ -74,6 +74,7 @@ class QuirkItem:
     control: Control
     choices: dict[str, str] | None = None
     enabled_by: str | None = None
+    wide: bool = False
 
 
 @dataclass(frozen=True)
@@ -171,6 +172,7 @@ _LABELING = QuirkBox(
                 f"Label values that mean {decision}, besides the built-in"
                 " spellings. Separate values with |; not case-sensitive.",
                 "text",
+                wide=True,
             )
             for key, decision in _LABEL_KEYS.items()
         ),
@@ -188,6 +190,7 @@ _EMPTY_VALUES = QuirkBox(
                     "Values that count as empty in any text field, so the next"
                     " column mapped to that field can fill it. Not case-sensitive.",
                     "text",
+                    wide=True,
                 ),
             ),
         ),

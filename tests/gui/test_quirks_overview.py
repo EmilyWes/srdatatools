@@ -324,3 +324,11 @@ def test_render_quirks_overview__chosen_is_read_only_and_shows_stored_values() -
     assert [text.value for text in screen.empty_rows] == ["none"]
     assert [select.value for select in screen.order_rows] == ["TT"]
     assert screen.current_choices() == chosen
+
+
+def test_render_quirks_overview__label_and_empty_value_boxes_are_wide() -> None:
+    screen = _render()
+
+    assert "w-[7rem]" in screen.widgets["label_include"].classes
+    assert "w-[7rem]" in screen.empty_rows[0].classes
+    assert "w-[5.5rem]" in screen.widgets["preferred_qualifier"].classes
