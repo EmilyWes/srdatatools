@@ -429,3 +429,49 @@ def test_home__deleting_selected_records_logs_and_reloads_table(
         element for element in middle.descendants() if isinstance(element, ui.aggrid)
     )
     assert grid.options["rowData"] == []
+
+
+def test_home__failing_file_is_logged_and_notified_without_undoing_others(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    good_path = tmp_path / "good.csv"
+    good_path.write_text("Title\nGood title\n")
+    moved_path = tmp_path / "moved.csv"
+    summary = FileSummary({"Title": "Good title"}, {"Title": 1}, 1)
+    navs = _capture_navs(monkeypatch)
+    on_imports: list[Any] = []
+    monkeypatch.setattr(
+        home_module,
+        "render_import_view",
+        lambda middle, on_import: on_imports.append(on_import),
+    )
+    notifications: list[str] = []
+    monkeypatch.setattr(
+        home_module.ui, "notify", lambda message, **_: notifications.append(message)
+    )
+
+    home()
+    click_and_wait(navs[-1].buttons["import"], monkeypatch)
+    middle = navs[-1].middle
+
+    async def confirm() -> None:
+        with middle:
+            await on_imports[-1](
+                [(moved_path, summary), (good_path, summary)],
+                "csv",
+                mapping_of({"Title": "title"}),
+                "unknown",
+                None,
+                default_choices("csv", "unknown"),
+            )
+
+    asyncio.run(confirm())
+
+    with Session(engine) as session:
+        source_file = session.query(SourceFile).one()
+        assert source_file.filename == "good.csv"
+        failure = session.query(ActivityLog).filter_by(status="warning").one()
+        assert failure.message.startswith("Import failed:\nmoved.csv\nReason: ")
+    assert len(notifications) == 1
+    assert notifications[0].startswith("Could not import moved.csv: ")
+    assert navs[-1].selected_key == f"source_file:{source_file.id}"

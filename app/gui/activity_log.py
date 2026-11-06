@@ -21,6 +21,17 @@ def log_import(session: Session, source_file: SourceFile) -> ActivityLog:
     return entry
 
 
+def log_import_failed(session: Session, filename: str, reason: str) -> ActivityLog:
+    entry = ActivityLog(
+        timestamp=datetime.datetime.now(),
+        action_type="import",
+        message=f"Import failed:\n{filename}\nReason: {reason}",
+        status="warning",
+    )
+    session.add(entry)
+    return entry
+
+
 def log_removal(session: Session, filename: str, removed: int) -> ActivityLog:
     entry = ActivityLog(
         timestamp=datetime.datetime.now(),

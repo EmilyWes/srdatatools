@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ from app.db.store import delete_library, delete_records, remove_source_file
 from app.gui.action_panel import render_right_panel
 from app.gui.activity_log import (
     clear_activity_log,
+    log_import_failed,
     log_library_deleted,
     log_records_deleted,
     log_removal,
@@ -59,6 +61,8 @@ from app.gui.source_file_view import render_source_file_view
 from app.parsers.common import FileSummary
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import ParsingChoices
+
+logger = logging.getLogger(__name__)
 
 _engine = get_engine()
 
@@ -243,26 +247,38 @@ def home() -> None:
         sheet: str | None,
         choices: ParsingChoices,
     ) -> None:
-        def store() -> list[int]:
-            with session_scope(_engine) as session:
-                source_files = [
-                    import_file(
-                        session,
-                        path,
-                        file_type,
-                        mapping,
-                        summary,
-                        source,
-                        sheet,
-                        choices,
-                    )
-                    for path, summary in files
-                ]
-                session.flush()
-                return [source_file.id for source_file in source_files]
+        def store() -> tuple[list[int], list[tuple[str, str]]]:
+            """Each file is stored on its own, so one that fails doesn't undo
+            the others."""
+            source_file_ids: list[int] = []
+            failures: list[tuple[str, str]] = []
+            for path, summary in files:
+                try:
+                    with session_scope(_engine) as session:
+                        source_file = import_file(
+                            session,
+                            path,
+                            file_type,
+                            mapping,
+                            summary,
+                            source,
+                            sheet,
+                            choices,
+                        )
+                        session.flush()
+                        source_file_ids.append(source_file.id)
+                except (ValueError, OSError) as exc:
+                    logger.warning("Could not import %s", path, exc_info=True)
+                    failures.append((path.name, str(exc)))
+                    with session_scope(_engine) as session:
+                        log_import_failed(session, path.name, str(exc))
+            return source_file_ids, failures
 
         name = files[0][0].name if len(files) == 1 else f"{len(files)} files"
-        source_file_ids = await run_busy(f"Importing {name}…", store)
+        source_file_ids, failures = await run_busy(f"Importing {name}…", store)
+        with panes.middle:
+            for filename, reason in failures:
+                ui.notify(f"Could not import {filename}: {reason}", type="negative")
         if len(source_file_ids) == 1:
             refresh(select_key=f"source_file:{source_file_ids[0]}")
         else:
