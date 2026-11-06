@@ -22,6 +22,18 @@ _LABEL_COLORS = {
     "unlabeled": "#e0e0e0",
 }
 _TITLE_CLASSES = "text-sm text-grey-7"
+_BOX_CLASSES = "w-96 h-80"
+_TOP_KEYWORDS = 10
+COMPLETENESS_FIELDS = [
+    "title",
+    "authors",
+    "abstract",
+    "publication_year",
+    "journal",
+    "doi",
+    "pmid",
+    "keywords",
+]
 
 
 def label_item_key(phase: str, screener: str) -> str:
@@ -78,41 +90,44 @@ def source_label(source: str | None) -> str:
 
 
 def _completeness_chart(total: int, filled: Sequence[tuple[str, int]]) -> None:
-    ui.label("Field completeness").classes(_TITLE_CLASSES)
-    ui.echart(
-        {
-            "grid": {"left": 8, "right": 24, "top": 8, "bottom": 8},
-            "xAxis": {
-                "type": "value",
-                "max": 100,
-                "axisLabel": {"formatter": "{value}%"},
-            },
-            "yAxis": {
-                "type": "category",
-                "inverse": True,
-                "data": [name for name, _ in filled],
-            },
-            "tooltip": {
-                "trigger": "item",
-                ":formatter": "(p) => `${p.name}: ${p.data.count} / "
-                + f"{format_count(total)}`",
-            },
-            "series": [
-                {
-                    "type": "bar",
-                    "color": _BAR_COLOR,
-                    "itemStyle": {"borderRadius": [0, 4, 4, 0]},
-                    "data": [
-                        {
-                            "value": round(100 * count / total, 1) if total else 0,
-                            "count": format_count(count),
-                        }
-                        for _, count in filled
-                    ],
-                }
-            ],
-        }
-    ).classes("w-full max-w-3xl").style(f"height: {len(filled) * 20 + 40}px")
+    with ui.column().classes("gap-1"):
+        ui.label("Field completeness").classes(_TITLE_CLASSES)
+        ui.echart(
+            {
+                "grid": {"left": 8, "right": 24, "top": 8, "bottom": 8},
+                "xAxis": {
+                    "type": "value",
+                    "max": 100,
+                    "axisLabel": {"formatter": "{value}%"},
+                },
+                "yAxis": {
+                    "type": "category",
+                    "inverse": True,
+                    "data": [name for name, _ in filled],
+                },
+                "tooltip": {
+                    "trigger": "item",
+                    ":formatter": "(p) => `${p.name}: ${p.data.count} / "
+                    + f"{format_count(total)}`",
+                },
+                "series": [
+                    {
+                        "type": "bar",
+                        "color": _BAR_COLOR,
+                        "itemStyle": {"borderRadius": [0, 4, 4, 0]},
+                        "data": [
+                            {
+                                "value": (
+                                    round(100 * count / total, 1) if total else 0
+                                ),
+                                "count": format_count(count),
+                            }
+                            for _, count in filled
+                        ],
+                    }
+                ],
+            }
+        ).classes(_BOX_CLASSES)
 
 
 def _year_chart(per_year: Sequence[tuple[int | None, int]]) -> None:
@@ -122,23 +137,24 @@ def _year_chart(per_year: Sequence[tuple[int | None, int]]) -> None:
     title = "Publication year" + (
         f" ({format_count(unknown)} unknown)" if unknown else ""
     )
-    ui.label(title).classes(_TITLE_CLASSES)
-    ui.echart(
-        {
-            "grid": {"left": 8, "right": 24, "top": 8, "bottom": 8},
-            "xAxis": {"type": "category", "data": [str(year) for year in years]},
-            "yAxis": {"type": "value", "minInterval": 1},
-            "tooltip": {"trigger": "item"},
-            "series": [
-                {
-                    "type": "bar",
-                    "color": _BAR_COLOR,
-                    "itemStyle": {"borderRadius": [4, 4, 0, 0]},
-                    "data": [counts.get(year, 0) for year in years],
-                }
-            ],
-        }
-    ).classes("w-full max-w-3xl h-64")
+    with ui.column().classes("gap-1"):
+        ui.label(title).classes(_TITLE_CLASSES)
+        ui.echart(
+            {
+                "grid": {"left": 8, "right": 24, "top": 8, "bottom": 8},
+                "xAxis": {"type": "category", "data": [str(year) for year in years]},
+                "yAxis": {"type": "value", "minInterval": 1},
+                "tooltip": {"trigger": "item"},
+                "series": [
+                    {
+                        "type": "bar",
+                        "color": _BAR_COLOR,
+                        "itemStyle": {"borderRadius": [4, 4, 0, 0]},
+                        "data": [counts.get(year, 0) for year in years],
+                    }
+                ],
+            }
+        ).classes(_BOX_CLASSES)
 
 
 def _label_pie(phase: str, screener: str, counts: Mapping[str, int]) -> None:
@@ -164,28 +180,37 @@ def _label_pie(phase: str, screener: str, counts: Mapping[str, int]) -> None:
                     }
                 ],
             }
-        ).classes("w-72 h-56")
+        ).classes(_BOX_CLASSES)
 
 
 def _keyword_table(prefix: str | None, counts: Sequence[tuple[str, int]]) -> None:
     with ui.column().classes("gap-1"):
         ui.label(_keyword_title(prefix)).classes(_TITLE_CLASSES)
-        ui.table(
-            columns=[
-                {
-                    "name": "keyword",
-                    "label": "Keyword",
-                    "field": "keyword",
-                    "align": "left",
-                },
-                {"name": "count", "label": "Papers", "field": "count"},
-            ],
-            rows=[
-                {"keyword": keyword, "count": format_count(count)}
-                for keyword, count in counts
-            ],
-            pagination=0,
-        ).props("dense flat bordered hide-bottom virtual-scroll").classes("w-64 h-80")
+        table = (
+            ui.table(
+                columns=[
+                    {
+                        "name": "keyword",
+                        "label": "Keyword",
+                        "field": "keyword",
+                        "align": "left",
+                    },
+                    {"name": "count", "label": "Records", "field": "count"},
+                ],
+                rows=[
+                    {"keyword": keyword, "count": format_count(count)}
+                    for keyword, count in counts[:_TOP_KEYWORDS]
+                ],
+                pagination=0,
+            )
+            .props("dense flat bordered hide-bottom")
+            .classes("w-96")
+        )
+        table.add_slot(
+            "body-cell-keyword",
+            '<q-td :props="props" :title="props.value"'
+            ' class="ellipsis" style="max-width: 18rem">{{ props.value }}</q-td>',
+        )
 
 
 def render_library_overview(
@@ -219,18 +244,15 @@ def render_library_overview(
                     "Everything is hidden. Use the gear next to Overview to choose"
                     " what's shown."
                 ).classes("text-sm text-grey-6")
-            if _COMPLETENESS not in hidden:
-                _completeness_chart(total, filled)
-            if _PER_YEAR not in hidden:
-                _year_chart(per_year)
-            if pies:
-                with ui.row().classes("gap-6 items-start"):
-                    for (phase, screener), counts in pies.items():
-                        _label_pie(phase, screener, counts)
-            if keyword_tables:
-                with ui.row().classes("gap-6 items-start"):
-                    for prefix, keyword_rows in keyword_tables.items():
-                        _keyword_table(prefix, keyword_rows)
+            with ui.row().classes("gap-6 items-start"):
+                if _COMPLETENESS not in hidden:
+                    _completeness_chart(total, filled)
+                if _PER_YEAR not in hidden:
+                    _year_chart(per_year)
+                for (phase, screener), counts in pies.items():
+                    _label_pie(phase, screener, counts)
+                for prefix, keyword_rows in keyword_tables.items():
+                    _keyword_table(prefix, keyword_rows)
 
 
 def render_overview_settings(

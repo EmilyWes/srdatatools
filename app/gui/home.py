@@ -29,6 +29,7 @@ from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
 from app.gui.library_nav import LeftPanelNav, render_left_panel
 from app.gui.library_overview import (
+    COMPLETENESS_FIELDS,
     load_hidden,
     overview_items,
     render_library_overview,
@@ -102,12 +103,12 @@ def home() -> None:
             actions.show_log(list_activity_log(session))
 
     def show_overview() -> None:
-        fields = [key for key in COLUMNS if key != "sources"]
         with session_scope(_engine) as session:
+            filled = count_filled_fields(session, COMPLETENESS_FIELDS)
             render_library_overview(
                 panes.middle,
                 count_records(session),
-                [(COLUMNS[key], n) for key, n in count_filled_fields(session, fields)],
+                [(COLUMNS[key], count) for key, count in filled],
                 count_records_per_year(session),
                 count_label_values(session),
                 count_keywords(session),

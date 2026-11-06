@@ -169,6 +169,19 @@ def test_render_library_overview__one_keyword_table_per_prefix() -> None:
     assert "Keywords: MeSH" in labels
 
 
+def test_render_library_overview__keyword_table_shows_top_ten_records() -> None:
+    panes = shell()
+    counts = [(f"keyword {n}", 20 - n) for n in range(12)]
+
+    render_library_overview(
+        panes.middle, 20, [], [], {}, {None: counts}, {"completeness", "per_year"}
+    )
+
+    table = _tables(panes.middle)[0]
+    assert [row["keyword"] for row in table.rows] == [f"keyword {n}" for n in range(10)]
+    assert [column["label"] for column in table.columns] == ["Keyword", "Records"]
+
+
 def test_render_library_overview__skips_hidden_items() -> None:
     panes = shell()
 
