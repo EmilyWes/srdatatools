@@ -1,4 +1,4 @@
-﻿from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from functools import partial
 from pathlib import Path
