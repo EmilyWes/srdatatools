@@ -4,6 +4,7 @@ from io import StringIO
 from pathlib import Path
 
 from app.parsers.common import decode_prefix
+from app.parsers.csv_ import sniff_dialect
 from app.parsers.excel import read_excel_headers
 from app.parsers.profiles import PROFILES
 
@@ -21,13 +22,14 @@ _EXTENSION_TYPES = {
     ".tsv": "tsv",
     ".bib": "bibtex",
 }
-_CSV_SAMPLE_SIZE = 2048
 _DETECT_PREFIX_SIZE = 4 * 1024 * 1024
 
 
 def _sniff_tabular(text: str) -> str | None:
+    dialect = sniff_dialect(text)
+    if dialect is None:
+        return None
     try:
-        dialect = csv.Sniffer().sniff(text[:_CSV_SAMPLE_SIZE], delimiters=",;\t")
         reader = csv.reader(StringIO(text), dialect=dialect)
         header = next(reader, [])
         first_row = next(reader, [])
