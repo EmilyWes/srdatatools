@@ -15,7 +15,6 @@ from app.parsers.profiles.scopus import EMBEDDED_AUTHOR_IDS, RIS_NOTES
 from app.parsers.quirks import (
     AffiliationLeadingName,
     DropEtAl,
-    EmptyValues,
     StripLastAuthorTrailing,
 )
 
@@ -93,7 +92,6 @@ def test_quirk_boxes__empty_values_and_ordering_are_lists() -> None:
 
     assert isinstance(empty, QuirkList)
     assert [(p.label, p.control) for p in empty.parts] == [
-        ("Field", "select"),
         ("Ignore", "text"),
     ]
     assert isinstance(order, QuirkList)
@@ -133,7 +131,7 @@ def test_default_choices__unknown_source_defaults() -> None:
     assert not (choices.drop_trailing or choices.id_from_name)
     assert choices.affiliation_start == ""
     assert choices.name_split == "none"
-    assert choices.empty_values == [("title", "[Not Available].")]
+    assert choices.empty_values == ["[Not Available]."]
     assert choices.use_first == []
     assert choices.field_size_limit == 1_000_000
     assert (choices.label_include, choices.label_unlabeled) == ("", "")
@@ -249,27 +247,16 @@ def test_profile_with__empty_preferred_qualifier_is_none() -> None:
     ).settings.preferred_issn_qualifier is (None)
 
 
-def test_profile_with__empty_values_are_pipe_separated() -> None:
-    choices = _with(
-        "ris", empty_values=[("title", "[Not Available]. | n/a |"), ("doi", "none")]
-    )
+def test_profile_with__empty_values_are_trimmed_and_blanks_dropped() -> None:
+    choices = _with("ris", empty_values=[" [Not Available]. ", " ", "none"])
 
     settings = profile_with("ris", "unknown", choices).settings
 
-    assert settings.empty_values == (
-        EmptyValues("title", frozenset({"[Not Available].", "n/a"})),
-        EmptyValues("doi", frozenset({"none"})),
-    )
-
-
-def test_profile_with__empty_values_without_field_or_values_are_skipped() -> None:
-    choices = _with("ris", empty_values=[("", "n/a"), ("title", " ")])
-
-    assert profile_with("ris", "unknown", choices).settings.empty_values == ()
+    assert settings.empty_values == ("[Not Available].", "none")
 
 
 def test_dump_choices__round_trips() -> None:
-    choices = _with("csv", "scopus", empty_values=[("title", "a|b")], use_first=["X"])
+    choices = _with("csv", "scopus", empty_values=["a", "b"], use_first=["X"])
 
     assert load_choices(dump_choices(choices), "csv", "scopus") == choices
 

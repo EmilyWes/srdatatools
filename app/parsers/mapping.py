@@ -454,11 +454,8 @@ def _parse_pages(raw_fields: dict[str, str], mapping: FieldMapping) -> str | Non
     return "-".join(piece for piece in (start, end) if piece) or None
 
 
-def _counts_as_empty(target: str, value: str, settings: ParseSettings) -> bool:
-    return any(
-        quirk.field == target and quirk.matches(value)
-        for quirk in settings.empty_values
-    )
+def _counts_as_empty(value: str, settings: ParseSettings) -> bool:
+    return value.strip().lower() in {v.lower() for v in settings.empty_values}
 
 
 def _ordered(mapping: FieldMapping, use_first: tuple[str, ...]) -> FieldMapping:
@@ -556,7 +553,7 @@ def apply_mapping(
         if not value:
             continue
         if isinstance(row, ScalarRow):
-            if not _counts_as_empty(row.target, value, settings):
+            if not _counts_as_empty(value, settings):
                 values.setdefault(row.target, value)
         elif isinstance(row, IssnIsbnRow):
             for scalar, piece in _classify_issn_isbn(row, value, settings).items():

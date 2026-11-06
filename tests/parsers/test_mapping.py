@@ -25,7 +25,7 @@ from app.parsers.mapping import (
     parse_date_string,
     suggest_mapping,
 )
-from app.parsers.quirks import EmptyValues, ParseSettings
+from app.parsers.quirks import ParseSettings
 from tests.mappings import mapping_of
 
 _DEFAULTS = RowDefaults()
@@ -102,22 +102,31 @@ def test_apply_mapping__first_non_empty_value_wins_for_scalar() -> None:
 
 def test_apply_mapping__empty_values_use_next_mapped_key() -> None:
     mapping = mapping_of({"TI": "title", "TT": "title"})
-    settings = ParseSettings(
-        empty_values=(EmptyValues("title", frozenset({"[Not Available]."})),)
-    )
-    raw = {"TI": "[not available].", "TT": "Translated"}
+    settings = ParseSettings(empty_values=("[Not Available].",))
+    raw = {"TI": " [not available]. ", "TT": "Translated"}
 
     assert apply_mapping(raw, mapping, settings).title == "Translated"
     assert apply_mapping({"TI": "[Not Available]."}, mapping, settings).title is None
 
 
-def test_apply_mapping__empty_values_only_apply_to_their_field() -> None:
-    mapping = mapping_of({"TI": "title", "JO": "journal"})
-    settings = ParseSettings(empty_values=(EmptyValues("title", frozenset({"n/a"})),))
+def test_apply_mapping__empty_values_apply_to_every_text_field() -> None:
+    mapping = mapping_of({"TI": "title", "JO": "journal", "DO": "doi"})
+    settings = ParseSettings(empty_values=("n/a",))
 
-    record = apply_mapping({"TI": "n/a", "JO": "n/a"}, mapping, settings)
+    record = apply_mapping(
+        {"TI": "N/A", "JO": "n/a", "DO": "10.1/x"}, mapping, settings
+    )
 
-    assert (record.title, record.journal) == (None, "n/a")
+    assert (record.title, record.journal, record.doi) == (None, None, "10.1/x")
+
+
+def test_apply_mapping__empty_values_match_the_whole_value() -> None:
+    mapping = mapping_of({"TI": "title"})
+    settings = ParseSettings(empty_values=("[Not Available].",))
+
+    record = apply_mapping({"TI": "[Not Available]. A title"}, mapping, settings)
+
+    assert record.title == "[Not Available]. A title"
 
 
 def test_apply_mapping__use_first_reads_chosen_keys_first_in_listed_order() -> None:

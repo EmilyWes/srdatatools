@@ -6,7 +6,6 @@ from app.parsers.mapping import LINE_DELIMITER, RowDefaults
 from app.parsers.profiles.base import FormatProfile, never_matches
 from app.parsers.quirks import (
     DropEtAl,
-    EmptyValues,
     ExpandPageRange,
     FirstValue,
     ParseSettings,
@@ -18,7 +17,7 @@ from app.parsers.quirks import (
 _SETTINGS = ParseSettings(
     issn_isbn_strip_extras=True,
     issn_isbn_only_one=True,
-    empty_values=(EmptyValues("title", frozenset({"[Not Available]."})),),
+    empty_values=("[Not Available].",),
 )
 # PubMed writes one IS line per medium, e.g. "1234-5678 (Print)".
 _NBIB_SETTINGS = replace(_SETTINGS, preferred_issn_qualifier="Electronic")

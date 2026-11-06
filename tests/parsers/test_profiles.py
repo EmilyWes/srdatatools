@@ -59,9 +59,7 @@ def test_default_profiles__turn_on_the_generic_quirks_for_every_type() -> None:
         assert StripDoi() in profile.quirks
         assert StripPmid() in profile.quirks
         assert ExpandPageRange() in profile.quirks
-        [empty] = profile.settings.empty_values
-        assert empty.field == "title"
-        assert empty.matches("[Not Available].")
+        assert profile.settings.empty_values == ("[Not Available].",)
 
 
 def test_default_profiles__nbib_keeps_first_publication_type() -> None:

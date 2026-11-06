@@ -12,7 +12,6 @@ from app.parsers.profiles.scopus import EMBEDDED_AUTHOR_IDS, RIS_NOTES, URL_EID
 from app.parsers.quirks import (
     AffiliationLeadingName,
     DropEtAl,
-    EmptyValues,
     ExpandPageRange,
     FirstValue,
     RecordQuirk,
@@ -27,7 +26,6 @@ Control = Literal["checkbox", "text", "number", "select", "note"]
 
 _FIELD_SIZE_TYPES = frozenset({"csv", "tsv"})
 _AUTHOR_COLUMN_TYPES = frozenset({"csv", "tsv", "excel", "bibtex"})
-EMPTY_VALUES_SEPARATOR = "|"
 _LABEL_VALUES_SEPARATOR = "|"
 _LABEL_KEYS: dict[str, LabelValue] = {
     "label_include": "include",
@@ -57,7 +55,7 @@ class ParsingChoices(BaseModel):
     label_exclude: str
     label_maybe: str
     label_unlabeled: str
-    empty_values: list[tuple[str, str]]
+    empty_values: list[str]
     use_first: list[str]
     strip_doi: bool
     strip_pmid: bool
@@ -185,18 +183,10 @@ _EMPTY_VALUES = QuirkBox(
             "empty_values",
             (
                 QuirkItem(
-                    "field",
-                    "Field",
-                    "Select a field for which to enter values that should be"
-                    " ignored.",
-                    "select",
-                ),
-                QuirkItem(
-                    "values",
+                    "value",
                     "Ignore",
-                    "These values are replaced with an empty value, so the next"
-                    " column mapped to the field can fill it. Separate values"
-                    " with |; not case-sensitive.",
+                    "Values that count as empty in any text field, so the next"
+                    " column mapped to that field can fill it. Not case-sensitive.",
                     "text",
                 ),
             ),
@@ -366,10 +356,7 @@ def default_choices(file_type: str, source: str) -> ParsingChoices:
             )
             for key, decision in _LABEL_KEYS.items()
         },
-        empty_values=[
-            (empty.field, EMPTY_VALUES_SEPARATOR.join(sorted(empty.values)))
-            for empty in settings.empty_values
-        ],
+        empty_values=list(settings.empty_values),
         use_first=list(settings.use_first),
         strip_doi=StripDoi() in quirks,
         strip_pmid=StripPmid() in quirks,
@@ -379,11 +366,6 @@ def default_choices(file_type: str, source: str) -> ParsingChoices:
         ris_notes=RIS_NOTES in quirks,
         eid_from_url=URL_EID in quirks,
     )
-
-
-def _empty_values(field: str, values: str) -> EmptyValues:
-    split = (value.strip() for value in values.split(EMPTY_VALUES_SEPARATOR))
-    return EmptyValues(field, frozenset(value for value in split if value))
 
 
 def _label_values(choices: ParsingChoices) -> tuple[tuple[str, LabelValue], ...]:
@@ -431,9 +413,7 @@ def profile_with(
         ambiguous_name_split=choices.name_split,
         csv_field_size_limit=choices.field_size_limit,
         empty_values=tuple(
-            _empty_values(field, values)
-            for field, values in choices.empty_values
-            if field and values.strip()
+            value.strip() for value in choices.empty_values if value.strip()
         ),
         use_first=tuple(choices.use_first),
     )

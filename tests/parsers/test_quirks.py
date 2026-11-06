@@ -8,7 +8,6 @@ from app.parsers.quirks import (
     AffiliationLeadingName,
     DropEtAl,
     EmbeddedAuthorIds,
-    EmptyValues,
     ExpandPageRange,
     FirstValue,
     IdFromUrl,
@@ -61,13 +60,6 @@ def test_expand_page_range_quirk__expands_record_pages() -> None:
 
 def test_expand_page_range_quirk__without_pages_leaves_record_unchanged() -> None:
     assert _apply(ExpandPageRange(), Record()).pages is None
-
-
-def test_empty_values__matches_whole_value_ignoring_case_and_spaces() -> None:
-    quirk = EmptyValues("title", frozenset({"[Not Available]."}))
-
-    assert quirk.matches(" [not available]. ")
-    assert not quirk.matches("[Not Available]. A title")
 
 
 def test_first_value__keeps_first_line() -> None:

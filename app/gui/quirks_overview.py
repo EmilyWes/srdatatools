@@ -7,8 +7,7 @@ from typing import Any, TypeVar
 from nicegui import ui
 from nicegui.element import Element
 
-from app.gui.mapping_table import sorted_target_options
-from app.parsers.mapping import SCALAR_FIELDS, FieldMapping
+from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import (
     ParsingChoices,
     QuirkBox,
@@ -93,9 +92,9 @@ class QuirksScreen:
     defaults: ParsingChoices
     current_mapping: Callable[[], FieldMapping] | None = None
     widgets: dict[str, Widget] = field(default_factory=dict)
-    empty_values: list[list[str]] = field(default_factory=list)
+    empty_values: list[str] = field(default_factory=list)
     use_first: list[str] = field(default_factory=list)
-    empty_rows: list[tuple[ui.select, ui.input]] = field(default_factory=list)
+    empty_rows: list[ui.input] = field(default_factory=list)
     order_rows: list[ui.select] = field(default_factory=list)
     lists: dict[str, Element] = field(default_factory=dict)
     parts: dict[str, tuple[QuirkItem, ...]] = field(default_factory=dict)
@@ -111,7 +110,7 @@ class QuirksScreen:
         return self.defaults.model_copy(
             update={
                 **values,
-                "empty_values": [(f, v) for f, v in self.empty_values if f],
+                "empty_values": [v for v in self.empty_values if v.strip()],
                 "use_first": list(self.use_first),
             }
         )
@@ -135,7 +134,7 @@ class QuirksScreen:
     def restore_defaults(self) -> None:
         for key, widget in self.widgets.items():
             widget.value = getattr(self.defaults, key)
-        self.empty_values = [list(pair) for pair in self.defaults.empty_values]
+        self.empty_values = list(self.defaults.empty_values)
         self.use_first = list(self.defaults.use_first)
         self._render_empty_values()
         self.refresh_ordering()
@@ -196,36 +195,37 @@ class QuirksScreen:
 
     def _render_empty_values(self) -> None:
         container = self.lists["empty_values"]
-        field_part, values_part = self.parts["empty_values"]
         container.clear()
         self.empty_rows = []
-        rows = self._shown_rows(self.empty_values, ["", ""])
         with container:
-            for index, (chosen, values) in enumerate(rows):
-                taken = {f for i, (f, _) in enumerate(rows) if i != index}
-                options = sorted_target_options(SCALAR_FIELDS - taken)
-                self._label(field_part)
-                with ui.row().classes("no-wrap items-center gap-1"):
-                    select = self._field(ui.select(options, value=chosen or None))
-                    blank = index == len(self.empty_values)
-                    if not (self.readonly or blank):
-                        self._remove_button(partial(self._remove_empty, index))
-                self._label(values_part)
-                text = self._field(ui.input(value=values))
-                text.set_enabled(bool(chosen) or self.readonly)
-                select.on_value_change(lambda e, i=index: self._pick_empty(i, e.value))
-                text.on_value_change(lambda e, i=index: self._type_empty(i, e.value))
-                self.empty_rows.append((select, text))
+            for index, value in enumerate(self._shown_rows(self.empty_values, "")):
+                self._add_empty_row(index, value)
 
-    def _pick_empty(self, index: int, value: str | None) -> None:
-        if index == len(self.empty_values):
-            self.empty_values.append([value or "", ""])
-        else:
-            self.empty_values[index][0] = value or ""
-        self._render_empty_values()
+    def _add_empty_row(self, index: int, value: str) -> None:
+        [part] = self.parts["empty_values"]
+        self._label(part)
+        with ui.row().classes("no-wrap items-center gap-1"):
+            text = self._field(ui.input(value=value))
+            if not (self.readonly or index == len(self.empty_values)):
+                self._remove_button(partial(self._remove_empty, index))
+        text.on_value_change(lambda e, i=index: self._type_empty(i, e.value))
+        self.empty_rows.append(text)
 
     def _type_empty(self, index: int, value: str) -> None:
-        self.empty_values[index][1] = value
+        """Typing in the blank box adds the next one without a redraw, so the
+        cursor stays in the box being typed in."""
+        if index < len(self.empty_values):
+            self.empty_values[index] = value
+            return
+        if not value:
+            return
+        self.empty_values.append(value)
+        row = self.empty_rows[index].parent_slot
+        assert row is not None
+        with row.parent:
+            self._remove_button(partial(self._remove_empty, index))
+        with self.lists["empty_values"]:
+            self._add_empty_row(len(self.empty_values), "")
 
     def _remove_empty(self, index: int) -> None:
         del self.empty_values[index]
@@ -304,7 +304,7 @@ def render_quirks_overview(
         readonly=chosen is not None,
         defaults=defaults,
         current_mapping=current_mapping,
-        empty_values=[list(pair) for pair in shown.empty_values],
+        empty_values=list(shown.empty_values),
         use_first=list(shown.use_first),
     )
     ui.add_css(_FIELD_CSS)
