@@ -14,6 +14,7 @@ _HIDDEN_KEY = "overview_hidden"
 _COMPLETENESS = "completeness"
 _PER_YEAR = "per_year"
 _PUBLICATION_TYPE = "publication_type"
+_SOURCE_FILES = "source_files"
 _BAR_COLOR = "#5470c6"
 _LABEL_COLORS = {
     "include": "#21ba45",
@@ -23,7 +24,7 @@ _LABEL_COLORS = {
     "unlabeled": "#e0e0e0",
 }
 _TITLE_CLASSES = "text-sm text-grey-7"
-_BOX_CLASSES = "w-96 h-80"
+_BOX_CLASSES = "w-[17rem] h-56"
 _TOP_KEYWORDS = 10
 _TOP_TYPES = 7
 _TYPE_COLORS = [
@@ -37,6 +38,13 @@ _TYPE_COLORS = [
 ]
 _OTHER_COLOR = "#9e9e9e"
 _UNKNOWN_COLOR = "#e0e0e0"
+_MULTIPLE_COLOR = "#616161"
+_KEYWORD_TABLE_CLASS = "overview-keywords"
+_KEYWORD_TABLE_CSS = (
+    f".{_KEYWORD_TABLE_CLASS} th, .{_KEYWORD_TABLE_CLASS} td"
+    " { height: 20px !important; padding-top: 0 !important;"
+    " padding-bottom: 0 !important; font-size: 12px; }"
+)
 COMPLETENESS_FIELDS = [
     "title",
     "authors",
@@ -68,6 +76,7 @@ def overview_items(
         (_COMPLETENESS, "Field completeness"),
         (_PER_YEAR, "Publication year"),
         (_PUBLICATION_TYPE, "Publication type"),
+        (_SOURCE_FILES, "Source files"),
         *(
             (label_item_key(phase, screener), f"Labels: {phase} / {screener}")
             for phase, screener in label_pairs
@@ -207,23 +216,30 @@ def _label_pie(phase: str, screener: str, counts: Mapping[str, int]) -> None:
     )
 
 
+def _top_slices(counts: Sequence[tuple[str, int]]) -> list[tuple[str, int, str]]:
+    top = counts[:_TOP_TYPES]
+    return [
+        *(
+            (name, count, color)
+            for (name, count), color in zip(top, _TYPE_COLORS, strict=False)
+        ),
+        ("Other", sum(count for _, count in counts[_TOP_TYPES:]), _OTHER_COLOR),
+    ]
+
+
 def _publication_type_pie(types: Sequence[tuple[str | None, int]]) -> None:
     known = [(name, count) for name, count in types if name is not None]
-    top = known[:_TOP_TYPES]
+    unknown = sum(count for name, count in types if name is None)
     _pie(
         "Publication type",
-        [
-            *(
-                (name, count, color)
-                for (name, count), color in zip(top, _TYPE_COLORS, strict=False)
-            ),
-            ("Other", sum(count for _, count in known[_TOP_TYPES:]), _OTHER_COLOR),
-            (
-                _UNKNOWN,
-                sum(count for name, count in types if name is None),
-                _UNKNOWN_COLOR,
-            ),
-        ],
+        [*_top_slices(known), (_UNKNOWN, unknown, _UNKNOWN_COLOR)],
+    )
+
+
+def _source_file_pie(per_file: Sequence[tuple[str, int]], multiple: int) -> None:
+    _pie(
+        "Source files",
+        [*_top_slices(per_file), ("Multiple files", multiple, _MULTIPLE_COLOR)],
     )
 
 
@@ -248,12 +264,12 @@ def _keyword_table(prefix: str | None, counts: Sequence[tuple[str, int]]) -> Non
                 pagination=0,
             )
             .props("dense flat bordered hide-bottom")
-            .classes("w-96")
+            .classes(f"w-[17rem] {_KEYWORD_TABLE_CLASS}")
         )
         table.add_slot(
             "body-cell-keyword",
             '<q-td :props="props" :title="props.value"'
-            ' class="ellipsis" style="max-width: 18rem">{{ props.value }}</q-td>',
+            ' class="ellipsis" style="max-width: 12rem">{{ props.value }}</q-td>',
         )
 
 
@@ -263,6 +279,7 @@ def render_library_overview(
     filled: Sequence[tuple[str, int]],
     per_year: Sequence[tuple[int | None, int]],
     publication_types: Sequence[tuple[str | None, int]],
+    per_file: tuple[Sequence[tuple[str, int]], int],
     label_counts: Mapping[tuple[str, str], Mapping[str, int]],
     keyword_counts: Mapping[str | None, Sequence[tuple[str, int]]],
     hidden: Collection[str],
@@ -284,6 +301,7 @@ def render_library_overview(
                 _COMPLETENESS in hidden
                 and _PER_YEAR in hidden
                 and _PUBLICATION_TYPE in hidden
+                and _SOURCE_FILES in hidden
                 and not (pies or keyword_tables)
             ):
                 ui.label(
@@ -297,10 +315,13 @@ def render_library_overview(
                     _year_chart(per_year)
                 if _PUBLICATION_TYPE not in hidden:
                     _publication_type_pie(publication_types)
+                if _SOURCE_FILES not in hidden:
+                    _source_file_pie(*per_file)
                 for (phase, screener), counts in pies.items():
                     _label_pie(phase, screener, counts)
                 for prefix, keyword_rows in keyword_tables.items():
                     _keyword_table(prefix, keyword_rows)
+        ui.add_css(_KEYWORD_TABLE_CSS)
 
 
 def render_overview_settings(

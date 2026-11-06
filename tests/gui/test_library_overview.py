@@ -80,6 +80,7 @@ def _render(middle: Element, hidden: set[str] | None = None) -> None:
         filled=[("Title", 4), ("DOI", 3), ("Abstract", 0)],
         per_year=[(2018, 1), (2020, 2), (None, 1)],
         publication_types=[("JOUR", 3), (None, 1)],
+        per_file=([("pubmed.nbib", 3)], 1),
         label_counts={
             ("tiab", "Emily"): {"include": 1, "exclude": 2, "unlabeled": 1},
             ("ft", "screener 1"): {"maybe": 4},
@@ -124,7 +125,15 @@ def test_render_library_overview__completeness_with_zero_records() -> None:
     panes = shell()
 
     render_library_overview(
-        panes.middle, 0, [("Title", 0)], [], [], {}, {}, {"publication_type"}
+        panes.middle,
+        0,
+        [("Title", 0)],
+        [],
+        [],
+        ([], 0),
+        {},
+        {},
+        {"publication_type", "source_files"},
     )
 
     assert _series_data(_charts(panes.middle)[0]) == [{"value": 0, "count": "0"}]
@@ -170,9 +179,10 @@ def test_render_library_overview__publication_type_top_seven_then_other() -> Non
         [],
         [],
         types,
+        ([], 0),
         {},
         {},
-        {"completeness", "per_year"},
+        {"completeness", "per_year", "source_files"},
     )
 
     slices = _pie_slices(_charts(panes.middle)[0])
@@ -184,12 +194,48 @@ def test_render_library_overview__publication_type_top_seven_then_other() -> Non
     assert len({color for _, _, color in slices}) == 8
 
 
+def test_render_library_overview__source_file_pie_with_multiple_files() -> None:
+    panes = shell()
+
+    _render(panes.middle)
+
+    assert _pie_slices(_charts(panes.middle)[3]) == [
+        ("pubmed.nbib", 3, "#2a78d6"),
+        ("Multiple files", 1, "#616161"),
+    ]
+    assert "Source files" in _labels(panes.middle)
+
+
+def test_render_library_overview__source_file_pie_top_seven_then_other() -> None:
+    panes = shell()
+    files = [(f"file {n}.ris", 20 - n) for n in range(8)]
+
+    render_library_overview(
+        panes.middle,
+        200,
+        [],
+        [],
+        [],
+        (files, 0),
+        {},
+        {},
+        {"completeness", "per_year", "publication_type"},
+    )
+
+    slices = _pie_slices(_charts(panes.middle)[0])
+    assert [name for name, _, _ in slices] == [
+        *(f"file {n}.ris" for n in range(7)),
+        "Other",
+    ]
+    assert slices[-1] == ("Other", 13, "#9e9e9e")
+
+
 def test_render_library_overview__one_pie_per_label_pair() -> None:
     panes = shell()
 
     _render(panes.middle)
 
-    tiab, ft = _charts(panes.middle)[3:]
+    tiab, ft = _charts(panes.middle)[4:]
     assert [(item["name"], item["value"]) for item in _series_data(tiab)] == [
         ("include", 1),
         ("exclude", 2),
@@ -225,9 +271,10 @@ def test_render_library_overview__keyword_table_shows_top_ten_records() -> None:
         [],
         [],
         [],
+        ([], 0),
         {},
         {None: counts},
-        {"completeness", "per_year", "publication_type"},
+        {"completeness", "per_year", "publication_type", "source_files"},
     )
 
     table = _tables(panes.middle)[0]
@@ -247,7 +294,7 @@ def test_render_library_overview__skips_hidden_items() -> None:
     assert "Field completeness" not in labels
     assert "Labels: tiab / Emily" not in labels
     assert "Keywords" not in labels
-    assert len(_charts(panes.middle)) == 3
+    assert len(_charts(panes.middle)) == 4
     assert len(_tables(panes.middle)) == 1
 
 
@@ -260,9 +307,10 @@ def test_render_library_overview__hint_when_everything_hidden() -> None:
         [],
         [],
         [],
+        ([], 0),
         {},
         {},
-        {"completeness", "per_year", "publication_type"},
+        {"completeness", "per_year", "publication_type", "source_files"},
     )
 
     assert _charts(panes.middle) == []
@@ -284,6 +332,7 @@ def test_overview_items__fixed_items_then_labels_then_keywords() -> None:
         ("completeness", "Field completeness"),
         ("per_year", "Publication year"),
         ("publication_type", "Publication type"),
+        ("source_files", "Source files"),
         (label_item_key("ft", "screener 1"), "Labels: ft / screener 1"),
         (keyword_item_key(None), "Keywords"),
         (keyword_item_key("MeSH"), "Keywords: MeSH"),
@@ -332,6 +381,7 @@ def test_render_overview_settings__checkboxes_reflect_hidden() -> None:
         "Field completeness": True,
         "Publication year": False,
         "Publication type": True,
+        "Source files": True,
         "Keywords: MeSH": True,
     }
 

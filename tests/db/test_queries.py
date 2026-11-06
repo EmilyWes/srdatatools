@@ -20,6 +20,7 @@ from app.db.queries import (
     count_publication_types,
     count_records,
     count_records_for_file,
+    count_records_per_source_file,
     count_records_per_year,
     list_activity_log,
     list_keyword_prefixes,
@@ -309,3 +310,29 @@ def test_count_publication_types__case_insensitive_sorted_with_none(
         ("Book", 1),
         ("CONF", 1),
     ]
+
+
+def test_count_records_per_source_file__shared_records_counted_separately(
+    library: Session,
+) -> None:
+    assert count_records_per_source_file(library) == (
+        [("pubmed.nbib", 1), ("scopus.csv", 1), ("other.ris", 1)],
+        1,
+    )
+
+
+def test_count_records_per_source_file__sorted_by_count(session: Session) -> None:
+    first = _source_file("first.ris", None, datetime.datetime(2026, 1, 1))
+    second = _source_file("second.ris", None, datetime.datetime(2026, 1, 2))
+    session.add_all([_record(None, first), _record(None, second)])
+    session.add(_record(None, second))
+    session.commit()
+
+    assert count_records_per_source_file(session) == (
+        [("second.ris", 2), ("first.ris", 1)],
+        0,
+    )
+
+
+def test_count_records_per_source_file__empty_library(session: Session) -> None:
+    assert count_records_per_source_file(session) == ([], 0)
