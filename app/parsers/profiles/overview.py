@@ -9,6 +9,7 @@ from app.parsers.authors import AmbiguousNameSplit
 from app.parsers.common import FileType
 from app.parsers.mapping import LINE_DELIMITER
 from app.parsers.profiles import FormatProfile, profile_for
+from app.parsers.profiles.pubmed import CITATION_PARTS
 from app.parsers.profiles.scopus import EMBEDDED_AUTHOR_IDS, RIS_NOTES, URL_EID
 from app.parsers.quirks import (
     AffiliationLeadingName,
@@ -27,6 +28,7 @@ Control = Literal["checkbox", "text", "number", "select", "note"]
 
 _FIELD_SIZE_TYPES: frozenset[FileType] = frozenset({"csv", "tsv"})
 _AUTHOR_COLUMN_TYPES: frozenset[FileType] = frozenset({"csv", "tsv", "excel", "bibtex"})
+_CITATION_TYPES: frozenset[FileType] = frozenset({"csv", "tsv", "excel"})
 _LABEL_VALUES_SEPARATOR = "|"
 _LABEL_KEYS: dict[str, LabelValue] = {
     "label_include": "include",
@@ -65,6 +67,7 @@ class ParsingChoices(BaseModel):
     first_publication_type: bool
     ris_notes: bool
     eid_from_url: bool
+    citation_parts: bool
 
 
 @dataclass(frozen=True)
@@ -274,6 +277,15 @@ _RIS_NOTES_ITEM = QuirkItem(
     " an other ID is always set.",
     "checkbox",
 )
+_CITATION_PARTS_ITEM = QuirkItem(
+    "citation_parts",
+    "Values from Citation",
+    "PubMed CSV packs volume, issue and pages into its Citation column"
+    " (Nature. 2023 Aug;620(7974):589-594.); reads them into fields that are"
+    " still empty, even when Citation is set to ignore. Only that plain form is"
+    " read.",
+    "checkbox",
+)
 _RIS_AUTHOR_DETAILS = QuirkItem(
     "ris.author_details",
     "Author handling",
@@ -309,6 +321,8 @@ def _type_items(file_type: FileType) -> tuple[QuirkItem, ...]:
     items: list[QuirkItem] = []
     if file_type in _FIELD_SIZE_TYPES:
         items.append(_FIELD_SIZE)
+    if file_type in _CITATION_TYPES:
+        items.append(_CITATION_PARTS_ITEM)
     if file_type in _AUTHOR_COLUMN_TYPES:
         items.append(_AUTHOR_COLUMNS)
     if file_type == "nbib":
@@ -369,6 +383,7 @@ def default_choices(file_type: FileType, source: str) -> ParsingChoices:
         first_publication_type=_FIRST_PUBLICATION_TYPE in quirks,
         ris_notes=RIS_NOTES in quirks,
         eid_from_url=URL_EID in quirks,
+        citation_parts=CITATION_PARTS in quirks,
     )
 
 
@@ -382,12 +397,12 @@ def _label_values(choices: ParsingChoices) -> tuple[tuple[str, LabelValue], ...]
 
 
 def _quirks(choices: ParsingChoices) -> tuple[RecordQuirk, ...]:
-    """ID from name runs before Drop trailing, which would leave its ")" alone."""
+    """ID from name runs before Drop trailing, which would leave its ")" alone;
+    Pages set runs last, so it also expands pages from Citation."""
     candidates: list[tuple[bool, RecordQuirk]] = [
         (choices.drop_et_al, DropEtAl()),
         (choices.strip_doi, StripDoi()),
         (choices.strip_pmid, StripPmid()),
-        (choices.pages_set, ExpandPageRange()),
         (choices.first_publication_type, _FIRST_PUBLICATION_TYPE),
         (choices.id_from_name, EMBEDDED_AUTHOR_IDS),
         (
@@ -397,6 +412,8 @@ def _quirks(choices: ParsingChoices) -> tuple[RecordQuirk, ...]:
         (choices.drop_trailing, StripLastAuthorTrailing()),
         (choices.ris_notes, RIS_NOTES),
         (choices.eid_from_url, URL_EID),
+        (choices.citation_parts, CITATION_PARTS),
+        (choices.pages_set, ExpandPageRange()),
     ]
     return tuple(quirk for on, quirk in candidates if on)
 

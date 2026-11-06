@@ -21,6 +21,10 @@ _NAME_WITH_ID = re.compile(r"^(?P<name>.*?)\s*\((?P<id>\d+)\)$")
 _DOI = re.compile(r"10\.\d{4,9}/\S+")
 _DIGITS = re.compile(r"\d+")
 _TRAILING_NON_NAME = ".,;:…" + string.whitespace
+# Only the plain form: ;volume(issue):pages followed by a full stop.
+_CITATION_PARTS = re.compile(
+    r";(?P<volume>\d+)\((?P<issue>\d+)\):(?P<pages>\d+(?:-\d+)?)\.(?:\s|$)"
+)
 
 
 @dataclass(frozen=True)
@@ -222,6 +226,32 @@ class RisNotes:
                 update[target] = value
         if other_ids != record.other_ids:
             update["other_ids"] = other_ids
+        return record.model_copy(update=update)
+
+
+@dataclass(frozen=True)
+class CitationParts:
+    """PubMed CSV packs volume, issue and pages into one column, e.g.
+    "Nature. 2023 Aug;620(7974):589-594. doi: ...". Only fills empty fields.
+    """
+
+    key: str
+
+    def apply(
+        self,
+        raw_fields: dict[str, str],
+        record: Record,
+        mapping: "FieldMapping",
+        settings: ParseSettings,
+    ) -> Record:
+        match = _CITATION_PARTS.search(raw_fields.get(self.key, ""))
+        if match is None:
+            return record
+        update = {
+            field: match[field]
+            for field in ("volume", "issue", "pages")
+            if not getattr(record, field)
+        }
         return record.model_copy(update=update)
 
 

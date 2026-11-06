@@ -23,6 +23,7 @@ _SETTINGS = ParseSettings(
 # PubMed writes one IS line per medium, e.g. "1234-5678 (Print)".
 _NBIB_SETTINGS = replace(_SETTINGS, preferred_issn_qualifier="Electronic")
 
+# Pages set runs last, so it also expands pages that another quirk filled.
 _GENERIC_QUIRKS: tuple[RecordQuirk, ...] = (
     DropEtAl(),
     StripDoi(),
@@ -30,8 +31,11 @@ _GENERIC_QUIRKS: tuple[RecordQuirk, ...] = (
     ExpandPageRange(),
 )
 _NBIB_QUIRKS: tuple[RecordQuirk, ...] = (
-    *_GENERIC_QUIRKS,
+    DropEtAl(),
+    StripDoi(),
+    StripPmid(),
     FirstValue("publication_type", LINE_DELIMITER),
+    ExpandPageRange(),
 )
 
 _TYPE_DEFAULTS: dict[
@@ -65,4 +69,8 @@ def default_row_defaults(file_type: FileType, **overrides: Any) -> RowDefaults:
 
 
 def default_quirks(file_type: FileType, *own: RecordQuirk) -> tuple[RecordQuirk, ...]:
-    return DEFAULT_PROFILES[file_type].quirks + own
+    """The Type's quirks plus the profile's own, with Pages set still last."""
+    quirks = DEFAULT_PROFILES[file_type].quirks
+    last = tuple(quirk for quirk in quirks if isinstance(quirk, ExpandPageRange))
+    rest = tuple(quirk for quirk in quirks if not isinstance(quirk, ExpandPageRange))
+    return rest + own + last

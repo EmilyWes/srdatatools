@@ -102,9 +102,17 @@ def test_quirk_boxes__empty_values_and_ordering_are_lists() -> None:
 
 
 def test_quirk_boxes__type_box_per_type() -> None:
-    assert _type_box_keys("csv") == ["field_size_limit", "author_columns"]
-    assert _type_box_keys("tsv") == ["field_size_limit", "author_columns"]
-    assert _type_box_keys("excel") == ["author_columns"]
+    assert _type_box_keys("csv") == [
+        "field_size_limit",
+        "citation_parts",
+        "author_columns",
+    ]
+    assert _type_box_keys("tsv") == [
+        "field_size_limit",
+        "citation_parts",
+        "author_columns",
+    ]
+    assert _type_box_keys("excel") == ["citation_parts", "author_columns"]
     assert _type_box_keys("nbib") == ["first_publication_type"]
     assert _type_box_keys("ris") == [
         "ris_notes",
@@ -150,6 +158,8 @@ def test_default_choices__selected_profile_sets_its_own_quirks() -> None:
     assert default_choices("ris", "scopus").ris_notes
     assert not default_choices("ris", "unknown").ris_notes
     assert default_choices("bibtex", "scopus").eid_from_url
+    assert default_choices("csv", "pubmed").citation_parts
+    assert not default_choices("csv", "unknown").citation_parts
 
 
 def test_default_choices__nbib_prefers_electronic_and_keeps_first_type() -> None:

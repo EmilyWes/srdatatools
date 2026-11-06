@@ -67,19 +67,24 @@ def test_default_profiles__nbib_keeps_first_publication_type() -> None:
     assert FirstValue("publication_type", "\n") not in DEFAULT_PROFILES["ris"].quirks
 
 
-def test_default_quirks__profile_quirks_come_after_the_type_defaults() -> None:
+def test_default_quirks__profile_quirks_go_before_pages_set() -> None:
     own = FirstValue("doi", "x")
 
-    assert default_quirks("ris", own) == (*DEFAULT_PROFILES["ris"].quirks, own)
+    assert default_quirks("ris", own) == (
+        DropEtAl(),
+        StripDoi(),
+        StripPmid(),
+        own,
+        ExpandPageRange(),
+    )
 
 
 def test_profiles__build_on_their_type_defaults() -> None:
     pubmed_csv = PUBMED.formats["csv"].quirks
     scopus_csv = SCOPUS.formats["csv"].quirks
 
-    assert pubmed_csv[: len(DEFAULT_PROFILES["csv"].quirks)] == (
-        DEFAULT_PROFILES["csv"].quirks
-    )
+    assert set(DEFAULT_PROFILES["csv"].quirks) <= set(pubmed_csv)
+    assert pubmed_csv[-1] == ExpandPageRange()
     assert StripLastAuthorTrailing() in pubmed_csv
     assert StripLastAuthorTrailing() not in scopus_csv
     assert EmbeddedAuthorIds("scopus_author_id") not in DEFAULT_PROFILES["csv"].quirks
