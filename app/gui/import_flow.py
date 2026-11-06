@@ -1,6 +1,5 @@
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
-from functools import partial
 from pathlib import Path
 
 from nicegui import app, ui
@@ -48,7 +47,7 @@ from app.parsers.excel import (
     read_excel_headers,
     read_excel_sheets,
 )
-from app.parsers.mapping import FieldMapping, RowDefaults
+from app.parsers.mapping import FieldMapping, RowDefaults, TagLines
 from app.parsers.nbib import (
     parse_nbib_file,
     parse_nbib_record,
@@ -61,7 +60,6 @@ from app.parsers.profiles import (
     apply_profile,
     fix_record,
     has_profile,
-    profile_for,
 )
 from app.parsers.profiles.overview import (
     ParsingChoices,
@@ -107,84 +105,91 @@ async def pick_files() -> list[Path]:
     return [Path(path) for path in selected] if selected else []
 
 
-def _parse_csv_lines(
-    lines: list[tuple[str, str]], mapping: FieldMapping, settings: ParseSettings
+@dataclass(frozen=True)
+class _TypeHandlers:
+    """One Type's parser functions, called the same way for every Type."""
+
+    read_keys: Callable[[Path, str | None, ParseSettings], FileSummary]
+    suggest: Callable[[list[str], FormatProfile], FieldMapping]
+    parse_record: Callable[[TagLines, FieldMapping, ParseSettings], ParsedRow]
+    parse_file: Callable[[Path, FieldMapping, str | None, ParseSettings], ParseResult]
+    noun: str
+
+
+def _suggest_columns(keys: list[str], profile: FormatProfile) -> FieldMapping:
+    return suggest_mapping(
+        keys, profile.suggestions, profile.row_defaults, profile.ignored_keys
+    )
+
+
+def _parse_columns(
+    lines: TagLines, mapping: FieldMapping, settings: ParseSettings
 ) -> ParsedRow:
     return parse_csv_record(dict(lines), mapping, settings)
 
 
-@dataclass
-class _FormatHandlers:
-    read_keys: Callable[[Path], FileSummary]
-    suggest: Callable[[list[str]], FieldMapping]
-    parse_record: Callable[[list[tuple[str, str]], FieldMapping], ParsedRow]
-    noun: str
-    profile: FormatProfile
+def _delimited(delimiter: str | None) -> _TypeHandlers:
+    return _TypeHandlers(
+        read_keys=lambda path, _, settings: read_csv_headers(path, delimiter, settings),
+        suggest=_suggest_columns,
+        parse_record=_parse_columns,
+        parse_file=lambda path, mapping, _, settings: parse_csv_file(
+            path, mapping, delimiter, settings
+        ),
+        noun="columns",
+    )
 
 
-def _handlers(
-    file_type: FileType, source: str, choices: ParsingChoices | None = None
-) -> _FormatHandlers | None:
-    if profile_for(source, file_type) is None:
-        return None
-    profile = profile_with(file_type, source, choices)
-    overrides, settings = profile.suggestions, profile.settings
-    defaults = profile.row_defaults
-    parse_csv = partial(_parse_csv_lines, settings=settings)
-    if file_type in ("csv", "tsv"):
-        suggest = partial(
-            suggest_mapping,
-            overrides=overrides,
-            defaults=defaults,
-            ignored_keys=profile.ignored_keys,
-        )
-        delimiter = _TSV_DELIMITER if file_type == "tsv" else None
-        read_keys = partial(read_csv_headers, delimiter=delimiter, settings=settings)
-        return _FormatHandlers(read_keys, suggest, parse_csv, "columns", profile)
-    if file_type == "excel":
-        suggest = partial(
-            suggest_mapping,
-            overrides=overrides,
-            defaults=defaults,
-            ignored_keys=profile.ignored_keys,
-        )
-        return _FormatHandlers(
-            read_excel_headers, suggest, parse_csv, "columns", profile
-        )
-    if file_type == "ris":
-        suggest = partial(suggest_ris_mapping, overrides=overrides, defaults=defaults)
-        return _FormatHandlers(
-            read_ris_tags,
-            suggest,
-            partial(parse_ris_record, settings=settings),
-            "tags",
-            profile,
-        )
-    if file_type == "nbib":
-        suggest = partial(suggest_nbib_mapping, overrides=overrides, defaults=defaults)
-        return _FormatHandlers(
-            read_nbib_tags,
-            suggest,
-            partial(parse_nbib_record, settings=settings),
-            "tags",
-            profile,
-        )
-    if file_type == "bibtex":
-        suggest = partial(
-            suggest_bibtex_mapping, overrides=overrides, defaults=defaults
-        )
-        return _FormatHandlers(
-            read_bibtex_fields,
-            suggest,
-            partial(parse_bibtex_record, settings=settings),
-            "fields",
-            profile,
-        )
-    return None
+_TYPES: dict[FileType, _TypeHandlers] = {
+    "csv": _delimited(None),
+    "tsv": _delimited(_TSV_DELIMITER),
+    "excel": _TypeHandlers(
+        read_keys=lambda path, sheet, _: read_excel_headers(path, sheet),
+        suggest=_suggest_columns,
+        parse_record=_parse_columns,
+        parse_file=parse_excel_file,
+        noun="columns",
+    ),
+    "ris": _TypeHandlers(
+        read_keys=lambda path, _, __: read_ris_tags(path),
+        suggest=lambda keys, profile: suggest_ris_mapping(
+            keys, profile.suggestions, profile.row_defaults
+        ),
+        parse_record=parse_ris_record,
+        parse_file=lambda path, mapping, _, settings: parse_ris_file(
+            path, mapping, settings
+        ),
+        noun="tags",
+    ),
+    "nbib": _TypeHandlers(
+        read_keys=lambda path, _, __: read_nbib_tags(path),
+        suggest=lambda keys, profile: suggest_nbib_mapping(
+            keys, profile.suggestions, profile.row_defaults
+        ),
+        parse_record=parse_nbib_record,
+        parse_file=lambda path, mapping, _, settings: parse_nbib_file(
+            path, mapping, settings
+        ),
+        noun="tags",
+    ),
+    "bibtex": _TypeHandlers(
+        read_keys=lambda path, _, __: read_bibtex_fields(path),
+        suggest=lambda keys, profile: suggest_bibtex_mapping(
+            keys, profile.suggestions, profile.row_defaults
+        ),
+        parse_record=parse_bibtex_record,
+        parse_file=lambda path, mapping, _, settings: parse_bibtex_file(
+            path, mapping, settings
+        ),
+        noun="fields",
+    ),
+}
 
 
-def _suggestion(handlers: _FormatHandlers, summary: FileSummary) -> FieldMapping:
-    return handlers.suggest(list(summary.samples))
+def _suggestion(file_type: FileType, source: str, summary: FileSummary) -> FieldMapping:
+    return _TYPES[file_type].suggest(
+        list(summary.samples), profile_with(file_type, source)
+    )
 
 
 def preview_for(
@@ -194,14 +199,13 @@ def preview_for(
     choices: Callable[[], ParsingChoices | None] = lambda: None,
 ) -> Callable[[FieldMapping], Record]:
     """`choices` is read on every preview, so the Result follows the Parsing view."""
-    if profile_for(source, file_type) is None:
-        raise ValueError(f"unsupported file type: {file_type!r}")
+    handlers = _TYPES[file_type]
 
     def preview(mapping: FieldMapping) -> Record:
-        handlers = _handlers(file_type, source, choices())
-        assert handlers is not None
-        row = handlers.parse_record(list(summary.samples.items()), mapping)
-        return fix_record(handlers.profile, row.raw_fields, row.record, mapping)
+        profile = profile_with(file_type, source, choices())
+        lines = list(summary.samples.items())
+        row = handlers.parse_record(lines, mapping, profile.settings)
+        return fix_record(profile, row.raw_fields, row.record, mapping)
 
     return preview
 
@@ -211,10 +215,7 @@ def type_label(file_type: str) -> str:
 
 
 def row_defaults_for(file_type: FileType, source: str) -> RowDefaults:
-    profile = profile_for(source, file_type)
-    if profile is None:
-        raise ValueError(f"unsupported file type: {file_type!r}")
-    return profile.row_defaults
+    return profile_with(file_type, source).row_defaults
 
 
 def _detect(path: Path) -> tuple[str, str]:
@@ -234,11 +235,9 @@ def common_detection(detected: list[tuple[str, str]]) -> tuple[str, str]:
 
 def read_summary(
     file_type: FileType, path: Path, sheet: str | None = None
-) -> FileSummary | None:
-    if file_type == "excel":
-        return read_excel_headers(path, sheet)
-    handlers = _handlers(file_type, UNKNOWN)
-    return handlers.read_keys(path) if handlers is not None else None
+) -> FileSummary:
+    settings = profile_with(file_type, UNKNOWN).settings
+    return _TYPES[file_type].read_keys(path, sheet, settings)
 
 
 def render_mapping(
@@ -249,140 +248,18 @@ def render_mapping(
     source: str = UNKNOWN,
     choices: Callable[[], ParsingChoices | None] = lambda: None,
 ) -> MappingScreen | None:
-    handlers = _handlers(file_type, source)
-    if handlers is None:
-        return None
-
     if not summary.samples:
         with container:
-            ui.notify(f"No {handlers.noun} to map in {name}", type="negative")
+            ui.notify(f"No {_TYPES[file_type].noun} to map in {name}", type="negative")
         return None
 
     return render_mapping_table(
         container,
         summary,
-        _suggestion(handlers, summary),
-        defaults=handlers.profile.row_defaults,
+        _suggestion(file_type, source, summary),
+        defaults=row_defaults_for(file_type, source),
         preview=preview_for(file_type, source, summary, choices),
     )
-
-
-def _store(
-    session: Session,
-    path: Path,
-    file_type: FileType,
-    mapping: FieldMapping,
-    summary: FileSummary,
-    result: ParseResult,
-    source: str,
-    choices: ParsingChoices | None,
-    sheet: str | None = None,
-) -> SourceFile:
-    handlers = _handlers(file_type, source, choices)
-    assert handlers is not None
-    result = apply_profile(result, handlers.profile, mapping)
-    source_file = store_parsed_rows(
-        session,
-        filename=path.name,
-        path=str(path),
-        format=file_type,
-        source=source if source != UNKNOWN else None,
-        sheet=sheet,
-        parsed_rows=[(row.record, row.raw_fields) for row in result.rows],
-        skipped_rows=[(row.row_number, row.reason) for row in result.skipped],
-    )
-    source_file.field_mapping = mapping.model_dump()
-    source_file.suggested_mapping = _suggestion(handlers, summary).model_dump()
-    source_file.file_summary = asdict(summary)
-    source_file.quirk_choices = dump_choices(
-        choices or default_choices(file_type, source)
-    )
-    log_import(session, source_file)
-    return source_file
-
-
-def _settings(
-    file_type: FileType, source: str, choices: ParsingChoices | None
-) -> ParseSettings:
-    return profile_with(file_type, source, choices).settings
-
-
-def import_csv(
-    session: Session,
-    path: Path,
-    mapping: FieldMapping,
-    summary: FileSummary,
-    source: str = UNKNOWN,
-    choices: ParsingChoices | None = None,
-) -> SourceFile:
-    settings = _settings("csv", source, choices)
-    result = parse_csv_file(path, mapping, settings=settings)
-    return _store(session, path, "csv", mapping, summary, result, source, choices)
-
-
-def import_tsv(
-    session: Session,
-    path: Path,
-    mapping: FieldMapping,
-    summary: FileSummary,
-    source: str = UNKNOWN,
-    choices: ParsingChoices | None = None,
-) -> SourceFile:
-    settings = _settings("tsv", source, choices)
-    result = parse_csv_file(path, mapping, _TSV_DELIMITER, settings)
-    return _store(session, path, "tsv", mapping, summary, result, source, choices)
-
-
-def import_excel(
-    session: Session,
-    path: Path,
-    mapping: FieldMapping,
-    summary: FileSummary,
-    source: str = UNKNOWN,
-    sheet: str | None = None,
-    choices: ParsingChoices | None = None,
-) -> SourceFile:
-    settings = _settings("excel", source, choices)
-    result = parse_excel_file(path, mapping, sheet, settings)
-    return _store(
-        session, path, "excel", mapping, summary, result, source, choices, sheet
-    )
-
-
-def import_ris(
-    session: Session,
-    path: Path,
-    mapping: FieldMapping,
-    summary: FileSummary,
-    source: str = UNKNOWN,
-    choices: ParsingChoices | None = None,
-) -> SourceFile:
-    result = parse_ris_file(path, mapping, _settings("ris", source, choices))
-    return _store(session, path, "ris", mapping, summary, result, source, choices)
-
-
-def import_nbib(
-    session: Session,
-    path: Path,
-    mapping: FieldMapping,
-    summary: FileSummary,
-    source: str = UNKNOWN,
-    choices: ParsingChoices | None = None,
-) -> SourceFile:
-    result = parse_nbib_file(path, mapping, _settings("nbib", source, choices))
-    return _store(session, path, "nbib", mapping, summary, result, source, choices)
-
-
-def import_bibtex(
-    session: Session,
-    path: Path,
-    mapping: FieldMapping,
-    summary: FileSummary,
-    source: str = UNKNOWN,
-    choices: ParsingChoices | None = None,
-) -> SourceFile:
-    result = parse_bibtex_file(path, mapping, _settings("bibtex", source, choices))
-    return _store(session, path, "bibtex", mapping, summary, result, source, choices)
 
 
 def import_file(
@@ -395,19 +272,27 @@ def import_file(
     sheet: str | None = None,
     choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    if file_type == "csv":
-        return import_csv(session, path, mapping, summary, source, choices)
-    if file_type == "tsv":
-        return import_tsv(session, path, mapping, summary, source, choices)
-    if file_type == "excel":
-        return import_excel(session, path, mapping, summary, source, sheet, choices)
-    if file_type == "ris":
-        return import_ris(session, path, mapping, summary, source, choices)
-    if file_type == "nbib":
-        return import_nbib(session, path, mapping, summary, source, choices)
-    if file_type == "bibtex":
-        return import_bibtex(session, path, mapping, summary, source, choices)
-    raise ValueError(f"unsupported file type: {file_type!r}")
+    profile = profile_with(file_type, source, choices)
+    result = _TYPES[file_type].parse_file(path, mapping, sheet, profile.settings)
+    result = apply_profile(result, profile, mapping)
+    source_file = store_parsed_rows(
+        session,
+        filename=path.name,
+        path=str(path),
+        format=file_type,
+        source=source if source != UNKNOWN else None,
+        sheet=sheet,
+        parsed_rows=[(row.record, row.raw_fields) for row in result.rows],
+        skipped_rows=[(row.row_number, row.reason) for row in result.skipped],
+    )
+    source_file.field_mapping = mapping.model_dump()
+    source_file.suggested_mapping = _suggestion(file_type, source, summary).model_dump()
+    source_file.file_summary = asdict(summary)
+    source_file.quirk_choices = dump_choices(
+        choices or default_choices(file_type, source)
+    )
+    log_import(session, source_file)
+    return source_file
 
 
 OnImport = Callable[
@@ -493,8 +378,7 @@ class ImportView:
             sheet = previous_sheet if previous_sheet in sheets else first_sheet
             if not is_file_type(file_type):
                 return sheets, sheet, []
-            summaries = [read_summary(file_type, path, sheet) for path in paths]
-            return sheets, sheet, [s for s in summaries if s is not None]
+            return sheets, sheet, [read_summary(file_type, p, sheet) for p in paths]
 
         if self._too_many_for_excel():
             with self.middle:

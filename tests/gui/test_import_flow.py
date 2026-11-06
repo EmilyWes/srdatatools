@@ -17,13 +17,7 @@ from app.gui import import_flow
 from app.gui.import_flow import (
     ImportView,
     common_detection,
-    import_bibtex,
-    import_csv,
-    import_excel,
     import_file,
-    import_nbib,
-    import_ris,
-    import_tsv,
     pick_files,
     read_summary,
     render_import_view,
@@ -110,7 +104,6 @@ _EMPTY_SUMMARY = FileSummary({}, {}, 0)
 
 def _summary(file_type: FileType, path: Path) -> FileSummary:
     summary = read_summary(file_type, path)
-    assert summary is not None
     return summary
 
 
@@ -118,7 +111,6 @@ def _render_mapping(
     container: Element, file_type: FileType, path: Path, source: str = "unknown"
 ) -> MappingScreen | None:
     summary = read_summary(file_type, path)
-    assert summary is not None
     return render_mapping(container, file_type, path.name, summary, source)
 
 
@@ -150,29 +142,16 @@ def test_render_mapping__shows_first_value_of_each_column(tmp_path: Path) -> Non
     assert screen._row_for("DOI").sample.text == "10.1/xyz"
 
 
-def test_render_mapping__returns_none_for_unknown_type(tmp_path: Path) -> None:
-    csv_path = tmp_path / "export.csv"
-    csv_path.write_text("Title\nSome Paper\n")
-    panes = shell()
-
-    screen = render_mapping(
-        panes.middle,
-        "unknown",  # type: ignore[arg-type]
-        csv_path.name,
-        FileSummary({"Title": "Some Paper"}, {}, 1),
-    )
-
-    assert screen is None
-
-
-def test_import_csv__stores_records_and_returns_source_file_with_row_count(
+def test_import_file__csv_stores_records_and_returns_source_file_with_row_count(
     session: Session, tmp_path: Path
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\nOther Paper,10.1/abc\n")
     mapping = mapping_of({"Title": "title", "DOI": "doi"})
 
-    source_file = import_csv(session, csv_path, mapping, _summary("csv", csv_path))
+    source_file = import_file(
+        session, csv_path, "csv", mapping, _summary("csv", csv_path)
+    )
     session.commit()
 
     assert source_file.filename == "export.csv"
@@ -181,62 +160,36 @@ def test_import_csv__stores_records_and_returns_source_file_with_row_count(
     assert isinstance(source_file.imported_at, datetime.datetime)
 
 
-def test_import_csv__stores_skipped_rows_on_source_file(
+def test_import_file__csv_stores_skipped_rows_on_source_file(
     session: Session, tmp_path: Path
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title,DOI\nSome Paper,10.1/xyz\n,\n")
     mapping = mapping_of({"Title": "title"})
 
-    source_file = import_csv(session, csv_path, mapping, _summary("csv", csv_path))
+    source_file = import_file(
+        session, csv_path, "csv", mapping, _summary("csv", csv_path)
+    )
 
     assert source_file.row_count == 1
     assert source_file.skipped_rows == [{"row_number": 3, "reason": "row is blank"}]
 
 
-def test_import_file__dispatches_csv_to_import_csv(
-    session: Session, tmp_path: Path
-) -> None:
-    csv_path = tmp_path / "export.csv"
-    csv_path.write_text("Title\nSome Paper\n")
-    mapping = mapping_of({"Title": "title"})
-
-    source_file = import_file(
-        session, csv_path, "csv", mapping, _summary("csv", csv_path)
-    )
-
-    assert source_file.format == "csv"
-    assert source_file.row_count == 1
-
-
-def test_import_tsv__stores_records_with_tsv_format(
+def test_import_file__tsv_stores_records_with_tsv_format(
     session: Session, tmp_path: Path
 ) -> None:
     tsv_path = tmp_path / "export.tsv"
     tsv_path.write_text("Title\tDOI\nA, B study\t10.1/xyz\nOther Paper\t10.1/abc\n")
     mapping = mapping_of({"Title": "title", "DOI": "doi"})
 
-    source_file = import_tsv(session, tsv_path, mapping, _summary("tsv", tsv_path))
+    source_file = import_file(
+        session, tsv_path, "tsv", mapping, _summary("tsv", tsv_path)
+    )
     session.commit()
 
     assert source_file.format == "tsv"
     assert source_file.row_count == 2
     assert source_file.skipped_rows == []
-
-
-def test_import_file__dispatches_tsv_to_import_tsv(
-    session: Session, tmp_path: Path
-) -> None:
-    tsv_path = tmp_path / "export.tsv"
-    tsv_path.write_text("Title\nSome Paper\n")
-    mapping = mapping_of({"Title": "title"})
-
-    source_file = import_file(
-        session, tsv_path, "tsv", mapping, _summary("tsv", tsv_path)
-    )
-
-    assert source_file.format == "tsv"
-    assert source_file.row_count == 1
 
 
 def test_import_file__writes_activity_log_row(session: Session, tmp_path: Path) -> None:
@@ -331,14 +284,16 @@ _RIS_TEXT = (
 )
 
 
-def test_import_ris__stores_records_and_skipped_rows(
+def test_import_file__ris_stores_records_and_skipped_rows(
     session: Session, tmp_path: Path
 ) -> None:
     ris_path = tmp_path / "export.ris"
     ris_path.write_text(_RIS_TEXT)
     mapping = mapping_of({"TI": "title"})
 
-    source_file = import_ris(session, ris_path, mapping, _summary("ris", ris_path))
+    source_file = import_file(
+        session, ris_path, "ris", mapping, _summary("ris", ris_path)
+    )
     session.commit()
 
     assert source_file.filename == "export.ris"
@@ -347,19 +302,6 @@ def test_import_ris__stores_records_and_skipped_rows(
     assert source_file.skipped_rows == [
         {"row_number": 6, "reason": "record has no TY tag"}
     ]
-
-
-def test_import_file__dispatches_ris_to_import_ris(
-    session: Session, tmp_path: Path
-) -> None:
-    ris_path = tmp_path / "export.ris"
-    ris_path.write_text(_RIS_TEXT)
-
-    source_file = import_file(
-        session, ris_path, "ris", FieldMapping(), _summary("ris", ris_path)
-    )
-
-    assert source_file.format == "ris"
 
 
 def test_import_file__saves_ris_suggestion_with_row_options(
@@ -426,14 +368,16 @@ def test_render_import_view__ris_type_renders_mapping_and_enables_import(
 _NBIB_TEXT = "PMID- 1\nTI  - Some Paper\nFAU - Smith, J\n\nTI  - Bad\n"
 
 
-def test_import_nbib__stores_records_and_skipped_rows(
+def test_import_file__nbib_stores_records_and_skipped_rows(
     session: Session, tmp_path: Path
 ) -> None:
     nbib_path = tmp_path / "export.nbib"
     nbib_path.write_text(_NBIB_TEXT)
     mapping = mapping_of({"TI": "title"})
 
-    source_file = import_nbib(session, nbib_path, mapping, _summary("nbib", nbib_path))
+    source_file = import_file(
+        session, nbib_path, "nbib", mapping, _summary("nbib", nbib_path)
+    )
     session.commit()
 
     assert source_file.filename == "export.nbib"
@@ -442,19 +386,6 @@ def test_import_nbib__stores_records_and_skipped_rows(
     assert source_file.skipped_rows == [
         {"row_number": 5, "reason": "record has no PMID tag"}
     ]
-
-
-def test_import_file__dispatches_nbib_to_import_nbib(
-    session: Session, tmp_path: Path
-) -> None:
-    nbib_path = tmp_path / "export.nbib"
-    nbib_path.write_text(_NBIB_TEXT)
-
-    source_file = import_file(
-        session, nbib_path, "nbib", FieldMapping(), _summary("nbib", nbib_path)
-    )
-
-    assert source_file.format == "nbib"
 
 
 def test_render_mapping__nbib_lists_distinct_tags_without_delimiter_box(
@@ -509,15 +440,15 @@ _BIBTEX_TEXT = (
 )
 
 
-def test_import_bibtex__stores_records_and_skipped_rows(
+def test_import_file__bibtex_stores_records_and_skipped_rows(
     session: Session, tmp_path: Path
 ) -> None:
     bibtex_path = tmp_path / "export.bib"
     bibtex_path.write_text(_BIBTEX_TEXT)
     mapping = mapping_of({"title": "title"})
 
-    source_file = import_bibtex(
-        session, bibtex_path, mapping, _summary("bibtex", bibtex_path)
+    source_file = import_file(
+        session, bibtex_path, "bibtex", mapping, _summary("bibtex", bibtex_path)
     )
     session.commit()
 
@@ -527,19 +458,6 @@ def test_import_bibtex__stores_records_and_skipped_rows(
     assert source_file.skipped_rows == [
         {"row_number": 2, "reason": "entry has no citation key"}
     ]
-
-
-def test_import_file__dispatches_bibtex_to_import_bibtex(
-    session: Session, tmp_path: Path
-) -> None:
-    bibtex_path = tmp_path / "export.bib"
-    bibtex_path.write_text(_BIBTEX_TEXT)
-
-    source_file = import_file(
-        session, bibtex_path, "bibtex", FieldMapping(), _summary("bibtex", bibtex_path)
-    )
-
-    assert source_file.format == "bibtex"
 
 
 def test_render_mapping__bibtex_lists_fields_and_hides_author_delimiter(
@@ -1216,36 +1134,20 @@ _TWO_SHEETS: dict[str, list[list[object]]] = {
 }
 
 
-def test_import_excel__stores_records_with_excel_format_and_sheet(
+def test_import_file__excel_stores_records_with_excel_format_and_sheet(
     session: Session, tmp_path: Path
 ) -> None:
     path = _workbook(tmp_path, _TWO_SHEETS)
     mapping = mapping_of({"Name": "title"})
     summary = read_summary("excel", path, "Other")
-    assert summary is not None
 
-    source_file = import_excel(session, path, mapping, summary, sheet="Other")
+    source_file = import_file(session, path, "excel", mapping, summary, sheet="Other")
     session.commit()
 
     assert source_file.format == "excel"
     assert source_file.sheet == "Other"
     assert source_file.row_count == 2
     assert [record.title for record in session.query(Record)] == ["Second", "Third"]
-
-
-def test_import_file__dispatches_excel_to_import_excel(
-    session: Session, tmp_path: Path
-) -> None:
-    path = _workbook(tmp_path, _TWO_SHEETS)
-    mapping = mapping_of({"Name": "title"})
-
-    source_file = import_file(
-        session, path, "excel", mapping, _summary("excel", path), sheet="Other"
-    )
-
-    assert source_file.format == "excel"
-    assert source_file.sheet == "Other"
-    assert source_file.row_count == 2
 
 
 def test_import_file__non_excel_type_stores_no_sheet(
@@ -1266,7 +1168,6 @@ def test_read_summary__excel_reads_first_sheet_by_default(tmp_path: Path) -> Non
 
     summary = read_summary("excel", path)
 
-    assert summary is not None
     assert list(summary.samples) == ["Title", "DOI"]
 
 
