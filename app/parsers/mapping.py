@@ -253,10 +253,9 @@ _LABEL_SPELLINGS: dict[str, LabelValue] = {
         ("exclude", "excluded", "no", "n", "0", "false", "irrelevant"), "exclude"
     ),
     **dict.fromkeys(("maybe", "unsure", "undecided", "?"), "maybe"),
-    "": "unlabeled",
+    # ASReview writes -1 for records nobody has labeled yet.
+    **dict.fromkeys(("", "-1"), "unlabeled"),
 }
-# ASReview writes -1 for records nobody has labeled yet.
-_MINUS_ONE = "-1"
 
 # Hyphens may sit anywhere in an ID; a qualifier like "(Print)" may follow it.
 _ISSN_ISBN_TOKEN = re.compile(
@@ -267,11 +266,22 @@ _ISBN_LENGTHS = (10, 13)
 _ISSN_ISBN_JOINER = "; "
 
 
-def normalize_label(value: str, minus_one_unlabeled: bool = False) -> LabelValue:
-    normalized = value.strip().lower()
-    if minus_one_unlabeled and normalized == _MINUS_ONE:
-        return "unlabeled"
-    label = _LABEL_SPELLINGS.get(normalized)
+def _label_for_line(line: str, settings: ParseSettings) -> LabelValue | None:
+    normalized = line.strip().lower()
+    custom = dict(settings.label_values)
+    if normalized in custom:
+        return custom[normalized]
+    return _LABEL_SPELLINGS.get(normalized)
+
+
+def normalize_label(value: str, settings: ParseSettings = NO_QUIRKS) -> LabelValue:
+    """In a multi-line value (RIS N1 notes) the first line that is a label wins;
+    the other lines are usually unrelated notes, so none matching is unlabeled."""
+    lines = [line for line in value.splitlines() if line.strip()]
+    if len(lines) > 1:
+        labels = (_label_for_line(line, settings) for line in lines)
+        return next((label for label in labels if label is not None), "unlabeled")
+    label = _label_for_line(value, settings)
     if label is None:
         logger.warning("Unknown label value %r", value)
         return "unknown"
@@ -444,11 +454,8 @@ def _parse_pages(raw_fields: dict[str, str], mapping: FieldMapping) -> str | Non
     return "-".join(piece for piece in (start, end) if piece) or None
 
 
-def _counts_as_empty(target: str, value: str, settings: ParseSettings) -> bool:
-    return any(
-        quirk.field == target and quirk.matches(value)
-        for quirk in settings.empty_values
-    )
+def _counts_as_empty(value: str, settings: ParseSettings) -> bool:
+    return value.strip().lower() in {v.lower() for v in settings.empty_values}
 
 
 def _ordered(mapping: FieldMapping, use_first: tuple[str, ...]) -> FieldMapping:
@@ -539,14 +546,14 @@ def apply_mapping(
                 Label(
                     phase=row.phase,
                     screener=row.screener,
-                    value=normalize_label(value, settings.minus_one_unlabeled),
+                    value=normalize_label(value, settings),
                 )
             )
             continue
         if not value:
             continue
         if isinstance(row, ScalarRow):
-            if not _counts_as_empty(row.target, value, settings):
+            if not _counts_as_empty(value, settings):
                 values.setdefault(row.target, value)
         elif isinstance(row, IssnIsbnRow):
             for scalar, piece in _classify_issn_isbn(row, value, settings).items():

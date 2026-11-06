@@ -25,7 +25,7 @@ from app.parsers.mapping import (
     parse_date_string,
     suggest_mapping,
 )
-from app.parsers.quirks import EmptyValues, ParseSettings
+from app.parsers.quirks import ParseSettings
 from tests.mappings import mapping_of
 
 _DEFAULTS = RowDefaults()
@@ -102,22 +102,31 @@ def test_apply_mapping__first_non_empty_value_wins_for_scalar() -> None:
 
 def test_apply_mapping__empty_values_use_next_mapped_key() -> None:
     mapping = mapping_of({"TI": "title", "TT": "title"})
-    settings = ParseSettings(
-        empty_values=(EmptyValues("title", frozenset({"[Not Available]."})),)
-    )
-    raw = {"TI": "[not available].", "TT": "Translated"}
+    settings = ParseSettings(empty_values=("[Not Available].",))
+    raw = {"TI": " [not available]. ", "TT": "Translated"}
 
     assert apply_mapping(raw, mapping, settings).title == "Translated"
     assert apply_mapping({"TI": "[Not Available]."}, mapping, settings).title is None
 
 
-def test_apply_mapping__empty_values_only_apply_to_their_field() -> None:
-    mapping = mapping_of({"TI": "title", "JO": "journal"})
-    settings = ParseSettings(empty_values=(EmptyValues("title", frozenset({"n/a"})),))
+def test_apply_mapping__empty_values_apply_to_every_text_field() -> None:
+    mapping = mapping_of({"TI": "title", "JO": "journal", "DO": "doi"})
+    settings = ParseSettings(empty_values=("n/a",))
 
-    record = apply_mapping({"TI": "n/a", "JO": "n/a"}, mapping, settings)
+    record = apply_mapping(
+        {"TI": "N/A", "JO": "n/a", "DO": "10.1/x"}, mapping, settings
+    )
 
-    assert (record.title, record.journal) == (None, "n/a")
+    assert (record.title, record.journal, record.doi) == (None, None, "10.1/x")
+
+
+def test_apply_mapping__empty_values_match_the_whole_value() -> None:
+    mapping = mapping_of({"TI": "title"})
+    settings = ParseSettings(empty_values=("[Not Available].",))
+
+    record = apply_mapping({"TI": "[Not Available]. A title"}, mapping, settings)
+
+    assert record.title == "[Not Available]. A title"
 
 
 def test_apply_mapping__use_first_reads_chosen_keys_first_in_listed_order() -> None:
@@ -703,9 +712,45 @@ def test_normalize_label__maps_known_spellings(value: str, expected: str) -> Non
     assert normalize_label(value) == expected
 
 
-def test_normalize_label__minus_one_is_unlabeled_only_when_on() -> None:
-    assert normalize_label("-1", minus_one_unlabeled=True) == "unlabeled"
-    assert normalize_label("-1") == "unknown"
+def test_normalize_label__minus_one_is_unlabeled_unless_listed_elsewhere() -> None:
+    settings = ParseSettings(label_values=(("-1", "exclude"),))
+
+    assert normalize_label("-1") == "unlabeled"
+    assert normalize_label("-1", settings) == "exclude"
+
+
+_ASREVIEW_VALUES = ParseSettings(
+    label_values=(("asreview_relevant", "include"), ("1", "exclude"))
+)
+
+
+def test_normalize_label__custom_value_overrides_builtin() -> None:
+    assert normalize_label("1", _ASREVIEW_VALUES) == "exclude"
+    assert normalize_label("0", _ASREVIEW_VALUES) == "exclude"
+
+
+def test_normalize_label__custom_match_is_case_insensitive() -> None:
+    assert normalize_label(" ASReview_Relevant ", _ASREVIEW_VALUES) == "include"
+
+
+def test_normalize_label__multiline_first_match() -> None:
+    value = "EID: 2-s2.0-1\nASReview_relevant\nirrelevant"
+
+    assert normalize_label(value, _ASREVIEW_VALUES) == "include"
+
+
+def test_normalize_label__multiline_no_match_is_unlabeled(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level("WARNING"):
+        value = normalize_label("EID: 2-s2.0-1\nExport Date: 22 October 2026")
+
+    assert value == "unlabeled"
+    assert caplog.text == ""
+
+
+def test_normalize_label__single_line_unmatched_is_unknown() -> None:
+    assert normalize_label("asreview_not_seen", _ASREVIEW_VALUES) == "unknown"
 
 
 def test_normalize_label__unknown_spelling_is_unknown_and_warns(

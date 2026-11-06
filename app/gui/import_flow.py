@@ -139,7 +139,12 @@ def _handlers(
         read_keys = partial(read_csv_headers, delimiter=delimiter, settings=settings)
         return _FormatHandlers(read_keys, suggest, parse_csv, "columns", profile)
     if file_type == _TYPE_EXCEL:
-        suggest = partial(suggest_mapping, overrides=overrides, defaults=defaults)
+        suggest = partial(
+            suggest_mapping,
+            overrides=overrides,
+            defaults=defaults,
+            ignored_keys=profile.ignored_keys,
+        )
         return _FormatHandlers(
             read_excel_headers, suggest, parse_csv, "columns", profile
         )

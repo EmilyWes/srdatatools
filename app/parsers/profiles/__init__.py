@@ -1,3 +1,4 @@
+from app.parsers.profiles.asreview import ASREVIEW
 from app.parsers.profiles.base import FormatProfile, Profile, apply_profile, fix_record
 from app.parsers.profiles.default import DEFAULT_PROFILES
 from app.parsers.profiles.openalex import OPENALEX
@@ -14,8 +15,10 @@ __all__ = [
     "profile_for",
 ]
 
+# Detection tries profiles in this order; ASReview first, since its exports keep
+# the input's vendor markers.
 PROFILES: dict[str, Profile] = {
-    profile.key: profile for profile in (PUBMED, SCOPUS, OPENALEX)
+    profile.key: profile for profile in (ASREVIEW, PUBMED, SCOPUS, OPENALEX)
 }
 
 

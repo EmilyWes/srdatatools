@@ -150,6 +150,19 @@ def test_render_quirks_overview__text_box_is_prefilled_and_tinted_when_changed()
     assert screen.current_choices().affiliation_start == ""
 
 
+def test_render_quirks_overview__labeling_box_has_a_text_box_per_decision() -> None:
+    middle = shell().middle
+    screen = _render(middle=middle)
+
+    assert {"Include", "Exclude", "Maybe", "Unlabeled"} <= set(_labels(middle))
+    assert isinstance(screen.widgets["label_include"], ui.input)
+    assert screen.widgets["label_unlabeled"].value == ""
+
+    screen.set_value("label_include", "asreview_relevant")
+
+    assert screen.current_choices().label_include == "asreview_relevant"
+
+
 def test_render_quirks_overview__changed_dropdown_is_tinted_blue() -> None:
     screen = _render()
     widget = screen.widgets["name_split"]
@@ -184,39 +197,40 @@ def test_render_quirks_overview__preferred_qualifier_greyed_out_without_only_one
     assert preferred.enabled
 
 
-def test_render_quirks_overview__empty_values_show_defaults_plus_a_blank_pair() -> None:
+def test_render_quirks_overview__empty_values_show_defaults_plus_a_blank_box() -> None:
     screen = _render()
 
-    [(field, values), (blank_field, blank_values)] = screen.empty_rows
-
-    assert (field.value, values.value) == ("title", "[Not Available].")
-    assert blank_field.value is None
-    assert not blank_values.enabled
+    assert [text.value for text in screen.empty_rows] == ["[Not Available].", ""]
 
 
-def test_render_quirks_overview__picking_a_field_adds_a_pair() -> None:
-    screen = _render()
+def test_render_quirks_overview__typing_in_the_blank_box_adds_the_next() -> None:
+    middle = shell().middle
+    screen = _render(middle=middle)
+    blank = screen.empty_rows[1]
 
-    screen.empty_rows[1][0].value = "doi"
-    screen.empty_rows[1][1].value = "none|n/a"
+    blank.value = "n"
+    blank.value = "none"
 
-    assert len(screen.empty_rows) == 3
-    assert screen.current_choices().empty_values == [
-        ("title", "[Not Available]."),
-        ("doi", "none|n/a"),
+    assert screen.empty_rows[1] is blank
+    assert [text.value for text in screen.empty_rows] == [
+        "[Not Available].",
+        "none",
+        "",
     ]
+    assert len(_buttons(middle, "close")) == 2
+    assert screen.current_choices().empty_values == ["[Not Available].", "none"]
 
 
-def test_render_quirks_overview__picked_field_not_offered_in_other_pairs() -> None:
+def test_render_quirks_overview__cleared_box_stays_but_is_ignored() -> None:
     screen = _render()
 
-    blank_field = screen.empty_rows[1][0]
+    screen.empty_rows[0].value = " "
 
-    assert "title" not in blank_field.options
-    assert "doi" in blank_field.options
+    assert len(screen.empty_rows) == 2
+    assert screen.current_choices().empty_values == []
 
 
-def test_render_quirks_overview__red_remove_button_drops_a_pair(
+def test_render_quirks_overview__red_remove_button_drops_a_value(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     middle = shell().middle
@@ -267,7 +281,7 @@ def test_render_quirks_overview__restore_defaults_resets_every_choice() -> None:
     screen.set_value("affiliation_start", "; ")
     screen.set_value("field_size_limit", 500)
     screen.set_value("name_split", "last")
-    screen.empty_rows[1][0].value = "doi"
+    screen.empty_rows[1].value = "none"
     screen.order_rows[0].value = "B"
 
     screen.restore_defaults()
@@ -296,7 +310,7 @@ def test_render_quirks_overview__chosen_is_read_only_and_shows_stored_values() -
         update={
             "drop_et_al": False,
             "preferred_qualifier": "print",
-            "empty_values": [("doi", "none")],
+            "empty_values": ["none"],
             "use_first": ["TT"],
         }
     )
@@ -307,6 +321,14 @@ def test_render_quirks_overview__chosen_is_read_only_and_shows_stored_values() -
     preferred = screen.widgets["preferred_qualifier"]
     assert drop.value is False and "disable" in drop.props
     assert preferred.value == "print" and "readonly" in preferred.props
-    assert [(f.value, v.value) for f, v in screen.empty_rows] == [("doi", "none")]
+    assert [text.value for text in screen.empty_rows] == ["none"]
     assert [select.value for select in screen.order_rows] == ["TT"]
     assert screen.current_choices() == chosen
+
+
+def test_render_quirks_overview__label_and_empty_value_boxes_are_wide() -> None:
+    screen = _render()
+
+    assert "w-[7rem]" in screen.widgets["label_include"].classes
+    assert "w-[7rem]" in screen.empty_rows[0].classes
+    assert "w-[5.5rem]" in screen.widgets["preferred_qualifier"].classes

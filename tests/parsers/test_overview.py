@@ -15,7 +15,6 @@ from app.parsers.profiles.scopus import EMBEDDED_AUTHOR_IDS, RIS_NOTES
 from app.parsers.quirks import (
     AffiliationLeadingName,
     DropEtAl,
-    EmptyValues,
     StripLastAuthorTrailing,
 )
 
@@ -93,7 +92,6 @@ def test_quirk_boxes__empty_values_and_ordering_are_lists() -> None:
 
     assert isinstance(empty, QuirkList)
     assert [(p.label, p.control) for p in empty.parts] == [
-        ("Field", "select"),
         ("Ignore", "text"),
     ]
     assert isinstance(order, QuirkList)
@@ -105,7 +103,11 @@ def test_quirk_boxes__type_box_per_type() -> None:
     assert _type_box_keys("tsv") == ["field_size_limit", "author_columns"]
     assert _type_box_keys("excel") == ["author_columns"]
     assert _type_box_keys("nbib") == ["first_publication_type"]
-    assert _type_box_keys("ris") == ["ris_notes", "ris.author_details"]
+    assert _type_box_keys("ris") == [
+        "ris_notes",
+        "ris.author_details",
+        "ris.outside_text",
+    ]
     assert _type_box_keys("bibtex") == [
         "author_columns",
         "eid_from_url",
@@ -125,13 +127,14 @@ def test_default_choices__unknown_source_defaults() -> None:
     assert choices.strip_extras and choices.only_one
     assert choices.preferred_qualifier == ""
     assert choices.drop_et_al and choices.strip_doi and choices.strip_pmid
-    assert choices.pages_set and choices.minus_one_unlabeled
+    assert choices.pages_set
     assert not (choices.drop_trailing or choices.id_from_name)
     assert choices.affiliation_start == ""
     assert choices.name_split == "none"
-    assert choices.empty_values == [("title", "[Not Available].")]
+    assert choices.empty_values == ["[Not Available]."]
     assert choices.use_first == []
     assert choices.field_size_limit == 1_000_000
+    assert (choices.label_include, choices.label_unlabeled) == ("", "")
 
 
 def test_default_choices__selected_profile_sets_its_own_quirks() -> None:
@@ -202,7 +205,7 @@ def test_profile_with__applies_the_settings() -> None:
         strip_extras=False,
         only_one=False,
         preferred_qualifier=" print ",
-        minus_one_unlabeled=False,
+        label_unlabeled="",
         name_split="last",
         field_size_limit=500,
         use_first=["B", "A"],
@@ -213,10 +216,27 @@ def test_profile_with__applies_the_settings() -> None:
     assert not settings.issn_isbn_strip_extras
     assert not settings.issn_isbn_only_one
     assert settings.preferred_issn_qualifier == "print"
-    assert not settings.minus_one_unlabeled
+    assert settings.label_values == ()
     assert settings.ambiguous_name_split == "last"
     assert settings.csv_field_size_limit == 500
     assert settings.use_first == ("B", "A")
+
+
+def test_profile_with__label_values_are_split_lowercased_and_trimmed() -> None:
+    choices = _with(
+        "ris",
+        label_include=" ASReview_relevant | Yes please ",
+        label_exclude=" | ",
+        label_unlabeled="not seen",
+    )
+
+    settings = profile_with("ris", "unknown", choices).settings
+
+    assert settings.label_values == (
+        ("asreview_relevant", "include"),
+        ("yes please", "include"),
+        ("not seen", "unlabeled"),
+    )
 
 
 def test_profile_with__empty_preferred_qualifier_is_none() -> None:
@@ -227,27 +247,16 @@ def test_profile_with__empty_preferred_qualifier_is_none() -> None:
     ).settings.preferred_issn_qualifier is (None)
 
 
-def test_profile_with__empty_values_are_pipe_separated() -> None:
-    choices = _with(
-        "ris", empty_values=[("title", "[Not Available]. | n/a |"), ("doi", "none")]
-    )
+def test_profile_with__empty_values_are_trimmed_and_blanks_dropped() -> None:
+    choices = _with("ris", empty_values=[" [Not Available]. ", " ", "none"])
 
     settings = profile_with("ris", "unknown", choices).settings
 
-    assert settings.empty_values == (
-        EmptyValues("title", frozenset({"[Not Available].", "n/a"})),
-        EmptyValues("doi", frozenset({"none"})),
-    )
-
-
-def test_profile_with__empty_values_without_field_or_values_are_skipped() -> None:
-    choices = _with("ris", empty_values=[("", "n/a"), ("title", " ")])
-
-    assert profile_with("ris", "unknown", choices).settings.empty_values == ()
+    assert settings.empty_values == ("[Not Available].", "none")
 
 
 def test_dump_choices__round_trips() -> None:
-    choices = _with("csv", "scopus", empty_values=[("title", "a|b")], use_first=["X"])
+    choices = _with("csv", "scopus", empty_values=["a", "b"], use_first=["X"])
 
     assert load_choices(dump_choices(choices), "csv", "scopus") == choices
 

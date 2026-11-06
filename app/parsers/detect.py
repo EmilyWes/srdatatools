@@ -4,6 +4,7 @@ from io import StringIO
 from pathlib import Path
 
 from app.parsers.common import decode_prefix
+from app.parsers.excel import read_excel_headers
 from app.parsers.profiles import PROFILES
 
 _RIS_FIRST_LINE = re.compile(r"^TY  -")
@@ -62,9 +63,16 @@ def detect_type(path: Path) -> str | None:
     return file_type or _EXTENSION_TYPES.get(path.suffix.lower())
 
 
+def _detect_text(path: Path, file_type: str) -> str:
+    """A workbook can't be read as text, so profiles see its tab-joined header row."""
+    if file_type == "excel":
+        return "	".join(read_excel_headers(path).samples)
+    return decode_prefix(path, _DETECT_PREFIX_SIZE)
+
+
 def detect_source(path: Path, file_type: str) -> str | None:
     try:
-        text = decode_prefix(path, _DETECT_PREFIX_SIZE)
+        text = _detect_text(path, file_type)
     except ValueError:
         return None
     for key, profile in PROFILES.items():

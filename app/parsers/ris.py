@@ -125,8 +125,11 @@ def parse_ris_text(
         if match is None:
             if not line.strip():
                 continue
+            # ASReview numbers each record ("1.") between ER and the next TY.
             if not lines:
-                skip(line_number, "text outside a record")
+                logger.debug(
+                    "Ignoring RIS text outside a record at line %d", line_number
+                )
             else:
                 tag, value = lines[-1]
                 lines[-1] = (tag, value + "\n" + line.strip())

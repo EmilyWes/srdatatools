@@ -49,7 +49,7 @@ def test_default_profiles__turn_on_the_generic_quirks() -> None:
     for settings in (profile.settings for profile in DEFAULT_PROFILES.values()):
         assert settings.issn_isbn_strip_extras
         assert settings.issn_isbn_only_one
-        assert settings.minus_one_unlabeled
+        assert settings.label_values == ()
         assert settings.ambiguous_name_split == "none"
 
 
@@ -59,9 +59,7 @@ def test_default_profiles__turn_on_the_generic_quirks_for_every_type() -> None:
         assert StripDoi() in profile.quirks
         assert StripPmid() in profile.quirks
         assert ExpandPageRange() in profile.quirks
-        [empty] = profile.settings.empty_values
-        assert empty.field == "title"
-        assert empty.matches("[Not Available].")
+        assert profile.settings.empty_values == ("[Not Available].",)
 
 
 def test_default_profiles__nbib_keeps_first_publication_type() -> None:
@@ -88,9 +86,9 @@ def test_profiles__build_on_their_type_defaults() -> None:
 
 
 def test_default_settings__overrides_the_type_default() -> None:
-    settings = default_settings("nbib", minus_one_unlabeled=False)
+    settings = default_settings("nbib", label_values=(("-1", "exclude"),))
 
-    assert not settings.minus_one_unlabeled
+    assert settings.label_values == (("-1", "exclude"),)
     assert settings.issn_isbn_strip_extras
 
 

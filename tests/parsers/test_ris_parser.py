@@ -190,15 +190,22 @@ def test_parse_ris_text__skips_record_missing_er_terminator() -> None:
     assert "ER" in result.skipped[0].reason
 
 
-def test_parse_ris_text__skips_text_outside_a_record() -> None:
+def test_parse_ris_text__ignores_text_outside_a_record() -> None:
     text = "Exported from somewhere\nTY  - JOUR\nTI  - Good\nER  - \n"
 
     result = parse_ris_text(text, _MAPPING)
 
-    assert len(result.rows) == 1
-    assert len(result.skipped) == 1
-    assert result.skipped[0].row_number == 1
-    assert "outside a record" in result.skipped[0].reason
+    assert [row.record.title for row in result.rows] == ["Good"]
+    assert result.skipped == []
+
+
+def test_parse_ris_text__ignores_asreview_record_numbers() -> None:
+    text = "1.\nTY  - JOUR\nTI  - A\nER  - \n\n2.\nTY  - JOUR\nTI  - B\nER  - \n"
+
+    result = parse_ris_text(text, _MAPPING)
+
+    assert [row.record.title for row in result.rows] == ["A", "B"]
+    assert result.skipped == []
 
 
 def test_parse_ris_text__ignores_repeated_er_lines() -> None:

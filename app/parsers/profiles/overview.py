@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ValidationError
 
+from app.models.record import LabelValue
 from app.parsers.authors import AmbiguousNameSplit
 from app.parsers.mapping import LINE_DELIMITER
 from app.parsers.profiles import FormatProfile, profile_for
@@ -11,7 +12,6 @@ from app.parsers.profiles.scopus import EMBEDDED_AUTHOR_IDS, RIS_NOTES, URL_EID
 from app.parsers.quirks import (
     AffiliationLeadingName,
     DropEtAl,
-    EmptyValues,
     ExpandPageRange,
     FirstValue,
     RecordQuirk,
@@ -26,7 +26,13 @@ Control = Literal["checkbox", "text", "number", "select", "note"]
 
 _FIELD_SIZE_TYPES = frozenset({"csv", "tsv"})
 _AUTHOR_COLUMN_TYPES = frozenset({"csv", "tsv", "excel", "bibtex"})
-EMPTY_VALUES_SEPARATOR = "|"
+_LABEL_VALUES_SEPARATOR = "|"
+_LABEL_KEYS: dict[str, LabelValue] = {
+    "label_include": "include",
+    "label_exclude": "exclude",
+    "label_maybe": "maybe",
+    "label_unlabeled": "unlabeled",
+}
 
 _FIRST_PUBLICATION_TYPE = FirstValue("publication_type", LINE_DELIMITER)
 _NAME_SPLIT_CHOICES: dict[str, str] = {
@@ -45,8 +51,11 @@ class ParsingChoices(BaseModel):
     id_from_name: bool
     affiliation_start: str
     name_split: AmbiguousNameSplit
-    minus_one_unlabeled: bool
-    empty_values: list[tuple[str, str]]
+    label_include: str
+    label_exclude: str
+    label_maybe: str
+    label_unlabeled: str
+    empty_values: list[str]
     use_first: list[str]
     strip_doi: bool
     strip_pmid: bool
@@ -65,6 +74,7 @@ class QuirkItem:
     control: Control
     choices: dict[str, str] | None = None
     enabled_by: str | None = None
+    wide: bool = False
 
 
 @dataclass(frozen=True)
@@ -155,12 +165,16 @@ _AUTHORS = QuirkBox(
 _LABELING = QuirkBox(
     "Labeling",
     (
-        QuirkItem(
-            "minus_one_unlabeled",
-            "-1 is unlabeled",
-            "ASReview writes -1 for records nobody has screened yet;"
-            " reads it as unlabeled instead of unknown.",
-            "checkbox",
+        *(
+            QuirkItem(
+                key,
+                decision.capitalize(),
+                f"Label values that mean {decision}, besides the built-in"
+                " spellings. Separate values with |; not case-sensitive.",
+                "text",
+                wide=True,
+            )
+            for key, decision in _LABEL_KEYS.items()
         ),
     ),
 )
@@ -171,19 +185,12 @@ _EMPTY_VALUES = QuirkBox(
             "empty_values",
             (
                 QuirkItem(
-                    "field",
-                    "Field",
-                    "Select a field for which to enter values that should be"
-                    " ignored.",
-                    "select",
-                ),
-                QuirkItem(
-                    "values",
+                    "value",
                     "Ignore",
-                    "These values are replaced with an empty value, so the next"
-                    " column mapped to the field can fill it. Separate values"
-                    " with |; not case-sensitive.",
+                    "Values that count as empty in any text field, so the next"
+                    " column mapped to that field can fill it. Not case-sensitive.",
                     "text",
+                    wide=True,
                 ),
             ),
         ),
@@ -274,6 +281,13 @@ _RIS_AUTHOR_DETAILS = QuirkItem(
     " affiliation block after all authors isn't pinned on the last one.",
     "note",
 )
+_RIS_OUTSIDE_TEXT = QuirkItem(
+    "ris.outside_text",
+    "Text outside records",
+    "Lines between an ER and the next record's first tag are ignored, such as"
+    " ASReview's record numbers (1., 2., …).",
+    "note",
+)
 _EID_FROM_URL_ITEM = QuirkItem(
     "eid_from_url",
     "Scopus EID from URL",
@@ -299,7 +313,7 @@ def _type_items(file_type: str) -> tuple[QuirkItem, ...]:
     if file_type == "nbib":
         items.append(_FIRST_PUBLICATION_TYPE_ITEM)
     if file_type == "ris":
-        items += [_RIS_NOTES_ITEM, _RIS_AUTHOR_DETAILS]
+        items += [_RIS_NOTES_ITEM, _RIS_AUTHOR_DETAILS, _RIS_OUTSIDE_TEXT]
     if file_type == "bibtex":
         items += [_EID_FROM_URL_ITEM, _KEY_CONTINUATION]
     return tuple(items)
@@ -339,11 +353,13 @@ def default_choices(file_type: str, source: str) -> ParsingChoices:
             (q.separator for q in quirks if isinstance(q, AffiliationLeadingName)), ""
         ),
         name_split=settings.ambiguous_name_split,
-        minus_one_unlabeled=settings.minus_one_unlabeled,
-        empty_values=[
-            (empty.field, EMPTY_VALUES_SEPARATOR.join(sorted(empty.values)))
-            for empty in settings.empty_values
-        ],
+        **{
+            key: _LABEL_VALUES_SEPARATOR.join(
+                value for value, label in settings.label_values if label == decision
+            )
+            for key, decision in _LABEL_KEYS.items()
+        },
+        empty_values=list(settings.empty_values),
         use_first=list(settings.use_first),
         strip_doi=StripDoi() in quirks,
         strip_pmid=StripPmid() in quirks,
@@ -355,9 +371,13 @@ def default_choices(file_type: str, source: str) -> ParsingChoices:
     )
 
 
-def _empty_values(field: str, values: str) -> EmptyValues:
-    split = (value.strip() for value in values.split(EMPTY_VALUES_SEPARATOR))
-    return EmptyValues(field, frozenset(value for value in split if value))
+def _label_values(choices: ParsingChoices) -> tuple[tuple[str, LabelValue], ...]:
+    pairs: list[tuple[str, LabelValue]] = []
+    for key, decision in _LABEL_KEYS.items():
+        for value in getattr(choices, key).split(_LABEL_VALUES_SEPARATOR):
+            if value.strip():
+                pairs.append((value.strip().lower(), decision))
+    return tuple(pairs)
 
 
 def _quirks(choices: ParsingChoices) -> tuple[RecordQuirk, ...]:
@@ -392,13 +412,11 @@ def profile_with(
         issn_isbn_strip_extras=choices.strip_extras,
         issn_isbn_only_one=choices.only_one,
         preferred_issn_qualifier=choices.preferred_qualifier.strip() or None,
-        minus_one_unlabeled=choices.minus_one_unlabeled,
+        label_values=_label_values(choices),
         ambiguous_name_split=choices.name_split,
         csv_field_size_limit=choices.field_size_limit,
         empty_values=tuple(
-            _empty_values(field, values)
-            for field, values in choices.empty_values
-            if field and values.strip()
+            value.strip() for value in choices.empty_values if value.strip()
         ),
         use_first=tuple(choices.use_first),
     )

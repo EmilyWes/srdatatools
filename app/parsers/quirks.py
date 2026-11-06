@@ -4,7 +4,7 @@ import string
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from app.models.record import Affiliation, Record
+from app.models.record import Affiliation, LabelValue, Record
 from app.parsers.authors import AmbiguousNameSplit
 
 # mapping.py imports ParseSettings at runtime, so FieldMapping is only for annotations.
@@ -23,26 +23,17 @@ _TRAILING_NON_NAME = ".,;:…" + string.whitespace
 
 
 @dataclass(frozen=True)
-class EmptyValues:
-    """Listed values count as empty, so the next key mapped to the field is used."""
-
-    field: str
-    values: frozenset[str]
-
-    def matches(self, value: str) -> bool:
-        return value.strip().lower() in {v.lower() for v in self.values}
-
-
-@dataclass(frozen=True)
 class ParseSettings:
     issn_isbn_strip_extras: bool = False
     issn_isbn_only_one: bool = False
     preferred_issn_qualifier: str | None = None
-    minus_one_unlabeled: bool = False
+    # Lowercased value -> decision; overrides the built-in spellings.
+    label_values: tuple[tuple[str, LabelValue], ...] = ()
     ambiguous_name_split: AmbiguousNameSplit = "none"
     # Python's csv limit is process-wide, so the parser sets it before each parse.
     csv_field_size_limit: int = 1_000_000
-    empty_values: tuple[EmptyValues, ...] = ()
+    # Count as empty in any text field, so the next key mapped to it is used.
+    empty_values: tuple[str, ...] = ()
     use_first: tuple[str, ...] = ()
 
 
