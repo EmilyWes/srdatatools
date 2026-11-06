@@ -424,3 +424,20 @@ def test_render_overview_settings__restore_and_back_buttons_call_back() -> None:
     _click(_button(panes.middle, "Back to overview"))
 
     assert calls == ["restore", "back"]
+
+
+def test_render_library_overview__pies_have_truncated_legend_top_right() -> None:
+    panes = shell()
+
+    _render(panes.middle, {"completeness", "per_year"})
+
+    for chart in _charts(panes.middle):
+        legend = chart.options["legend"]
+        assert (legend["orient"], legend["right"], legend["top"]) == (
+            "vertical",
+            0,
+            0,
+        )
+        assert legend["textStyle"]["overflow"] == "truncate"
+        assert legend["tooltip"]["show"] is True
+        assert chart.options["series"][0]["label"]["show"] is False

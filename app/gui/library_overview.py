@@ -186,10 +186,20 @@ def _pie(title: str, slices: Sequence[tuple[str, int, str]]) -> None:
         ui.echart(
             {
                 "tooltip": {"trigger": "item"},
+                "legend": {
+                    "orient": "vertical",
+                    "right": 0,
+                    "top": 0,
+                    "textStyle": {"width": 100, "overflow": "truncate"},
+                    "tooltip": {"show": True},
+                },
                 "series": [
                     {
                         "type": "pie",
-                        "radius": "60%",
+                        "radius": "55%",
+                        "center": ["30%", "55%"],
+                        "label": {"show": False},
+                        "labelLine": {"show": False},
                         "itemStyle": {"borderColor": "#fff", "borderWidth": 2},
                         "data": [
                             {
