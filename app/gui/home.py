@@ -16,11 +16,12 @@ from app.db.queries import (
     list_source_files,
 )
 from app.db.session import get_engine, session_scope
-from app.db.store import delete_library, remove_source_file
+from app.db.store import delete_library, delete_records, remove_source_file
 from app.gui.action_panel import render_right_panel
 from app.gui.activity_log import (
     clear_activity_log,
     log_library_deleted,
+    log_records_deleted,
     log_removal,
 )
 from app.gui.busy import run_busy
@@ -40,6 +41,7 @@ from app.gui.record_table import (
     LabelFormat,
     RecordSelection,
     load_columns,
+    load_keyword_columns,
     load_label_columns,
     load_label_format,
     load_rows,
@@ -144,7 +146,19 @@ def home() -> None:
                 return load_rows(session, columns, label_format), columns
 
         rows, columns = await run_busy("Loading library table…", load)
-        render_record_table(panes.middle, rows, columns, selection)
+        render_record_table(
+            panes.middle, rows, columns, selection, on_delete=delete_selected
+        )
+
+    async def delete_selected(ids: set[int]) -> None:
+        def delete() -> None:
+            with session_scope(_engine) as session:
+                log_records_deleted(session, delete_records(session, ids))
+
+        await run_busy("Deleting records…", delete)
+        selection.ids.clear()
+        refresh_log()
+        await show_table()
 
     def save_table_columns(columns: list[str]) -> None:
         with session_scope(_engine) as session:
@@ -164,11 +178,13 @@ def home() -> None:
         with session_scope(_engine) as session:
             columns = load_columns(session)
             label_columns = load_label_columns(session)
+            keyword_columns = load_keyword_columns(session)
             label_format = load_label_format(session)
         render_table_settings(
             panes.middle,
             columns,
             label_columns=label_columns,
+            keyword_columns=keyword_columns,
             label_format=label_format,
             on_change=save_table_columns,
             on_label_format=save_table_label_format,

@@ -393,3 +393,39 @@ def test_home__deleting_library_empties_db_logs_and_shows_overview(
         assert "Records removed: 1" in entry.message
     assert navs[-1].selected_key == "library:overview"
     assert f"source_file:{source_file_id}" not in navs[-1].buttons
+
+
+def test_home__deleting_selected_records_logs_and_reloads_table(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_source_file_with_record(engine)
+    navs = _capture_navs(monkeypatch)
+    on_deletes: list[Any] = []
+    render_record_table = home_module.render_record_table
+
+    def capture(*args: Any, **kwargs: Any) -> None:
+        on_deletes.append(kwargs["on_delete"])
+        render_record_table(*args, **kwargs)
+
+    monkeypatch.setattr(home_module, "render_record_table", capture)
+
+    home()
+    click_and_wait(navs[-1].buttons["library:table"], monkeypatch)
+    with Session(engine) as session:
+        record_id = session.query(Record).one().id
+    middle = navs[-1].middle
+
+    async def delete() -> None:
+        with middle:
+            await on_deletes[-1]({record_id})
+
+    asyncio.run(delete())
+
+    with Session(engine) as session:
+        assert session.query(Record).count() == 0
+        assert session.query(SourceFile).count() == 1
+        assert session.query(ActivityLog).one().message == "Deleted records: 1"
+    grid = next(
+        element for element in middle.descendants() if isinstance(element, ui.aggrid)
+    )
+    assert grid.options["rowData"] == []

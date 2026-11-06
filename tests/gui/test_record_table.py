@@ -17,9 +17,11 @@ from app.gui.record_table import (
     DEFAULT_COLUMNS,
     LabelFormat,
     RecordSelection,
+    column_field,
+    keyword_column_key,
     label_column_key,
-    label_field,
     load_columns,
+    load_keyword_columns,
     load_label_columns,
     load_label_format,
     load_rows,
@@ -377,8 +379,8 @@ def _add_labels(session: Session) -> None:
     session.commit()
 
 
-def test_label_field__is_free_of_dots_and_brackets() -> None:
-    assert all(char.isalnum() or char == "_" for char in label_field(FT))
+def test_column_field__is_free_of_dots_and_brackets() -> None:
+    assert all(char.isalnum() or char == "_" for char in column_field(FT))
 
 
 def test_load_label_columns__one_key_per_pair_in_library(session: Session) -> None:
@@ -408,8 +410,8 @@ def test_load_rows__label_cells_join_values_per_pair(session: Session) -> None:
     _add_labels(session)
 
     assert load_rows(session, [TIAB, FT], label_format="words") == [
-        {"id": 1, label_field(TIAB): "include; maybe", label_field(FT): "exclude"},
-        {"id": 2, label_field(TIAB): "", label_field(FT): ""},
+        {"id": 1, column_field(TIAB): "include; maybe", column_field(FT): "exclude"},
+        {"id": 2, column_field(TIAB): "", column_field(FT): ""},
     ]
 
 
@@ -419,7 +421,7 @@ def test_render_record_table__label_column_header_and_field() -> None:
     render_record_table(panes.middle, [_row(1)], ["doi", FT], RecordSelection())
 
     column = _grid(panes.middle).options["columnDefs"][1]
-    assert column["field"] == label_field(FT)
+    assert column["field"] == column_field(FT)
     assert column["headerName"] == "Label: ft / screener 1.0"
     assert column["filter"] == "agTextColumnFilter"
 
@@ -474,7 +476,7 @@ def test_load_rows__label_cells_as_numbers(session: Session) -> None:
 
     rows = load_rows(session, [TIAB, FT], label_format="numbers")
 
-    assert rows[0] == {"id": 1, label_field(TIAB): "1; 0.5", label_field(FT): "0"}
+    assert rows[0] == {"id": 1, column_field(TIAB): "1; 0.5", column_field(FT): "0"}
 
 
 @pytest.mark.parametrize(
@@ -505,7 +507,7 @@ def test_load_rows__each_label_value_has_a_number(
 
     rows = load_rows(session, [key], label_format="numbers")
 
-    assert rows[0][label_field(key)] == number
+    assert rows[0][column_field(key)] == number
 
 
 def test_render_table_settings__label_format_radio_reports_change() -> None:
@@ -557,4 +559,172 @@ def test_load_rows__unlabeled_is_empty_but_keeps_its_slot(
     rows = load_rows(session, [key], label_format=label_format)
 
     include = "1" if label_format == "numbers" else "include"
-    assert rows[0][label_field(key)] == f"; {include}; "
+    assert rows[0][column_field(key)] == f"; {include}; "
+
+
+def test_default_columns__doi_title_authors() -> None:
+    assert DEFAULT_COLUMNS == ["doi", "title", "authors"]
+
+
+MESH = keyword_column_key("MeSH")
+AUTHOR = keyword_column_key("Author")
+
+
+def _add_keywords(session: Session) -> None:
+    session.add_all(
+        [
+            Record(id=1, keywords=["Cancer", "[MeSH] Humans", "[MeSH] Mice"]),
+            Record(id=2, keywords=["[Author] diet"]),
+        ]
+    )
+    session.commit()
+
+
+def test_column_field__keyword_key_is_free_of_dots_and_brackets() -> None:
+    field = column_field(keyword_column_key("a.b [c]"))
+
+    assert all(char.isalnum() or char == "_" for char in field)
+
+
+def test_load_keyword_columns__one_key_per_prefix_in_library(
+    session: Session,
+) -> None:
+    _add_keywords(session)
+
+    assert load_keyword_columns(session) == [MESH, AUTHOR]
+
+
+def test_load_columns__keyword_columns_after_label_columns(session: Session) -> None:
+    _add_labels(session)
+    _add_keywords_to_existing(session)
+    save_columns(session, [MESH, FT, "doi"])
+    session.commit()
+
+    assert load_columns(session) == ["doi", FT, MESH]
+
+
+def _add_keywords_to_existing(session: Session) -> None:
+    session.add(Record(id=3, keywords=["[MeSH] Humans"]))
+    session.commit()
+
+
+def test_load_rows__keywords_column_shows_only_unprefixed(session: Session) -> None:
+    _add_keywords(session)
+
+    assert load_rows(session, ["keywords"]) == [
+        {"id": 1, "keywords": "Cancer"},
+        {"id": 2, "keywords": ""},
+    ]
+
+
+def test_load_rows__keyword_columns_strip_prefix_per_column(session: Session) -> None:
+    _add_keywords(session)
+
+    assert load_rows(session, [MESH, AUTHOR]) == [
+        {"id": 1, column_field(MESH): "Humans; Mice", column_field(AUTHOR): ""},
+        {"id": 2, column_field(MESH): "", column_field(AUTHOR): "diet"},
+    ]
+
+
+def test_render_record_table__keyword_column_header_and_field() -> None:
+    panes = shell()
+
+    render_record_table(panes.middle, [_row(1)], [MESH], RecordSelection())
+
+    column = _grid(panes.middle).options["columnDefs"][0]
+    assert column["field"] == column_field(MESH)
+    assert column["headerName"] == "Keywords: MeSH"
+
+
+def test_render_table_settings__keyword_checkboxes_after_label_ones() -> None:
+    panes = shell()
+    changes: list[list[str]] = []
+    render_table_settings(
+        panes.middle,
+        ["doi"],
+        label_columns=[FT],
+        keyword_columns=[MESH],
+        label_format="words",
+        on_change=changes.append,
+        on_label_format=print,
+        on_restore=lambda: None,
+        on_back=lambda: None,
+    )
+    checkboxes = [
+        element
+        for element in panes.middle.descendants()
+        if isinstance(element, ui.checkbox)
+    ]
+
+    assert [box.text for box in checkboxes[-2:]] == [
+        "Label: ft / screener 1.0",
+        "Keywords: MeSH",
+    ]
+
+    checkboxes[-1].value = True
+    checkboxes[-2].value = True
+
+    assert changes == [["doi", MESH], ["doi", FT, MESH]]
+
+
+def test_render_record_table__header_tooltip_is_full_name() -> None:
+    panes = shell()
+
+    render_record_table(panes.middle, [_row(1)], ["doi", FT], RecordSelection())
+
+    tooltips = [
+        column["headerTooltip"] for column in _grid(panes.middle).options["columnDefs"]
+    ]
+    assert tooltips == ["DOI", "Label: ft / screener 1.0"]
+
+
+def test_render_record_table__compact_rows() -> None:
+    panes = shell()
+
+    render_record_table(panes.middle, [_row(1)], DEFAULT_COLUMNS, RecordSelection())
+
+    options = _grid(panes.middle).options
+    assert options["rowHeight"] == 24
+    assert options["defaultColDef"]["cellStyle"] == {"fontSize": "12px"}
+
+
+def test_render_record_table__delete_button_red_and_disabled_without_selection() -> (
+    None
+):
+    panes = shell()
+
+    render_record_table(panes.middle, [_row(1)], DEFAULT_COLUMNS, RecordSelection())
+
+    button = _button(panes.middle, "Delete selected")
+    assert button.props["color"] == "negative"
+    assert not button.enabled
+
+
+def test_render_record_table__delete_confirm_passes_selected_ids() -> None:
+    panes = shell()
+    deleted: list[set[int]] = []
+    render_record_table(
+        panes.middle,
+        [_row(1), _row(2), _row(3)],
+        DEFAULT_COLUMNS,
+        RecordSelection(ids={1, 3}),
+        on_delete=deleted.append,
+    )
+    assert _button(panes.middle, "Delete selected").enabled
+
+    _click(_button(panes.middle, "Delete selected"))
+    # Dialogs live in the client layout, which every test in this run shares.
+    dialog = [
+        element
+        for element in panes.middle.client.layout.descendants()
+        if isinstance(element, ui.dialog)
+    ][-1]
+    message = next(
+        element.text
+        for element in dialog.descendants()
+        if isinstance(element, ui.label)
+    )
+    _click(_button(dialog, "Delete"))
+
+    assert message == "Delete 2 records? This can't be undone."
+    assert deleted == [{1, 3}]
