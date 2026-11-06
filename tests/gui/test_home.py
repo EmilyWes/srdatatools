@@ -203,6 +203,19 @@ def _capture_navs(monkeypatch: pytest.MonkeyPatch) -> list[LeftPanelNav]:
     return navs
 
 
+def _capture_shells(monkeypatch: pytest.MonkeyPatch) -> list[ShellPanes]:
+    shells: list[ShellPanes] = []
+    shell = home_module.shell
+
+    def capture() -> ShellPanes:
+        panes = shell()
+        shells.append(panes)
+        return panes
+
+    monkeypatch.setattr(home_module, "shell", capture)
+    return shells
+
+
 def _capture_removes(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     on_removes: list[Any] = []
     render_source_file_view = home_module.render_source_file_view
@@ -222,6 +235,7 @@ def test_home__import_stores_given_summary_and_selects_new_file(
     csv_path.write_text("Title\nA title\n")
     summary = FileSummary({"Title": "From the mapping screen"}, {"Title": 1}, 1)
     navs = _capture_navs(monkeypatch)
+    shells = _capture_shells(monkeypatch)
     on_imports: list[Any] = []
     monkeypatch.setattr(
         home_module,
@@ -231,7 +245,7 @@ def test_home__import_stores_given_summary_and_selects_new_file(
 
     home()
     click_and_wait(navs[-1].buttons["import"], monkeypatch)
-    middle = navs[-1].middle
+    middle = shells[-1].middle
 
     async def confirm() -> None:
         with middle:
@@ -263,6 +277,7 @@ def test_home__multi_file_import_stores_each_file_and_selects_overview(
     first_summary = FileSummary({"Title": "First title"}, {"Title": 1}, 1)
     second_summary = FileSummary({"Title": "Second title"}, {"Title": 1}, 1)
     navs = _capture_navs(monkeypatch)
+    shells = _capture_shells(monkeypatch)
     on_imports: list[Any] = []
     monkeypatch.setattr(
         home_module,
@@ -272,7 +287,7 @@ def test_home__multi_file_import_stores_each_file_and_selects_overview(
 
     home()
     click_and_wait(navs[-1].buttons["import"], monkeypatch)
-    middle = navs[-1].middle
+    middle = shells[-1].middle
 
     async def confirm() -> None:
         with middle:
@@ -306,13 +321,14 @@ def test_home__clicking_table_shows_records_in_grid(
 ) -> None:
     _add_source_file_with_record(engine)
     navs = _capture_navs(monkeypatch)
+    shells = _capture_shells(monkeypatch)
 
     home()
     click_and_wait(navs[-1].buttons["library:table"], monkeypatch)
 
     grid = next(
         element
-        for element in navs[-1].middle.descendants()
+        for element in shells[-1].middle.descendants()
         if isinstance(element, ui.aggrid)
     )
     assert [row["title"] for row in grid.options["rowData"]] == ["A title"]
@@ -323,13 +339,14 @@ def test_home__selecting_source_file_shows_detail_view(
 ) -> None:
     source_file_id = _add_source_file_with_record(engine)
     navs = _capture_navs(monkeypatch)
+    shells = _capture_shells(monkeypatch)
 
     home()
     navs[-1].select(f"source_file:{source_file_id}")
 
     labels = [
         element.text
-        for element in navs[-1].middle.descendants()
+        for element in shells[-1].middle.descendants()
         if isinstance(element, ui.label)
     ]
     assert "Records in library" in labels
@@ -340,11 +357,12 @@ def test_home__removing_source_file_deletes_logs_and_shows_overview(
 ) -> None:
     source_file_id = _add_source_file_with_record(engine)
     navs = _capture_navs(monkeypatch)
+    shells = _capture_shells(monkeypatch)
     on_removes = _capture_removes(monkeypatch)
 
     home()
     navs[-1].select(f"source_file:{source_file_id}")
-    middle = navs[-1].middle
+    middle = shells[-1].middle
 
     async def remove() -> None:
         with middle:
@@ -365,6 +383,7 @@ def test_home__deleting_library_empties_db_logs_and_shows_overview(
 ) -> None:
     source_file_id = _add_source_file_with_record(engine)
     navs = _capture_navs(monkeypatch)
+    shells = _capture_shells(monkeypatch)
     on_deletes: list[Any] = []
     render_right_panel = home_module.render_right_panel
 
@@ -376,7 +395,7 @@ def test_home__deleting_library_empties_db_logs_and_shows_overview(
 
     home()
     navs[-1].select(f"source_file:{source_file_id}")
-    middle = navs[-1].middle
+    middle = shells[-1].middle
 
     async def delete() -> None:
         with middle:
@@ -400,6 +419,7 @@ def test_home__deleting_selected_records_logs_and_reloads_table(
 ) -> None:
     _add_source_file_with_record(engine)
     navs = _capture_navs(monkeypatch)
+    shells = _capture_shells(monkeypatch)
     on_deletes: list[Any] = []
     render_record_table = home_module.render_record_table
 
@@ -413,7 +433,7 @@ def test_home__deleting_selected_records_logs_and_reloads_table(
     click_and_wait(navs[-1].buttons["library:table"], monkeypatch)
     with Session(engine) as session:
         record_id = session.query(Record).one().id
-    middle = navs[-1].middle
+    middle = shells[-1].middle
 
     async def delete() -> None:
         with middle:
@@ -439,6 +459,7 @@ def test_home__failing_file_is_logged_and_notified_without_undoing_others(
     moved_path = tmp_path / "moved.csv"
     summary = FileSummary({"Title": "Good title"}, {"Title": 1}, 1)
     navs = _capture_navs(monkeypatch)
+    shells = _capture_shells(monkeypatch)
     on_imports: list[Any] = []
     monkeypatch.setattr(
         home_module,
@@ -452,7 +473,7 @@ def test_home__failing_file_is_logged_and_notified_without_undoing_others(
 
     home()
     click_and_wait(navs[-1].buttons["import"], monkeypatch)
-    middle = navs[-1].middle
+    middle = shells[-1].middle
 
     async def confirm() -> None:
         with middle:

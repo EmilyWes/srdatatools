@@ -227,7 +227,6 @@ def home() -> None:
         with session_scope(_engine) as session:
             nav = render_left_panel(
                 panes.left,
-                panes.middle,
                 list_source_files(session),
                 on_import=start_import,
                 on_overview=show_overview,

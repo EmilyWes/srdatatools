@@ -16,16 +16,9 @@ _HEADING_CLASSES = "w-44 text-xs text-grey-6 pt-1 text-center"
 
 @dataclass
 class LeftPanelNav:
-    middle: Element
     buttons: dict[str, ui.button] = field(default_factory=dict)
-    labels: dict[str, str] = field(default_factory=dict)
     views: dict[str, Callable[[], Awaitable[None] | None]] = field(default_factory=dict)
     selected_key: str | None = None
-
-    def show_placeholder(self, label: str) -> None:
-        self.middle.clear()
-        with self.middle:
-            ui.label(label)
 
     def clear_selection(self) -> None:
         if self.selected_key is not None:
@@ -40,15 +33,11 @@ class LeftPanelNav:
     def select(self, key: str) -> Awaitable[None] | None:
         self.highlight(key)
         view = self.views.get(key)
-        if view is not None:
-            return view()
-        self.show_placeholder(self.labels[key])
-        return None
+        return view() if view is not None else None
 
 
 def render_left_panel(
     left: Element,
-    middle: Element,
     source_files: Sequence[SourceFile],
     on_import: Callable[[], Awaitable[None] | None] | None = None,
     on_overview: Callable[[], Awaitable[None] | None] | None = None,
@@ -57,14 +46,14 @@ def render_left_panel(
     on_table_settings: Callable[[], Awaitable[None] | None] | None = None,
     on_source_file: Callable[[int], Awaitable[None] | None] | None = None,
 ) -> LeftPanelNav:
-    nav = LeftPanelNav(middle=middle)
+    nav = LeftPanelNav()
     ui.add_css(
         ".source-file-btn .q-btn__content"
         " { white-space: normal; overflow-wrap: anywhere; text-align: center; }"
     )
 
     def handle_import() -> Awaitable[None] | None:
-        nav.select(_IMPORT_KEY)
+        nav.highlight(_IMPORT_KEY)
         return on_import() if on_import is not None else None
 
     def handle_overview_settings() -> Awaitable[None] | None:
@@ -88,7 +77,6 @@ def render_left_panel(
             .props("dense")
         )
         nav.buttons[_IMPORT_KEY] = import_button
-        nav.labels[_IMPORT_KEY] = "Import"
         ui.separator()
 
         ui.label("Library").classes(_HEADING_CLASSES)
@@ -103,7 +91,6 @@ def render_left_panel(
             ).props("flat dense round size=sm")
         overview_button.on_click(lambda: nav.select(_OVERVIEW_KEY))
         nav.buttons[_OVERVIEW_KEY] = overview_button
-        nav.labels[_OVERVIEW_KEY] = "Overview"
 
         with ui.row().classes("w-44 items-center gap-1 no-wrap"):
             table_button = (
@@ -116,7 +103,6 @@ def render_left_panel(
             ).props("flat dense round size=sm")
         table_button.on_click(lambda: nav.select(_TABLE_KEY))
         nav.buttons[_TABLE_KEY] = table_button
-        nav.labels[_TABLE_KEY] = "Table"
 
         if source_files:
             ui.separator()
@@ -131,7 +117,6 @@ def render_left_panel(
             )
             button.on_click(lambda key=key: nav.select(key))
             nav.buttons[key] = button
-            nav.labels[key] = source_file.filename
             if on_source_file is not None:
                 nav.views[key] = partial(on_source_file, source_file.id)
 

@@ -15,15 +15,7 @@ def shell() -> ShellPanes:
     ui.query(".nicegui-content").classes("min-h-screen p-0 gap-0")
     with ui.row().classes("w-full flex-grow no-wrap gap-0 border items-stretch"):
         left = ui.column().classes("w-56 border-r items-center bg-grey-2 pt-4")
-        with left:
-            ui.label("Navigation")
-
         middle = ui.column().classes("flex-grow min-w-0")
-        with middle:
-            ui.label("Content")
-
-        right = ui.column().classes("w-56 border-l bg-grey-2")
-        with right:
-            ui.label("Actions")
+        right =ui.column().classes("w-56 border-l bg-grey-2")
 
     return ShellPanes(left=left, middle=middle, right=right)
