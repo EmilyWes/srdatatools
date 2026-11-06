@@ -442,3 +442,20 @@ def test_render_library_overview__pies_have_truncated_legend_top_right() -> None
         assert legend["tooltip"]["show"] is True
         assert chart.options["series"][0]["label"]["show"] is False
         assert chart.options["series"][0]["minAngle"] == 5
+
+
+def test_render_library_overview__boxes_in_evenly_spaced_grid_with_frames() -> None:
+    panes = shell()
+
+    _render(panes.middle)
+
+    grid = next(
+        element
+        for element in panes.middle.descendants()
+        if isinstance(element, ui.grid)
+    )
+    assert grid.style["grid-template-columns"] == "repeat(auto-fill, 18rem)"
+    assert "justify-evenly" in grid.classes
+    frames = grid.default_slot.children
+    assert len(frames) == 8
+    assert all({"border", "items-center"} <= set(frame.classes) for frame in frames)

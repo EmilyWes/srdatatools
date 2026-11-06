@@ -24,7 +24,11 @@ _LABEL_COLORS = {
     "unlabeled": "#e0e0e0",
 }
 _TITLE_CLASSES = "text-sm text-grey-7"
-_BOX_CLASSES = "w-[17rem] h-56"
+_BOX_CLASSES = "w-full h-56"
+_BOX_WIDTH = "18rem"
+_FRAME_CLASSES = (
+    f"w-[{_BOX_WIDTH}] gap-1 items-center p-2 border border-gray-300 rounded"
+)
 _TOP_KEYWORDS = 10
 _TOP_TYPES = 7
 _TYPE_COLORS = [
@@ -42,8 +46,9 @@ _MULTIPLE_COLOR = "#616161"
 _MIN_SLICE_ANGLE = 5
 _KEYWORD_TABLE_CLASS = "overview-keywords"
 _KEYWORD_TABLE_CSS = (
-    f".{_KEYWORD_TABLE_CLASS} th, .{_KEYWORD_TABLE_CLASS} td"
-    " { height: 20px !important; padding-top: 0 !important;"
+    f".{_KEYWORD_TABLE_CLASS} tr, .{_KEYWORD_TABLE_CLASS} th,"
+    f" .{_KEYWORD_TABLE_CLASS} td"
+    " { height: 18px !important; line-height: 18px; padding-top: 0 !important;"
     " padding-bottom: 0 !important; font-size: 12px; }"
 )
 COMPLETENESS_FIELDS = [
@@ -114,7 +119,7 @@ def source_label(source: str | None) -> str:
 
 
 def _completeness_chart(total: int, filled: Sequence[tuple[str, int]]) -> None:
-    with ui.column().classes("gap-1"):
+    with ui.column().classes(_FRAME_CLASSES):
         ui.label("Field completeness").classes(_TITLE_CLASSES)
         ui.echart(
             {
@@ -161,7 +166,7 @@ def _year_chart(per_year: Sequence[tuple[int | None, int]]) -> None:
     title = "Publication year" + (
         f" ({format_count(unknown)} unknown)" if unknown else ""
     )
-    with ui.column().classes("gap-1"):
+    with ui.column().classes(_FRAME_CLASSES):
         ui.label(title).classes(_TITLE_CLASSES)
         ui.echart(
             {
@@ -182,7 +187,7 @@ def _year_chart(per_year: Sequence[tuple[int | None, int]]) -> None:
 
 
 def _pie(title: str, slices: Sequence[tuple[str, int, str]]) -> None:
-    with ui.column().classes("gap-1"):
+    with ui.column().classes(_FRAME_CLASSES):
         ui.label(title).classes(_TITLE_CLASSES)
         ui.echart(
             {
@@ -198,7 +203,7 @@ def _pie(title: str, slices: Sequence[tuple[str, int, str]]) -> None:
                     {
                         "type": "pie",
                         "radius": "55%",
-                        "center": ["30%", "55%"],
+                        "center": ["25%", "55%"],
                         "minAngle": _MIN_SLICE_ANGLE,
                         "label": {"show": False},
                         "labelLine": {"show": False},
@@ -256,7 +261,7 @@ def _source_file_pie(per_file: Sequence[tuple[str, int]], multiple: int) -> None
 
 
 def _keyword_table(prefix: str | None, counts: Sequence[tuple[str, int]]) -> None:
-    with ui.column().classes("gap-1"):
+    with ui.column().classes(_FRAME_CLASSES):
         ui.label(_keyword_title(prefix)).classes(_TITLE_CLASSES)
         table = (
             ui.table(
@@ -276,7 +281,7 @@ def _keyword_table(prefix: str | None, counts: Sequence[tuple[str, int]]) -> Non
                 pagination=0,
             )
             .props("dense flat bordered hide-bottom")
-            .classes(f"w-[17rem] {_KEYWORD_TABLE_CLASS}")
+            .classes(f"w-full {_KEYWORD_TABLE_CLASS}")
         )
         table.add_slot(
             "body-cell-keyword",
@@ -320,7 +325,9 @@ def render_library_overview(
                     "Everything is hidden. Use the gear next to Overview to choose"
                     " what's shown."
                 ).classes("text-sm text-grey-6")
-            with ui.row().classes("gap-6 items-start"):
+            with ui.grid(columns=f"repeat(auto-fill, {_BOX_WIDTH})").classes(
+                "w-full gap-4 justify-evenly"
+            ):
                 if _COMPLETENESS not in hidden:
                     _completeness_chart(total, filled)
                 if _PER_YEAR not in hidden:
