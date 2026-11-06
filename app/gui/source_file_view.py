@@ -4,8 +4,8 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import SourceFile
+from app.gui.format import format_count, source_label
 from app.gui.import_flow import preview_for, row_defaults_for, type_label
-from app.gui.library_overview import format_count, source_label
 from app.gui.mapping_table import render_mapping_table
 from app.gui.quirks_overview import render_quirks_overview
 from app.parsers.common import FileSummary

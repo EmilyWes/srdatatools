@@ -23,15 +23,22 @@ from app.db.queries import (
     list_record_sources,
 )
 from app.db.settings import delete_setting, get_setting, set_setting
-from app.gui.library_overview import format_count, source_label
+from app.gui.format import (
+    format_count,
+    is_keyword_key,
+    is_label_key,
+    keyword_key,
+    keyword_prefix,
+    label_key,
+    label_pair,
+    source_label,
+)
 from app.parsers.mapping import split_keyword
 
 _COLUMNS_KEY = "table_columns"
 _NUMBER_COLUMNS = {"publication_year", "publication_month", "publication_day"}
 _WIDE_COLUMNS = {"title", "abstract", "notes"}
 _SELECTION_TIMEOUT = 10.0
-_LABEL_PREFIX = "label:"
-_KEYWORD_PREFIX = "keywords:"
 _ROW_HEIGHT = 24
 _TABLE_CLASS = "record-table"
 _HEADER_CSS = (
@@ -86,48 +93,22 @@ class RecordSelection:
         self.ids = set(ids)
 
 
-def label_column_key(phase: str, screener: str) -> str:
-    return _LABEL_PREFIX + json.dumps([phase, screener])
-
-
-def _is_label_column(key: str) -> bool:
-    return key.startswith(_LABEL_PREFIX)
-
-
-def _label_pair(key: str) -> tuple[str, str]:
-    phase, screener = json.loads(key.removeprefix(_LABEL_PREFIX))
-    return phase, screener
-
-
-def keyword_column_key(prefix: str) -> str:
-    return _KEYWORD_PREFIX + json.dumps(prefix)
-
-
-def _is_keyword_column(key: str) -> bool:
-    return key.startswith(_KEYWORD_PREFIX)
-
-
-def _keyword_prefix(key: str) -> str:
-    prefix: str = json.loads(key.removeprefix(_KEYWORD_PREFIX))
-    return prefix
-
-
 def column_field(key: str) -> str:
     """ag-grid reads dots in a field as a nested path, so label and keyword keys are
     hex-encoded."""
-    if _is_label_column(key):
+    if is_label_key(key):
         return f"label_{key.encode().hex()}"
-    if _is_keyword_column(key):
+    if is_keyword_key(key):
         return f"keywords_{key.encode().hex()}"
     return key
 
 
 def _header(key: str) -> str:
-    if _is_label_column(key):
-        phase, screener = _label_pair(key)
+    if is_label_key(key):
+        phase, screener = label_pair(key)
         return f"Label: {phase} / {screener}"
-    if _is_keyword_column(key):
-        return f"Keywords: {_keyword_prefix(key)}"
+    if is_keyword_key(key):
+        return f"Keywords: {keyword_prefix(key)}"
     return COLUMNS[key]
 
 
@@ -139,11 +120,11 @@ def _in_display_order(
 
 
 def load_label_columns(session: Session) -> list[str]:
-    return [label_column_key(*pair) for pair in list_label_columns(session)]
+    return [label_key(*pair) for pair in list_label_columns(session)]
 
 
 def load_keyword_columns(session: Session) -> list[str]:
-    return [keyword_column_key(prefix) for prefix in list_keyword_prefixes(session)]
+    return [keyword_key(prefix) for prefix in list_keyword_prefixes(session)]
 
 
 def load_columns(session: Session) -> list[str]:
@@ -157,8 +138,8 @@ def load_columns(session: Session) -> list[str]:
 
 
 def save_columns(session: Session, columns: Sequence[str]) -> None:
-    extra_columns = [key for key in columns if _is_label_column(key)] + [
-        key for key in columns if _is_keyword_column(key)
+    extra_columns = [key for key in columns if is_label_key(key)] + [
+        key for key in columns if is_keyword_key(key)
     ]
     set_setting(
         session, _COLUMNS_KEY, json.dumps(_in_display_order(columns, extra_columns))
@@ -221,8 +202,8 @@ def _label_text(value: str, label_format: LabelFormat) -> str:
 def load_rows(
     session: Session, columns: Sequence[str], label_format: LabelFormat = "numbers"
 ) -> list[dict[str, Any]]:
-    label_columns = [key for key in columns if _is_label_column(key)]
-    keyword_columns = [key for key in columns if _is_keyword_column(key)]
+    label_columns = [key for key in columns if is_label_key(key)]
+    keyword_columns = [key for key in columns if is_keyword_key(key)]
     fields = [
         key for key in columns if key in COLUMNS and key not in ("sources", "keywords")
     ]
@@ -238,7 +219,7 @@ def load_rows(
             )
         for key in keyword_columns:
             row[column_field(key)] = "; ".join(
-                text for prefix, text in keywords if prefix == _keyword_prefix(key)
+                text for prefix, text in keywords if prefix == keyword_prefix(key)
             )
         rows.append(row)
     if "sources" in columns:
@@ -250,7 +231,7 @@ def load_rows(
         for row in rows:
             pairs = labels.get(row["id"], {})
             for key in label_columns:
-                values = pairs.get(_label_pair(key), [])
+                values = pairs.get(label_pair(key), [])
                 row[column_field(key)] = "; ".join(
                     _label_text(value, label_format) for value in values
                 )
