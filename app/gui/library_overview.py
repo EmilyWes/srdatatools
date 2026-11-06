@@ -39,6 +39,7 @@ _TYPE_COLORS = [
 _OTHER_COLOR = "#9e9e9e"
 _UNKNOWN_COLOR = "#e0e0e0"
 _MULTIPLE_COLOR = "#616161"
+_MIN_SLICE_ANGLE = 5
 _KEYWORD_TABLE_CLASS = "overview-keywords"
 _KEYWORD_TABLE_CSS = (
     f".{_KEYWORD_TABLE_CLASS} th, .{_KEYWORD_TABLE_CLASS} td"
@@ -198,6 +199,7 @@ def _pie(title: str, slices: Sequence[tuple[str, int, str]]) -> None:
                         "type": "pie",
                         "radius": "55%",
                         "center": ["30%", "55%"],
+                        "minAngle": _MIN_SLICE_ANGLE,
                         "label": {"show": False},
                         "labelLine": {"show": False},
                         "itemStyle": {"borderColor": "#fff", "borderWidth": 2},

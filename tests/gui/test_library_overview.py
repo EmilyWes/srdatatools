@@ -441,3 +441,4 @@ def test_render_library_overview__pies_have_truncated_legend_top_right() -> None
         assert legend["textStyle"]["overflow"] == "truncate"
         assert legend["tooltip"]["show"] is True
         assert chart.options["series"][0]["label"]["show"] is False
+        assert chart.options["series"][0]["minAngle"] == 5
