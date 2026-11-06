@@ -275,7 +275,7 @@ _ISSN_ISBN_JOINER = "; "
 
 def _label_for_line(line: str, settings: ParseSettings) -> LabelValue | None:
     normalized = line.strip().lower()
-    custom = dict(settings.label_values)
+    custom = settings.label_lookup
     if normalized in custom:
         return custom[normalized]
     return _LABEL_SPELLINGS.get(normalized)
@@ -462,7 +462,7 @@ def _parse_pages(raw_fields: dict[str, str], mapping: FieldMapping) -> str | Non
 
 
 def _counts_as_empty(value: str, settings: ParseSettings) -> bool:
-    return value.strip().lower() in {v.lower() for v in settings.empty_values}
+    return value.strip().lower() in settings.empty_lookup
 
 
 def _ordered(mapping: FieldMapping, use_first: tuple[str, ...]) -> FieldMapping:

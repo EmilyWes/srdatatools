@@ -2,6 +2,7 @@ import logging
 import re
 import string
 from dataclasses import dataclass
+from functools import cached_property
 from typing import TYPE_CHECKING, Protocol
 
 from app.models.record import Affiliation, LabelValue, Record
@@ -35,6 +36,15 @@ class ParseSettings:
     # Count as empty in any text field, so the next key mapped to it is used.
     empty_values: tuple[str, ...] = ()
     use_first: tuple[str, ...] = ()
+
+    # Cached: the lookups run for every field of every record.
+    @cached_property
+    def label_lookup(self) -> dict[str, LabelValue]:
+        return dict(self.label_values)
+
+    @cached_property
+    def empty_lookup(self) -> frozenset[str]:
+        return frozenset(value.lower() for value in self.empty_values)
 
 
 NO_QUIRKS = ParseSettings()
