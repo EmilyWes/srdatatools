@@ -342,6 +342,8 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [ ] IEEE Xplore profile (CSV)
 - [ ] Embase profile (RIS/CSV)
 - [ ] PsycINFO profile — EBSCO and ProQuest variants (RIS/CSV)
+- [ ] DistillerSR profile (CSV/Excel/RIS), including its screening labels
+- [ ] Rayyan profile (CSV/RIS/BibTeX), including its screening labels
 
 **Backlog / stretch**
 
