@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from nicegui import ui
 from nicegui.elements.label import Label
 from nicegui.elements.tooltip import Tooltip
