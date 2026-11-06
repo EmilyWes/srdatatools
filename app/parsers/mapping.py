@@ -1,7 +1,7 @@
 import difflib
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal, TypeVar, get_args
 
@@ -581,6 +581,37 @@ def apply_mapping(
         labels=labels,
         publication_date=_parse_publication_date(raw_fields, mapping),
     )
+
+
+TagLines = list[tuple[str, str]]
+LineAuthors = Callable[[TagLines, dict[str, AuthorsRow], ParseSettings], list[Author]]
+
+
+def join_tag_lines(lines: TagLines) -> dict[str, str]:
+    """A tag repeated per value (RIS, NBIB) becomes one raw field, one value a line."""
+    values: dict[str, list[str]] = {}
+    for tag, value in lines:
+        values.setdefault(tag, []).append(value)
+    return {
+        tag: "\n".join(v for v in tag_values if v) for tag, tag_values in values.items()
+    }
+
+
+def apply_line_mapping(
+    lines: TagLines,
+    raw_fields: dict[str, str],
+    mapping: FieldMapping,
+    settings: ParseSettings,
+    authors_from_lines: LineAuthors,
+) -> Record:
+    """Authors come from the lines in order, so each detail line stays with the
+    author line above it rather than being zipped by position."""
+    record = apply_mapping(raw_fields, mapping, settings)
+    author_rows = dict(mapping.rows_of(AuthorsRow))
+    if not author_rows:
+        return record
+    authors = authors_from_lines(lines, author_rows, settings)
+    return record.model_copy(update={"authors": authors})
 
 
 def override_aliases(

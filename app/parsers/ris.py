@@ -22,8 +22,9 @@ from app.parsers.mapping import (
     RowDefaults,
     Suggest,
     add_author_detail,
-    apply_mapping,
+    apply_line_mapping,
     author_for_name,
+    join_tag_lines,
     override_aliases,
 )
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
@@ -97,15 +98,10 @@ def parse_ris_record(
     mapping: FieldMapping,
     settings: ParseSettings = NO_QUIRKS,
 ) -> ParsedRow:
-    values: dict[str, list[str]] = {}
-    for tag, value in lines:
-        values.setdefault(tag, []).append(value)
-    raw_fields = {t: "\n".join(v for v in vs if v) for t, vs in values.items()}
-    record = apply_mapping(raw_fields, mapping, settings)
-    author_rows = dict(mapping.rows_of(AuthorsRow))
-    if author_rows:
-        authors = _authors_from_lines(lines, author_rows, settings)
-        record = record.model_copy(update={"authors": authors})
+    raw_fields = join_tag_lines(lines)
+    record = apply_line_mapping(
+        lines, raw_fields, mapping, settings, _authors_from_lines
+    )
     return ParsedRow(record=record, raw_fields=raw_fields)
 
 

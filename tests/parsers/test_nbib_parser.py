@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+import app.parsers.mapping as mapping_module
 from app.models.record import Author, Record
 from app.parsers import nbib
 from app.parsers.common import SkippedRow
@@ -759,7 +760,7 @@ def test_parse_nbib_record__attaches_auid_and_ad_to_preceding_fau() -> None:
 
 
 def _fail_on_bad_title(monkeypatch: pytest.MonkeyPatch) -> None:
-    real = nbib.apply_mapping
+    real = mapping_module.apply_mapping
 
     def apply(
         raw_fields: dict[str, str], mapping: FieldMapping, settings: ParseSettings
@@ -768,7 +769,7 @@ def _fail_on_bad_title(monkeypatch: pytest.MonkeyPatch) -> None:
             raise ValueError("bad value")
         return real(raw_fields, mapping, settings)
 
-    monkeypatch.setattr(nbib, "apply_mapping", apply)
+    monkeypatch.setattr(mapping_module, "apply_mapping", apply)
 
 
 def test_parse_nbib_text__skips_record_that_fails_to_parse(
