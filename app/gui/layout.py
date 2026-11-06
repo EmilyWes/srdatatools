@@ -16,6 +16,6 @@ def shell() -> ShellPanes:
     with ui.row().classes("w-full flex-grow no-wrap gap-0 border items-stretch"):
         left = ui.column().classes("w-56 border-r items-center bg-grey-2 pt-4")
         middle = ui.column().classes("flex-grow min-w-0")
-        right =ui.column().classes("w-56 border-l bg-grey-2")
+        right = ui.column().classes("w-56 border-l bg-grey-2")
 
     return ShellPanes(left=left, middle=middle, right=right)
