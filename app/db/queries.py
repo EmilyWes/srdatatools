@@ -2,11 +2,13 @@ from collections import Counter, defaultdict
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import JSON, ColumnElement, String, and_, case, cast, func, select
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.db.models import ActivityLog, Label, Record, RecordSource, SourceFile
 from app.parsers.mapping import split_keyword
+
+_EMPTY_JSON = ("[]", "{}", "null")
 
 
 def list_source_files(session: Session) -> list[SourceFile]:
@@ -94,15 +96,21 @@ def count_label_values(session: Session) -> dict[tuple[str, str], dict[str, int]
     return counts
 
 
+def _is_filled(column: InstrumentedAttribute[Any]) -> ColumnElement[bool]:
+    """JSON columns are compared as stored text, so no row has to be loaded."""
+    if isinstance(column.type, JSON):
+        return cast(column, String).not_in(_EMPTY_JSON)
+    if isinstance(column.type, String):
+        return and_(column.is_not(None), column != "")
+    return column.is_not(None)
+
+
 def count_filled_fields(
     session: Session, fields: Sequence[str]
 ) -> list[tuple[str, int]]:
-    counts = dict.fromkeys(fields, 0)
-    for row in list_record_rows(session, fields):
-        for field in fields:
-            if row[field] not in (None, "", [], {}):
-                counts[field] += 1
-    return list(counts.items())
+    columns = [getattr(Record, field) for field in fields]
+    statement = select(*(func.count(case((_is_filled(c), 1))) for c in columns))
+    return list(zip(fields, session.execute(statement).one(), strict=True))
 
 
 def count_keywords(session: Session) -> dict[str | None, list[tuple[str, int]]]:
