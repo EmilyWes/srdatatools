@@ -470,6 +470,10 @@ def _ordered(mapping: FieldMapping, use_first: tuple[str, ...]) -> FieldMapping:
     return mapping.model_copy(update={"rows": {**first, **mapping.rows}})
 
 
+def strip_orcid_url(value: str) -> str:
+    return _ORCID_URL.sub("", value)
+
+
 def author_for_name(name: str, row: AuthorsRow, settings: ParseSettings) -> Author:
     if row.role == "full_name":
         return Author(full_name=name)
@@ -483,7 +487,7 @@ def author_for_name(name: str, row: AuthorsRow, settings: ParseSettings) -> Auth
 
 def add_author_detail(author: Author, row: AuthorsRow, value: str) -> None:
     if row.role == "orcid":
-        author.orcid = author.orcid or _ORCID_URL.sub("", value)
+        author.orcid = author.orcid or strip_orcid_url(value)
     elif row.role == "ids":
         author.other_ids.setdefault(row.id_key, value)
     elif row.role == "affiliations":

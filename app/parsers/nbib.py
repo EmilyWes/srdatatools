@@ -26,6 +26,7 @@ from app.parsers.mapping import (
     author_for_name,
     join_tag_lines,
     override_aliases,
+    strip_orcid_url,
 )
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
 from app.parsers.quirks import NO_QUIRKS, ParseSettings
@@ -72,7 +73,6 @@ _DOI_SUFFIX = " [doi]"
 _DOI_TAG = "DOI"
 _REQUIRED_TAG = "PMID"
 _ORCID_SCHEME = "ORCID"
-_ORCID_URL = re.compile(r"^https?://orcid\.org/")
 _EDITOR_TAGS = ("FED", "ED")
 
 
@@ -93,7 +93,7 @@ def _add_auid(author: Author, row: AuthorsRow, value: str) -> None:
     if not identifier:
         return
     if scheme.upper() == _ORCID_SCHEME:
-        author.orcid = _ORCID_URL.sub("", identifier)
+        author.orcid = strip_orcid_url(identifier)
     else:
         author.other_ids[scheme.lower() or row.id_key] = identifier
 
