@@ -4,6 +4,13 @@ from typing import Any
 
 from nicegui import ui
 
+from app.db.activity_log import (
+    clear_activity_log,
+    log_import_failed,
+    log_library_deleted,
+    log_records_deleted,
+    log_removal,
+)
 from app.db.models import SourceFile
 from app.db.queries import (
     count_filled_fields,
@@ -21,13 +28,6 @@ from app.db.queries import (
 from app.db.session import get_engine, session_scope
 from app.db.store import delete_library, delete_records, remove_source_file
 from app.gui.action_panel import render_right_panel
-from app.gui.activity_log import (
-    clear_activity_log,
-    log_import_failed,
-    log_library_deleted,
-    log_records_deleted,
-    log_removal,
-)
 from app.gui.busy import run_busy
 from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell

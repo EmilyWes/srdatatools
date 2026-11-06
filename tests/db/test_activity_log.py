@@ -4,8 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.db.models import ActivityLog, Base, SourceFile
-from app.gui.activity_log import (
+from app.db.activity_log import (
     clear_activity_log,
     log_import,
     log_import_failed,
@@ -13,6 +12,7 @@ from app.gui.activity_log import (
     log_records_deleted,
     log_removal,
 )
+from app.db.models import ActivityLog, Base, SourceFile
 
 
 @pytest.fixture
