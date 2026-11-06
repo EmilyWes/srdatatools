@@ -190,6 +190,10 @@ def test_render_source_file_view__shows_saved_mapping_readonly() -> None:
     assert "An abstract" in labels
 
 
+def _shown(element: Element) -> bool:
+    return "invisible" not in element.classes
+
+
 def _toggle(middle: Element) -> ui.toggle:
     return next(e for e in middle.descendants() if isinstance(e, ui.toggle))
 
@@ -198,13 +202,14 @@ def test_render_source_file_view__toggle_switches_between_mapping_and_parsing() 
     middle, _ = _render()
     toggle = _toggle(middle)
     assert toggle.parent_slot is not None
-    _, mapping, parsing = toggle.parent_slot.children
+    _, stack = toggle.parent_slot.children
+    mapping, parsing = stack.default_slot.children
     assert toggle.value == "mapping"
-    assert mapping.visible and not parsing.visible
+    assert _shown(mapping) and not _shown(parsing)
 
     toggle.value = "parsing"
 
-    assert parsing.visible and not mapping.visible
+    assert _shown(parsing) and not _shown(mapping)
 
 
 def test_render_source_file_view__parsing_shows_stored_choices_readonly() -> None:

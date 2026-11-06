@@ -1346,6 +1346,10 @@ def _nbib_view(
     return view, panes.middle
 
 
+def _shown(element: Element) -> bool:
+    return "invisible" not in element.classes
+
+
 def _toggle(middle: Element) -> ui.toggle:
     return next(e for e in middle.descendants() if isinstance(e, ui.toggle))
 
@@ -1357,7 +1361,7 @@ def test_render_import_view__starts_on_mapping_with_parsing_hidden(
 
     assert _toggle(middle).value == "mapping"
     assert view.views is not None
-    assert view.views.mapping.visible and not view.views.parsing.visible
+    assert _shown(view.views.mapping) and not _shown(view.views.parsing)
 
 
 def test_render_import_view__toggle_switches_to_parsing_and_keeps_edits(
@@ -1370,7 +1374,7 @@ def test_render_import_view__toggle_switches_to_parsing_and_keeps_edits(
     _toggle(middle).value = "parsing"
 
     assert view.views is not None
-    assert view.views.parsing.visible and not view.views.mapping.visible
+    assert _shown(view.views.parsing) and not _shown(view.views.mapping)
     _toggle(middle).value = "mapping"
     assert view.mapping_screen.current_mapping().rows["TA"].target == "journal"
 
@@ -1384,7 +1388,7 @@ def test_render_import_view__source_change_keeps_the_selected_view(
     view._set_source("pubmed")
 
     assert _toggle(middle).value == "parsing"
-    assert view.views is not None and view.views.parsing.visible
+    assert view.views is not None and _shown(view.views.parsing)
 
 
 def test_render_import_view__result_follows_parsing_after_switching_back(

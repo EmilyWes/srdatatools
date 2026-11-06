@@ -427,8 +427,6 @@ class ImportView:
 
     def _render_mapping_and_parsing(self, file_type: FileType) -> None:
         views = render_view_toggle(self.view, on_change=self._on_view)
-        views.mapping.classes("items-center w-full")
-        views.parsing.classes("items-center w-full")
         quirks_screen = render_quirks_overview(
             views.parsing,
             quirk_boxes(file_type, type_label(file_type)),

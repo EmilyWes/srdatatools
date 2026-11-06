@@ -345,9 +345,9 @@ def test_render_view_toggle__shows_one_view_and_reports_switches() -> None:
 
     views = render_view_toggle(on_change=switched.append)
 
-    assert views.mapping.visible and not views.parsing.visible
+    assert _shown(views.mapping) and not _shown(views.parsing)
     views.toggle.value = "parsing"
-    assert views.parsing.visible and not views.mapping.visible
+    assert _shown(views.parsing) and not _shown(views.mapping)
     assert switched == ["parsing"]
 
 
@@ -357,4 +357,20 @@ def test_render_view_toggle__starts_on_the_given_view() -> None:
     views = render_view_toggle("parsing")
 
     assert views.toggle.value == "parsing"
-    assert views.parsing.visible and not views.mapping.visible
+    assert _shown(views.parsing) and not _shown(views.mapping)
+
+
+def test_render_view_toggle__only_mapping_sets_the_width() -> None:
+    shell()
+
+    views = render_view_toggle("parsing")
+
+    assert views.mapping.parent_slot is views.parsing.parent_slot
+    assert {"w-0", "min-w-full"} <= set(views.parsing.classes)
+    # Collapsed, not removed, so the hidden mapping still sets the width.
+    assert {"h-0", "invisible"} <= set(views.mapping.classes)
+    assert views.mapping.visible
+
+
+def _shown(element: Element) -> bool:
+    return "invisible" not in element.classes
