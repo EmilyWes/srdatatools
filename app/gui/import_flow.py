@@ -12,7 +12,14 @@ from app.db.store import store_parsed_rows
 from app.gui.activity_log import log_import
 from app.gui.busy import run_busy
 from app.gui.mapping_table import MappingScreen, render_mapping_table
-from app.gui.quirks_overview import QuirksScreen, render_quirks_overview
+from app.gui.quirks_overview import (
+    VIEW_MAPPING,
+    VIEW_PARSING,
+    MappingParsingViews,
+    QuirksScreen,
+    render_quirks_overview,
+    render_view_toggle,
+)
 from app.models.record import Record
 from app.parsers.bibtex import (
     parse_bibtex_file,
@@ -80,10 +87,6 @@ _TYPE_OPTIONS = {
     _TYPE_BIBTEX: "BibTeX",
 }
 _TSV_DELIMITER = "\t"
-
-_VIEW_MAPPING = "mapping"
-_VIEW_PARSING = "parsing"
-_VIEW_OPTIONS = {_VIEW_MAPPING: "Mapping", _VIEW_PARSING: "Parsing"}
 
 _SOURCE_UNKNOWN = "unknown"
 _SOURCE_OPTIONS = {
@@ -433,11 +436,10 @@ class ImportView:
     summaries: list[FileSummary] = field(default_factory=list)
     sheets: list[str] = field(default_factory=list)
     sheet: str | None = None
-    view: str = _VIEW_MAPPING
+    view: str = VIEW_MAPPING
     mapping_screen: MappingScreen | None = None
     quirks_screen: QuirksScreen | None = None
-    mapping_container: Element | None = None
-    quirks_container: Element | None = None
+    views: MappingParsingViews | None = None
     import_button: ui.button | None = None
 
     def _name(self) -> str:
@@ -530,29 +532,26 @@ class ImportView:
             return FieldMapping()
         return self.mapping_screen.current_mapping()
 
-    def _show_view(self, view: str) -> None:
+    def _on_view(self, view: str) -> None:
+        """Each view refreshes from the other's edits when it is shown."""
         self.view = view
-        assert self.mapping_container is not None
-        assert self.quirks_container is not None
-        self.mapping_container.set_visibility(view == _VIEW_MAPPING)
-        self.quirks_container.set_visibility(view == _VIEW_PARSING)
-        if view == _VIEW_MAPPING and self.mapping_screen is not None:
+        if view == VIEW_MAPPING and self.mapping_screen is not None:
             self.mapping_screen.refresh_results()
-        if view == _VIEW_PARSING and self.quirks_screen is not None:
+        if view == VIEW_PARSING and self.quirks_screen is not None:
             self.quirks_screen.refresh_ordering()
 
     def _render_mapping_and_parsing(self) -> None:
-        toggle = ui.toggle(_VIEW_OPTIONS, value=self.view).props("dense no-caps")
-        quirks_container = ui.column().classes("items-center w-full")
-        mapping_container = ui.column().classes("items-center w-full")
+        views = render_view_toggle(self.view, on_change=self._on_view)
+        views.mapping.classes("items-center w-full")
+        views.parsing.classes("items-center w-full")
         quirks_screen = render_quirks_overview(
-            quirks_container,
+            views.parsing,
             quirk_boxes(self.file_type, type_label(self.file_type)),
             default_choices(self.file_type, self.source),
             current_mapping=self._current_mapping,
         )
         mapping_screen = render_mapping(
-            mapping_container,
+            views.mapping,
             self.file_type,
             self._name(),
             merge_summaries(self.summaries),
@@ -560,14 +559,12 @@ class ImportView:
             quirks_screen.current_choices,
         )
         if mapping_screen is None:
-            toggle.delete()
-            quirks_container.delete()
+            views.toggle.delete()
+            views.parsing.delete()
             return
         self.mapping_screen, self.quirks_screen = mapping_screen, quirks_screen
-        self.mapping_container = mapping_container
-        self.quirks_container = quirks_container
-        toggle.on_value_change(lambda e: self._show_view(e.value))
-        self._show_view(self.view)
+        self.views = views
+        self._on_view(self.view)
 
     def render(self) -> None:
         type_known = self.file_type != _TYPE_UNKNOWN
@@ -632,7 +629,7 @@ class ImportView:
                         notice.classes("invisible")
 
                 self.mapping_screen = self.quirks_screen = None
-                self.mapping_container = self.quirks_container = None
+                self.views = None
                 if self.paths and self.summaries and type_known:
                     self._render_mapping_and_parsing()
                 has_mapping = self.mapping_screen is not None

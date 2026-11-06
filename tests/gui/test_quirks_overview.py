@@ -3,7 +3,11 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.gui.layout import shell
-from app.gui.quirks_overview import QuirksScreen, render_quirks_overview
+from app.gui.quirks_overview import (
+    QuirksScreen,
+    render_quirks_overview,
+    render_view_toggle,
+)
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import (
     ParsingChoices,
@@ -332,3 +336,24 @@ def test_render_quirks_overview__label_and_empty_value_boxes_are_wide() -> None:
     assert "w-[7rem]" in screen.widgets["label_include"].classes
     assert "w-[7rem]" in screen.empty_rows[0].classes
     assert "w-[5.5rem]" in screen.widgets["preferred_qualifier"].classes
+
+
+def test_render_view_toggle__shows_one_view_and_reports_switches() -> None:
+    shell()
+    switched: list[str] = []
+
+    views = render_view_toggle(on_change=switched.append)
+
+    assert views.mapping.visible and not views.parsing.visible
+    views.toggle.value = "parsing"
+    assert views.parsing.visible and not views.mapping.visible
+    assert switched == ["parsing"]
+
+
+def test_render_view_toggle__starts_on_the_given_view() -> None:
+    shell()
+
+    views = render_view_toggle("parsing")
+
+    assert views.toggle.value == "parsing"
+    assert views.parsing.visible and not views.mapping.visible

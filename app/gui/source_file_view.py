@@ -7,7 +7,7 @@ from app.db.models import SourceFile
 from app.gui.format import format_count, source_label
 from app.gui.import_flow import preview_for, row_defaults_for, type_label
 from app.gui.mapping_table import render_mapping_table
-from app.gui.quirks_overview import render_quirks_overview
+from app.gui.quirks_overview import render_quirks_overview, render_view_toggle
 from app.parsers.common import FileSummary
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import (
@@ -15,9 +15,6 @@ from app.parsers.profiles.overview import (
     load_choices,
     quirk_boxes,
 )
-
-_VIEW_MAPPING = "mapping"
-_VIEW_PARSING = "parsing"
 
 
 def render_source_file_view(
@@ -84,20 +81,14 @@ def render_source_file_view(
                     "min-w-48 max-w-full max-h-80"
                 )
             with ui.column().classes("gap-1"):
-                toggle = ui.toggle(
-                    {_VIEW_MAPPING: "Mapping", _VIEW_PARSING: "Parsing"},
-                    value=_VIEW_MAPPING,
-                ).props("dense no-caps")
+                views = render_view_toggle()
                 summary = FileSummary(**source_file.file_summary)
                 source = source_file.source or "unknown"
                 choices = load_choices(
                     source_file.quirk_choices, source_file.format, source
                 )
-                mapping_container = ui.column()
-                quirks_container = ui.column()
-                quirks_container.set_visibility(False)
                 render_mapping_table(
-                    mapping_container,
+                    views.mapping,
                     summary,
                     FieldMapping.model_validate(source_file.suggested_mapping),
                     defaults=row_defaults_for(source_file.format, source),
@@ -107,14 +98,8 @@ def render_source_file_view(
                     chosen=FieldMapping.model_validate(source_file.field_mapping),
                 )
                 render_quirks_overview(
-                    quirks_container,
+                    views.parsing,
                     quirk_boxes(source_file.format, type_label(source_file.format)),
                     default_choices(source_file.format, source),
                     chosen=choices,
                 )
-
-                def show(view: str) -> None:
-                    mapping_container.set_visibility(view == _VIEW_MAPPING)
-                    quirks_container.set_visibility(view == _VIEW_PARSING)
-
-                toggle.on_value_change(lambda e: show(e.value))

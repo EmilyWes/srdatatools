@@ -295,6 +295,42 @@ class QuirksScreen:
                 self._wire_enabled_by(item)
 
 
+VIEW_MAPPING = "mapping"
+VIEW_PARSING = "parsing"
+_VIEW_OPTIONS = {VIEW_MAPPING: "Mapping", VIEW_PARSING: "Parsing"}
+
+
+@dataclass
+class MappingParsingViews:
+    toggle: ui.toggle
+    mapping: ui.column
+    parsing: ui.column
+
+    def show(self, view: str) -> None:
+        self.mapping.set_visibility(view == VIEW_MAPPING)
+        self.parsing.set_visibility(view == VIEW_PARSING)
+
+
+def render_view_toggle(
+    view: str = VIEW_MAPPING, on_change: Callable[[str], Any] | None = None
+) -> MappingParsingViews:
+    """The Mapping | Parsing toggle above two containers, one shown at a time."""
+    views = MappingParsingViews(
+        toggle=ui.toggle(_VIEW_OPTIONS, value=view).props("dense no-caps"),
+        mapping=ui.column(),
+        parsing=ui.column(),
+    )
+
+    def change(value: str) -> None:
+        views.show(value)
+        if on_change is not None:
+            on_change(value)
+
+    views.toggle.on_value_change(lambda e: change(e.value))
+    views.show(view)
+    return views
+
+
 def render_quirks_overview(
     container: Element,
     boxes: list[QuirkBox],

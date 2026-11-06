@@ -1449,8 +1449,8 @@ def test_render_import_view__starts_on_mapping_with_parsing_hidden(
     view, middle = _nbib_view(monkeypatch, tmp_path)
 
     assert _toggle(middle).value == "mapping"
-    assert view.mapping_container is not None and view.mapping_container.visible
-    assert view.quirks_container is not None and not view.quirks_container.visible
+    assert view.views is not None
+    assert view.views.mapping.visible and not view.views.parsing.visible
 
 
 def test_render_import_view__toggle_switches_to_parsing_and_keeps_edits(
@@ -1462,8 +1462,8 @@ def test_render_import_view__toggle_switches_to_parsing_and_keeps_edits(
 
     _toggle(middle).value = "parsing"
 
-    assert view.quirks_container is not None and view.quirks_container.visible
-    assert view.mapping_container is not None and not view.mapping_container.visible
+    assert view.views is not None
+    assert view.views.parsing.visible and not view.views.mapping.visible
     _toggle(middle).value = "mapping"
     assert view.mapping_screen.current_mapping().rows["TA"].target == "journal"
 
@@ -1477,7 +1477,7 @@ def test_render_import_view__source_change_keeps_the_selected_view(
     view._set_source("pubmed")
 
     assert _toggle(middle).value == "parsing"
-    assert view.quirks_container is not None and view.quirks_container.visible
+    assert view.views is not None and view.views.parsing.visible
 
 
 def test_render_import_view__result_follows_parsing_after_switching_back(
