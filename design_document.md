@@ -2,7 +2,7 @@
 
 2026-09-18 · Emily
 
-**srdatatools** is a local, open-source (MIT licensed), single-user desktop application for importing, merging, deduplicating, enriching, and exporting collections of academic paper metadata from multiple sources (RIS, NBIB, CSV, BibTeX, OpenAlex).
+**srdatatools** is a local, open-source (MIT licensed), single-user desktop application for importing, merging, deduplicating, enriching, and exporting collections of academic paper metadata from multiple sources (RIS, NBIB, CSV/TSV, Excel, BibTeX), with OpenAlex as the enrichment source.
 
 ## Goals & scope
 
@@ -10,7 +10,8 @@
 
 **v1 goals:**
 
-- Import bibliographic records from RIS, NBIB (PubMed), CSV, and BibTeX files
+- Import bibliographic records from RIS, NBIB (PubMed), CSV/TSV, Excel, and BibTeX files
+- Import screening labels already assigned in a screening tool (e.g. ASReview), per phase and screener
 - Store everything in one local database so multiple source files can be combined without duplicate entries
 - Deduplicate records across sources (same paper appearing in e.g. both a PubMed and a Scopus export)
 - Export the combined, cleaned collection to a new file (RIS/CSV at minimum)
@@ -33,7 +34,7 @@
 
 ## Source database priority
 
-Goal: support as many databases as possible, built in order of how widely used they are. Starting six:
+Goal: support as many databases as possible, built in order of how widely used they are. Starting seven (plus the already implemented ASReview and OpenAlex profiles at the bottom):
 
 | Priority | Database | Native export format(s) | Notes / quirks |
 | --- | --- | --- | --- |
@@ -44,6 +45,8 @@ Goal: support as many databases as possible, built in order of how widely used t
 | 5 | Embase | RIS, CSV | Similar shape to PubMed/Medline records but with Embase-specific fields (e.g. Emtree terms) |
 | 6 | PsycINFO | RIS, CSV (via EBSCO or ProQuest platform) | Field set and export mechanics depend on which platform (EBSCO vs ProQuest) the library uses — may need two sub-profiles |
 | 7 | Zotero | RIS, CSV, BibTeX, CSL JSON | Reference manager rather than a database, so records may be incomplete or hand-edited; export fields and tags can vary with the item types in the user's library |
+| — (implemented) | ASReview | CSV, TSV, Excel, RIS | Screening tool: its export is the input file with ASReview's label/note fields added (see ASReview below) |
+| — (implemented) | OpenAlex | CSV, RIS, BibTeX (also a `.txt` tagged format, not yet supported) | Lists are `\|`-separated in CSV; only the CSV export is auto-detected, as the RIS and BibTeX exports carry nothing that marks them as OpenAlex |
 
 **Design implication:** most of these export to RIS or CSV rather than a unique file format each. So the real challenge isn't "one parser per database" — it's that RIS tag usage and CSV column names vary by vendor. The parser architecture should be **format + vendor profile**, not just format: a shared RIS/CSV parsing core, with a per-database "profile" (tag/column mapping + quirks) layered on top. This makes adding a new database mostly a matter of writing a new profile rather than a new parser, and keeps the door open for scaling to "as many databases as possible" without the codebase growing linearly with the parser count.
 
@@ -75,6 +78,8 @@ Goal: support as many databases as possible, built in order of how widely used t
 | Packaging | PyInstaller | One-click executable per OS (Windows/macOS/Linux), no Python install required for end users |
 | HTTP client | httpx | Async-friendly calls to OpenAlex (other enrichment APIs later) |
 
+**Developer logging:** stdlib `logging` to the console (WARNING and up; DEBUG with the `--debug` flag) and to a rotating `srdatatools.log` (1 MB × 3 files) in the app-data folder next to the database. It is separate from the user-facing activity log.
+
 **Module layout** (`(planned)` marks modules not built yet):
 
 ```
@@ -82,7 +87,8 @@ app/
   models/
     record.py        # pydantic Record schema every parser normalizes to
   parsers/
-    common.py        # result types shared by all parsers + file decoding
+    common.py        # result types shared by all parsers, the FileType literal, file decoding
+    detect.py        # Type/Source auto-detection from file extension + content sniffing
     mapping.py       # generic input-key -> Record field mapping (CSV columns, RIS/NBIB tags, BibTeX fields)
     authors.py       # author-name parsing shared by the parsers
     csv_.py          # generic CSV/TSV reader + column-mapping suggestions
@@ -95,18 +101,21 @@ app/
       base.py        # Profile/FormatProfile types + apply_profile
       default.py     # default profile per Type, used when Source is Unknown
       overview.py    # Parsing view boxes per Type + applying the Parsing choices
+      asreview.py
+      openalex.py
       pubmed.py
       scopus.py
-      web_of_science.py
-      ieee_xplore.py
-      embase.py
-      psycinfo.py
+      web_of_science.py  # (planned)
+      ieee_xplore.py     # (planned)
+      embase.py          # (planned)
+      psycinfo.py        # (planned)
   db/
     models.py        # SQLAlchemy models
     session.py       # engine/session setup, runs Alembic migrations
     store.py         # writes parsed records to the database
     queries.py       # read queries for the GUI
     settings.py      # app_settings key/value read/write
+    activity_log.py  # writes plain-language activity_log rows (for every module that acts)
     migrations/      # Alembic
   dedup/             # (planned) matching strategies (DOI, fuzzy title+author+year)
   enrich/            # (planned) OpenAlex client, field-merging logic
@@ -116,14 +125,15 @@ app/
     home.py          # the single page, wires the panes together
     layout.py        # three-pane shell
     library_nav.py   # left panel navigation
-    import_flow.py   # import view in the middle panel
+    import_flow.py   # import view in the middle panel + the per-Type parser wiring it imports with
     library_overview.py # Library overview stats in the middle panel
     source_file_view.py # source-file detail view in the middle panel
-    quirks_overview.py # Parsing view (quirks overview) for the import and source-file views
+    quirks_overview.py # Parsing view (quirks overview) + the Mapping | Parsing toggle, for the import and source-file views
     record_table.py  # Library record table + its column settings view
     action_panel.py  # right panel actions + activity log
     mapping_table.py # field-mapping table (CSV columns, RIS/NBIB tags, BibTeX fields)
-    activity_log.py  # writes plain-language activity_log rows
+    busy.py          # runs slow work off the event loop, with a spinner dialog if it takes a while
+    format.py        # shared count/source formatting and label/keyword setting keys
   main.py            # launches pywebview + NiceGUI server
 ```
 
@@ -137,14 +147,16 @@ Core tables, kept normalized so the same paper found via two sources becomes one
 | --- | --- |
 | `record` | One row per imported record (pre-dedup), one per unique paper after dedup: title, authors (ordered JSON list: names, ORCID, affiliations), abstract, publication year/month/day, DOI, PMID and other ids, merged/enriched fields |
 | `record_source` | Raw import: which file/source a record came from, its original raw fields (import time is on `source_file`) |
-| `source_file` | Metadata about each imported file: path/name, format, import date, row count, skipped rows (row number + reason), and the field mapping used at import (chosen mapping, original suggestion, and per-column example values and fill counts), and the parsing (quirk) choices |
+| `source_file` | Metadata about each imported file: path/name, format, source (the vendor profile, empty when Unknown), sheet (Excel only), import date, row count, skipped rows (row number + reason), and the field mapping used at import (chosen mapping, original suggestion, and per-column example values and fill counts), and the parsing (quirk) choices |
 | `label` | Screening decisions imported from a label column: which `record` and `source_file` it belongs to, phase, screener, and the normalized value (include / exclude / maybe / unknown / unlabeled). A record can have several; removing a source file deletes its labels |
 | `dedup_link` *(planned, Phase 2)* | Which raw `record_source` rows were merged into which `record`, match method used, confidence score, blocking key used |
 | `enrichment_log` *(planned, Phase 3)* | What was fetched from OpenAlex for a record, when, and which fields it filled or overwrote |
 | `citation_edge` *(planned, Phase 4)* | Snowballing results: `record_id` cites/is cited by `record_id` (or an external id not yet imported) |
-| `activity_log` | Log of every user- or system-triggered action, for the transparency view; the user can clear it |
+| `activity_log` | Log of every user- or system-triggered action, for the transparency view, with a status (ok / warning, e.g. an import with skipped rows or a file that failed); the user can clear it |
 | `field_merge_policy` *(planned, Phase 2)* | The default conflict-resolution chain, plus named field-group overrides and which fields belong to each |
-| `app_settings` | Simple key/value local settings store — record-table column selection; later OpenAlex polite-pool email, merge-policy defaults, etc. |
+| `app_settings` | Simple key/value local settings store — record-table column selection and label format, the Overview's hidden charts/tables; later OpenAlex polite-pool email, merge-policy defaults, etc. |
+
+**DOIs** are stored lowercased and without a `https://doi.org/` or `doi:` prefix (DOIs are case-insensitive, so this makes matching exact); the original value stays in `record_source`'s raw fields.
 
 **Key design choice:** never destroy the originally imported data. `record_source` keeps the raw parsed fields forever, so *what was imported* is never lost — this is for transparency and audit, not for in-app undo. There is no built-in undo/rollback for merges or enrichment: the safety net is that the app makes it clear, before running dedup, that the user should **export the current library first** if they want a restore point. This keeps the merge engine and its data model simpler, at the cost of relying on the user's own exported backup rather than an in-app history.
 
@@ -168,7 +180,7 @@ flowchart LR
 
 **Dedup is optional, not a required step.** The pipeline is Import → Parse → *(optional)* Dedup → Store → *(optional)* Enrich/Snowball → Export, and each optional stage can be skipped. This means the app is equally useful for simpler jobs: exploring a single file to understand what's in it, or converting one file straight from one format to another (e.g. NBIB to CSV) — no need to run merge/dedup when there's nothing to merge.
 
-**Import & parsing.** Each format (RIS, NBIB, CSV, BibTeX) has its own parser that maps fields into the common `Record` schema, with a per-database vendor profile layered on top where one applies. CSV needs a column-mapping step in the GUI since headers vary by export source (Scopus, Web of Science, etc. all name columns differently). Import accepts multiple files per action (all sharing one source/type selection) and auto-detects type/source from file extension + content sniffing to prefill the source/type dropdowns; see GUI & UX design below for the full import flow. Import writes directly to both `record_source` (raw parsed fields) and `record` (one row per imported record, pre-dedup) — dedup is a separate, on-demand step the user triggers later over the whole `record` table, not something that happens automatically at import time.
+**Import & parsing.** Each format (RIS, NBIB, CSV, BibTeX) has its own parser that maps fields into the common `Record` schema, with a per-database vendor profile layered on top where one applies. CSV needs a column-mapping step in the GUI since headers vary by export source (Scopus, Web of Science, etc. all name columns differently). Import accepts multiple files per action (all sharing one source/type selection) and auto-detects type/source from file extension + content sniffing to prefill the source/type dropdowns; see GUI & UX design below for the full import flow. Import writes directly to both `record_source` (raw parsed fields) and `record` (one row per imported record, pre-dedup) — dedup is a separate, on-demand step the user triggers later over the whole `record` table, not something that happens automatically at import time. Text files are read as UTF-8 (with or without a BOM), falling back to cp1252; Excel means `.xlsx` workbooks only (no legacy `.xls`).
 
 **Deduplication.** At tens-of-thousands scale, comparing every record against every other (all-pairs) is too slow for fuzzy matching, so dedup uses **blocking**: records are first grouped into small candidate buckets (e.g. by normalized publication year + first few characters of first-author surname, or a title n-gram key), and expensive fuzzy comparison only runs *within* a bucket, not across the whole library. Layered checks, cheapest first: (1) exact DOI match (no blocking needed — indexed lookup), (2) exact PubMed/other id match, (3) blocked fuzzy match on normalized title + year + author overlap (e.g. rapidfuzz). The fuzzy-match confidence threshold is **user-adjustable**, defaulting to effectively requiring an exact match — so out of the box the tool only merges what it's certain about, and the user explicitly loosens the threshold if they want it to catch more near-duplicates (trading some risk of false merges for fewer missed ones). Matches below the active threshold are queued for manual review in the GUI rather than auto-merged — this is the main way the tool avoids silently corrupting data.
 
@@ -189,7 +201,7 @@ flowchart LR
 
 **Snowballing.** For a chosen record (or set of records), fetch its references (backward) and citing works (forward) via OpenAlex's citation graph. Results always land in a **candidate holding area** — never straight into the library — where the user reviews and picks which to pull in. No default cap on how many candidates a round can fetch, since a well-cited paper's citing works can run into the hundreds; instead, before fetching, the app estimates the result size and shows a warning if it's large, so the user can confirm or narrow the request rather than being surprised by it. Repeatable across multiple rounds, forward and backward independently.
 
-**Transparency.** Every import, merge, enrichment call, and snowball action writes to the activity log with a plain-language description ("Merged 2 records from PubMed export into existing record via DOI match"), viewable and filterable in its own GUI tab — this is a first-class feature, not a debug log.
+**Transparency.** Every import, merge, enrichment call, and snowball action writes to the activity log with a plain-language description, shown in the right panel's activity log — this is a first-class feature, not a debug log. Entries are short messages of a few lines (shown here separated by " / "), e.g. an import is *Imported from: / scopus.csv / Processed: 998 / Skipped: 2* and a failed file *Import failed: / scopus.csv / Reason: …*; an entry is green when ok and orange as a warning (rows skipped, a file that failed).
 
 ## GUI & UX design
 
@@ -198,8 +210,8 @@ flowchart LR
 - **Left panel** — navigation: a **Library** heading with two entries for the full combined record set, **Overview** and **Table** (each has a gear icon that opens its settings), followed by a list of imported source files, one per `source_file` row. Selecting an entry drives what the middle panel shows; Overview is selected on app start. An **Import** button sits at the top of this panel.
 - **Middle panel** — content for whatever is selected on the left:
   - **Overview** selected: a *Field completeness* bar chart (for title, authors, abstract, publication year, journal, DOI, PMID and keywords, the share of records with a value, the count on hover); a *Publication year* bar chart (every year from the first to the last, records without a year left out and counted in the title); a *Publication type* pie (values as stored, matched case-insensitively; the 7 most common get their own slice, the rest are summed into *Other*, and records without a type form *Unknown*); a *Source files* pie (records per imported file, same top-7 + *Other* rule, records linked to several files counted once in *Multiple files*); one pie per label phase + screener (include / exclude / maybe / unknown / unlabeled, records without a label for that pair counted as unlabeled); and one table per keyword prefix (unprefixed keywords under *Keywords*, others e.g. *Keywords: MeSH*) of the 10 keywords carried by the most records, matched case-insensitively (long keywords cut off with … and shown in full on hover). All charts and tables are the same size and flow left to right, wrapping onto the next line. Its settings have one checkbox per chart or table; the hidden ones are persisted in `app_settings`, so a new label pair or keyword prefix shows by default.
-  - **Table** selected: all records in one unpaginated grid (horizontal scrolling for wide column sets), with column sorting and per-column header filters. Rows are selected by clicking or via checkboxes; the header checkbox selects all rows passing the current filters. Rows are compact (24px, small text); hovering a column header shows its full name, and headers highlight on hover to show they can be clicked to sort. Above the grid: total rows, rows in filter (with *Clear all filters*) and rows in selection (with *Clear selection* and a red *Delete selected*, which asks for confirmation, removes the records with their labels, keeps their source files and logs the deletion). The selection is kept for the session (for the right-panel actions to run on later), not between sessions.
-  - **Table settings** (gear beside Table): choose which record fields are shown as columns, plus one optional column per label phase + screener combination in the library (e.g. *Label: ft / screener 1*, several values joined with "; ") and one per keyword prefix (e.g. *Keywords: MeSH*, prefix stripped; the plain *Keywords* column shows the unprefixed keywords), and a *Label values* choice of **Numbers** (1 / 0 / 0.5 / ?, the default) or **Words** (include / exclude / maybe / unknown), with unlabeled shown as an empty value in both, with *Restore defaults* (DOI, title, authors; Numbers). The choice is remembered between sessions in `app_settings`.
+  - **Table** selected: all records in one unpaginated grid (horizontal scrolling for wide column sets), with column sorting and per-column header filters. Rows are selected by clicking or via checkboxes; the header checkbox selects all rows passing the current filters. Rows are compact (24px, small text); the Authors cell shows the first author, followed by *et al.* when there are more. Hovering a column header shows its full name, and headers highlight on hover to show they can be clicked to sort. Above the grid: total rows, rows in filter (with *Clear all filters*) and rows in selection (with *Clear selection* and a red *Delete selected*, which asks for confirmation, removes the records with their labels, keeps their source files and logs the deletion). The selection is kept for the session (for the right-panel actions to run on later), not between sessions.
+  - **Table settings** (gear beside Table): choose which record fields are shown as columns (including *Sources*: the vendor of each file the record came from, e.g. "PubMed, Scopus", Unknown for files imported without a source), plus one optional column per label phase + screener combination in the library (e.g. *Label: ft / screener 1*, several values joined with "; ") and one per keyword prefix (e.g. *Keywords: MeSH*, prefix stripped; the plain *Keywords* column shows the unprefixed keywords), and a *Label values* choice of **Numbers** (1 / 0 / 0.5 / ?, the default) or **Words** (include / exclude / maybe / unknown), with unlabeled shown as an empty value in both, with *Restore defaults* (DOI, title, authors; Numbers). The choice is remembered between sessions in `app_settings`.
   - **A source file** selected: that file's info — rows currently in the library from this file, how many rows were skipped on import (and why), and an option to remove all of this file's records from the library (see open question on how this interacts with records already merged via dedup), plus a read-only copy of the field mapping and parsing choices used at import, behind the same **Mapping | Parsing** toggle as the import view.
   - **Import** clicked: the middle panel is replaced by the import flow (below) until the user confirms or cancels.
 - **Right panel** — one button per cross-cutting action, top to bottom: **Deduplicate**, **Enrich**, **Snowball**, **Export**. Each has a small gear icon beside it that opens that action's settings in the middle panel (merge-settings for Deduplicate; polite-pool email/overwrite policy for Enrich; pre-fetch size-warning threshold for Snowball; export options for Export). Below the four buttons, a read-only textbox shows the activity log, oldest first and scrolled to the newest entry — always visible, no separate tab needed. Actions refresh it after doing work that may have written to the log. Below the activity log, a red **Delete library** button removes all records and source files after a confirmation dialog showing the counts; the activity log and settings are kept, and the deletion is logged.
@@ -210,12 +222,12 @@ flowchart LR
 2. The middle panel switches to the import view: two dropdowns, **Source** and **Type**, each listing that dropdown's implemented options plus an **Unknown** choice.
    - **Type** = file format (RIS / NBIB / CSV / TSV / Excel / BibTeX, tied to the generic parsers). Type is required — while it's Unknown, **Import** is disabled, with a "please select the type" tooltip.
    - **Sheet** (Excel only) = which tab of the workbook to read, a dropdown on its own row above Source/Type, defaulting to the first tab; changing it re-reads that sheet. The chosen sheet is stored with the source file and shown in its detail view. Excel import takes one file at a time: with several files selected, **Import** is disabled with an "Excel import takes one file at a time" tooltip.
-   - **Source** = vendor profile (PubMed, Scopus, Web of Science, IEEE Xplore, Embase, PsycINFO). Source may stay **Unknown**, meaning no vendor-specific field mapping is applied.
+   - **Source** = vendor profile, one option per implemented profile (e.g. PubMed, Scopus, OpenAlex, ASReview). Source may stay **Unknown**, meaning no vendor-specific field mapping is applied.
    - On upload, the app tries to auto-detect both from file extension + content sniffing and prefills the dropdowns (exact per-format/per-profile detection heuristics are an implementation detail, not specced here). A failed detection leaves a dropdown at Unknown rather than blocking the flow, except Type, which blocks per above.
    - The two dropdowns work independently — picking a Source doesn't filter Type's options or vice versa. If the chosen combination isn't one the source actually exports (e.g. PubMed + CSV), the app falls back to the default parser for the chosen Type with no vendor mapping, and shows an inline note next to Source: *"No profile for this source/type combination — using the default parser."*
 3. Once a file and Type with a mapping renderer are set, a field-mapping table appears inline in the import view itself, directly below the Source/Type dropdowns — no separate screen or confirm step. It's pre-filled with suggested field mappings and stays editable; **Import** always reads whatever the table currently shows at the moment it's clicked. Quirks that build a mapped field follow the table too: they only read rows mapped to that field, so a row set to ignore is never used, not even when pairing author IDs with author names. Quirks that take a value from one specific input key (the Scopus EID from the BibTeX `url` field, the RIS `N1` note lines) run whenever the quirk is on, even if that row is set to ignore. (Today CSV, TSV, Excel, RIS, NBIB and BibTeX share the same mapping table: CSV, TSV and Excel rows are the file's (or sheet's) columns, RIS rows are the tags found in the file (except `ER`), NBIB rows are the tags found in the file plus a derived `DOI` row (taken from the `AID`/`LID` entry ending `[doi]`), BibTeX rows are the fields found in the file plus `@type` (entry type) and `@key` (citation key), pre-filled from a default tag mapping. Delimiters are set per row (see Per-row options); the delimiter box is hidden where values come one per line: RIS and NBIB repeat a tag per value, and BibTeX authors are always split on `and`. Each row also shows an Example: the first non-empty value of that column or tag, truncated, with the full value on hover.)
    - **Labels:** any number of rows can map to **Label**, for screening decisions. Picking it shows two stacked boxes under the dropdown, **phase** and **screener** (grey placeholders `ft` / `screener 1`, used when a box is left empty). Values are normalized case-insensitively: include (`include`, `included`, `yes`, `y`, `1`, `true`, `relevant`), exclude (`exclude`, `excluded`, `no`, `n`, `0`, `false`, `irrelevant`), maybe (`maybe`, `unsure`, `undecided`, `?`), unlabeled (empty cell, or ASReview's `-1`), plus the values listed in the Parsing view's Labeling box, which take precedence (e.g. `-1` under Exclude); anything else is stored as unknown (red in the Result column) and logged. A multi-line value (e.g. RIS `N1` notes) is read line by line: the first line that is a label value wins, and none matching means unlabeled. CSV/TSV/Excel headers `included`, `label_included`, `label`, `decision` and `inclusion` are suggested as Label.
-4. **Import** parses for real and writes both `record_source` (raw fields) and `record` (one row per imported record, pre-dedup). Malformed rows are skipped, logged, and rolled into a result summary ("998 imported, 2 skipped"), consistent with the general malformed-record handling.
+4. **Import** parses for real and writes both `record_source` (raw fields) and `record` (one row per imported record, pre-dedup). Malformed rows are skipped, logged, and rolled into the file's skipped count, consistent with the general malformed-record handling; this includes a record whose values fail to parse or that a quirk fails on (the error is the skip reason). Each file of a multi-file import is stored on its own: a file that can't be read (e.g. moved since it was picked, or undecodable) is skipped, gets a warning entry in the activity log and a notification, and doesn't undo the files that did import.
    - **Per-row options:** the dropdown has one entry per target, and picking a target with options shows its inputs stacked under the dropdown, always visible (like Label). Text boxes left empty use the grey placeholder (the profile's default); delimiters and separators keep their spaces. Any number of rows may map to the same target; where only one value can be kept, the first row in the table that gives one wins. Switching a row to another target and back restores its suggested options. Each option box is tinted like the dropdown: blue when its value differs from the suggested one, orange when it is worth a look (the author separator or keyword delimiter isn't in the example, no example name contains the name separator, the example date is ambiguous for the order box, or the row's Result is red), green otherwise. The checks only use the example, the first non-empty value of that column or tag.
      - **Publication date:** part (full / year / month / day). A full date also has an order (day before month, EU, the default / month before day, US), used only for numeric dates where both numbers could be the month. Built-in patterns read `YYYY`, `YYYY-MM(-DD)`, `YYYY/MM/DD`, RIS `YYYY/MM/DD/other`, NBIB `YYYY Mon (DD)`, `DD/MM/YYYY` (also `.` or `-`), `12 March 2020`, `March 12, 2020`, `Oct2021` / `Oct 2021` and `Fall2013` / `Fall 2013` (a season gives the year only).
      - **Pages:** part (range / start / end / number of pages); with start + number of pages, end = start + count − 1. A range wins over start/end.
@@ -226,7 +238,7 @@ flowchart LR
    - **Quirks overview (Parsing):** a **Mapping | Parsing** toggle above the table switches between the mapping table and the quirks overview, the selected one highlighted; both keep their edits while hidden, and a Source/Type change resets Parsing to the new profile's defaults but keeps the selected view. Parsing shows the subject boxes (see Quirks under Source database priority) side by side where they fit, wrapping onto the next line otherwise; every box is as wide as the widest box needs (measured in the browser, as CSS alone can't equalize wrapping boxes) and a thin grey border with its title centred in the top line, and the selected profile's defaults pre-set. All text in Parsing is small (`text-xs`, box titles `text-sm`). Each item is one row: its label, then exactly one control — a checkbox, text box or dropdown — or, for parser behaviour, the label alone as grey text; the controls line up in one column within each box. Hovering a label shows what the item does. A text box left empty switches its item off. Checkboxes, text boxes and dropdowns have no colour while at the profile default and turn blue when changed; they are no taller than a line of text. Empty values and Ordering are lists: an entry has a small red remove button, and a blank entry at the bottom (its Ignore box greyed out until a field is picked) adds the next one once something is picked. A field already used in Empty values isn't offered again; Ordering offers the columns that currently share a target and refreshes whenever Parsing is shown, keeping a pick that no longer shares one. A **Restore defaults** button at the bottom right resets every Parsing choice to the profile's defaults. The Result column follows the Parsing choices when switching back to Mapping, and **Import** uses them; they are stored with the source file, and the source-file view shows them read-only (choices stored before the subject boxes show the profile's defaults).
    - **Dates from several rows:** each of year, month and day comes from the first year/month/day row that gives it; missing parts are filled from the first full date that gives them (so RIS `PY` + `DA` combine). When the two disagree, year/month/day wins.
 
-**Visualizations:** valued highly (e.g. publications-per-year charts, source-overlap Venn diagrams), but in service of the workflow rather than cluttering it — shown in the middle panel when Library is selected, a few well-chosen, contextually placed visuals rather than a wall of graphs. The specific set beyond the basic counts (a later dashboard pass — see to-do list) will be figured out iteratively as the app takes shape, not fully speced up front.
+**Visualizations:** valued highly (e.g. publications-per-year charts, source-overlap Venn diagrams), but in service of the workflow rather than cluttering it — shown in the middle panel when Library is selected, a few well-chosen, contextually placed visuals rather than a wall of graphs. The Overview holds the current set (completeness, publication year, publication type, source files, labels, keywords); further visuals, such as dedup status or source overlap, are added iteratively as the app takes shape (see Phase 5), not fully speced up front.
 
 ## Related work
 
@@ -251,6 +263,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Set up SQLite + SQLAlchemy models + Alembic migrations
 - [x] Project scaffolding, packaging pipeline (PyInstaller) proven end-to-end early, even with a trivial GUI
 - [x] Test suite + CI set up from day one (pytest + GitHub Actions or similar), running on Windows, macOS, and Linux — every parser and dedup rule gets tests as it's written, not bolted on later; data-handling correctness is a core goal, not a nice-to-have
+  - Large local vendor exports (`tests/data/<vendor>/*_big_*`) are parsed by tests marked `big`, skipped by default and run with `pytest -m big`
 - [x] Contribution basics for open source: CONTRIBUTING.md, code style/lint config, issue templates
 
 **Phase 1 — Import & storage (MVP)**
@@ -286,11 +299,11 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Auto-detection of type/source from file extension + content sniffing, prefilling the Source/Type dropdowns
 - [x] Source/Type dropdowns: implemented profiles/formats + "Unknown"; Type required (Import disabled with a tooltip while Unknown); mismatched Source/Type combination falls back to the default parser with an inline notice
 - [x] Import action: writes `record_source` + `record`, per-file "N imported, M skipped" summary
-- [x] Activity log: write a plain-language `activity_log` row for each import (e.g. "Imported 998 records from scopus.csv, 2 skipped")
+- [x] Activity log: write a plain-language `activity_log` row for each import (e.g. *Imported from: / scopus.csv / Processed: 998 / Skipped: 2*)
 - [x] Source-file detail view: records currently in library from this file, skipped-row count, remove-this-source's-records action, read-only copy of the field mapping used at import
 - [x] Delete/wipe the database: action that removes all imported records and source files
 - [x] Right panel: Dedup / Enrich / Snowball / Export buttons in order, each with a gear icon opening its settings in the middle panel, read-only activity log textbox beneath
-- [x] Middle panel Library view: Overview (field completeness, publication year, label pies, keyword tables) + record table with sorting, column filters, row selection and persisted column settings
+- [x] Middle panel Library view: Overview (field completeness, publication year, publication type and source files pies, label pies, keyword tables) + record table with sorting, column filters, row selection and persisted column settings
 
 **Phase 2 — Export & dedup**
 
@@ -310,7 +323,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 **Phase 3 — Enrichment**
 
 - [ ] OpenAlex API client
-- [ ] Local app\_settings store; "polite pool" email prompt shown inline on first enrichment run if not already set, skippable
+- [ ] "Polite pool" email stored in `app_settings`; prompt shown inline on first enrichment run if not already set, skippable
 - [ ] Field-filling logic (only fill empty fields by default; user can force-overwrite)
 - [ ] Enrichment review/log UI
 - [ ] Explicit "Enrich" action in the Library GUI: per-record and per-selected-batch, no automatic enrichment on import
@@ -325,11 +338,10 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 
 **Phase 5 — Polish & packaging**
 
-- [ ] Full activity log GUI tab with filters/search
-- [ ] Dashboard-style stats page (charts: records over time, by source, by dedup status)
+- [ ] Overview: add dedup-status charts and other dashboard visuals as needed (records per year and per source file already exist)
 - [ ] One-click installers for Windows/macOS/Linux
   - Bundle a third-party license notices file (MIT/BSD/Apache-2.0/MPL-2.0 dependency copyrights) alongside the PyInstaller-built binary — pip-installed/source use is covered by each package's own `site-packages` license file, but a frozen executable needs its own attribution file
-- [ ] User docs / README + MIT LICENSE file for open-source release
+- [ ] User docs / README for open-source release
   - Add a `[project.scripts]` entry point so `pip install` provides a `srdatatools` command (currently only the importable `app` package, launched via `python -m app.main`)
 - [ ] Broaden test coverage to integration tests across the full import → dedup → enrich → export pipeline
 
