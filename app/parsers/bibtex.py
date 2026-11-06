@@ -3,6 +3,7 @@ import re
 import unicodedata
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from functools import partial
 from itertools import zip_longest
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from app.parsers.common import (
     SkippedRow,
     SummaryBuilder,
     decode_file,
+    parse_or_skip,
 )
 from app.parsers.mapping import (
     LINE_DELIMITER,
@@ -265,7 +267,12 @@ def parse_bibtex_text(
                 "Skipping BibTeX entry at line %d: %s", entry.line_number, entry.reason
             )
         else:
-            rows.append(parse_bibtex_record(entry.fields, mapping, settings))
+            parse_or_skip(
+                rows,
+                skipped,
+                entry.line_number,
+                partial(parse_bibtex_record, entry.fields, mapping, settings),
+            )
     return ParseResult(rows=rows, skipped=skipped)
 
 

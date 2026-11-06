@@ -2,6 +2,9 @@ from pathlib import Path
 
 import pytest
 
+from app.models.record import Record
+from app.parsers import csv_
+from app.parsers.common import SkippedRow
 from app.parsers.csv_ import (
     parse_csv_file,
     parse_csv_record,
@@ -21,6 +24,7 @@ from app.parsers.mapping import (
     ScalarRow,
     Suggest,
 )
+from app.parsers.quirks import ParseSettings
 from tests.mappings import mapping_of, targets_of
 
 CSV_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "general"
@@ -671,3 +675,30 @@ def test_parse_csv_text__reads_asreview_style_included_column() -> None:
         "unlabeled",
         "unlabeled",
     ]
+
+
+def _fail_on_bad_title(monkeypatch: pytest.MonkeyPatch) -> None:
+    real = csv_.apply_mapping
+
+    def apply(
+        raw_fields: dict[str, str], mapping: FieldMapping, settings: ParseSettings
+    ) -> Record:
+        if "Bad" in raw_fields.values():
+            raise ValueError("bad value")
+        return real(raw_fields, mapping, settings)
+
+    monkeypatch.setattr(csv_, "apply_mapping", apply)
+
+
+def test_parse_csv_text__skips_record_that_fails_to_parse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _fail_on_bad_title(monkeypatch)
+
+    result = csv_.parse_csv_text(
+        "Title\nGood\nBad\nAlso good\n", mapping_of({"Title": "title"})
+    )
+
+    assert [row.record.title for row in result.rows] == ["Good", "Also good"]
+    assert [row.row_number for row in result.rows] == [2, 4]
+    assert result.skipped == [SkippedRow(3, "bad value")]

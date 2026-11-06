@@ -1,5 +1,6 @@
 import datetime
 import logging
+from functools import partial
 from pathlib import Path
 from zipfile import BadZipFile
 
@@ -13,6 +14,7 @@ from app.parsers.common import (
     ParseResult,
     SkippedRow,
     SummaryBuilder,
+    parse_or_skip,
 )
 from app.parsers.csv_ import parse_csv_record
 from app.parsers.mapping import FieldMapping
@@ -105,7 +107,12 @@ def parse_excel_file(
             logger.warning("Skipping row %d: blank", row_number)
             continue
         raw_fields = dict(zip(headers, values, strict=True))
-        rows.append(parse_csv_record(raw_fields, mapping, settings))
+        parse_or_skip(
+            rows,
+            skipped,
+            row_number,
+            partial(parse_csv_record, raw_fields, mapping, settings),
+        )
 
     return ParseResult(rows=rows, skipped=skipped)
 

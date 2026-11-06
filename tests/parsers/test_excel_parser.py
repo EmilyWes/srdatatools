@@ -5,8 +5,12 @@ from pathlib import Path
 import pytest
 from openpyxl import Workbook
 
+from app.models.record import Record
+from app.parsers import csv_
+from app.parsers.common import SkippedRow
 from app.parsers.excel import parse_excel_file, read_excel_headers, read_excel_sheets
 from app.parsers.mapping import FieldMapping, Suggest
+from app.parsers.quirks import ParseSettings
 from tests.mappings import mapping_of
 
 
@@ -276,3 +280,29 @@ def test_read_excel_headers__empty_sheet_has_no_headers(tmp_path: Path) -> None:
 
     assert summary.samples == {}
     assert summary.total_rows == 0
+
+
+def _fail_on_bad_title(monkeypatch: pytest.MonkeyPatch) -> None:
+    real = csv_.apply_mapping
+
+    def apply(
+        raw_fields: dict[str, str], mapping: FieldMapping, settings: ParseSettings
+    ) -> Record:
+        if "Bad" in raw_fields.values():
+            raise ValueError("bad value")
+        return real(raw_fields, mapping, settings)
+
+    monkeypatch.setattr(csv_, "apply_mapping", apply)
+
+
+def test_parse_excel_file__skips_record_that_fails_to_parse(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _fail_on_bad_title(monkeypatch)
+    path = _workbook(tmp_path, {"Sheet": [["Title"], ["Good"], ["Bad"], ["Also"]]})
+
+    result = parse_excel_file(path, mapping_of({"Title": "title"}))
+
+    assert [row.record.title for row in result.rows] == ["Good", "Also"]
+    assert [row.row_number for row in result.rows] == [2, 4]
+    assert result.skipped == [SkippedRow(3, "bad value")]

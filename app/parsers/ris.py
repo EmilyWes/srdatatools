@@ -1,6 +1,7 @@
 import logging
 import re
 from collections.abc import Mapping
+from functools import partial
 from pathlib import Path
 
 from app.models.record import Author
@@ -11,6 +12,7 @@ from app.parsers.common import (
     SkippedRow,
     SummaryBuilder,
     decode_file,
+    parse_or_skip,
 )
 from app.parsers.mapping import (
     LINE_DELIMITER,
@@ -140,7 +142,12 @@ def parse_ris_text(
             if lines and all(t != _TYPE_TAG for t, _ in lines):
                 skip(start_line, "record has no TY tag")
             elif lines:
-                rows.append(parse_ris_record(lines, mapping, settings))
+                parse_or_skip(
+                    rows,
+                    skipped,
+                    start_line,
+                    partial(parse_ris_record, lines, mapping, settings),
+                )
             lines = []
             continue
 

@@ -1,9 +1,12 @@
 import codecs
-from collections.abc import Iterable
-from dataclasses import dataclass
+import logging
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from app.models.record import Record
+
+logger = logging.getLogger(__name__)
 
 _FILE_ENCODINGS = ("utf-8-sig", "cp1252")
 
@@ -12,6 +15,7 @@ _FILE_ENCODINGS = ("utf-8-sig", "cp1252")
 class ParsedRow:
     record: Record
     raw_fields: dict[str, str]
+    row_number: int = 0
 
 
 @dataclass
@@ -24,6 +28,22 @@ class SkippedRow:
 class ParseResult:
     rows: list[ParsedRow]
     skipped: list[SkippedRow]
+
+
+def parse_or_skip(
+    rows: list[ParsedRow],
+    skipped: list[SkippedRow],
+    row_number: int,
+    parse: Callable[[], ParsedRow],
+) -> None:
+    """A record whose values don't fit the Record schema is skipped, not fatal."""
+    try:
+        row = parse()
+    except ValueError as exc:
+        logger.warning("Skipping record at %d", row_number, exc_info=True)
+        skipped.append(SkippedRow(row_number, str(exc)))
+        return
+    rows.append(replace(row, row_number=row_number))
 
 
 @dataclass

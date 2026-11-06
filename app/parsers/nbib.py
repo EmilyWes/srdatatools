@@ -1,6 +1,7 @@
 import logging
 import re
 from collections.abc import Mapping
+from functools import partial
 from pathlib import Path
 
 from app.models.record import Author
@@ -11,6 +12,7 @@ from app.parsers.common import (
     SkippedRow,
     SummaryBuilder,
     decode_file,
+    parse_or_skip,
 )
 from app.parsers.mapping import (
     LINE_DELIMITER,
@@ -166,7 +168,12 @@ def parse_nbib_text(
         if all(tag != _REQUIRED_TAG for tag, _ in lines):
             skip(start_line, f"record has no {_REQUIRED_TAG} tag")
             return
-        rows.append(parse_nbib_record(lines, mapping, settings))
+        parse_or_skip(
+            rows,
+            skipped,
+            start_line,
+            partial(parse_nbib_record, lines, mapping, settings),
+        )
 
     for line_number, line in enumerate(text.splitlines(), start=1):
         if not line.strip():

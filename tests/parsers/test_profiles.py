@@ -105,6 +105,39 @@ def test_default_row_defaults__overrides_the_type_default() -> None:
     assert defaults == RowDefaults(delimiter=",", author_delimiter="\n")
 
 
+class _FailOnBadTitle:
+    def apply(
+        self,
+        raw_fields: dict[str, str],
+        record: Record,
+        mapping: FieldMapping,
+        settings: ParseSettings,
+    ) -> Record:
+        if record.title == "Bad":
+            raise ValueError("bad value")
+        return record
+
+
+def test_apply_profile__skips_record_a_quirk_fails_on_in_row_order() -> None:
+    profile = FormatProfile(
+        suggestions={},
+        matches=never_matches,
+        settings=ParseSettings(),
+        row_defaults=RowDefaults(),
+        quirks=(_FailOnBadTitle(),),
+    )
+    rows = [
+        ParsedRow(Record(title=title), {}, row_number)
+        for title, row_number in (("Good", 2), ("Bad", 3), ("Also", 5))
+    ]
+    result = ParseResult(rows=rows, skipped=[SkippedRow(4, "blank")])
+
+    fixed = apply_profile(result, profile, FieldMapping())
+
+    assert [row.record.title for row in fixed.rows] == ["Good", "Also"]
+    assert fixed.skipped == [SkippedRow(3, "bad value"), SkippedRow(4, "blank")]
+
+
 def test_apply_profile__runs_quirks_in_order_and_keeps_raw_fields_and_skipped() -> None:
     profile = FormatProfile(
         suggestions={},

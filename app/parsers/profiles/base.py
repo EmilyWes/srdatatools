@@ -1,10 +1,13 @@
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from app.models.record import Record
-from app.parsers.common import ParseResult
+from app.parsers.common import ParsedRow, ParseResult, SkippedRow
 from app.parsers.mapping import FieldMapping, RowDefaults, Suggest
 from app.parsers.quirks import ParseSettings, RecordQuirk
+
+logger = logging.getLogger(__name__)
 
 MatchesText = Callable[[str], bool]
 
@@ -44,8 +47,16 @@ def fix_record(
 def apply_profile(
     result: ParseResult, profile: FormatProfile, mapping: FieldMapping
 ) -> ParseResult:
-    rows = [
-        replace(row, record=fix_record(profile, row.raw_fields, row.record, mapping))
-        for row in result.rows
-    ]
-    return replace(result, rows=rows)
+    """A record a quirk fails on is skipped, like one the parser fails on."""
+    rows: list[ParsedRow] = []
+    skipped = list(result.skipped)
+    for row in result.rows:
+        try:
+            record = fix_record(profile, row.raw_fields, row.record, mapping)
+        except ValueError as exc:
+            logger.warning("Skipping record at %d", row.row_number, exc_info=True)
+            skipped.append(SkippedRow(row.row_number, str(exc)))
+            continue
+        rows.append(replace(row, record=record))
+    skipped.sort(key=lambda row: row.row_number)
+    return ParseResult(rows=rows, skipped=skipped)

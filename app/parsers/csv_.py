@@ -1,6 +1,7 @@
 import csv
 import logging
 from collections.abc import Mapping
+from functools import partial
 from io import StringIO
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from app.parsers.common import (
     SkippedRow,
     SummaryBuilder,
     decode_file,
+    parse_or_skip,
 )
 from app.parsers.mapping import (
     FieldMapping,
@@ -146,7 +148,12 @@ def parse_csv_text(
             logger.warning("Skipping row %d: blank", row_number)
             continue
 
-        rows.append(parse_csv_record(raw_fields, mapping, settings))
+        parse_or_skip(
+            rows,
+            skipped,
+            row_number,
+            partial(parse_csv_record, raw_fields, mapping, settings),
+        )
 
     return ParseResult(rows=rows, skipped=skipped)
 
