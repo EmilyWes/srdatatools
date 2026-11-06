@@ -1,5 +1,5 @@
 import json
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any
 
 from nicegui import ui
@@ -10,36 +10,60 @@ from app.db.settings import delete_setting, get_setting, set_setting
 from app.parsers.profiles import PROFILES
 
 _UNKNOWN = "Unknown"
-_SECTIONS_KEY = "overview_sections"
-
-SECTIONS: dict[str, str] = {
-    "total": "Total records",
-    "per_source": "Records per source",
-    "per_file": "Records per file",
-    "per_year": "Records per year",
+_HIDDEN_KEY = "overview_hidden"
+_COMPLETENESS = "completeness"
+_PER_YEAR = "per_year"
+_BAR_COLOR = "#5470c6"
+_LABEL_COLORS = {
+    "include": "#21ba45",
+    "exclude": "#c10015",
+    "maybe": "#f2c037",
+    "unknown": "#9e9e9e",
+    "unlabeled": "#e0e0e0",
 }
-DEFAULT_SECTIONS = list(SECTIONS)
+_TITLE_CLASSES = "text-sm text-grey-7"
 
 
-def _in_display_order(sections: Collection[str]) -> list[str]:
-    return [key for key in SECTIONS if key in sections]
+def label_item_key(phase: str, screener: str) -> str:
+    return "label:" + json.dumps([phase, screener])
 
 
-def load_sections(session: Session) -> list[str]:
-    stored = get_setting(session, _SECTIONS_KEY)
-    return (
-        _in_display_order(json.loads(stored))
-        if stored is not None
-        else DEFAULT_SECTIONS
-    )
+def keyword_item_key(prefix: str | None) -> str:
+    return "keywords:" + json.dumps(prefix)
 
 
-def save_sections(session: Session, sections: Sequence[str]) -> None:
-    set_setting(session, _SECTIONS_KEY, json.dumps(_in_display_order(sections)))
+def _keyword_title(prefix: str | None) -> str:
+    return f"Keywords: {prefix}" if prefix is not None else "Keywords"
 
 
-def reset_sections(session: Session) -> None:
-    delete_setting(session, _SECTIONS_KEY)
+def overview_items(
+    label_pairs: Sequence[tuple[str, str]], keyword_prefixes: Sequence[str | None]
+) -> list[tuple[str, str]]:
+    return [
+        (_COMPLETENESS, "Field completeness"),
+        (_PER_YEAR, "Publication year"),
+        *(
+            (label_item_key(phase, screener), f"Labels: {phase} / {screener}")
+            for phase, screener in label_pairs
+        ),
+        *(
+            (keyword_item_key(prefix), _keyword_title(prefix))
+            for prefix in keyword_prefixes
+        ),
+    ]
+
+
+def load_hidden(session: Session) -> set[str]:
+    stored = get_setting(session, _HIDDEN_KEY)
+    return set(json.loads(stored)) if stored is not None else set()
+
+
+def save_hidden(session: Session, hidden: Collection[str]) -> None:
+    set_setting(session, _HIDDEN_KEY, json.dumps(sorted(hidden)))
+
+
+def reset_hidden(session: Session) -> None:
+    delete_setting(session, _HIDDEN_KEY)
 
 
 def format_count(count: int) -> str:
@@ -53,85 +77,189 @@ def source_label(source: str | None) -> str:
     return profile.label if profile is not None else source
 
 
-def _count_table(title: str, heading: str, rows: list[tuple[str, int]]) -> None:
+def _completeness_chart(total: int, filled: Sequence[tuple[str, int]]) -> None:
+    ui.label("Field completeness").classes(_TITLE_CLASSES)
+    ui.echart(
+        {
+            "grid": {"left": 8, "right": 24, "top": 8, "bottom": 8},
+            "xAxis": {
+                "type": "value",
+                "max": 100,
+                "axisLabel": {"formatter": "{value}%"},
+            },
+            "yAxis": {
+                "type": "category",
+                "inverse": True,
+                "data": [name for name, _ in filled],
+            },
+            "tooltip": {
+                "trigger": "item",
+                ":formatter": "(p) => `${p.name}: ${p.data.count} / "
+                + f"{format_count(total)}`",
+            },
+            "series": [
+                {
+                    "type": "bar",
+                    "color": _BAR_COLOR,
+                    "itemStyle": {"borderRadius": [0, 4, 4, 0]},
+                    "data": [
+                        {
+                            "value": round(100 * count / total, 1) if total else 0,
+                            "count": format_count(count),
+                        }
+                        for _, count in filled
+                    ],
+                }
+            ],
+        }
+    ).classes("w-full max-w-3xl").style(f"height: {len(filled) * 20 + 40}px")
+
+
+def _year_chart(per_year: Sequence[tuple[int | None, int]]) -> None:
+    counts = {year: count for year, count in per_year if year is not None}
+    unknown = sum(count for year, count in per_year if year is None)
+    years = list(range(min(counts), max(counts) + 1)) if counts else []
+    title = "Publication year" + (
+        f" ({format_count(unknown)} unknown)" if unknown else ""
+    )
+    ui.label(title).classes(_TITLE_CLASSES)
+    ui.echart(
+        {
+            "grid": {"left": 8, "right": 24, "top": 8, "bottom": 8},
+            "xAxis": {"type": "category", "data": [str(year) for year in years]},
+            "yAxis": {"type": "value", "minInterval": 1},
+            "tooltip": {"trigger": "item"},
+            "series": [
+                {
+                    "type": "bar",
+                    "color": _BAR_COLOR,
+                    "itemStyle": {"borderRadius": [4, 4, 0, 0]},
+                    "data": [counts.get(year, 0) for year in years],
+                }
+            ],
+        }
+    ).classes("w-full max-w-3xl h-64")
+
+
+def _label_pie(phase: str, screener: str, counts: Mapping[str, int]) -> None:
     with ui.column().classes("gap-1"):
-        ui.label(title).classes("text-sm text-grey-7")
+        ui.label(f"Labels: {phase} / {screener}").classes(_TITLE_CLASSES)
+        ui.echart(
+            {
+                "tooltip": {"trigger": "item"},
+                "series": [
+                    {
+                        "type": "pie",
+                        "radius": "60%",
+                        "itemStyle": {"borderColor": "#fff", "borderWidth": 2},
+                        "data": [
+                            {
+                                "name": value,
+                                "value": counts[value],
+                                "itemStyle": {"color": color},
+                            }
+                            for value, color in _LABEL_COLORS.items()
+                            if counts.get(value)
+                        ],
+                    }
+                ],
+            }
+        ).classes("w-72 h-56")
+
+
+def _keyword_table(prefix: str | None, counts: Sequence[tuple[str, int]]) -> None:
+    with ui.column().classes("gap-1"):
+        ui.label(_keyword_title(prefix)).classes(_TITLE_CLASSES)
         ui.table(
             columns=[
-                {"name": "name", "label": heading, "field": "name", "align": "left"},
-                {"name": "count", "label": "Records", "field": "count"},
+                {
+                    "name": "keyword",
+                    "label": "Keyword",
+                    "field": "keyword",
+                    "align": "left",
+                },
+                {"name": "count", "label": "Papers", "field": "count"},
             ],
-            rows=[{"name": name, "count": format_count(count)} for name, count in rows],
+            rows=[
+                {"keyword": keyword, "count": format_count(count)}
+                for keyword, count in counts
+            ],
             pagination=0,
-        ).props("dense flat bordered hide-bottom").classes("min-w-48")
+        ).props("dense flat bordered hide-bottom virtual-scroll").classes("w-64 h-80")
 
 
 def render_library_overview(
     middle: Element,
     total: int,
-    per_source: Sequence[tuple[str | None, int]],
-    per_file: Sequence[tuple[str, int]],
+    filled: Sequence[tuple[str, int]],
     per_year: Sequence[tuple[int | None, int]],
-    sections: Collection[str],
+    label_counts: Mapping[tuple[str, str], Mapping[str, int]],
+    keyword_counts: Mapping[str | None, Sequence[tuple[str, int]]],
+    hidden: Collection[str],
 ) -> None:
+    pies = {
+        pair: counts
+        for pair, counts in label_counts.items()
+        if label_item_key(*pair) not in hidden
+    }
+    keyword_tables = {
+        prefix: counts
+        for prefix, counts in keyword_counts.items()
+        if keyword_item_key(prefix) not in hidden
+    }
     middle.clear()
     with middle:
         with ui.column().classes("w-full p-4 gap-4"):
-            if not sections:
+            if (
+                _COMPLETENESS in hidden
+                and _PER_YEAR in hidden
+                and not (pies or keyword_tables)
+            ):
                 ui.label(
-                    "No sections selected. Use the gear next to Overview to choose"
+                    "Everything is hidden. Use the gear next to Overview to choose"
                     " what's shown."
                 ).classes("text-sm text-grey-6")
-            if "total" in sections:
-                with ui.column().classes("gap-0"):
-                    ui.label(SECTIONS["total"]).classes("text-sm text-grey-7")
-                    ui.label(format_count(total)).classes("text-3xl")
-            with ui.row().classes("gap-6 items-start"):
-                if "per_source" in sections:
-                    _count_table(
-                        SECTIONS["per_source"],
-                        "Source",
-                        [(source_label(source), count) for source, count in per_source],
-                    )
-                if "per_file" in sections:
-                    _count_table(SECTIONS["per_file"], "File", list(per_file))
-                if "per_year" in sections:
-                    _count_table(
-                        SECTIONS["per_year"],
-                        "Year",
-                        [
-                            (str(year) if year is not None else _UNKNOWN, count)
-                            for year, count in per_year
-                        ],
-                    )
+            if _COMPLETENESS not in hidden:
+                _completeness_chart(total, filled)
+            if _PER_YEAR not in hidden:
+                _year_chart(per_year)
+            if pies:
+                with ui.row().classes("gap-6 items-start"):
+                    for (phase, screener), counts in pies.items():
+                        _label_pie(phase, screener, counts)
+            if keyword_tables:
+                with ui.row().classes("gap-6 items-start"):
+                    for prefix, keyword_rows in keyword_tables.items():
+                        _keyword_table(prefix, keyword_rows)
 
 
 def render_overview_settings(
     middle: Element,
-    sections: Sequence[str],
-    on_change: Callable[[list[str]], Any],
+    items: Sequence[tuple[str, str]],
+    hidden: Collection[str],
+    on_change: Callable[[set[str]], Any],
     on_restore: Callable[[], Any],
     on_back: Callable[[], Any],
 ) -> None:
-    selected = set(sections)
+    hidden_now = set(hidden)
 
     def toggle(key: str, checked: bool) -> None:
         if checked:
-            selected.add(key)
+            hidden_now.discard(key)
         else:
-            selected.discard(key)
-        on_change(_in_display_order(selected))
+            hidden_now.add(key)
+        on_change(set(hidden_now))
 
     middle.clear()
     with middle:
         with ui.column().classes("w-full p-4 gap-2"):
             ui.label("Overview settings").classes("text-lg")
-            ui.label("Sections").classes("text-sm text-grey-7")
+            ui.label("Shown").classes("text-sm text-grey-7")
             with ui.column().classes("gap-0"):
-                for key, label in SECTIONS.items():
+                for key, label in items:
                     ui.checkbox(
                         label,
-                        value=key in selected,
+                        value=key not in hidden_now,
                         on_change=lambda e, key=key: toggle(key, e.value),
                     ).props("dense")
             with ui.row().classes("gap-2 pt-2"):

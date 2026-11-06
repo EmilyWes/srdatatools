@@ -19,8 +19,6 @@ from app.db.queries import (
     count_label_values,
     count_records,
     count_records_for_file,
-    count_records_per_file,
-    count_records_per_source,
     count_records_per_year,
     list_activity_log,
     list_keyword_prefixes,
@@ -150,39 +148,6 @@ def test_count_records__zero_when_empty(session: Session) -> None:
 
 def test_count_records__counts_all_records(library: Session) -> None:
     assert count_records(library) == 4
-
-
-def test_count_records_per_source__empty_when_no_records(session: Session) -> None:
-    assert count_records_per_source(session) == []
-
-
-def test_count_records_per_source__groups_by_vendor_with_unknown_last(
-    library: Session,
-) -> None:
-    assert count_records_per_source(library) == [
-        ("pubmed", 2),
-        ("scopus", 2),
-        (None, 1),
-    ]
-
-
-def test_count_records_per_source__counts_record_once_per_vendor(
-    session: Session,
-) -> None:
-    first = _source_file("a.nbib", "pubmed", datetime.datetime(2026, 1, 1))
-    second = _source_file("b.nbib", "pubmed", datetime.datetime(2026, 1, 2))
-    session.add(_record(2020, first, second))
-    session.commit()
-
-    assert count_records_per_source(session) == [("pubmed", 1)]
-
-
-def test_count_records_per_file__in_import_order(library: Session) -> None:
-    assert count_records_per_file(library) == [
-        ("pubmed.nbib", 2),
-        ("scopus.csv", 2),
-        ("other.ris", 1),
-    ]
 
 
 def test_count_records_for_file__counts_only_that_file(library: Session) -> None:

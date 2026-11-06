@@ -16,7 +16,7 @@ from app.gui.action_panel import ActionPanel
 from app.gui.home import home
 from app.gui.layout import ShellPanes
 from app.gui.library_nav import LeftPanelNav
-from app.gui.library_overview import save_sections
+from app.gui.library_overview import save_hidden
 from app.parsers.common import FileSummary
 from app.parsers.profiles.overview import default_choices
 from tests.gui.clicks import click_and_wait
@@ -125,14 +125,14 @@ def test_home__shows_library_overview_on_start(monkeypatch: pytest.MonkeyPatch) 
         for element in shells[0].middle.descendants()
         if isinstance(element, ui.label)
     ]
-    assert "Total records" in labels
+    assert "Field completeness" in labels
 
 
-def test_home__overview_shows_only_stored_sections(
+def test_home__overview_hides_stored_hidden_items(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with Session(engine) as session:
-        save_sections(session, ["per_year"])
+        save_hidden(session, ["completeness"])
         session.commit()
     shells: list[ShellPanes] = []
     shell = home_module.shell
@@ -151,8 +151,8 @@ def test_home__overview_shows_only_stored_sections(
         for element in shells[0].middle.descendants()
         if isinstance(element, ui.label)
     ]
-    assert "Records per year" in labels
-    assert "Total records" not in labels
+    assert "Publication year" in labels
+    assert "Field completeness" not in labels
 
 
 def test_home__builds_with_imported_source_file(engine: Engine) -> None:

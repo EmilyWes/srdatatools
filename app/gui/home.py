@@ -5,12 +5,14 @@ from nicegui import ui
 
 from app.db.models import SourceFile
 from app.db.queries import (
+    count_filled_fields,
+    count_keywords,
+    count_label_values,
     count_records,
     count_records_for_file,
-    count_records_per_file,
-    count_records_per_source,
     count_records_per_year,
     list_activity_log,
+    list_label_columns,
     list_source_files,
 )
 from app.db.session import get_engine, session_scope
@@ -26,13 +28,15 @@ from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
 from app.gui.library_nav import LeftPanelNav, render_left_panel
 from app.gui.library_overview import (
-    load_sections,
+    load_hidden,
+    overview_items,
     render_library_overview,
     render_overview_settings,
-    reset_sections,
-    save_sections,
+    reset_hidden,
+    save_hidden,
 )
 from app.gui.record_table import (
+    COLUMNS,
     LabelFormat,
     RecordSelection,
     load_columns,
@@ -96,33 +100,39 @@ def home() -> None:
             actions.show_log(list_activity_log(session))
 
     def show_overview() -> None:
+        fields = [key for key in COLUMNS if key != "sources"]
         with session_scope(_engine) as session:
             render_library_overview(
                 panes.middle,
                 count_records(session),
-                count_records_per_source(session),
-                count_records_per_file(session),
+                [(COLUMNS[key], n) for key, n in count_filled_fields(session, fields)],
                 count_records_per_year(session),
-                load_sections(session),
+                count_label_values(session),
+                count_keywords(session),
+                load_hidden(session),
             )
 
-    def save_overview_sections(sections: list[str]) -> None:
+    def save_overview_hidden(hidden: set[str]) -> None:
         with session_scope(_engine) as session:
-            save_sections(session, sections)
+            save_hidden(session, hidden)
 
-    def restore_overview_sections() -> None:
+    def restore_overview_hidden() -> None:
         with session_scope(_engine) as session:
-            reset_sections(session)
+            reset_hidden(session)
         show_overview_settings()
 
     def show_overview_settings() -> None:
         with session_scope(_engine) as session:
-            sections = load_sections(session)
+            items = overview_items(
+                list_label_columns(session), list(count_keywords(session))
+            )
+            hidden = load_hidden(session)
         render_overview_settings(
             panes.middle,
-            sections,
-            on_change=save_overview_sections,
-            on_restore=restore_overview_sections,
+            items,
+            hidden,
+            on_change=save_overview_hidden,
+            on_restore=restore_overview_hidden,
             on_back=show_overview,
         )
 

@@ -65,26 +65,6 @@ def count_records(session: Session) -> int:
     return session.scalar(select(func.count(Record.id))) or 0
 
 
-def count_records_per_source(session: Session) -> list[tuple[str | None, int]]:
-    statement = (
-        select(SourceFile.source, func.count(func.distinct(RecordSource.record_id)))
-        .join(RecordSource.source_file)
-        .group_by(SourceFile.source)
-        .order_by(SourceFile.source.asc().nulls_last())
-    )
-    return [(source, count) for source, count in session.execute(statement)]
-
-
-def count_records_per_file(session: Session) -> list[tuple[str, int]]:
-    statement = (
-        select(SourceFile.filename, func.count(func.distinct(RecordSource.record_id)))
-        .join(RecordSource.source_file)
-        .group_by(SourceFile.id)
-        .order_by(SourceFile.imported_at)
-    )
-    return [(filename, count) for filename, count in session.execute(statement)]
-
-
 def count_records_for_file(session: Session, source_file_id: int) -> int:
     statement = select(func.count(func.distinct(RecordSource.record_id))).where(
         RecordSource.source_file_id == source_file_id
