@@ -156,7 +156,7 @@ def test_render_quirks_overview__labeling_box_has_a_text_box_per_decision() -> N
 
     assert {"Include", "Exclude", "Maybe", "Unlabeled"} <= set(_labels(middle))
     assert isinstance(screen.widgets["label_include"], ui.input)
-    assert screen.widgets["label_unlabeled"].value == "-1"
+    assert screen.widgets["label_unlabeled"].value == ""
 
     screen.set_value("label_include", "asreview_relevant")
 

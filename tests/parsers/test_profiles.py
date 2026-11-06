@@ -49,7 +49,7 @@ def test_default_profiles__turn_on_the_generic_quirks() -> None:
     for settings in (profile.settings for profile in DEFAULT_PROFILES.values()):
         assert settings.issn_isbn_strip_extras
         assert settings.issn_isbn_only_one
-        assert settings.label_values == (("-1", "unlabeled"),)
+        assert settings.label_values == ()
         assert settings.ambiguous_name_split == "none"
 
 
@@ -88,9 +88,9 @@ def test_profiles__build_on_their_type_defaults() -> None:
 
 
 def test_default_settings__overrides_the_type_default() -> None:
-    settings = default_settings("nbib", label_values=())
+    settings = default_settings("nbib", label_values=(("-1", "exclude"),))
 
-    assert settings.label_values == ()
+    assert settings.label_values == (("-1", "exclude"),)
     assert settings.issn_isbn_strip_extras
 
 

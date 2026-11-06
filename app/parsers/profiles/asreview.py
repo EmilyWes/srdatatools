@@ -31,7 +31,6 @@ _TABULAR_IGNORED = frozenset(
 _RIS_LABEL_VALUES: tuple[tuple[str, LabelValue], ...] = (
     ("asreview_relevant", "include"),
     ("asreview_irrelevant", "exclude"),
-    ("-1", "unlabeled"),
     ("asreview_not_seen", "unlabeled"),
 )
 

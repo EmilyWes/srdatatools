@@ -136,7 +136,7 @@ def test_default_choices__unknown_source_defaults() -> None:
     assert choices.empty_values == [("title", "[Not Available].")]
     assert choices.use_first == []
     assert choices.field_size_limit == 1_000_000
-    assert (choices.label_include, choices.label_unlabeled) == ("", "-1")
+    assert (choices.label_include, choices.label_unlabeled) == ("", "")
 
 
 def test_default_choices__selected_profile_sets_its_own_quirks() -> None:
@@ -229,7 +229,7 @@ def test_profile_with__label_values_are_split_lowercased_and_trimmed() -> None:
         "ris",
         label_include=" ASReview_relevant | Yes please ",
         label_exclude=" | ",
-        label_unlabeled="-1",
+        label_unlabeled="not seen",
     )
 
     settings = profile_with("ris", "unknown", choices).settings
@@ -237,7 +237,7 @@ def test_profile_with__label_values_are_split_lowercased_and_trimmed() -> None:
     assert settings.label_values == (
         ("asreview_relevant", "include"),
         ("yes please", "include"),
-        ("-1", "unlabeled"),
+        ("not seen", "unlabeled"),
     )
 
 

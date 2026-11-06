@@ -703,11 +703,11 @@ def test_normalize_label__maps_known_spellings(value: str, expected: str) -> Non
     assert normalize_label(value) == expected
 
 
-def test_normalize_label__minus_one_is_only_unlabeled_when_listed() -> None:
-    settings = ParseSettings(label_values=(("-1", "unlabeled"),))
+def test_normalize_label__minus_one_is_unlabeled_unless_listed_elsewhere() -> None:
+    settings = ParseSettings(label_values=(("-1", "exclude"),))
 
-    assert normalize_label("-1", settings) == "unlabeled"
-    assert normalize_label("-1") == "unknown"
+    assert normalize_label("-1") == "unlabeled"
+    assert normalize_label("-1", settings) == "exclude"
 
 
 _ASREVIEW_VALUES = ParseSettings(

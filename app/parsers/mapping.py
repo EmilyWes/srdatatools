@@ -253,7 +253,8 @@ _LABEL_SPELLINGS: dict[str, LabelValue] = {
         ("exclude", "excluded", "no", "n", "0", "false", "irrelevant"), "exclude"
     ),
     **dict.fromkeys(("maybe", "unsure", "undecided", "?"), "maybe"),
-    "": "unlabeled",
+    # ASReview writes -1 for records nobody has labeled yet.
+    **dict.fromkeys(("", "-1"), "unlabeled"),
 }
 
 # Hyphens may sit anywhere in an ID; a qualifier like "(Print)" may follow it.
