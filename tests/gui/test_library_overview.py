@@ -79,6 +79,7 @@ def _render(middle: Element, hidden: set[str] | None = None) -> None:
         total=4,
         filled=[("Title", 4), ("DOI", 3), ("Abstract", 0)],
         per_year=[(2018, 1), (2020, 2), (None, 1)],
+        publication_types=[("JOUR", 3), (None, 1)],
         label_counts={
             ("tiab", "Emily"): {"include": 1, "exclude": 2, "unlabeled": 1},
             ("ft", "screener 1"): {"maybe": 4},
@@ -122,7 +123,9 @@ def test_render_library_overview__completeness_as_percent_with_counts() -> None:
 def test_render_library_overview__completeness_with_zero_records() -> None:
     panes = shell()
 
-    render_library_overview(panes.middle, 0, [("Title", 0)], [], {}, {}, set())
+    render_library_overview(
+        panes.middle, 0, [("Title", 0)], [], [], {}, {}, {"publication_type"}
+    )
 
     assert _series_data(_charts(panes.middle)[0]) == [{"value": 0, "count": "0"}]
 
@@ -138,12 +141,55 @@ def test_render_library_overview__year_chart_fills_gaps_and_omits_unknown() -> N
     assert "Publication year (1 unknown)" in _labels(panes.middle)
 
 
+def _pie_slices(chart: ui.echart) -> list[tuple[str, int, str]]:
+    return [
+        (item["name"], item["value"], item["itemStyle"]["color"])
+        for item in _series_data(chart)
+    ]
+
+
+def test_render_library_overview__publication_type_pie_with_unknown() -> None:
+    panes = shell()
+
+    _render(panes.middle)
+
+    assert _pie_slices(_charts(panes.middle)[2]) == [
+        ("JOUR", 3, "#2a78d6"),
+        ("Unknown", 1, "#e0e0e0"),
+    ]
+    assert "Publication type" in _labels(panes.middle)
+
+
+def test_render_library_overview__publication_type_top_seven_then_other() -> None:
+    panes = shell()
+    types: list[tuple[str | None, int]] = [(f"type {n}", 20 - n) for n in range(9)]
+
+    render_library_overview(
+        panes.middle,
+        200,
+        [],
+        [],
+        types,
+        {},
+        {},
+        {"completeness", "per_year"},
+    )
+
+    slices = _pie_slices(_charts(panes.middle)[0])
+    assert [name for name, _, _ in slices] == [
+        *(f"type {n}" for n in range(7)),
+        "Other",
+    ]
+    assert slices[-1] == ("Other", 13 + 12, "#9e9e9e")
+    assert len({color for _, _, color in slices}) == 8
+
+
 def test_render_library_overview__one_pie_per_label_pair() -> None:
     panes = shell()
 
     _render(panes.middle)
 
-    tiab, ft = _charts(panes.middle)[2:]
+    tiab, ft = _charts(panes.middle)[3:]
     assert [(item["name"], item["value"]) for item in _series_data(tiab)] == [
         ("include", 1),
         ("exclude", 2),
@@ -174,7 +220,14 @@ def test_render_library_overview__keyword_table_shows_top_ten_records() -> None:
     counts = [(f"keyword {n}", 20 - n) for n in range(12)]
 
     render_library_overview(
-        panes.middle, 20, [], [], {}, {None: counts}, {"completeness", "per_year"}
+        panes.middle,
+        20,
+        [],
+        [],
+        [],
+        {},
+        {None: counts},
+        {"completeness", "per_year", "publication_type"},
     )
 
     table = _tables(panes.middle)[0]
@@ -194,7 +247,7 @@ def test_render_library_overview__skips_hidden_items() -> None:
     assert "Field completeness" not in labels
     assert "Labels: tiab / Emily" not in labels
     assert "Keywords" not in labels
-    assert len(_charts(panes.middle)) == 2
+    assert len(_charts(panes.middle)) == 3
     assert len(_tables(panes.middle)) == 1
 
 
@@ -202,7 +255,14 @@ def test_render_library_overview__hint_when_everything_hidden() -> None:
     panes = shell()
 
     render_library_overview(
-        panes.middle, 3, [], [], {}, {}, {"completeness", "per_year"}
+        panes.middle,
+        3,
+        [],
+        [],
+        [],
+        {},
+        {},
+        {"completeness", "per_year", "publication_type"},
     )
 
     assert _charts(panes.middle) == []
@@ -223,6 +283,7 @@ def test_overview_items__fixed_items_then_labels_then_keywords() -> None:
     assert overview_items([("ft", "screener 1")], [None, "MeSH"]) == [
         ("completeness", "Field completeness"),
         ("per_year", "Publication year"),
+        ("publication_type", "Publication type"),
         (label_item_key("ft", "screener 1"), "Labels: ft / screener 1"),
         (keyword_item_key(None), "Keywords"),
         (keyword_item_key("MeSH"), "Keywords: MeSH"),
@@ -270,6 +331,7 @@ def test_render_overview_settings__checkboxes_reflect_hidden() -> None:
     assert checkboxes == {
         "Field completeness": True,
         "Publication year": False,
+        "Publication type": True,
         "Keywords: MeSH": True,
     }
 

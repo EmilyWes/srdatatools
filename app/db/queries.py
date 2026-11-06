@@ -127,3 +127,19 @@ def count_keywords(session: Session) -> dict[str | None, list[tuple[str, int]]]:
 
 def list_keyword_prefixes(session: Session) -> list[str]:
     return [prefix for prefix in count_keywords(session) if prefix is not None]
+
+
+def count_publication_types(session: Session) -> list[tuple[str | None, int]]:
+    """Grouped case-insensitively; the first spelling seen is shown. Empty is None."""
+    spellings: dict[str, str] = {}
+    counts: Counter[str | None] = Counter()
+    statement = select(Record.publication_type).order_by(Record.id)
+    for value in session.scalars(statement):
+        if not value:
+            counts[None] += 1
+            continue
+        counts[spellings.setdefault(value.casefold(), value)] += 1
+    return sorted(
+        counts.items(),
+        key=lambda item: (-item[1], item[0] is None, (item[0] or "").casefold()),
+    )

@@ -17,6 +17,7 @@ from app.db.queries import (
     count_filled_fields,
     count_keywords,
     count_label_values,
+    count_publication_types,
     count_records,
     count_records_for_file,
     count_records_per_year,
@@ -285,3 +286,26 @@ def test_list_keyword_prefixes__first_seen_order_without_unprefixed(
     keyworded: Session,
 ) -> None:
     assert list_keyword_prefixes(keyworded) == ["MeSH", "Author"]
+
+
+def test_count_publication_types__case_insensitive_sorted_with_none(
+    session: Session,
+) -> None:
+    session.add_all(
+        [
+            Record(publication_type="JOUR"),
+            Record(publication_type="Book"),
+            Record(publication_type="jour"),
+            Record(publication_type=None),
+            Record(publication_type=""),
+            Record(publication_type="CONF"),
+        ]
+    )
+    session.commit()
+
+    assert count_publication_types(session) == [
+        ("JOUR", 2),
+        (None, 2),
+        ("Book", 1),
+        ("CONF", 1),
+    ]

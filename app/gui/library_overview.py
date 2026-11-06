@@ -13,6 +13,7 @@ _UNKNOWN = "Unknown"
 _HIDDEN_KEY = "overview_hidden"
 _COMPLETENESS = "completeness"
 _PER_YEAR = "per_year"
+_PUBLICATION_TYPE = "publication_type"
 _BAR_COLOR = "#5470c6"
 _LABEL_COLORS = {
     "include": "#21ba45",
@@ -24,6 +25,18 @@ _LABEL_COLORS = {
 _TITLE_CLASSES = "text-sm text-grey-7"
 _BOX_CLASSES = "w-96 h-80"
 _TOP_KEYWORDS = 10
+_TOP_TYPES = 7
+_TYPE_COLORS = [
+    "#2a78d6",
+    "#eb6834",
+    "#1baf7a",
+    "#eda100",
+    "#e87ba4",
+    "#008300",
+    "#6250d6",
+]
+_OTHER_COLOR = "#9e9e9e"
+_UNKNOWN_COLOR = "#e0e0e0"
 COMPLETENESS_FIELDS = [
     "title",
     "authors",
@@ -54,6 +67,7 @@ def overview_items(
     return [
         (_COMPLETENESS, "Field completeness"),
         (_PER_YEAR, "Publication year"),
+        (_PUBLICATION_TYPE, "Publication type"),
         *(
             (label_item_key(phase, screener), f"Labels: {phase} / {screener}")
             for phase, screener in label_pairs
@@ -157,9 +171,9 @@ def _year_chart(per_year: Sequence[tuple[int | None, int]]) -> None:
         ).classes(_BOX_CLASSES)
 
 
-def _label_pie(phase: str, screener: str, counts: Mapping[str, int]) -> None:
+def _pie(title: str, slices: Sequence[tuple[str, int, str]]) -> None:
     with ui.column().classes("gap-1"):
-        ui.label(f"Labels: {phase} / {screener}").classes(_TITLE_CLASSES)
+        ui.label(title).classes(_TITLE_CLASSES)
         ui.echart(
             {
                 "tooltip": {"trigger": "item"},
@@ -170,17 +184,47 @@ def _label_pie(phase: str, screener: str, counts: Mapping[str, int]) -> None:
                         "itemStyle": {"borderColor": "#fff", "borderWidth": 2},
                         "data": [
                             {
-                                "name": value,
-                                "value": counts[value],
+                                "name": name,
+                                "value": count,
                                 "itemStyle": {"color": color},
                             }
-                            for value, color in _LABEL_COLORS.items()
-                            if counts.get(value)
+                            for name, count, color in slices
+                            if count
                         ],
                     }
                 ],
             }
         ).classes(_BOX_CLASSES)
+
+
+def _label_pie(phase: str, screener: str, counts: Mapping[str, int]) -> None:
+    _pie(
+        f"Labels: {phase} / {screener}",
+        [
+            (value, counts.get(value, 0), color)
+            for value, color in _LABEL_COLORS.items()
+        ],
+    )
+
+
+def _publication_type_pie(types: Sequence[tuple[str | None, int]]) -> None:
+    known = [(name, count) for name, count in types if name is not None]
+    top = known[:_TOP_TYPES]
+    _pie(
+        "Publication type",
+        [
+            *(
+                (name, count, color)
+                for (name, count), color in zip(top, _TYPE_COLORS, strict=False)
+            ),
+            ("Other", sum(count for _, count in known[_TOP_TYPES:]), _OTHER_COLOR),
+            (
+                _UNKNOWN,
+                sum(count for name, count in types if name is None),
+                _UNKNOWN_COLOR,
+            ),
+        ],
+    )
 
 
 def _keyword_table(prefix: str | None, counts: Sequence[tuple[str, int]]) -> None:
@@ -218,6 +262,7 @@ def render_library_overview(
     total: int,
     filled: Sequence[tuple[str, int]],
     per_year: Sequence[tuple[int | None, int]],
+    publication_types: Sequence[tuple[str | None, int]],
     label_counts: Mapping[tuple[str, str], Mapping[str, int]],
     keyword_counts: Mapping[str | None, Sequence[tuple[str, int]]],
     hidden: Collection[str],
@@ -238,6 +283,7 @@ def render_library_overview(
             if (
                 _COMPLETENESS in hidden
                 and _PER_YEAR in hidden
+                and _PUBLICATION_TYPE in hidden
                 and not (pies or keyword_tables)
             ):
                 ui.label(
@@ -249,6 +295,8 @@ def render_library_overview(
                     _completeness_chart(total, filled)
                 if _PER_YEAR not in hidden:
                     _year_chart(per_year)
+                if _PUBLICATION_TYPE not in hidden:
+                    _publication_type_pie(publication_types)
                 for (phase, screener), counts in pies.items():
                     _label_pie(phase, screener, counts)
                 for prefix, keyword_rows in keyword_tables.items():
