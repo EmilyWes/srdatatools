@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Sequence
 from typing import Any
 
@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import ActivityLog, Label, Record, RecordSource, SourceFile
+from app.parsers.mapping import split_keyword
 
 
 def list_source_files(session: Session) -> list[SourceFile]:
@@ -98,3 +99,51 @@ def count_records_per_year(session: Session) -> list[tuple[int | None, int]]:
         .order_by(Record.publication_year.asc().nulls_last())
     )
     return [(year, count) for year, count in session.execute(statement)]
+
+
+def count_label_values(session: Session) -> dict[tuple[str, str], dict[str, int]]:
+    total = count_records(session)
+    labels = list_record_labels(session).values()
+    counts: dict[tuple[str, str], dict[str, int]] = {}
+    for pair in list_label_columns(session):
+        values = Counter(value for pairs in labels for value in pairs.get(pair, []))
+        missing = total - sum(pair in pairs for pairs in labels)
+        if missing:
+            values["unlabeled"] += missing
+        counts[pair] = dict(values)
+    return counts
+
+
+def count_filled_fields(
+    session: Session, fields: Sequence[str]
+) -> list[tuple[str, int]]:
+    counts = dict.fromkeys(fields, 0)
+    for row in list_record_rows(session, fields):
+        for field in fields:
+            if row[field] not in (None, "", [], {}):
+                counts[field] += 1
+    return list(counts.items())
+
+
+def count_keywords(session: Session) -> dict[str | None, list[tuple[str, int]]]:
+    """Grouped case-insensitively; the first spelling seen is shown."""
+    spellings: dict[tuple[str | None, str], str] = {}
+    counts: dict[str | None, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for keywords in session.scalars(select(Record.keywords).order_by(Record.id)):
+        seen = set()
+        for keyword in keywords:
+            prefix, text = split_keyword(keyword)
+            key = (prefix, text.casefold())
+            if key in seen:
+                continue
+            seen.add(key)
+            spelling = spellings.setdefault(key, text)
+            counts[prefix][spelling] += 1
+    return {
+        prefix: sorted(texts.items(), key=lambda item: (-item[1], item[0].casefold()))
+        for prefix, texts in counts.items()
+    }
+
+
+def list_keyword_prefixes(session: Session) -> list[str]:
+    return [prefix for prefix in count_keywords(session) if prefix is not None]

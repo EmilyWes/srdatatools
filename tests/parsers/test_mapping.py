@@ -23,6 +23,7 @@ from app.parsers.mapping import (
     normalize_label,
     override_aliases,
     parse_date_string,
+    split_keyword,
     suggest_mapping,
 )
 from app.parsers.quirks import ParseSettings
@@ -891,3 +892,16 @@ def test_override_aliases__moves_alias_to_a_new_target() -> None:
     merged = override_aliases(base, {"type": Suggest("publication_type")})
 
     assert merged == {"type": Suggest("publication_type")}
+
+
+def test_split_keyword__splits_prefix_off() -> None:
+    assert split_keyword("[MeSH] Humans") == ("MeSH", "Humans")
+
+
+def test_split_keyword__unprefixed_keyword() -> None:
+    assert split_keyword("Humans") == (None, "Humans")
+
+
+def test_split_keyword__round_trips_tagged() -> None:
+    row = KeywordsRow(delimiter=";", prefix="Author")
+    assert split_keyword(row.tagged("[a] b")) == ("Author", "[a] b")

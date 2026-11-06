@@ -46,5 +46,15 @@ def log_library_deleted(
     return entry
 
 
+def log_records_deleted(session: Session, count: int) -> ActivityLog:
+    entry = ActivityLog(
+        timestamp=datetime.datetime.now(),
+        action_type="delete_records",
+        message=f"Deleted records: {count}",
+    )
+    session.add(entry)
+    return entry
+
+
 def clear_activity_log(session: Session) -> None:
     session.execute(delete(ActivityLog))

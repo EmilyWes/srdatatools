@@ -25,6 +25,8 @@ _SUGGESTION_CUTOFF = 0.7
 # Case-sensitive on purpose: "PMCID" is an ID header, "Valid" is not.
 _ID_HEADER = re.compile(r"(?<![A-Za-z])[Ii][Dd](?![A-Za-z])|[A-Z]ID(?![A-Za-z])")
 
+_TAGGED_KEYWORD = re.compile(r"\[([^\]]+)\] (.*)", re.DOTALL)
+
 _MONTH_ABBREVIATIONS = {
     "jan": 1,
     "feb": 2,
@@ -151,6 +153,11 @@ class KeywordsRow(BaseModel):
 
     def tagged(self, keyword: str) -> str:
         return f"[{self.prefix}] {keyword}" if self.prefix else keyword
+
+
+def split_keyword(keyword: str) -> tuple[str | None, str]:
+    match = _TAGGED_KEYWORD.fullmatch(keyword)
+    return (match[1], match[2]) if match else (None, keyword)
 
 
 class LabelRow(BaseModel):
