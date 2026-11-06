@@ -27,7 +27,15 @@ from app.parsers.bibtex import (
     read_bibtex_fields,
     suggest_bibtex_mapping,
 )
-from app.parsers.common import FileSummary, ParsedRow, ParseResult, merge_summaries
+from app.parsers.common import (
+    UNKNOWN,
+    FileSummary,
+    FileType,
+    ParsedRow,
+    ParseResult,
+    is_file_type,
+    merge_summaries,
+)
 from app.parsers.csv_ import (
     parse_csv_file,
     parse_csv_record,
@@ -70,27 +78,19 @@ from app.parsers.ris import (
     suggest_ris_mapping,
 )
 
-_TYPE_UNKNOWN = "unknown"
-_TYPE_RIS = "ris"
-_TYPE_NBIB = "nbib"
-_TYPE_CSV = "csv"
-_TYPE_TSV = "tsv"
-_TYPE_EXCEL = "excel"
-_TYPE_BIBTEX = "bibtex"
 _TYPE_OPTIONS = {
-    _TYPE_UNKNOWN: "Unknown",
-    _TYPE_RIS: "RIS",
-    _TYPE_NBIB: "NBIB",
-    _TYPE_CSV: "CSV",
-    _TYPE_TSV: "TSV",
-    _TYPE_EXCEL: "Excel",
-    _TYPE_BIBTEX: "BibTeX",
+    UNKNOWN: "Unknown",
+    "ris": "RIS",
+    "nbib": "NBIB",
+    "csv": "CSV",
+    "tsv": "TSV",
+    "excel": "Excel",
+    "bibtex": "BibTeX",
 }
 _TSV_DELIMITER = "\t"
 
-_SOURCE_UNKNOWN = "unknown"
 _SOURCE_OPTIONS = {
-    _SOURCE_UNKNOWN: "Unknown",
+    UNKNOWN: "Unknown",
     **{key: profile.label for key, profile in PROFILES.items()},
 }
 
@@ -123,7 +123,7 @@ class _FormatHandlers:
 
 
 def _handlers(
-    file_type: str, source: str, choices: ParsingChoices | None = None
+    file_type: FileType, source: str, choices: ParsingChoices | None = None
 ) -> _FormatHandlers | None:
     if profile_for(source, file_type) is None:
         return None
@@ -131,17 +131,17 @@ def _handlers(
     overrides, settings = profile.suggestions, profile.settings
     defaults = profile.row_defaults
     parse_csv = partial(_parse_csv_lines, settings=settings)
-    if file_type in (_TYPE_CSV, _TYPE_TSV):
+    if file_type in ("csv", "tsv"):
         suggest = partial(
             suggest_mapping,
             overrides=overrides,
             defaults=defaults,
             ignored_keys=profile.ignored_keys,
         )
-        delimiter = _TSV_DELIMITER if file_type == _TYPE_TSV else None
+        delimiter = _TSV_DELIMITER if file_type == "tsv" else None
         read_keys = partial(read_csv_headers, delimiter=delimiter, settings=settings)
         return _FormatHandlers(read_keys, suggest, parse_csv, "columns", profile)
-    if file_type == _TYPE_EXCEL:
+    if file_type == "excel":
         suggest = partial(
             suggest_mapping,
             overrides=overrides,
@@ -151,7 +151,7 @@ def _handlers(
         return _FormatHandlers(
             read_excel_headers, suggest, parse_csv, "columns", profile
         )
-    if file_type == _TYPE_RIS:
+    if file_type == "ris":
         suggest = partial(suggest_ris_mapping, overrides=overrides, defaults=defaults)
         return _FormatHandlers(
             read_ris_tags,
@@ -160,7 +160,7 @@ def _handlers(
             "tags",
             profile,
         )
-    if file_type == _TYPE_NBIB:
+    if file_type == "nbib":
         suggest = partial(suggest_nbib_mapping, overrides=overrides, defaults=defaults)
         return _FormatHandlers(
             read_nbib_tags,
@@ -169,7 +169,7 @@ def _handlers(
             "tags",
             profile,
         )
-    if file_type == _TYPE_BIBTEX:
+    if file_type == "bibtex":
         suggest = partial(
             suggest_bibtex_mapping, overrides=overrides, defaults=defaults
         )
@@ -188,7 +188,7 @@ def _suggestion(handlers: _FormatHandlers, summary: FileSummary) -> FieldMapping
 
 
 def preview_for(
-    file_type: str,
+    file_type: FileType,
     source: str,
     summary: FileSummary,
     choices: Callable[[], ParsingChoices | None] = lambda: None,
@@ -210,7 +210,7 @@ def type_label(file_type: str) -> str:
     return _TYPE_OPTIONS[file_type]
 
 
-def row_defaults_for(file_type: str, source: str) -> RowDefaults:
+def row_defaults_for(file_type: FileType, source: str) -> RowDefaults:
     profile = profile_for(source, file_type)
     if profile is None:
         raise ValueError(f"unsupported file type: {file_type!r}")
@@ -218,35 +218,35 @@ def row_defaults_for(file_type: str, source: str) -> RowDefaults:
 
 
 def _detect(path: Path) -> tuple[str, str]:
-    file_type = detect_type(path) or _TYPE_UNKNOWN
-    if file_type == _TYPE_UNKNOWN:
-        return file_type, _SOURCE_UNKNOWN
-    return file_type, detect_source(path, file_type) or _SOURCE_UNKNOWN
+    file_type = detect_type(path)
+    if file_type is None:
+        return UNKNOWN, UNKNOWN
+    return file_type, detect_source(path, file_type) or UNKNOWN
 
 
 def common_detection(detected: list[tuple[str, str]]) -> tuple[str, str]:
     types = {file_type for file_type, _ in detected}
     sources = {source for _, source in detected}
-    file_type = types.pop() if len(types) == 1 else _TYPE_UNKNOWN
-    source = sources.pop() if len(sources) == 1 else _SOURCE_UNKNOWN
+    file_type = types.pop() if len(types) == 1 else UNKNOWN
+    source = sources.pop() if len(sources) == 1 else UNKNOWN
     return file_type, source
 
 
 def read_summary(
-    file_type: str, path: Path, sheet: str | None = None
+    file_type: FileType, path: Path, sheet: str | None = None
 ) -> FileSummary | None:
-    if file_type == _TYPE_EXCEL:
+    if file_type == "excel":
         return read_excel_headers(path, sheet)
-    handlers = _handlers(file_type, _SOURCE_UNKNOWN)
+    handlers = _handlers(file_type, UNKNOWN)
     return handlers.read_keys(path) if handlers is not None else None
 
 
 def render_mapping(
     container: Element,
-    file_type: str,
+    file_type: FileType,
     name: str,
     summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
+    source: str = UNKNOWN,
     choices: Callable[[], ParsingChoices | None] = lambda: None,
 ) -> MappingScreen | None:
     handlers = _handlers(file_type, source)
@@ -270,7 +270,7 @@ def render_mapping(
 def _store(
     session: Session,
     path: Path,
-    file_type: str,
+    file_type: FileType,
     mapping: FieldMapping,
     summary: FileSummary,
     result: ParseResult,
@@ -286,7 +286,7 @@ def _store(
         filename=path.name,
         path=str(path),
         format=file_type,
-        source=source if source != _SOURCE_UNKNOWN else None,
+        source=source if source != UNKNOWN else None,
         sheet=sheet,
         parsed_rows=[(row.record, row.raw_fields) for row in result.rows],
         skipped_rows=[(row.row_number, row.reason) for row in result.skipped],
@@ -302,7 +302,7 @@ def _store(
 
 
 def _settings(
-    file_type: str, source: str, choices: ParsingChoices | None
+    file_type: FileType, source: str, choices: ParsingChoices | None
 ) -> ParseSettings:
     return profile_with(file_type, source, choices).settings
 
@@ -312,12 +312,12 @@ def import_csv(
     path: Path,
     mapping: FieldMapping,
     summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
+    source: str = UNKNOWN,
     choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    settings = _settings(_TYPE_CSV, source, choices)
+    settings = _settings("csv", source, choices)
     result = parse_csv_file(path, mapping, settings=settings)
-    return _store(session, path, _TYPE_CSV, mapping, summary, result, source, choices)
+    return _store(session, path, "csv", mapping, summary, result, source, choices)
 
 
 def import_tsv(
@@ -325,12 +325,12 @@ def import_tsv(
     path: Path,
     mapping: FieldMapping,
     summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
+    source: str = UNKNOWN,
     choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    settings = _settings(_TYPE_TSV, source, choices)
+    settings = _settings("tsv", source, choices)
     result = parse_csv_file(path, mapping, _TSV_DELIMITER, settings)
-    return _store(session, path, _TYPE_TSV, mapping, summary, result, source, choices)
+    return _store(session, path, "tsv", mapping, summary, result, source, choices)
 
 
 def import_excel(
@@ -338,14 +338,14 @@ def import_excel(
     path: Path,
     mapping: FieldMapping,
     summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
+    source: str = UNKNOWN,
     sheet: str | None = None,
     choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    settings = _settings(_TYPE_EXCEL, source, choices)
+    settings = _settings("excel", source, choices)
     result = parse_excel_file(path, mapping, sheet, settings)
     return _store(
-        session, path, _TYPE_EXCEL, mapping, summary, result, source, choices, sheet
+        session, path, "excel", mapping, summary, result, source, choices, sheet
     )
 
 
@@ -354,11 +354,11 @@ def import_ris(
     path: Path,
     mapping: FieldMapping,
     summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
+    source: str = UNKNOWN,
     choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    result = parse_ris_file(path, mapping, _settings(_TYPE_RIS, source, choices))
-    return _store(session, path, _TYPE_RIS, mapping, summary, result, source, choices)
+    result = parse_ris_file(path, mapping, _settings("ris", source, choices))
+    return _store(session, path, "ris", mapping, summary, result, source, choices)
 
 
 def import_nbib(
@@ -366,11 +366,11 @@ def import_nbib(
     path: Path,
     mapping: FieldMapping,
     summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
+    source: str = UNKNOWN,
     choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    result = parse_nbib_file(path, mapping, _settings(_TYPE_NBIB, source, choices))
-    return _store(session, path, _TYPE_NBIB, mapping, summary, result, source, choices)
+    result = parse_nbib_file(path, mapping, _settings("nbib", source, choices))
+    return _store(session, path, "nbib", mapping, summary, result, source, choices)
 
 
 def import_bibtex(
@@ -378,36 +378,34 @@ def import_bibtex(
     path: Path,
     mapping: FieldMapping,
     summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
+    source: str = UNKNOWN,
     choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    result = parse_bibtex_file(path, mapping, _settings(_TYPE_BIBTEX, source, choices))
-    return _store(
-        session, path, _TYPE_BIBTEX, mapping, summary, result, source, choices
-    )
+    result = parse_bibtex_file(path, mapping, _settings("bibtex", source, choices))
+    return _store(session, path, "bibtex", mapping, summary, result, source, choices)
 
 
 def import_file(
     session: Session,
     path: Path,
-    file_type: str,
+    file_type: FileType,
     mapping: FieldMapping,
     summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
+    source: str = UNKNOWN,
     sheet: str | None = None,
     choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    if file_type == _TYPE_CSV:
+    if file_type == "csv":
         return import_csv(session, path, mapping, summary, source, choices)
-    if file_type == _TYPE_TSV:
+    if file_type == "tsv":
         return import_tsv(session, path, mapping, summary, source, choices)
-    if file_type == _TYPE_EXCEL:
+    if file_type == "excel":
         return import_excel(session, path, mapping, summary, source, sheet, choices)
-    if file_type == _TYPE_RIS:
+    if file_type == "ris":
         return import_ris(session, path, mapping, summary, source, choices)
-    if file_type == _TYPE_NBIB:
+    if file_type == "nbib":
         return import_nbib(session, path, mapping, summary, source, choices)
-    if file_type == _TYPE_BIBTEX:
+    if file_type == "bibtex":
         return import_bibtex(session, path, mapping, summary, source, choices)
     raise ValueError(f"unsupported file type: {file_type!r}")
 
@@ -415,7 +413,7 @@ def import_file(
 OnImport = Callable[
     [
         list[tuple[Path, FileSummary]],
-        str,
+        FileType,
         FieldMapping,
         str,
         str | None,
@@ -431,8 +429,8 @@ class ImportView:
     on_import: OnImport
     paths: list[Path] = field(default_factory=list)
     detected: list[tuple[str, str]] = field(default_factory=list)
-    file_type: str = _TYPE_UNKNOWN
-    source: str = _SOURCE_UNKNOWN
+    file_type: str = UNKNOWN
+    source: str = UNKNOWN
     summaries: list[FileSummary] = field(default_factory=list)
     sheets: list[str] = field(default_factory=list)
     sheet: str | None = None
@@ -448,7 +446,7 @@ class ImportView:
         return f"{len(self.paths)} files"
 
     def _too_many_for_excel(self) -> bool:
-        return self.file_type == _TYPE_EXCEL and len(self.paths) > 1
+        return self.file_type == "excel" and len(self.paths) > 1
 
     def _mixed(self) -> bool:
         return len(set(self.detected)) > 1
@@ -490,9 +488,11 @@ class ImportView:
         self.sheet = None
 
         def read() -> tuple[list[str], str | None, list[FileSummary]]:
-            sheets = read_excel_sheets(paths[0]) if file_type == _TYPE_EXCEL else []
+            sheets = read_excel_sheets(paths[0]) if file_type == "excel" else []
             first_sheet = next(iter(sheets), None)
             sheet = previous_sheet if previous_sheet in sheets else first_sheet
+            if not is_file_type(file_type):
+                return sheets, sheet, []
             summaries = [read_summary(file_type, path, sheet) for path in paths]
             return sheets, sheet, [s for s in summaries if s is not None]
 
@@ -517,6 +517,7 @@ class ImportView:
         assert self.paths
         assert self.mapping_screen is not None
         assert self.quirks_screen is not None
+        assert is_file_type(self.file_type)
         return self.on_import(
             list(zip(self.paths, self.summaries, strict=True)),
             self.file_type,
@@ -540,19 +541,19 @@ class ImportView:
         if view == VIEW_PARSING and self.quirks_screen is not None:
             self.quirks_screen.refresh_ordering()
 
-    def _render_mapping_and_parsing(self) -> None:
+    def _render_mapping_and_parsing(self, file_type: FileType) -> None:
         views = render_view_toggle(self.view, on_change=self._on_view)
         views.mapping.classes("items-center w-full")
         views.parsing.classes("items-center w-full")
         quirks_screen = render_quirks_overview(
             views.parsing,
-            quirk_boxes(self.file_type, type_label(self.file_type)),
-            default_choices(self.file_type, self.source),
+            quirk_boxes(file_type, type_label(file_type)),
+            default_choices(file_type, self.source),
             current_mapping=self._current_mapping,
         )
         mapping_screen = render_mapping(
             views.mapping,
-            self.file_type,
+            file_type,
             self._name(),
             merge_summaries(self.summaries),
             self.source,
@@ -567,7 +568,8 @@ class ImportView:
         self._on_view(self.view)
 
     def render(self) -> None:
-        type_known = self.file_type != _TYPE_UNKNOWN
+        file_type = self.file_type if is_file_type(self.file_type) else None
+        type_known = file_type is not None
         has_file = bool(self.paths)
 
         self.middle.clear()
@@ -617,9 +619,9 @@ class ImportView:
 
                     notice = ui.icon("warning", size="sm").classes("text-orange-7")
                     if (
-                        self.source != _SOURCE_UNKNOWN
-                        and type_known
-                        and not has_profile(self.source, self.file_type)
+                        self.source != UNKNOWN
+                        and file_type is not None
+                        and not has_profile(self.source, file_type)
                     ):
                         notice.tooltip(
                             "No profile for this source/type combination"
@@ -630,8 +632,8 @@ class ImportView:
 
                 self.mapping_screen = self.quirks_screen = None
                 self.views = None
-                if self.paths and self.summaries and type_known:
-                    self._render_mapping_and_parsing()
+                if self.paths and self.summaries and file_type is not None:
+                    self._render_mapping_and_parsing(file_type)
                 has_mapping = self.mapping_screen is not None
 
                 with ui.row().classes("items-center gap-2"):

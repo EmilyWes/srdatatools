@@ -3,12 +3,22 @@ import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Literal, TypeGuard, get_args
 
 from app.models.record import Record
 
 logger = logging.getLogger(__name__)
 
 _FILE_ENCODINGS = ("utf-8-sig", "cp1252")
+
+FileType = Literal["ris", "nbib", "csv", "tsv", "excel", "bibtex"]
+FILE_TYPES: tuple[FileType, ...] = get_args(FileType)
+# The Source/Type dropdowns' choice when nothing is known or picked.
+UNKNOWN = "unknown"
+
+
+def is_file_type(value: str) -> TypeGuard[FileType]:
+    return value in FILE_TYPES
 
 
 @dataclass

@@ -8,7 +8,7 @@ from app.parsers.bibtex import (
     read_bibtex_fields,
     suggest_bibtex_mapping,
 )
-from app.parsers.common import ParseResult
+from app.parsers.common import FileType, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
 from app.parsers.detect import detect_source
 from app.parsers.profiles import apply_profile
@@ -16,14 +16,18 @@ from app.parsers.profiles.scopus import SCOPUS
 from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
 from tests.vendor_data import vendor_file, vendor_files
 
-_FORMAT_BY_SUFFIX = {".csv": "csv", ".ris": "ris", ".bib": "bibtex"}
+_FORMAT_BY_SUFFIX: dict[str, FileType] = {
+    ".csv": "csv",
+    ".ris": "ris",
+    ".bib": "bibtex",
+}
 
 _HUMMINGBIRD_EID = "2-s2.0-85081690252"
 _NODOSAUR_EID = "2-s2.0-105050698470"
 _CONFERENCE_EID = "2-s2.0-105040180364"
 
 
-def _parse(path: Path, file_format: str) -> ParseResult:
+def _parse(path: Path, file_format: FileType) -> ParseResult:
     profile = SCOPUS.formats[file_format]
     if file_format == "csv":
         headers = list(read_csv_headers(path).samples)

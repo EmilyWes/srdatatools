@@ -36,7 +36,7 @@ def test_profile_for__unknown_source_returns_type_default() -> None:
 
 
 def test_profile_for__unsupported_type_returns_none() -> None:
-    assert profile_for("unknown", "unknown") is None
+    assert profile_for("unknown", "unknown") is None  # type: ignore[arg-type]
 
 
 def test_has_profile__only_for_a_source_that_exports_the_type() -> None:

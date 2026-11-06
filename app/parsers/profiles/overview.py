@@ -6,6 +6,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.models.record import LabelValue
 from app.parsers.authors import AmbiguousNameSplit
+from app.parsers.common import FileType
 from app.parsers.mapping import LINE_DELIMITER
 from app.parsers.profiles import FormatProfile, profile_for
 from app.parsers.profiles.scopus import EMBEDDED_AUTHOR_IDS, RIS_NOTES, URL_EID
@@ -24,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 Control = Literal["checkbox", "text", "number", "select", "note"]
 
-_FIELD_SIZE_TYPES = frozenset({"csv", "tsv"})
-_AUTHOR_COLUMN_TYPES = frozenset({"csv", "tsv", "excel", "bibtex"})
+_FIELD_SIZE_TYPES: frozenset[FileType] = frozenset({"csv", "tsv"})
+_AUTHOR_COLUMN_TYPES: frozenset[FileType] = frozenset({"csv", "tsv", "excel", "bibtex"})
 _LABEL_VALUES_SEPARATOR = "|"
 _LABEL_KEYS: dict[str, LabelValue] = {
     "label_include": "include",
@@ -304,7 +305,7 @@ _KEY_CONTINUATION = QuirkItem(
 )
 
 
-def _type_items(file_type: str) -> tuple[QuirkItem, ...]:
+def _type_items(file_type: FileType) -> tuple[QuirkItem, ...]:
     items: list[QuirkItem] = []
     if file_type in _FIELD_SIZE_TYPES:
         items.append(_FIELD_SIZE)
@@ -319,7 +320,7 @@ def _type_items(file_type: str) -> tuple[QuirkItem, ...]:
     return tuple(items)
 
 
-def quirk_boxes(file_type: str, type_label: str) -> list[QuirkBox]:
+def quirk_boxes(file_type: FileType, type_label: str) -> list[QuirkBox]:
     return [
         _ISSN_ISBN,
         _AUTHORS,
@@ -332,14 +333,14 @@ def quirk_boxes(file_type: str, type_label: str) -> list[QuirkBox]:
     ]
 
 
-def _profile(file_type: str, source: str) -> FormatProfile:
+def _profile(file_type: FileType, source: str) -> FormatProfile:
     profile = profile_for(source, file_type)
     if profile is None:
         raise ValueError(f"unsupported file type: {file_type!r}")
     return profile
 
 
-def default_choices(file_type: str, source: str) -> ParsingChoices:
+def default_choices(file_type: FileType, source: str) -> ParsingChoices:
     profile = _profile(file_type, source)
     settings, quirks = profile.settings, profile.quirks
     return ParsingChoices(
@@ -401,7 +402,7 @@ def _quirks(choices: ParsingChoices) -> tuple[RecordQuirk, ...]:
 
 
 def profile_with(
-    file_type: str, source: str, choices: ParsingChoices | None = None
+    file_type: FileType, source: str, choices: ParsingChoices | None = None
 ) -> FormatProfile:
     """The selected profile with the choices applied; None keeps its defaults."""
     profile = _profile(file_type, source)
@@ -427,7 +428,9 @@ def dump_choices(choices: ParsingChoices) -> dict[str, Any]:
     return choices.model_dump(mode="json")
 
 
-def load_choices(data: dict[str, Any], file_type: str, source: str) -> ParsingChoices:
+def load_choices(
+    data: dict[str, Any], file_type: FileType, source: str
+) -> ParsingChoices:
     """Unknown keys are dropped and missing ones keep the profile's defaults."""
     defaults = default_choices(file_type, source)
     fields = ParsingChoices.model_fields

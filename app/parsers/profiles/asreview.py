@@ -1,6 +1,7 @@
 import re
 
 from app.models.record import LabelValue
+from app.parsers.common import FileType
 from app.parsers.mapping import Suggest
 from app.parsers.profiles.base import FormatProfile, Profile
 from app.parsers.profiles.default import (
@@ -47,7 +48,7 @@ def _matches_ris(text: str) -> bool:
     return bool(_RIS_LABEL_LINE.search(text))
 
 
-def _tabular(file_type: str) -> FormatProfile:
+def _tabular(file_type: FileType) -> FormatProfile:
     return FormatProfile(
         suggestions=_TABULAR_SUGGESTIONS,
         matches=_matches_tabular,

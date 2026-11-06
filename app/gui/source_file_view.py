@@ -1,4 +1,5 @@
 from collections.abc import Awaitable, Callable
+from typing import cast
 
 from nicegui import ui
 from nicegui.element import Element
@@ -8,7 +9,7 @@ from app.gui.format import format_count, source_label
 from app.gui.import_flow import preview_for, row_defaults_for, type_label
 from app.gui.mapping_table import render_mapping_table
 from app.gui.quirks_overview import render_quirks_overview, render_view_toggle
-from app.parsers.common import FileSummary
+from app.parsers.common import UNKNOWN, FileSummary, FileType
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import (
     default_choices,
@@ -27,6 +28,7 @@ def render_source_file_view(
         dialog.close()
         return on_remove()
 
+    file_type = cast(FileType, source_file.format)
     middle.clear()
     with middle:
         with ui.dialog() as dialog, ui.card():
@@ -83,23 +85,19 @@ def render_source_file_view(
             with ui.column().classes("gap-1"):
                 views = render_view_toggle()
                 summary = FileSummary(**source_file.file_summary)
-                source = source_file.source or "unknown"
-                choices = load_choices(
-                    source_file.quirk_choices, source_file.format, source
-                )
+                source = source_file.source or UNKNOWN
+                choices = load_choices(source_file.quirk_choices, file_type, source)
                 render_mapping_table(
                     views.mapping,
                     summary,
                     FieldMapping.model_validate(source_file.suggested_mapping),
-                    defaults=row_defaults_for(source_file.format, source),
-                    preview=preview_for(
-                        source_file.format, source, summary, lambda: choices
-                    ),
+                    defaults=row_defaults_for(file_type, source),
+                    preview=preview_for(file_type, source, summary, lambda: choices),
                     chosen=FieldMapping.model_validate(source_file.field_mapping),
                 )
                 render_quirks_overview(
                     views.parsing,
-                    quirk_boxes(source_file.format, type_label(source_file.format)),
-                    default_choices(source_file.format, source),
+                    quirk_boxes(file_type, type_label(file_type)),
+                    default_choices(file_type, source),
                     chosen=choices,
                 )

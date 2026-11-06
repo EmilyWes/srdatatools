@@ -1,5 +1,6 @@
 import pytest
 
+from app.parsers.common import FileType
 from app.parsers.profiles import PROFILES, profile_for
 from app.parsers.profiles.overview import (
     ParsingChoices,
@@ -21,7 +22,7 @@ from app.parsers.quirks import (
 _ALL_TYPES = ("ris", "nbib", "csv", "tsv", "excel", "bibtex")
 
 
-def _keys(file_type: str) -> list[str]:
+def _keys(file_type: FileType) -> list[str]:
     return [
         item.key
         for box in quirk_boxes(file_type, "Type")
@@ -30,19 +31,21 @@ def _keys(file_type: str) -> list[str]:
     ]
 
 
-def _type_box_keys(file_type: str) -> list[str]:
+def _type_box_keys(file_type: FileType) -> list[str]:
     box = quirk_boxes(file_type, "Type")[-1]
     return [item.key for item in box.items if isinstance(item, QuirkItem)]
 
 
-def _with(file_type: str, source: str = "unknown", **changes: object) -> ParsingChoices:
+def _with(
+    file_type: FileType, source: str = "unknown", **changes: object
+) -> ParsingChoices:
     return default_choices(file_type, source).model_copy(update=changes)
 
 
 @pytest.mark.parametrize("source", ["unknown", *PROFILES], ids=["unknown", *PROFILES])
 @pytest.mark.parametrize("file_type", _ALL_TYPES)
 def test_profile_with__defaults_reproduce_the_profile(
-    file_type: str, source: str
+    file_type: FileType, source: str
 ) -> None:
     profile = profile_for(source, file_type)
 
@@ -68,7 +71,7 @@ def test_quirk_boxes__titles_in_order_ending_with_the_type_label() -> None:
 
 
 @pytest.mark.parametrize("file_type", _ALL_TYPES)
-def test_quirk_boxes__every_control_key_is_a_choice(file_type: str) -> None:
+def test_quirk_boxes__every_control_key_is_a_choice(file_type: FileType) -> None:
     for box in quirk_boxes(file_type, "Type"):
         for item in box.items:
             key = item.key
@@ -158,7 +161,7 @@ def test_default_choices__nbib_prefers_electronic_and_keeps_first_type() -> None
 
 def test_default_choices__unsupported_type_raises() -> None:
     with pytest.raises(ValueError):
-        default_choices("unknown", "unknown")
+        default_choices("unknown", "unknown")  # type: ignore[arg-type]
 
 
 def test_profile_with__turns_a_type_default_off() -> None:

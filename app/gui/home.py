@@ -58,7 +58,7 @@ from app.gui.record_table import (
     save_label_format,
 )
 from app.gui.source_file_view import render_source_file_view
-from app.parsers.common import FileSummary
+from app.parsers.common import FileSummary, FileType
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import ParsingChoices
 
@@ -240,7 +240,7 @@ def home() -> None:
 
     async def on_confirmed(
         files: list[tuple[Path, FileSummary]],
-        file_type: str,
+        file_type: FileType,
         mapping: FieldMapping,
         source: str,
         sheet: str | None,

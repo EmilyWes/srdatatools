@@ -8,7 +8,7 @@ from app.parsers.bibtex import (
     read_bibtex_fields,
     suggest_bibtex_mapping,
 )
-from app.parsers.common import ParseResult
+from app.parsers.common import FileType, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
 from app.parsers.detect import detect_source
 from app.parsers.mapping import FieldMapping
@@ -17,13 +17,17 @@ from app.parsers.profiles.openalex import OPENALEX
 from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
 from tests.vendor_data import vendor_file, vendor_files
 
-_FORMAT_BY_SUFFIX = {".csv": "csv", ".ris": "ris", ".bib": "bibtex"}
+_FORMAT_BY_SUFFIX: dict[str, FileType] = {
+    ".csv": "csv",
+    ".ris": "ris",
+    ".bib": "bibtex",
+}
 
 _CHICKEN_DOI = "10.1038/nature03154"
 _DINOSAUR_DOI = "10.1038/nature21700"
 
 
-def _parse(path: Path, file_format: str) -> ParseResult:
+def _parse(path: Path, file_format: FileType) -> ParseResult:
     profile = OPENALEX.formats[file_format]
     mapping: FieldMapping
     if file_format == "csv":

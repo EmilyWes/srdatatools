@@ -8,6 +8,7 @@ from app.gui.quirks_overview import (
     render_quirks_overview,
     render_view_toggle,
 )
+from app.parsers.common import FileType
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import (
     ParsingChoices,
@@ -19,7 +20,7 @@ from tests.mappings import mapping_of
 
 
 def _render(
-    file_type: str = "csv",
+    file_type: FileType = "csv",
     source: str = "unknown",
     chosen: ParsingChoices | None = None,
     mapping: FieldMapping | None = None,

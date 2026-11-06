@@ -3,7 +3,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from app.models.record import Record
-from app.parsers.common import ParsedRow, ParseResult, SkippedRow
+from app.parsers.common import FileType, ParsedRow, ParseResult, SkippedRow
 from app.parsers.mapping import FieldMapping, RowDefaults, Suggest
 from app.parsers.quirks import ParseSettings, RecordQuirk
 
@@ -26,7 +26,7 @@ class FormatProfile:
 class Profile:
     key: str
     label: str
-    formats: dict[str, FormatProfile]
+    formats: dict[FileType, FormatProfile]
 
 
 def never_matches(text: str) -> bool:

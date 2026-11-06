@@ -31,7 +31,7 @@ from app.gui.import_flow import (
 )
 from app.gui.layout import shell
 from app.gui.mapping_table import MappingScreen
-from app.parsers.common import FileSummary
+from app.parsers.common import FileSummary, FileType
 from app.parsers.mapping import AuthorsRow, FieldMapping
 from app.parsers.profiles.overview import (
     ParsingChoices,
@@ -108,14 +108,14 @@ def test_common_detection__differing_values_become_unknown() -> None:
 _EMPTY_SUMMARY = FileSummary({}, {}, 0)
 
 
-def _summary(file_type: str, path: Path) -> FileSummary:
+def _summary(file_type: FileType, path: Path) -> FileSummary:
     summary = read_summary(file_type, path)
     assert summary is not None
     return summary
 
 
 def _render_mapping(
-    container: Element, file_type: str, path: Path, source: str = "unknown"
+    container: Element, file_type: FileType, path: Path, source: str = "unknown"
 ) -> MappingScreen | None:
     summary = read_summary(file_type, path)
     assert summary is not None
@@ -157,7 +157,7 @@ def test_render_mapping__returns_none_for_unknown_type(tmp_path: Path) -> None:
 
     screen = render_mapping(
         panes.middle,
-        "unknown",
+        "unknown",  # type: ignore[arg-type]
         csv_path.name,
         FileSummary({"Title": "Some Paper"}, {}, 1),
     )
@@ -317,7 +317,13 @@ def test_import_file__unsupported_type_raises(session: Session, tmp_path: Path) 
     xml_path.write_text("<records/>\n")
 
     with pytest.raises(ValueError, match="unsupported file type"):
-        import_file(session, xml_path, "endnote_xml", FieldMapping(), _EMPTY_SUMMARY)
+        import_file(
+            session,
+            xml_path,
+            "endnote_xml",  # type: ignore[arg-type]
+            FieldMapping(),
+            _EMPTY_SUMMARY,
+        )
 
 
 _RIS_TEXT = (
@@ -756,7 +762,7 @@ def test_render_import_view__import_button_awaits_async_on_import(
 
     async def on_import(
         files: list[tuple[Path, FileSummary]],
-        file_type: str,
+        file_type: FileType,
         mapping: FieldMapping,
         source: str,
         sheet: str | None,
@@ -1051,7 +1057,7 @@ def test_render_import_view__mismatched_source_and_type_shows_notice() -> None:
     [("pubmed", "nbib"), ("unknown", "ris"), ("pubmed", "unknown")],
 )
 def test_render_import_view__no_notice_unless_both_set_without_profile(
-    source: str, file_type: str
+    source: str, file_type: FileType
 ) -> None:
     panes = shell()
     view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
