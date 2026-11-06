@@ -1,11 +1,13 @@
 import logging
+import shutil
 import sqlite3
+import sys
 from pathlib import Path
 
 import platformdirs
 import pytest
 
-from app.db.session import default_db_path, run_migrations
+from app.db.session import default_db_path, project_root, run_migrations
 
 EXPECTED_TABLES = {
     "activity_log",
@@ -187,3 +189,27 @@ def test_run_migrations__defaults_to_default_db_path(
     run_migrations()
 
     assert fallback_path.exists()
+
+
+def test_project_root__is_repo_root_when_not_frozen() -> None:
+    assert (project_root() / "alembic.ini").is_file()
+
+
+def test_run_migrations__frozen_reads_bundled_alembic_files(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Mirrors the data layout packaging/pyinstaller.spec bundles into _MEIPASS."""
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    shutil.copy(project_root() / "alembic.ini", bundle / "alembic.ini")
+    shutil.copytree(
+        project_root() / "app" / "db" / "migrations",
+        bundle / "app" / "db" / "migrations",
+    )
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle), raising=False)
+    db_path = tmp_path / "frozen.db"
+
+    run_migrations(db_path)
+
+    assert project_root() == bundle
+    assert db_path.exists()

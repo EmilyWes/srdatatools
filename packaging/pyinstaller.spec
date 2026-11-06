@@ -6,6 +6,8 @@ Run from the repo root: `python -m PyInstaller packaging/pyinstaller.spec`
 NiceGUI ships its static/vendor web assets (Vue, Quasar, etc.) as package
 data that PyInstaller's import analysis can't discover on its own, so they
 are added explicitly below (mirrors NiceGUI's own `nicegui-pack` helper).
+Alembic reads alembic.ini and the migration scripts as files at startup, so
+they are bundled as data too (see app.db.session.project_root).
 pywebview bundles its own PyInstaller hook, so it needs no extra data here.
 """
 
@@ -19,7 +21,11 @@ NICEGUI_ROOT = Path(nicegui.__file__).parent
 a = Analysis(  # noqa: F821  (injected by PyInstaller)
     [str(REPO_ROOT / "app" / "main.py")],
     pathex=[str(REPO_ROOT)],
-    datas=[(str(NICEGUI_ROOT), "nicegui")],
+    datas=[
+        (str(NICEGUI_ROOT), "nicegui"),
+        (str(REPO_ROOT / "alembic.ini"), "."),
+        (str(REPO_ROOT / "app" / "db" / "migrations"), "app/db/migrations"),
+    ],
 )
 pyz = PYZ(a.pure)  # noqa: F821  (injected by PyInstaller)
 
