@@ -1,10 +1,19 @@
 import json
+from typing import Literal
 
 from app.parsers.profiles import PROFILES
 
 _UNKNOWN_SOURCE = "Unknown"
 _LABEL_PREFIX = "label:"
 _KEYWORD_PREFIX = "keywords:"
+_LABEL_NUMBERS = {
+    "include": "1",
+    "exclude": "0",
+    "maybe": "0.5",
+    "unknown": "?",
+}
+
+LabelFormat = Literal["words", "numbers"]
 
 
 def format_count(count: int) -> str:
@@ -45,3 +54,9 @@ def is_keyword_key(key: str) -> bool:
 def keyword_prefix(key: str) -> str | None:
     prefix: str | None = json.loads(key.removeprefix(_KEYWORD_PREFIX))
     return prefix
+
+
+def label_text(value: str, label_format: LabelFormat) -> str:
+    if value == "unlabeled":
+        return ""
+    return _LABEL_NUMBERS[value] if label_format == "numbers" else value
