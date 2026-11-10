@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from app.db.settings import delete_setting, get_setting, set_setting
@@ -15,6 +15,10 @@ class ExportOptions(BaseModel):
     encoding: Literal["utf-8-sig", "utf-8"] = "utf-8-sig"
     label_format: LabelFormat = "numbers"
     line_breaks: Literal["keep", "space"] = "keep"
+    # Python's csv module rejects longer fields by default, and so do the tools
+    # built on it.
+    max_length: int = Field(default=131_072, ge=1)
+    empty_columns: bool = False
     ignored_columns: bool = False
     original_data: bool = False
 

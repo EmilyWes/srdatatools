@@ -51,3 +51,7 @@ def test_load_options__defaults_when_stored_value_is_invalid(session: Session) -
     session.commit()
 
     assert load_options(session) == ExportOptions()
+
+
+def test_load_options__defaults_to_pythons_csv_field_limit(session: Session) -> None:
+    assert load_options(session).max_length == 131_072

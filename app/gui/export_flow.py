@@ -97,7 +97,9 @@ class ExportView:
     path: Path | None = None
     columns: list[ExportColumn] = field(default_factory=list)
     rows: list[_Row] = field(default_factory=list)
-    option_widgets: dict[str, ui.select | ui.checkbox] = field(default_factory=dict)
+    option_widgets: dict[str, ui.select | ui.checkbox | ui.number] = field(
+        default_factory=dict
+    )
     mapping: ui.column | None = None
     path_label: ui.label | None = None
     export_button: ui.button | None = None
@@ -195,8 +197,7 @@ class ExportView:
         count_cell_style = "background: rgba(0, 0, 0, 0.04)"
         row_base = "w-full min-w-max no-wrap items-center gap-1 pl-0 border-b"
         with self.mapping:
-            table_classes = "gap-0 border rounded-borders max-w-full overflow-x-auto"
-            with ui.column().classes(table_classes):
+            with ui.column().classes("gap-0 border rounded-borders"):
                 with ui.row().classes(f"{row_base} py-2 bg-grey-2"):
                     with (
                         ui.element("div")
@@ -248,9 +249,12 @@ class ExportView:
                     self._refresh_row(row)
 
     def _set_option(self, key: str, value: Any) -> None:
+        if key == "max_length":
+            # An emptied box falls back to the default.
+            value = int(value) if value else ExportOptions().max_length
         self.options = self.options.model_copy(update={key: value})
         self._refresh_option_colors()
-        if key in ("ignored_columns", "original_data"):
+        if key in ("ignored_columns", "original_data", "empty_columns"):
             self._rebuild_columns()
             self._render_mapping()
         elif key == "label_format":
@@ -282,12 +286,15 @@ class ExportView:
         with ui.label(label).classes("text-xs"):
             ui.tooltip(hover).classes("max-w-sm text-xs")
         value = getattr(self.options, key)
-        widget: ui.select | ui.checkbox
-        if choices is None:
+        widget: ui.select | ui.checkbox | ui.number
+        if isinstance(value, bool):
             widget = ui.checkbox(value=value).props("dense keep-color size=32px")
+        elif isinstance(value, int):
+            widget = ui.number(value=value, min=1, precision=0)
+            widget.classes(_BOX_FIELD_CLASSES).props("dense outlined")
         else:
-            widget = ui.select(choices, value=value).classes(_BOX_FIELD_CLASSES)
-            widget.props("dense options-dense outlined")
+            widget = ui.select(choices or {}, value=value)
+            widget.classes(_BOX_FIELD_CLASSES).props("dense options-dense outlined")
         widget.on_value_change(lambda e: self._set_option(key, e.value))
         self.option_widgets[key] = widget
 
@@ -310,6 +317,14 @@ class ExportView:
                         " when it opens the file.",
                         _ENCODINGS,
                     )
+                    self._box_item(
+                        "max_length",
+                        "Maximum length",
+                        "Longest value written, in characters; longer values are"
+                        " cut. 131.072 is the default limit of Python's CSV reader,"
+                        " which many tools use; Excel holds at most 32.767"
+                        " characters per cell.",
+                    )
                 with render_box_frame("Values"):
                     self._box_item(
                         "label_format",
@@ -324,6 +339,12 @@ class ExportView:
                         "Line breaks inside a value (e.g. an abstract) are kept"
                         " within quotes, or replaced with a space.",
                         _LINE_BREAKS,
+                    )
+                    self._box_item(
+                        "empty_columns",
+                        "Export empty columns",
+                        "Adds the columns that none of the exported records has a"
+                        " value for.",
                     )
                 with render_box_frame("Original data"):
                     self._box_item(

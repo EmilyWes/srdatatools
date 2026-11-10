@@ -137,3 +137,12 @@ def test_log_export_failed__writes_warning_row_with_reason(session: Session) -> 
     assert entry.message == "Export failed:\nlibrary.csv\nReason: Permission denied"
     assert entry.action_type == "export"
     assert entry.status == "warning"
+
+
+def test_log_export__cut_values_make_a_warning(session: Session) -> None:
+    log_export(session, "library.csv", records=10, cut=3)
+    session.commit()
+
+    entry = session.query(ActivityLog).one()
+    assert entry.message == "Exported to:\nlibrary.csv\nRecords: 10\nValues cut: 3"
+    assert entry.status == "warning"

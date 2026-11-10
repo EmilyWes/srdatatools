@@ -17,13 +17,20 @@ def write_csv(
     columns: Sequence[ExportColumn],
     records: Sequence[ExportRecord],
     options: ExportOptions,
-) -> None:
+) -> int:
+    """Returns how many values were cut to the maximum length."""
     exported = [column for column in columns if column.name]
+    cut = 0
     with path.open("w", encoding=options.encoding, newline="") as file:
         writer = csv.writer(file, delimiter=options.delimiter)
         writer.writerow(column.name for column in exported)
         for record in records:
-            writer.writerow(
-                _cell(column_value(column, record, options), options)
-                for column in exported
-            )
+            row = []
+            for column in exported:
+                value = _cell(column_value(column, record, options), options)
+                if len(value) > options.max_length:
+                    value = value[: options.max_length]
+                    cut += 1
+                row.append(value)
+            writer.writerow(row)
+    return cut

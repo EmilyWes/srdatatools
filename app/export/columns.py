@@ -195,7 +195,9 @@ def export_columns(
     raw_keys = _raw_keys(records, options)
     taken = {column.name.casefold() for column in columns}
     columns.extend(_raw(key, taken) for key in raw_keys)
-    return columns
+    if options.empty_columns:
+        return columns
+    return [column for column in columns if fill_count(column, records, options)]
 
 
 def _raw_keys(records: Sequence[ExportRecord], options: ExportOptions) -> list[str]:

@@ -17,7 +17,7 @@ from app.export.columns import (
 from app.export.options import ExportOptions
 from app.models.record import Author, Label, PartialDate, Record
 
-_OPTIONS = ExportOptions()
+_OPTIONS = ExportOptions(empty_columns=True)
 
 
 def _pubmed_source(**raw_fields: str) -> ExportSource:
@@ -241,6 +241,24 @@ def test_column_value__raw_joins_distinct_values_across_sources() -> None:
     options = ExportOptions(original_data=True)
 
     assert _value(record, "raw:Source", options) == "Scopus; Scopus AI"
+
+
+def test_export_columns__leaves_out_empty_columns_by_default() -> None:
+    records = [_record(title="A", doi="10.1/x"), _record(id=2, title="B")]
+
+    columns = export_columns(records, ExportOptions())
+
+    keys = [column.key for column in columns]
+    assert "title" in keys
+    assert "doi" in keys
+    assert "abstract" not in keys
+    assert "authors" not in keys
+
+
+def test_export_columns__empty_columns_option_keeps_them() -> None:
+    columns = export_columns([_record(title="A")], ExportOptions(empty_columns=True))
+
+    assert "abstract" in [column.key for column in columns]
 
 
 def test_fill_count_and_example__count_records_with_a_value() -> None:

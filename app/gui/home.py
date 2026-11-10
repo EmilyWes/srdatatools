@@ -41,6 +41,7 @@ from app.export.options import (
 from app.gui.action_panel import render_right_panel
 from app.gui.busy import run_busy
 from app.gui.export_flow import render_export_view
+from app.gui.format import format_count
 from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
 from app.gui.library_nav import LeftPanelNav, render_left_panel
@@ -302,23 +303,34 @@ def home() -> None:
         records: list[ExportRecord],
         options: ExportOptions,
     ) -> None:
-        def write() -> str | None:
+        def write() -> tuple[int, str | None]:
             try:
-                write_csv(path, columns, records, options)
+                cut = write_csv(path, columns, records, options)
             except OSError as exc:
                 logger.warning("Could not export to %s", path, exc_info=True)
                 with session_scope(_engine) as session:
                     log_export_failed(session, path.name, str(exc))
-                return str(exc)
+                return 0, str(exc)
             with session_scope(_engine) as session:
-                log_export(session, path.name, len(records))
-            return None
+                log_export(session, path.name, len(records), cut)
+            return cut, None
 
-        error = await run_busy(f"Exporting to {path.name}…", write)
+        cut, error = await run_busy(f"Exporting to {path.name}…", write)
         if error is not None:
             with panes.middle:
                 ui.notify(f"Could not export to {path.name}: {error}", type="negative")
-        refresh_log()
+            refresh_log()
+            return
+        noun = "record" if len(records) == 1 else "records"
+        message = f"Exported {format_count(len(records))} {noun} to {path.name}"
+        if cut:
+            message += (
+                f"; {format_count(cut)} values cut to"
+                f" {format_count(options.max_length)} characters"
+            )
+        with panes.middle:
+            ui.notify(message, type="warning" if cut else "positive")
+        refresh()
 
     def save_export_options(options: ExportOptions) -> None:
         with session_scope(_engine) as session:

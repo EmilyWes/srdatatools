@@ -169,6 +169,15 @@ def test_export_view__original_data_adds_raw_rows_and_disables_ignored() -> None
     assert changes[-1].original_data is True
 
 
+def test_export_view__empty_columns_option_adds_empty_rows() -> None:
+    view = _view()
+    assert "abstract" not in [row.column.key for row in view.rows]
+
+    view.option_widgets["empty_columns"].value = True
+
+    assert "abstract" in [row.column.key for row in view.rows]
+
+
 def test_export_view__ignored_columns_adds_only_ignored_raw_rows() -> None:
     view = _view()
 
@@ -242,3 +251,16 @@ def test_export_view__export_passes_path_columns_records_and_options(
     assert columns is view.columns
     assert [record.id for record in records] == [1, 2]
     assert options == view.options
+
+
+def test_export_view__maximum_length_box_sets_option_and_empty_restores_default() -> (
+    None
+):
+    view = _view()
+
+    view.option_widgets["max_length"].value = 32767
+    assert view.options.max_length == 32767
+    assert view.option_widgets["max_length"].props["bg-color"] == "blue-2"
+
+    view.option_widgets["max_length"].value = None
+    assert view.options.max_length == 131_072

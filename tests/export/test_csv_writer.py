@@ -110,3 +110,23 @@ def test_write_csv__round_trips_through_the_csv_importer(tmp_path: Path) -> None
     assert first.publication_date == PartialDate(year=2015, month=5)
     assert "deep learning" in first.keywords
     assert result.rows[1].record.publication_date == PartialDate(year=1998)
+
+
+def test_write_csv__cuts_values_over_the_maximum_length(tmp_path: Path) -> None:
+    options = ExportOptions(encoding="utf-8", max_length=8)
+
+    path = tmp_path / "library.csv"
+    cut = write_csv(path, _columns({"title": "Title"}, options), _RECORDS, options)
+
+    assert path.read_text(encoding="utf-8").splitlines()[1:] == ["Deep lea", "Gradient"]
+    assert cut == 2
+
+
+def test_write_csv__nothing_cut_within_the_default_length(tmp_path: Path) -> None:
+    options = ExportOptions()
+
+    cut = write_csv(
+        tmp_path / "a.csv", export_columns(_RECORDS, options), _RECORDS, options
+    )
+
+    assert cut == 0

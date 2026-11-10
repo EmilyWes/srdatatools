@@ -527,10 +527,20 @@ def _open_export(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     return views
 
 
-def test_home__export_writes_csv_and_logs(
+def _capture_notifications(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    notifications: list[str] = []
+    monkeypatch.setattr(
+        home_module.ui, "notify", lambda message, **_: notifications.append(message)
+    )
+    return notifications
+
+
+def test_home__export_writes_csv_logs_notifies_and_shows_overview(
     engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     _add_source_file_with_record(engine)
+    navs = _capture_navs(monkeypatch)
+    notifications = _capture_notifications(monkeypatch)
     [view] = _open_export(monkeypatch)
     view.path = tmp_path / "library.csv"
     view._refresh_export_button()
@@ -544,12 +554,17 @@ def test_home__export_writes_csv_and_logs(
         entry = session.query(ActivityLog).one()
         assert entry.message == "Exported to:\nlibrary.csv\nRecords: 1"
         assert entry.status == "ok"
+    assert notifications == ["Exported 1 record to library.csv"]
+    assert navs[-1].selected_key == "library:overview"
+    assert len(navs) == 2
 
 
 def test_home__failed_export_is_logged_as_warning(
     engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     _add_source_file_with_record(engine)
+    navs = _capture_navs(monkeypatch)
+    notifications = _capture_notifications(monkeypatch)
     [view] = _open_export(monkeypatch)
     view.path = tmp_path / "missing" / "library.csv"
     view._refresh_export_button()
@@ -560,6 +575,8 @@ def test_home__failed_export_is_logged_as_warning(
         entry = session.query(ActivityLog).one()
         assert entry.message.startswith("Export failed:\nlibrary.csv\nReason: ")
         assert entry.status == "warning"
+    assert notifications[0].startswith("Could not export to library.csv: ")
+    assert len(navs) == 1
 
 
 def test_home__export_options_are_remembered(
@@ -574,3 +591,22 @@ def test_home__export_options_are_remembered(
     click_and_wait(_export_button(shells[-1]), monkeypatch)
 
     assert views[-1].options.delimiter == ";"
+
+
+def test_home__export_with_cut_values_warns(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _add_source_file_with_record(engine)
+    notifications = _capture_notifications(monkeypatch)
+    [view] = _open_export(monkeypatch)
+    view.option_widgets["max_length"].value = 3
+    view.path = tmp_path / "library.csv"
+    view._refresh_export_button()
+
+    click_and_wait(view.export_button, monkeypatch)
+
+    assert notifications == [
+        "Exported 1 record to library.csv; 3 values cut to 3 characters"
+    ]
+    with Session(engine) as session:
+        assert session.query(ActivityLog).one().status == "warning"
