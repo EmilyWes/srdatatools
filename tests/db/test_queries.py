@@ -29,6 +29,7 @@ from app.db.queries import (
     list_record_rows,
     list_record_sources,
     list_source_files,
+    load_export_records,
 )
 
 
@@ -347,3 +348,82 @@ def test_count_records_per_source_file__sorted_by_count(session: Session) -> Non
 
 def test_count_records_per_source_file__empty_library(session: Session) -> None:
     assert count_records_per_source_file(session) == ([], 0)
+
+
+def _mapped_file(filename: str, source: str | None, mapped: list[str]) -> SourceFile:
+    source_file = _source_file(filename, source, datetime.datetime(2026, 1, 1))
+    source_file.field_mapping = {"rows": {key: {"target": "title"} for key in mapped}}
+    return source_file
+
+
+def test_load_export_records__builds_record_sources_and_labels(
+    session: Session,
+) -> None:
+    scopus = _mapped_file("scopus.csv", "scopus", ["Title"])
+    record = Record(
+        title="Deep learning",
+        authors=[{"family_name": "LeCun", "given_name": "Yann"}],
+        publication_year=2015,
+        publication_month=5,
+        doi="10.1038/nature14539",
+        keywords=["[MeSH] Humans"],
+        other_ids={"eid": "2-s2.0-1"},
+        sources=[
+            RecordSource(
+                source_file=scopus,
+                raw_fields={"Title": "Deep learning", "Link": "https://x"},
+            )
+        ],
+        labels=[Label(source_file=scopus, phase="ft", screener="s1", value="include")],
+    )
+    session.add(record)
+    session.commit()
+
+    [export] = load_export_records(session)
+
+    assert export.id == record.id
+    assert export.record.title == "Deep learning"
+    assert export.record.authors[0].family_name == "LeCun"
+    date = export.record.publication_date
+    assert date is not None
+    assert (date.year, date.month, date.day) == (2015, 5, None)
+    assert export.record.keywords == ["[MeSH] Humans"]
+    assert export.record.other_ids == {"eid": "2-s2.0-1"}
+    assert [(lb.phase, lb.screener, lb.value) for lb in export.record.labels] == [
+        ("ft", "s1", "include")
+    ]
+    [source] = export.sources
+    assert (source.vendor, source.filename) == ("scopus", "scopus.csv")
+    assert source.raw_fields == {"Title": "Deep learning", "Link": "https://x"}
+    assert source.ignored_keys == {"Link"}
+
+
+def test_load_export_records__no_date_when_no_parts(session: Session) -> None:
+    session.add(Record(title="Undated"))
+    session.commit()
+
+    [export] = load_export_records(session)
+
+    assert export.record.publication_date is None
+
+
+def test_load_export_records__only_the_given_ids(session: Session) -> None:
+    pubmed = _mapped_file("pubmed.nbib", "pubmed", ["TI"])
+    records = [
+        Record(
+            title=title,
+            sources=[RecordSource(source_file=pubmed, raw_fields={"TI": title})],
+            labels=[
+                Label(source_file=pubmed, phase="ft", screener="s1", value="exclude")
+            ],
+        )
+        for title in ("A", "B", "C")
+    ]
+    session.add_all(records)
+    session.commit()
+
+    result = load_export_records(session, {records[0].id, records[2].id})
+
+    assert [export.record.title for export in result] == ["A", "C"]
+    assert all(len(export.sources) == 1 for export in result)
+    assert all(len(export.record.labels) == 1 for export in result)

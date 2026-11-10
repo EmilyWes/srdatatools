@@ -6,6 +6,8 @@ from nicegui import ui
 
 from app.db.activity_log import (
     clear_activity_log,
+    log_export,
+    log_export_failed,
     log_import_failed,
     log_library_deleted,
     log_records_deleted,
@@ -24,11 +26,22 @@ from app.db.queries import (
     list_activity_log,
     list_label_columns,
     list_source_files,
+    load_export_records,
 )
 from app.db.session import get_engine, session_scope
 from app.db.store import delete_library, delete_records, remove_source_file
+from app.export.columns import ExportColumn, ExportRecord
+from app.export.csv_ import write_csv
+from app.export.options import (
+    ExportOptions,
+    load_options,
+    reset_options,
+    save_options,
+)
 from app.gui.action_panel import render_right_panel
 from app.gui.busy import run_busy
+from app.gui.export_flow import render_export_view
+from app.gui.format import format_count
 from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
 from app.gui.library_nav import LeftPanelNav, render_left_panel
@@ -102,6 +115,7 @@ def home() -> None:
         on_clear_log=clear_log,
         count_library=count_library,
         on_delete_library=delete_all,
+        on_export=lambda: start_export(),
     )
 
     def refresh_log() -> None:
@@ -282,6 +296,68 @@ def home() -> None:
             refresh(select_key=f"source_file:{source_file_ids[0]}")
         else:
             refresh()
+
+    async def export(
+        path: Path,
+        columns: list[ExportColumn],
+        records: list[ExportRecord],
+        options: ExportOptions,
+    ) -> None:
+        def write() -> tuple[int, str | None]:
+            try:
+                cut = write_csv(path, columns, records, options)
+            except OSError as exc:
+                logger.warning("Could not export to %s", path, exc_info=True)
+                with session_scope(_engine) as session:
+                    log_export_failed(session, path.name, str(exc))
+                return 0, str(exc)
+            with session_scope(_engine) as session:
+                log_export(session, path.name, len(records), cut)
+            return cut, None
+
+        cut, error = await run_busy(f"Exporting to {path.name}…", write)
+        if error is not None:
+            with panes.middle:
+                ui.notify(f"Could not export to {path.name}: {error}", type="negative")
+            refresh_log()
+            return
+        noun = "record" if len(records) == 1 else "records"
+        message = f"Exported {format_count(len(records))} {noun} to {path.name}"
+        if cut:
+            message += (
+                f"; {format_count(cut)} values cut to"
+                f" {format_count(options.max_length)} characters"
+            )
+        with panes.middle:
+            ui.notify(message, type="warning" if cut else "positive")
+        refresh()
+
+    def save_export_options(options: ExportOptions) -> None:
+        with session_scope(_engine) as session:
+            save_options(session, options)
+
+    def restore_export_options() -> None:
+        with session_scope(_engine) as session:
+            reset_options(session)
+
+    async def start_export() -> None:
+        clear_nav_selection()
+        ids = set(selection.ids) or None
+
+        def load() -> tuple[list[ExportRecord], ExportOptions]:
+            with session_scope(_engine) as session:
+                return load_export_records(session, ids), load_options(session)
+
+        records, options = await run_busy("Loading records…", load)
+        render_export_view(
+            panes.middle,
+            records,
+            options,
+            selected=ids is not None,
+            on_export=export,
+            on_options_change=save_export_options,
+            on_restore_options=restore_export_options,
+        )
 
     def start_import() -> None:
         render_import_view(panes.middle, on_import=on_confirmed)

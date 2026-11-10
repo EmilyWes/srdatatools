@@ -31,7 +31,7 @@ from app.parsers.mapping import (
     row_with,
 )
 
-_ROW_FIELD_CSS = """
+ROW_FIELD_CSS = """
 .mapping-field .q-field__control, .mapping-field .q-field__marginal {
     min-height: 24px;
     height: 24px;
@@ -252,7 +252,7 @@ _RESULT_CLASSES = "w-48 truncate text-xs"
 _RESULT_TEXT_COLORS = {"green": "text-positive", "red": "text-negative"}
 
 
-def _fill_color(filled: int, total: int) -> str:
+def fill_color(filled: int, total: int) -> str:
     if 3 * filled >= 2 * total and total:
         return "green"
     if 3 * filled >= total and total:
@@ -491,7 +491,7 @@ def render_mapping_table(
         for header in headers
     }
 
-    ui.add_css(_ROW_FIELD_CSS)
+    ui.add_css(ROW_FIELD_CSS)
 
     count_cell_classes = "self-stretch flex items-center px-2 mr-1"
     count_cell_style = "background: rgba(0, 0, 0, 0.04)"
@@ -526,7 +526,7 @@ def render_mapping_table(
                         .style(count_cell_style)
                     ):
                         count = ui.linear_progress(value=ratio, show_value=False)
-                        count.props(f"color={_fill_color(filled, summary.total_rows)}")
+                        count.props(f"color={fill_color(filled, summary.total_rows)}")
                         count.classes("w-10")
                         count.tooltip(f"{filled} of {summary.total_rows}")
                     label = ui.label(header).classes("truncate text-xs")

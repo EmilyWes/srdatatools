@@ -8,7 +8,7 @@ from collections.abc import (
     Sequence,
 )
 from dataclasses import dataclass, field
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 from nicegui import ui
 from nicegui.element import Element
@@ -24,6 +24,7 @@ from app.db.queries import (
 )
 from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.format import (
+    LabelFormat,
     format_count,
     is_keyword_key,
     is_label_key,
@@ -31,6 +32,7 @@ from app.gui.format import (
     keyword_prefix,
     label_key,
     label_pair,
+    label_text,
     source_label,
 )
 from app.parsers.mapping import split_keyword
@@ -48,14 +50,7 @@ _HEADER_CSS = (
 )
 _LABEL_FORMAT_KEY = "table_label_format"
 
-LabelFormat = Literal["words", "numbers"]
 _LABEL_FORMATS: dict[LabelFormat, str] = {"numbers": "Numbers", "words": "Words"}
-_LABEL_NUMBERS = {
-    "include": "1",
-    "exclude": "0",
-    "maybe": "0.5",
-    "unknown": "?",
-}
 
 COLUMNS: dict[str, str] = {
     "doi": "DOI",
@@ -193,12 +188,6 @@ def row_for(values: Mapping[str, Any]) -> dict[str, Any]:
     return row
 
 
-def _label_text(value: str, label_format: LabelFormat) -> str:
-    if value == "unlabeled":
-        return ""
-    return _LABEL_NUMBERS[value] if label_format == "numbers" else value
-
-
 def load_rows(
     session: Session, columns: Sequence[str], label_format: LabelFormat = "numbers"
 ) -> list[dict[str, Any]]:
@@ -233,7 +222,7 @@ def load_rows(
             for key in label_columns:
                 values = pairs.get(label_pair(key), [])
                 row[column_field(key)] = "; ".join(
-                    _label_text(value, label_format) for value in values
+                    label_text(value, label_format) for value in values
                 )
     return rows
 

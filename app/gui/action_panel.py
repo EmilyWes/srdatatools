@@ -43,6 +43,7 @@ def render_right_panel(
     on_clear_log: Callable[[], Any] | None = None,
     count_library: Callable[[], tuple[int, int]] | None = None,
     on_delete_library: Callable[[], Awaitable[None] | None] | None = None,
+    on_export: Callable[[], Awaitable[None] | None] | None = None,
 ) -> ActionPanel:
     def show_settings(action: str) -> None:
         if on_settings is not None:
@@ -70,19 +71,27 @@ def render_right_panel(
     with right:
         with ui.column().classes("w-full items-center gap-6 pt-6 pb-12"):
             for action in _ACTIONS:
+                exports = action == "Export"
                 with ui.row().classes("items-center gap-1 no-wrap"):
                     button = (
-                        ui.button(action, color=None)
+                        ui.button(
+                            action, color=None, on_click=on_export if exports else None
+                        )
                         .classes("w-32 text-sm")
                         .props("dense")
                     )
-                    button.disable()
-                    button.tooltip("Not implemented yet")
-                    ui.button(
+                    gear = ui.button(
                         icon="settings",
                         color=None,
                         on_click=lambda action=action: show_settings(action),
                     ).props("flat dense round size=sm")
+                    if exports:
+                        # Export's view holds its options; the hidden gear keeps
+                        # the button lined up with the others.
+                        gear.classes("invisible")
+                    else:
+                        button.disable()
+                        button.tooltip("Not implemented yet")
         with ui.column().classes("w-full px-2 gap-1"):
             ui.label("Activity log").classes("text-xs text-grey-7")
             log = (
