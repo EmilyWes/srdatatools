@@ -120,15 +120,19 @@ app/
   dedup/             # (planned) matching strategies (DOI, fuzzy title+author+year)
   enrich/            # (planned) OpenAlex client, field-merging logic
   snowball/          # (planned) reference/citation graph traversal via OpenAlex
-  export/            # (planned) writers back to RIS/CSV/NBIB
+  export/
+    columns.py       # export columns (one per output column) and their cell values
+    options.py       # export options, remembered in app_settings
+    csv_.py          # CSV writer
   gui/
     home.py          # the single page, wires the panes together
     layout.py        # three-pane shell
     library_nav.py   # left panel navigation
+    export_flow.py   # export view in the middle panel
     import_flow.py   # import view in the middle panel + the per-Type parser wiring it imports with
     library_overview.py # Library overview stats in the middle panel
     source_file_view.py # source-file detail view in the middle panel
-    quirks_overview.py # Parsing view (quirks overview) + the Mapping | Parsing toggle, for the import and source-file views
+    quirks_overview.py # Parsing view (quirks overview) + the Mapping | Parsing toggle, for the import, source-file and export views
     record_table.py  # Library record table + its column settings view
     action_panel.py  # right panel actions + activity log
     mapping_table.py # field-mapping table (CSV columns, RIS/NBIB tags, BibTeX fields)
@@ -197,7 +201,7 @@ flowchart LR
 
 **Manual dedup review.** A GUI screen shows candidate duplicate pairs side by side with their match score and reason, and lets the user confirm, reject, or edit before merging. Since merges can't be undone in-app, running dedup surfaces a clear one-time reminder to export the current library first if the user wants a restore point.
 
-**Export.** Writes the current `record` table (optionally filtered) back out to RIS or CSV, preserving as much of the original metadata as the format allows.
+**Export.** Writes the records back out to CSV (RIS planned): the Table's current selection when there is one, otherwise the whole library, preserving as much of the original metadata as the format allows. On request it also writes the raw imported fields kept in `record_source`. See Export flow below.
 
 **Enrichment (OpenAlex).** Explicit, not automatic: enrichment only runs when the user clicks "Enrich" for a record or a selected batch — never automatically on import — so the user always controls when API calls happen. For records with a DOI or title match in OpenAlex, pull abstract, open-access status/link, citation count, concepts/topics, and fill only fields that are empty locally by default (never silently overwrite user-verified data) — full details always visible in the enrichment log. OpenAlex's rate limits are much more generous for requests that include a "polite pool" email. The app stores this email locally once given (a per-installation setting), and if it isn't set yet, the GUI prompts for it inline the first time enrichment runs — the user can also skip it and enrichment still works, just at lower default rate limits.
 
@@ -216,7 +220,7 @@ flowchart LR
   - **Table settings** (gear beside Table): choose which record fields are shown as columns (including *Sources*: the vendor of each file the record came from, e.g. "PubMed, Scopus", Unknown for files imported without a source), plus one optional column per label phase + screener combination in the library (e.g. *Label: ft / screener 1*, several values joined with "; ") and one per keyword prefix (e.g. *Keywords: MeSH*, prefix stripped; the plain *Keywords* column shows the unprefixed keywords), and a *Label values* choice of **Numbers** (1 / 0 / 0.5 / ?, the default) or **Words** (include / exclude / maybe / unknown), with unlabeled shown as an empty value in both, with *Restore defaults* (DOI, title, authors; Numbers). The choice is remembered between sessions in `app_settings`.
   - **A source file** selected: that file's info — rows currently in the library from this file, how many rows were skipped on import (and why), and an option to remove all of this file's records from the library (see open question on how this interacts with records already merged via dedup), plus a read-only copy of the field mapping and parsing choices used at import, behind the same **Mapping | Parsing** toggle as the import view.
   - **Import** clicked: the middle panel is replaced by the import flow (below) until the user confirms or cancels.
-- **Right panel** — one button per cross-cutting action, top to bottom: **Deduplicate**, **Enrich**, **Snowball**, **Export**. Each has a small gear icon beside it that opens that action's settings in the middle panel (merge-settings for Deduplicate; polite-pool email/overwrite policy for Enrich; pre-fetch size-warning threshold for Snowball; export options for Export). Below the four buttons, a read-only textbox shows the activity log, oldest first and scrolled to the newest entry — always visible, no separate tab needed. Actions refresh it after doing work that may have written to the log. Below the activity log, a red **Delete library** button removes all records and source files after a confirmation dialog showing the counts; the activity log and settings are kept, and the deletion is logged.
+- **Right panel** — one button per cross-cutting action, top to bottom: **Deduplicate**, **Enrich**, **Snowball**, **Export**. Each has a small gear icon beside it that opens that action's settings in the middle panel (merge-settings for Deduplicate; polite-pool email/overwrite policy for Enrich; pre-fetch size-warning threshold for Snowball; the Export gear opens the same export view as the Export button). Below the four buttons, a read-only textbox shows the activity log, oldest first and scrolled to the newest entry — always visible, no separate tab needed. Actions refresh it after doing work that may have written to the log. Below the activity log, a red **Delete library** button removes all records and source files after a confirmation dialog showing the counts; the activity log and settings are kept, and the deletion is logged.
 
 **Import flow.**
 
@@ -239,6 +243,14 @@ flowchart LR
      - **Other ID:** editable key name (defaults to the slug of the column name).
    - **Quirks overview (Parsing):** a **Mapping | Parsing** toggle above the table switches between the mapping table and the quirks overview, the selected one highlighted; both keep their edits while hidden, and a Source/Type change resets Parsing to the new profile's defaults but keeps the selected view. Parsing shows the subject boxes (see Quirks under Source database priority) side by side where they fit within the mapping table's width, wrapping onto the next line otherwise, so toggling never resizes the panes; every box is as wide as the widest box needs (measured in the browser, as CSS alone can't equalize wrapping boxes) and a thin grey border with its title centred in the top line, and the selected profile's defaults pre-set. All text in Parsing is small (`text-xs`, box titles `text-sm`). Each item is one row: its label, then exactly one control — a checkbox, text box or dropdown — or, for parser behaviour, the label alone as grey text; the controls line up in one column within each box. Hovering a label shows what the item does. A text box left empty switches its item off. Checkboxes, text boxes and dropdowns have no colour while at the profile default and turn blue when changed; they are no taller than a line of text. Empty values and Ordering are lists: an entry has a small red remove button, and a blank entry at the bottom (its Ignore box greyed out until a field is picked) adds the next one once something is picked. A field already used in Empty values isn't offered again; Ordering offers the columns that currently share a target and refreshes whenever Parsing is shown, keeping a pick that no longer shares one. A **Restore defaults** button at the bottom right resets every Parsing choice to the profile's defaults. The Result column follows the Parsing choices when switching back to Mapping, and **Import** uses them; they are stored with the source file, and the source-file view shows them read-only (choices stored before the subject boxes show the profile's defaults).
    - **Dates from several rows:** each of year, month and day comes from the first year/month/day row that gives it; missing parts are filled from the first full date that gives them (so RIS `PY` + `DA` combine). When the two disagree, year/month/day wins.
+
+**Export flow.** Export (or its gear) replaces the middle panel with the export view, until another entry is picked.
+
+1. Top: the target file with a **Save as…** button (native save dialog, `library.csv` by default), **Type** (CSV for now), and a line saying what is exported: *Exporting 12 selected records* when the Table has a selection, else *Exporting all 1.234 records*.
+2. A **Mapping | Options** toggle, as in the import view.
+   - **Mapping:** one fixed row per output column (no adding, removing or reordering), in order: Record ID, Title, Authors, Publication date, Journal, Conference, Volume, Issue, Pages, Abstract, DOI, PMID, ISSN, ISBN, one row per other-ID key, Publication type, Keywords and one row per keyword prefix (prefix stripped), Language, Publisher, URL, Notes, one row per label phase + screener, Sources (vendors, as in the Table), Source files. A row none of the exported records has a value for is left out unless **Export empty columns** is on. Each row shows a fill bar (records among the exported ones with a value, coloured as in the import table), the field, an **Export as** text box with the CSV header and an Example (the first non-empty value, full value on hover). The header starts at the field's name; emptying it leaves the column out and turns the box red, a changed name turns it blue. Per-row options sit under the box: Authors format (names: last, first / names: first last / full name; an author stored only as a full name is written as such), name separator (`, `, last, first only) and author separator (`; `); Publication date part (full / year / month / day; full writes `YYYY`, `YYYY-MM` or `YYYY-MM-DD` as far as known); Keywords delimiter (`; `). Several label values for one phase + screener are joined with `; `.
+   - **Options:** boxes like Parsing. *File:* delimiter (comma / semicolon / tab), encoding (UTF-8 with BOM, the default, so Excel shows accented characters correctly / UTF-8) and maximum length (default 131.072 characters, the default limit of Python's CSV reader, which many tools use; import raises its own limit, other programs may not; longer values are cut, an emptied box uses the default). *Values:* label values (Numbers / Words, as in the Table settings), line breaks inside values (kept within quotes / replaced with a space) and **Export empty columns** (off). *Original data:* **Export ignored input columns** adds a row per raw key the file's mapping set to ignore; **Export original data** adds a row per raw key (and greys out the first). Raw rows come last, named after the key, with *(original)* appended when that clashes with a record column; a record whose sources disagree on a key gets their distinct values joined with `; `. Toggling either (or Export empty columns) rebuilds the rows, keeping edited names. Type and the Options are remembered in `app_settings`, with **Restore defaults**; the mapping rows are rebuilt each time.
+3. **Export** (disabled until a file is chosen, or with no records) writes the file, logs *Exported to: / library.csv / Records: 1.234*, shows *Exported 1.234 records to library.csv* and returns to the Library Overview. Values cut to the maximum length make both a warning (*Values cut: 3* in the log, *; 3 values cut to 131.072 characters* in the notification). A write that fails is logged as a warning and shown as a notification, and the export view stays open.
 
 **Visualizations:** valued highly (e.g. publications-per-year charts, source-overlap Venn diagrams), but in service of the workflow rather than cluttering it — shown in the middle panel when Library is selected, a few well-chosen, contextually placed visuals rather than a wall of graphs. The Overview holds the current set (completeness, publication year, publication type, source files, labels, keywords); further visuals, such as dedup status or source overlap, are added iteratively as the app takes shape (see Phase 5), not fully speced up front.
 
@@ -310,7 +322,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 **Phase 2 — Export & dedup**
 
 - [ ] Export to RIS
-- [ ] Export to CSV
+- [x] Export to CSV
 - [ ] Exact-match dedup (DOI, PubMed ID)
 - [ ] Per-field conflict resolution engine: default strategy chain + named field-group overrides (prefer source, longest/shortest, first/most-recent import, manual)
 - [ ] Merge-settings GUI: configure matching fields, default chain, and field-group overrides
@@ -364,7 +376,6 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 
 - [ ] Additional import formats/profiles as usage grows, roughly in order of commonality: EndNote XML next, then further databases beyond the starting six
 - [ ] Tagging / notes on records
-- [ ] Export filtering (by tag, year range, source)
 - [ ] Additional enrichment sources beyond OpenAlex (Crossref, Semantic Scholar) as fallbacks or supplements
 
 ## Open questions
