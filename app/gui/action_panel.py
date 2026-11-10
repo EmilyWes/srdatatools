@@ -80,18 +80,18 @@ def render_right_panel(
                         .classes("w-32 text-sm")
                         .props("dense")
                     )
-                    if not exports:
-                        button.disable()
-                        button.tooltip("Not implemented yet")
-                    ui.button(
+                    gear = ui.button(
                         icon="settings",
                         color=None,
-                        on_click=(
-                            on_export
-                            if exports
-                            else lambda action=action: show_settings(action)
-                        ),
+                        on_click=lambda action=action: show_settings(action),
                     ).props("flat dense round size=sm")
+                    if exports:
+                        # Export's view holds its options; the hidden gear keeps
+                        # the button lined up with the others.
+                        gear.classes("invisible")
+                    else:
+                        button.disable()
+                        button.tooltip("Not implemented yet")
         with ui.column().classes("w-full px-2 gap-1"):
             ui.label("Activity log").classes("text-xs text-grey-7")
             log = (

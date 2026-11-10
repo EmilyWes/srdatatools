@@ -340,13 +340,13 @@ class ExportView:
                         " within quotes, or replaced with a space.",
                         _LINE_BREAKS,
                     )
+                with render_box_frame("Column selection"):
                     self._box_item(
                         "empty_columns",
                         "Export empty columns",
                         "Adds the columns that none of the exported records has a"
                         " value for.",
                     )
-                with render_box_frame("Original data"):
                     self._box_item(
                         "ignored_columns",
                         "Export ignored input columns",

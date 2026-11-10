@@ -61,13 +61,19 @@ def test_render_right_panel__action_buttons_in_order_only_export_enabled() -> No
     assert [button.enabled for button in action_buttons] == [False, False, False, True]
 
 
-def test_render_right_panel__one_settings_gear_per_action() -> None:
+def test_render_right_panel__settings_gear_for_every_action_but_export() -> None:
     panes = shell()
 
     render_right_panel(panes.right, panes.middle)
 
     gears = [buttons[1] for buttons in _row_buttons(panes.right)]
     assert [gear.props["icon"] for gear in gears] == ["settings"] * 4
+    assert ["invisible" in gear.classes for gear in gears] == [
+        False,
+        False,
+        False,
+        True,
+    ]
 
 
 def test_render_right_panel__gear_shows_settings_in_middle_and_calls_back() -> None:
@@ -87,16 +93,14 @@ def test_render_right_panel__gear_shows_settings_in_middle_and_calls_back() -> N
     assert labels[0].text == "Enrich settings"  # type: ignore[attr-defined]
 
 
-def test_render_right_panel__export_button_and_gear_call_back() -> None:
+def test_render_right_panel__export_button_calls_back() -> None:
     panes = shell()
     calls: list[None] = []
     render_right_panel(panes.right, panes.middle, on_export=lambda: calls.append(None))
 
-    export_button, export_gear = _row_buttons(panes.right)[3]
-    _click(export_button)
-    _click(export_gear)
+    _click(_row_buttons(panes.right)[3][0])
 
-    assert calls == [None, None]
+    assert calls == [None]
 
 
 def _clear_log_button(right: Element) -> ui.button:
