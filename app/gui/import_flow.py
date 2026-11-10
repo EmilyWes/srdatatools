@@ -437,8 +437,9 @@ class ImportView:
         if view == VIEW_PARSING and self.quirks_screen is not None:
             self.quirks_screen.refresh_ordering()
 
-    def _render_mapping_and_parsing(self, file_type: FileType) -> None:
-        views = render_view_toggle(self.view, on_change=self._on_view)
+    def _render_mapping_and_parsing(
+        self, views: MappingParsingViews, file_type: FileType
+    ) -> None:
         quirks_screen = render_quirks_overview(
             views.parsing,
             quirk_boxes(file_type, type_label(file_type)),
@@ -454,12 +455,20 @@ class ImportView:
             quirks_screen.current_choices,
         )
         if mapping_screen is None:
-            views.toggle.delete()
-            views.parsing.delete()
+            views.parsing.clear()
             return
         self.mapping_screen, self.quirks_screen = mapping_screen, quirks_screen
         self.views = views
         self._on_view(self.view)
+
+    def _no_mapping_reason(self, type_known: bool) -> str:
+        if not self.paths:
+            return "select a file first"
+        if not type_known:
+            return "please select the type"
+        if self._too_many_for_excel():
+            return _EXCEL_SINGLE_FILE
+        return "file has no mapping available"
 
     def render(self) -> None:
         file_type = self.file_type if is_file_type(self.file_type) else None
@@ -531,9 +540,19 @@ class ImportView:
 
                 self.mapping_screen = self.quirks_screen = None
                 self.views = None
-                if self.paths and self.summaries and file_type is not None:
-                    self._render_mapping_and_parsing(file_type)
+                can_render = bool(self.paths and self.summaries) and type_known
+                has_samples = bool(merge_summaries(self.summaries).samples)
+                views = render_view_toggle(
+                    self.view if can_render and has_samples else None,
+                    on_change=self._on_view,
+                )
+                if can_render:
+                    assert file_type is not None
+                    self._render_mapping_and_parsing(views, file_type)
                 has_mapping = self.mapping_screen is not None
+                if not has_mapping:
+                    views.toggle.disable()
+                    views.toggle.tooltip(self._no_mapping_reason(type_known))
 
                 with ui.row().classes("items-center gap-2"):
                     self.import_button = ui.button(

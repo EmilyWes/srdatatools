@@ -1469,12 +1469,32 @@ def test_render_import_view__ordering_offers_keys_sharing_a_target(
     assert "PG" not in select.options
 
 
-def test_render_import_view__no_toggle_without_a_mapping() -> None:
+def test_render_import_view__toggle_disabled_before_a_file() -> None:
     panes = shell()
 
     render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
-    assert not [e for e in panes.middle.descendants() if isinstance(e, ui.toggle)]
+    toggle = _toggle(panes.middle)
+    assert not toggle.enabled
+    assert toggle.value is None
+    assert _tooltips_for(panes.middle, toggle) == ["select a file first"]
+
+
+def test_render_import_view__toggle_disabled_for_unknown_type(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    panes = shell()
+    path = tmp_path / "export.txt"
+    path.write_text("not a known format")
+    _pick(monkeypatch, path)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
+
+    run_in(view.middle, view._select_files())
+
+    toggle = _toggle(panes.middle)
+    assert not toggle.enabled
+    assert toggle.value is None
+    assert _tooltips_for(panes.middle, toggle) == ["please select the type"]
 
 
 def test_import_file__applies_parsing_choices(session: Session, tmp_path: Path) -> None:
