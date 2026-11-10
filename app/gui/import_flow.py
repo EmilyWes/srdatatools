@@ -457,7 +457,7 @@ class ImportView:
         self.middle.clear()
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):
-                with ui.row().classes("items-center gap-2"):
+                with ui.grid(columns=2).classes("items-center gap-x-4 gap-y-2"):
                     if len(self.paths) > 1:
                         files_label = ui.label(f"{len(self.paths)} files selected")
                         files_label.tooltip(", ".join(path.name for path in self.paths))
@@ -466,51 +466,53 @@ class ImportView:
                             self.paths[0].name if self.paths else "No file selected"
                         )
                     files_label.classes("text-sm")
-                    if self._mixed():
-                        ui.icon("warning", size="sm").classes("text-orange-7").tooltip(
-                            f"{_MIXED_WARNING} Detected: {self._mixed_details()}"
+                    with ui.row().classes("items-center gap-2"):
+                        ui.button("Select files", on_click=self._select_files).props(
+                            "dense"
                         )
-                    ui.button("Select files", on_click=self._select_files).props(
-                        "dense"
-                    )
+                        if self._mixed():
+                            ui.icon("warning", size="sm").classes(
+                                "text-orange-7"
+                            ).tooltip(
+                                f"{_MIXED_WARNING} Detected: {self._mixed_details()}"
+                            )
 
-                if self.sheets:
-                    sheet_select = (
-                        ui.select(self.sheets, value=self.sheet, label="Sheet")
-                        .props("dense outlined")
-                        .classes("w-48")
-                    )
-                    sheet_select.on_value_change(lambda e: self._set_sheet(e.value))
-
-                with ui.row().classes("items-center gap-2"):
-                    # Mirrors the warning icon's slot so the dropdowns stay centred.
-                    ui.icon("warning", size="sm").classes("invisible")
+                    ui.label("Select source").classes("text-sm")
                     source_select = (
-                        ui.select(_SOURCE_OPTIONS, value=self.source, label="Source")
+                        ui.select(_SOURCE_OPTIONS, value=self.source)
                         .props("dense outlined")
                         .classes("w-48")
                     )
                     source_select.on_value_change(lambda e: self._set_source(e.value))
 
-                    type_select = (
-                        ui.select(_TYPE_OPTIONS, value=self.file_type, label="Type")
-                        .props("dense outlined")
-                        .classes("w-48")
-                    )
-                    type_select.on_value_change(lambda e: self._set_type(e.value))
-
-                    notice = ui.icon("warning", size="sm").classes("text-orange-7")
-                    if (
-                        self.source != UNKNOWN
-                        and file_type is not None
-                        and not has_profile(self.source, file_type)
-                    ):
-                        notice.tooltip(
-                            "No profile for this source/type combination"
-                            " — using the default parser."
+                    ui.label("Select type").classes("text-sm")
+                    with ui.row().classes("items-center gap-2"):
+                        type_select = (
+                            ui.select(_TYPE_OPTIONS, value=self.file_type)
+                            .props("dense outlined")
+                            .classes("w-48")
                         )
-                    else:
-                        notice.classes("invisible")
+                        type_select.on_value_change(lambda e: self._set_type(e.value))
+                        if (
+                            self.source != UNKNOWN
+                            and file_type is not None
+                            and not has_profile(self.source, file_type)
+                        ):
+                            ui.icon("warning", size="sm").classes(
+                                "text-orange-7"
+                            ).tooltip(
+                                "No profile for this source/type combination"
+                                " — using the default parser."
+                            )
+
+                    if self.sheets:
+                        ui.label("Select sheet").classes("text-sm")
+                        sheet_select = (
+                            ui.select(self.sheets, value=self.sheet)
+                            .props("dense outlined")
+                            .classes("w-48")
+                        )
+                        sheet_select.on_value_change(lambda e: self._set_sheet(e.value))
 
                 self.mapping_screen = self.quirks_screen = None
                 self.views = None

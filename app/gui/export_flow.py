@@ -68,11 +68,10 @@ async def pick_save_path() -> Path | None:
     return Path(selected[0]) if selected else None
 
 
-def _records_line(count: int, selected: bool) -> str:
-    noun = "record" if count == 1 else "records"
+def _records_count(count: int, selected: bool) -> str:
     if selected:
-        return f"Exporting {format_count(count)} selected {noun}"
-    return f"Exporting all {format_count(count)} {noun}"
+        return f"{format_count(count)} (selected)"
+    return format_count(count)
 
 
 @dataclass
@@ -399,15 +398,17 @@ class ExportView:
         self.middle.clear()
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):
-                with ui.row().classes("items-center gap-2"):
-                    self.path_label = ui.label("No file chosen").classes("text-sm")
+                with ui.grid(columns=2).classes("items-center gap-x-4 gap-y-2"):
+                    self.path_label = ui.label("No file selected").classes("text-sm")
                     ui.button("Save as…", on_click=self._choose_path).props("dense")
-                ui.select(
-                    _TYPE_OPTIONS, value=self.options.file_type, label="Type"
-                ).props("dense outlined").classes("w-48")
-                ui.label(_records_line(len(self.records), self.selected)).classes(
-                    "text-sm text-grey-7"
-                )
+                    ui.label("Select type").classes("text-sm")
+                    ui.select(_TYPE_OPTIONS, value=self.options.file_type).props(
+                        "dense outlined"
+                    ).classes("w-48")
+                    ui.label("Number of records:").classes("text-sm")
+                    ui.label(_records_count(len(self.records), self.selected)).classes(
+                        "text-sm"
+                    )
                 views = render_view_toggle(VIEW_MAPPING, parsing_label="Options")
                 self.mapping = views.mapping
                 self._render_mapping()

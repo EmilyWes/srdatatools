@@ -990,8 +990,15 @@ _DETECTED_PUBMED_TEXT = "PMID- 1\nOWN - NLM\nTI  - A title\n"
 
 
 def _file_row_children(middle: Element) -> list[Element]:
-    outer_column = middle.default_slot.children[0]
-    return list(outer_column.default_slot.children[0].default_slot.children)
+    label, controls = _grid_cells(middle)[:2]
+    return [label, *controls.default_slot.children]
+
+
+def _grid_cells(middle: Element) -> list[Element]:
+    grid = middle.default_slot.children[0].default_slot.children[0]
+    return [
+        cell for cell in grid.default_slot.children if not isinstance(cell, Tooltip)
+    ]
 
 
 def _tooltips_for(middle: Element, element: Element) -> list[str]:
@@ -1187,8 +1194,9 @@ def test_render_mapping__excel_lists_columns_with_delimiter_box(
 
 
 def _sheet_select(middle: Element) -> Any:
-    outer_column = middle.default_slot.children[0]
-    return outer_column.default_slot.children[1]
+    label, select = _grid_cells(middle)[-2:]
+    assert label.text == "Select sheet"  # type: ignore[attr-defined]
+    return select
 
 
 def test_render_import_view__xlsx_file_lists_sheets_and_enables_import(
@@ -1204,9 +1212,7 @@ def test_render_import_view__xlsx_file_lists_sheets_and_enables_import(
     assert view.file_type == "excel"
     assert view.sheets == ["Records", "Other"]
     assert view.sheet == "Records"
-    select = _sheet_select(panes.middle)
-    assert select.props["label"] == "Sheet"
-    assert select.value == "Records"
+    assert _sheet_select(panes.middle).value == "Records"
     assert view.mapping_screen is not None
     assert {row.header for row in view.mapping_screen.rows} == {"Title", "DOI"}
     assert view.import_button is not None

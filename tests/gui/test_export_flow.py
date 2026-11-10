@@ -101,7 +101,7 @@ def test_pick_save_path__none_when_cancelled(monkeypatch: pytest.MonkeyPatch) ->
 
 @pytest.mark.parametrize(
     ("selected", "line"),
-    [(False, "Exporting all 2 records"), (True, "Exporting 2 selected records")],
+    [(False, "2"), (True, "2 (selected)")],
 )
 def test_render_export_view__says_which_records(selected: bool, line: str) -> None:
     assert line in _texts(_view(selected=selected))
