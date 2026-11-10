@@ -570,9 +570,8 @@ def test_render_import_view__selecting_file_updates_label(
     assert view.paths == [txt_path]
     # type is not detected, so no mapping renders yet
     assert view.mapping_screen is None
-    outer_column = panes.middle.default_slot.children[0]
-    file_row = outer_column.default_slot.children[0]
-    assert file_row.default_slot.children[0].text == "export.txt"  # type: ignore[attr-defined]
+    label = _file_row_children(panes.middle)[0]
+    assert label.text == "export.txt"  # type: ignore[attr-defined]
 
 
 def test_render_import_view__mapping_renders_inline_and_enables_import_without_confirm(
@@ -990,8 +989,7 @@ _DETECTED_PUBMED_TEXT = "PMID- 1\nOWN - NLM\nTI  - A title\n"
 
 
 def _file_row_children(middle: Element) -> list[Element]:
-    label, controls = _grid_cells(middle)[:2]
-    return [label, *controls.default_slot.children]
+    return list(_grid_cells(middle)[1].default_slot.children)
 
 
 def _grid_cells(middle: Element) -> list[Element]:
@@ -1195,7 +1193,7 @@ def test_render_mapping__excel_lists_columns_with_delimiter_box(
 
 def _sheet_select(middle: Element) -> Any:
     label, select = _grid_cells(middle)[-2:]
-    assert label.text == "Select sheet"  # type: ignore[attr-defined]
+    assert label.text == "Select sheet:"  # type: ignore[attr-defined]
     return select
 
 

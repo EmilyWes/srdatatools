@@ -19,6 +19,14 @@ from app.export.columns import (
 )
 from app.export.options import ExportOptions
 from app.gui.format import format_count
+from app.gui.import_flow import (
+    BUTTON_PROPS,
+    FILE_LABEL_CLASSES,
+    GRID_CLASSES,
+    GRID_COLUMNS,
+    SELECT_CLASSES,
+    SELECT_PROPS,
+)
 from app.gui.mapping_table import ROW_FIELD_CSS, fill_color
 from app.gui.quirks_overview import (
     FIELD_CSS,
@@ -397,13 +405,17 @@ class ExportView:
         self.middle.clear()
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):
-                with ui.grid(columns=2).classes("items-center gap-x-4 gap-y-2"):
-                    self.path_label = ui.label("No file selected").classes("text-sm")
-                    ui.button("Save as…", on_click=self._choose_path).props("dense")
-                    ui.label("Select type").classes("text-sm")
+                with ui.grid(columns=GRID_COLUMNS).classes(GRID_CLASSES):
+                    ui.button("Save as…", on_click=self._choose_path).props(
+                        BUTTON_PROPS
+                    )
+                    self.path_label = ui.label("No file selected").classes(
+                        FILE_LABEL_CLASSES
+                    )
+                    ui.label("Select type:").classes("text-sm")
                     ui.select(_TYPE_OPTIONS, value=self.options.file_type).props(
-                        "dense outlined"
-                    ).classes("w-48")
+                        SELECT_PROPS
+                    ).classes(SELECT_CLASSES)
                     ui.label("Number of records:").classes("text-sm")
                     ui.label(_records_count(len(self.records), self.selected)).classes(
                         "text-sm"

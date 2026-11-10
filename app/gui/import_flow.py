@@ -10,7 +10,7 @@ from app.db.activity_log import log_import
 from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
 from app.gui.busy import run_busy
-from app.gui.mapping_table import MappingScreen, render_mapping_table
+from app.gui.mapping_table import ROW_FIELD_CSS, MappingScreen, render_mapping_table
 from app.gui.quirks_overview import (
     VIEW_MAPPING,
     VIEW_PARSING,
@@ -97,6 +97,16 @@ _MIXED_WARNING = (
     " Make sure you are importing files from the same source and of the same type."
 )
 _EXCEL_SINGLE_FILE = "Excel import takes one file at a time"
+
+# The second column is fixed to the dropdown width (w-32) so a long file name
+# overflows to the right instead of moving the button and dropdowns.
+GRID_COLUMNS = "max-content 8rem"
+GRID_CLASSES = "items-center justify-items-start gap-x-1 gap-y-2"
+CELL_ROW_CLASSES = "items-center gap-2 no-wrap"
+FILE_LABEL_CLASSES = "text-sm whitespace-nowrap"
+SELECT_PROPS = "dense outlined options-dense popup-content-class=text-xs"
+BUTTON_PROPS = "dense size=11px"
+SELECT_CLASSES = "mapping-field text-xs w-32"
 
 
 async def pick_files() -> list[Path]:
@@ -456,22 +466,25 @@ class ImportView:
         type_known = file_type is not None
         has_file = bool(self.paths)
 
+        ui.add_css(ROW_FIELD_CSS)
         self.middle.clear()
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):
-                with ui.grid(columns=2).classes("items-center gap-x-4 gap-y-2"):
-                    if len(self.paths) > 1:
-                        files_label = ui.label(f"{len(self.paths)} files selected")
-                        files_label.tooltip(", ".join(path.name for path in self.paths))
-                    else:
-                        files_label = ui.label(
-                            self.paths[0].name if self.paths else "No file selected"
-                        )
-                    files_label.classes("text-sm")
-                    with ui.row().classes("items-center gap-2"):
-                        ui.button("Select files", on_click=self._select_files).props(
-                            "dense"
-                        )
+                with ui.grid(columns=GRID_COLUMNS).classes(GRID_CLASSES):
+                    ui.button("Select files", on_click=self._select_files).props(
+                        BUTTON_PROPS
+                    )
+                    with ui.row().classes(CELL_ROW_CLASSES):
+                        if len(self.paths) > 1:
+                            files_label = ui.label(f"{len(self.paths)} files selected")
+                            files_label.tooltip(
+                                ", ".join(path.name for path in self.paths)
+                            )
+                        else:
+                            files_label = ui.label(
+                                self.paths[0].name if self.paths else "No file selected"
+                            )
+                        files_label.classes(FILE_LABEL_CLASSES)
                         if self._mixed():
                             ui.icon("warning", size="sm").classes(
                                 "text-orange-7"
@@ -479,20 +492,20 @@ class ImportView:
                                 f"{_MIXED_WARNING} Detected: {self._mixed_details()}"
                             )
 
-                    ui.label("Select source").classes("text-sm")
+                    ui.label("Select source:").classes("text-sm")
                     source_select = (
                         ui.select(_SOURCE_OPTIONS, value=self.source)
-                        .props("dense outlined")
-                        .classes("w-48")
+                        .props(SELECT_PROPS)
+                        .classes(SELECT_CLASSES)
                     )
                     source_select.on_value_change(lambda e: self._set_source(e.value))
 
-                    ui.label("Select type").classes("text-sm")
-                    with ui.row().classes("items-center gap-2"):
+                    ui.label("Select type:").classes("text-sm")
+                    with ui.row().classes(CELL_ROW_CLASSES):
                         type_select = (
                             ui.select(_TYPE_OPTIONS, value=self.file_type)
-                            .props("dense outlined")
-                            .classes("w-48")
+                            .props(SELECT_PROPS)
+                            .classes(SELECT_CLASSES)
                         )
                         type_select.on_value_change(lambda e: self._set_type(e.value))
                         if (
@@ -508,11 +521,11 @@ class ImportView:
                             )
 
                     if self.sheets:
-                        ui.label("Select sheet").classes("text-sm")
+                        ui.label("Select sheet:").classes("text-sm")
                         sheet_select = (
                             ui.select(self.sheets, value=self.sheet)
-                            .props("dense outlined")
-                            .classes("w-48")
+                            .props(SELECT_PROPS)
+                            .classes(SELECT_CLASSES)
                         )
                         sheet_select.on_value_change(lambda e: self._set_sheet(e.value))
 
