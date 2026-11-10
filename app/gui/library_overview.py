@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.format import format_count, keyword_key, label_key
+from app.gui.mapping_table import fill_color
 
 _UNKNOWN = "Unknown"
 _HIDDEN_KEY = "overview_hidden"
@@ -16,6 +17,8 @@ _PER_YEAR = "per_year"
 _PUBLICATION_TYPE = "publication_type"
 _SOURCE_FILES = "source_files"
 _BAR_COLOR = "#5470c6"
+# Quasar's green/orange/red, so the bars match the mapping's fill bars.
+_FILL_COLORS = {"green": "#4caf50", "orange": "#ff9800", "red": "#f44336"}
 _LABEL_COLORS = {
     "include": "#21ba45",
     "exclude": "#c10015",
@@ -103,14 +106,14 @@ def _completeness_chart(total: int, filled: Sequence[tuple[str, int]]) -> None:
             {
                 "grid": {"left": 8, "right": 24, "top": 8, "bottom": 8},
                 "xAxis": {
+                    "type": "category",
+                    "data": [name for name, _ in filled],
+                    "axisLabel": {"rotate": 45, "interval": 0},
+                },
+                "yAxis": {
                     "type": "value",
                     "max": 100,
                     "axisLabel": {"formatter": "{value}%"},
-                },
-                "yAxis": {
-                    "type": "category",
-                    "inverse": True,
-                    "data": [name for name, _ in filled],
                 },
                 "tooltip": {
                     "trigger": "item",
@@ -120,14 +123,16 @@ def _completeness_chart(total: int, filled: Sequence[tuple[str, int]]) -> None:
                 "series": [
                     {
                         "type": "bar",
-                        "color": _BAR_COLOR,
-                        "itemStyle": {"borderRadius": [0, 4, 4, 0]},
+                        "itemStyle": {"borderRadius": [4, 4, 0, 0]},
                         "data": [
                             {
                                 "value": (
                                     round(100 * count / total, 1) if total else 0
                                 ),
                                 "count": format_count(count),
+                                "itemStyle": {
+                                    "color": _FILL_COLORS[fill_color(count, total)]
+                                },
                             }
                             for _, count in filled
                         ],

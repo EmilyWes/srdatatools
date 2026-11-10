@@ -96,11 +96,11 @@ def test_render_library_overview__completeness_as_percent_with_counts() -> None:
     _render(panes.middle)
 
     chart = _charts(panes.middle)[0]
-    assert chart.options["yAxis"]["data"] == ["Title", "DOI", "Abstract"]
+    assert chart.options["xAxis"]["data"] == ["Title", "DOI", "Abstract"]
     assert _series_data(chart) == [
-        {"value": 100.0, "count": "4"},
-        {"value": 75.0, "count": "3"},
-        {"value": 0.0, "count": "0"},
+        {"value": 100.0, "count": "4", "itemStyle": {"color": "#4caf50"}},
+        {"value": 75.0, "count": "3", "itemStyle": {"color": "#4caf50"}},
+        {"value": 0.0, "count": "0", "itemStyle": {"color": "#f44336"}},
     ]
 
 
@@ -119,7 +119,9 @@ def test_render_library_overview__completeness_with_zero_records() -> None:
         {"publication_type", "source_files"},
     )
 
-    assert _series_data(_charts(panes.middle)[0]) == [{"value": 0, "count": "0"}]
+    assert _series_data(_charts(panes.middle)[0]) == [
+        {"value": 0, "count": "0", "itemStyle": {"color": "#f44336"}}
+    ]
 
 
 def test_render_library_overview__year_chart_fills_gaps_and_omits_unknown() -> None:
