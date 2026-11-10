@@ -18,7 +18,7 @@ from app.parsers.profiles.overview import (
 _CHANGED_BG_COLOR = "blue-2"
 _CHANGED_CHECKBOX_COLOR = "blue"
 # Dense boxes no taller than a line of text-sm (20px).
-_FIELD_CSS = """
+FIELD_CSS = """
 .quirk-field .q-field__control, .quirk-field .q-field__marginal {
     min-height: 20px;
     height: 20px;
@@ -86,6 +86,14 @@ def _shared_keys(mapping: FieldMapping) -> list[str]:
     """Keys whose target is also the target of another mapped key."""
     counts = Counter(row.target for row in mapping.rows.values())
     return [key for key, row in mapping.rows.items() if counts[row.target] > 1]
+
+
+def render_box_frame(title: str) -> Element:
+    """A titled box whose grid lines up each label with its control."""
+    with ui.element("fieldset").classes(_BOX_CLASSES):
+        with ui.element("legend").classes(_TITLE_CLASSES):
+            ui.label(title)
+        return ui.element("div").classes(_GRID_CLASSES).style(_GRID_STYLE)
 
 
 @dataclass
@@ -280,11 +288,7 @@ class QuirksScreen:
             self.refresh_ordering()
 
     def render_box(self, box: QuirkBox, chosen: ParsingChoices) -> None:
-        with ui.element("fieldset").classes(_BOX_CLASSES):
-            with ui.element("legend").classes(_TITLE_CLASSES):
-                ui.label(box.title)
-            grid = ui.element("div").classes(_GRID_CLASSES).style(_GRID_STYLE)
-        with grid:
+        with render_box_frame(box.title):
             for item in box.items:
                 if isinstance(item, QuirkList):
                     self._render_list(item)
@@ -297,7 +301,6 @@ class QuirksScreen:
 
 VIEW_MAPPING = "mapping"
 VIEW_PARSING = "parsing"
-_VIEW_OPTIONS = {VIEW_MAPPING: "Mapping", VIEW_PARSING: "Parsing"}
 _STACKED_CLASSES = "col-start-1 row-start-1"
 _HIDDEN_VIEW_CLASSES = "h-0 overflow-hidden invisible"
 
@@ -320,7 +323,9 @@ class MappingParsingViews:
 
 
 def render_view_toggle(
-    view: str = VIEW_MAPPING, on_change: Callable[[str], Any] | None = None
+    view: str = VIEW_MAPPING,
+    on_change: Callable[[str], Any] | None = None,
+    parsing_label: str = "Parsing",
 ) -> MappingParsingViews:
     """The Mapping | Parsing toggle above two containers, one shown at a time.
 
@@ -328,7 +333,8 @@ def render_view_toggle(
     doesn't resize the middle pane: Parsing wraps its boxes to that width, and
     the hidden view is collapsed rather than removed so its width still counts.
     """
-    toggle = ui.toggle(_VIEW_OPTIONS, value=view).props("dense no-caps")
+    options = {VIEW_MAPPING: "Mapping", VIEW_PARSING: parsing_label}
+    toggle = ui.toggle(options, value=view).props("dense no-caps")
     with ui.element("div").classes("grid w-fit max-w-full"):
         mapping = ui.column().classes(_STACKED_CLASSES)
         parsing = ui.column().classes(f"{_STACKED_CLASSES} w-0 min-w-full")
@@ -360,7 +366,7 @@ def render_quirks_overview(
         empty_values=list(shown.empty_values),
         use_first=list(shown.use_first),
     )
-    ui.add_css(_FIELD_CSS)
+    ui.add_css(FIELD_CSS)
     container.clear()
     with container, ui.column().classes("gap-1 w-full"):
         # Deferred: a once-timer waits for the browser connection before running.

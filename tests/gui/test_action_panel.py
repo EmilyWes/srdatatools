@@ -46,7 +46,7 @@ def test_render_right_panel__builds_without_raising() -> None:
     render_right_panel(panes.right, panes.middle)
 
 
-def test_render_right_panel__action_buttons_in_order_and_disabled() -> None:
+def test_render_right_panel__action_buttons_in_order_only_export_enabled() -> None:
     panes = shell()
 
     render_right_panel(panes.right, panes.middle)
@@ -58,7 +58,7 @@ def test_render_right_panel__action_buttons_in_order_and_disabled() -> None:
         "Snowball",
         "Export",
     ]
-    assert not any(button.enabled for button in action_buttons)
+    assert [button.enabled for button in action_buttons] == [False, False, False, True]
 
 
 def test_render_right_panel__one_settings_gear_per_action() -> None:
@@ -85,6 +85,18 @@ def test_render_right_panel__gear_shows_settings_in_middle_and_calls_back() -> N
     assert len(middle_children) == 1
     labels = middle_children[0].default_slot.children
     assert labels[0].text == "Enrich settings"  # type: ignore[attr-defined]
+
+
+def test_render_right_panel__export_button_and_gear_call_back() -> None:
+    panes = shell()
+    calls: list[None] = []
+    render_right_panel(panes.right, panes.middle, on_export=lambda: calls.append(None))
+
+    export_button, export_gear = _row_buttons(panes.right)[3]
+    _click(export_button)
+    _click(export_gear)
+
+    assert calls == [None, None]
 
 
 def _clear_log_button(right: Element) -> ui.button:

@@ -496,3 +496,81 @@ def test_home__failing_file_is_logged_and_notified_without_undoing_others(
     assert len(notifications) == 1
     assert notifications[0].startswith("Could not import moved.csv: ")
     assert navs[-1].selected_key == f"source_file:{source_file.id}"
+
+
+def _capture_export_views(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    views: list[Any] = []
+    render_export_view = home_module.render_export_view
+
+    def capture(*args: Any, **kwargs: Any) -> Any:
+        view = render_export_view(*args, **kwargs)
+        views.append(view)
+        return view
+
+    monkeypatch.setattr(home_module, "render_export_view", capture)
+    return views
+
+
+def _export_button(panes: ShellPanes) -> ui.button:
+    return next(
+        element
+        for element in panes.right.descendants()
+        if isinstance(element, ui.button) and element.text == "Export"
+    )
+
+
+def _open_export(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    shells = _capture_shells(monkeypatch)
+    views = _capture_export_views(monkeypatch)
+    home()
+    click_and_wait(_export_button(shells[-1]), monkeypatch)
+    return views
+
+
+def test_home__export_writes_csv_and_logs(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _add_source_file_with_record(engine)
+    [view] = _open_export(monkeypatch)
+    view.path = tmp_path / "library.csv"
+    view._refresh_export_button()
+
+    click_and_wait(view.export_button, monkeypatch)
+
+    lines = (tmp_path / "library.csv").read_text(encoding="utf-8-sig").splitlines()
+    assert lines[0].startswith("Record ID,Title,")
+    assert lines[1].split(",")[1] == "A title"
+    with Session(engine) as session:
+        entry = session.query(ActivityLog).one()
+        assert entry.message == "Exported to:\nlibrary.csv\nRecords: 1"
+        assert entry.status == "ok"
+
+
+def test_home__failed_export_is_logged_as_warning(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _add_source_file_with_record(engine)
+    [view] = _open_export(monkeypatch)
+    view.path = tmp_path / "missing" / "library.csv"
+    view._refresh_export_button()
+
+    click_and_wait(view.export_button, monkeypatch)
+
+    with Session(engine) as session:
+        entry = session.query(ActivityLog).one()
+        assert entry.message.startswith("Export failed:\nlibrary.csv\nReason: ")
+        assert entry.status == "warning"
+
+
+def test_home__export_options_are_remembered(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shells = _capture_shells(monkeypatch)
+    views = _capture_export_views(monkeypatch)
+    home()
+    click_and_wait(_export_button(shells[-1]), monkeypatch)
+
+    views[-1].option_widgets["delimiter"].value = ";"
+    click_and_wait(_export_button(shells[-1]), monkeypatch)
+
+    assert views[-1].options.delimiter == ";"
