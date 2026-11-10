@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from app.models.record import Author
+import pytest
+
+import app.parsers.mapping as mapping_module
+from app.models.record import Author, Record
+from app.parsers import nbib
+from app.parsers.common import SkippedRow
 from app.parsers.mapping import (
     AuthorsRow,
     FieldMapping,
@@ -18,6 +23,7 @@ from app.parsers.nbib import (
     suggest_nbib_mapping,
 )
 from app.parsers.profiles.default import DEFAULT_PROFILES
+from app.parsers.quirks import ParseSettings
 from tests.mappings import mapping_of, targets_of
 
 _NBIB_SETTINGS = DEFAULT_PROFILES["nbib"].settings
@@ -751,3 +757,29 @@ def test_parse_nbib_record__attaches_auid_and_ad_to_preceding_fau() -> None:
     assert author.family_name == "Smith"
     assert author.orcid == "0000-0001-2345-6789"
     assert [a.name for a in author.affiliations] == ["University X"]
+
+
+def _fail_on_bad_title(monkeypatch: pytest.MonkeyPatch) -> None:
+    real = mapping_module.apply_mapping
+
+    def apply(
+        raw_fields: dict[str, str], mapping: FieldMapping, settings: ParseSettings
+    ) -> Record:
+        if "Bad" in raw_fields.values():
+            raise ValueError("bad value")
+        return real(raw_fields, mapping, settings)
+
+    monkeypatch.setattr(mapping_module, "apply_mapping", apply)
+
+
+def test_parse_nbib_text__skips_record_that_fails_to_parse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _fail_on_bad_title(monkeypatch)
+    text = "PMID- 1\nTI  - Good\n\nPMID- 2\nTI  - Bad\n\nPMID- 3\nTI  - Also\n"
+
+    result = nbib.parse_nbib_text(text, mapping_of({"TI": "title"}))
+
+    assert [row.record.title for row in result.rows] == ["Good", "Also"]
+    assert [row.row_number for row in result.rows] == [1, 7]
+    assert result.skipped == [SkippedRow(4, "bad value")]

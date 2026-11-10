@@ -29,6 +29,10 @@ files before each commit.
 pytest
 ```
 
+Tests marked `big` parse the large local vendor exports under `tests/data/`
+(files named `*_big_*`) and are skipped by default; `pytest -m big` runs just
+those.
+
 Every parser and dedup rule should have tests covering it as it's written,
 not bolted on afterwards. Data-handling code (parsers, dedup/matching,
 merge/conflict-resolution logic) should use realistic sample data, kept under

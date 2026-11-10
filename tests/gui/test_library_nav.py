@@ -26,13 +26,13 @@ def _source_file(id_: int, filename: str) -> SourceFile:
 def test_render_left_panel__builds_without_raising() -> None:
     panes = shell()
 
-    render_left_panel(panes.left, panes.middle, [])
+    render_left_panel(panes.left, [])
 
 
 def test_render_left_panel__adds_import_and_library_with_no_source_files() -> None:
     panes = shell()
 
-    nav = render_left_panel(panes.left, panes.middle, [])
+    nav = render_left_panel(panes.left, [])
 
     # Import, separator, "Library" label, Overview, Table row
     assert len(panes.left.default_slot.children) == 5
@@ -46,7 +46,7 @@ def test_render_left_panel__adds_one_entry_per_source_file() -> None:
         _source_file(2, "scopus_export.csv"),
     ]
 
-    nav = render_left_panel(panes.left, panes.middle, source_files)
+    nav = render_left_panel(panes.left, source_files)
 
     # Import, sep, "Library" label, Overview, Table row, sep, "Imported files" label,
     # source_file:1, source_file:2
@@ -60,27 +60,22 @@ def test_render_left_panel__adds_one_entry_per_source_file() -> None:
     ]
 
 
-def test_render_left_panel__select_highlights_entry_and_updates_middle() -> None:
+def test_render_left_panel__select_highlights_entry() -> None:
     panes = shell()
     source_files = [_source_file(1, "pubmed_export.nbib")]
-    nav = render_left_panel(panes.left, panes.middle, source_files)
+    nav = render_left_panel(panes.left, source_files)
 
     nav.select("source_file:1")
 
     assert nav.selected_key == "source_file:1"
     assert _SELECTED_CLASS in nav.buttons["source_file:1"].classes
-    middle_children = panes.middle.default_slot.children
-    assert len(middle_children) == 1
-    assert middle_children[0].text == "pubmed_export.nbib"  # type: ignore[attr-defined]
 
 
 def test_render_left_panel__selecting_source_file_calls_on_source_file() -> None:
     panes = shell()
     source_files = [_source_file(7, "pubmed_export.nbib")]
     selected: list[int] = []
-    nav = render_left_panel(
-        panes.left, panes.middle, source_files, on_source_file=selected.append
-    )
+    nav = render_left_panel(panes.left, source_files, on_source_file=selected.append)
 
     nav.select("source_file:7")
 
@@ -90,7 +85,7 @@ def test_render_left_panel__selecting_source_file_calls_on_source_file() -> None
 def test_render_left_panel__switching_selection_removes_previous_highlight() -> None:
     panes = shell()
     source_files = [_source_file(1, "pubmed_export.nbib")]
-    nav = render_left_panel(panes.left, panes.middle, source_files)
+    nav = render_left_panel(panes.left, source_files)
 
     nav.select("library:overview")
     nav.select("source_file:1")
@@ -99,9 +94,9 @@ def test_render_left_panel__switching_selection_removes_previous_highlight() -> 
     assert _SELECTED_CLASS in nav.buttons["source_file:1"].classes
 
 
-def test_render_left_panel__clicking_import_selects_and_shows_placeholder() -> None:
+def test_render_left_panel__clicking_import_selects_it() -> None:
     panes = shell()
-    nav = render_left_panel(panes.left, panes.middle, [])
+    nav = render_left_panel(panes.left, [])
 
     import_button = panes.left.default_slot.children[0]
     click_listener = next(iter(import_button._event_listeners.values()))
@@ -110,14 +105,12 @@ def test_render_left_panel__clicking_import_selects_and_shows_placeholder() -> N
 
     assert nav.selected_key == "import"
     assert _SELECTED_CLASS in nav.buttons["import"].classes
-    middle_children = panes.middle.default_slot.children
-    assert middle_children[0].text == "Import"  # type: ignore[attr-defined]
 
 
 def test_render_left_panel__clicking_import_deselects_previous_selection() -> None:
     panes = shell()
     source_files = [_source_file(1, "pubmed_export.nbib")]
-    nav = render_left_panel(panes.left, panes.middle, source_files)
+    nav = render_left_panel(panes.left, source_files)
     nav.select("source_file:1")
 
     import_button = panes.left.default_slot.children[0]
@@ -139,7 +132,7 @@ def test_render_left_panel__import_button_uses_on_import_callback_when_given(
     async def on_import() -> None:
         calls.append(None)
 
-    nav = render_left_panel(panes.left, panes.middle, [], on_import=on_import)
+    nav = render_left_panel(panes.left, [], on_import=on_import)
     import_button = panes.left.default_slot.children[0]
     click_listener = next(iter(import_button._event_listeners.values()))
     assert click_listener.handler is not None
@@ -159,7 +152,7 @@ def test_render_left_panel__import_button_uses_on_import_callback_when_given(
 
 def test_render_left_panel__clear_selection_removes_highlight() -> None:
     panes = shell()
-    nav = render_left_panel(panes.left, panes.middle, [])
+    nav = render_left_panel(panes.left, [])
     nav.select("library:overview")
 
     nav.clear_selection()
@@ -183,7 +176,7 @@ def _gear(nav: LeftPanelNav, key: str) -> ui.button:
 def test_render_left_panel__library_heading_above_overview_and_table() -> None:
     panes = shell()
 
-    render_left_panel(panes.left, panes.middle, [])
+    render_left_panel(panes.left, [])
 
     heading = panes.left.default_slot.children[2]
     assert isinstance(heading, ui.label)
@@ -195,7 +188,6 @@ def test_render_left_panel__selecting_overview_and_table_calls_their_views() -> 
     calls: list[str] = []
     nav = render_left_panel(
         panes.left,
-        panes.middle,
         [],
         on_overview=lambda: calls.append("overview"),
         on_table=lambda: calls.append("table"),
@@ -217,7 +209,7 @@ def test_render_left_panel__clicking_table_awaits_async_view(
     async def show_table() -> None:
         calls.append("table")
 
-    nav = render_left_panel(panes.left, panes.middle, [], on_table=show_table)
+    nav = render_left_panel(panes.left, [], on_table=show_table)
 
     click_and_wait(nav.buttons["library:table"], monkeypatch)
 
@@ -229,7 +221,6 @@ def test_render_left_panel__table_gear_opens_settings_with_table_highlighted() -
     calls: list[str] = []
     nav = render_left_panel(
         panes.left,
-        panes.middle,
         [],
         on_table=lambda: calls.append("table"),
         on_table_settings=lambda: calls.append("settings"),
@@ -249,7 +240,6 @@ def test_render_left_panel__overview_gear_opens_settings_and_highlights() -> Non
     calls: list[str] = []
     nav = render_left_panel(
         panes.left,
-        panes.middle,
         [],
         on_overview=lambda: calls.append("overview"),
         on_overview_settings=lambda: calls.append("settings"),

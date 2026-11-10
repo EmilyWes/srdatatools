@@ -1,7 +1,7 @@
 import difflib
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal, TypeVar, get_args
 
@@ -275,7 +275,7 @@ _ISSN_ISBN_JOINER = "; "
 
 def _label_for_line(line: str, settings: ParseSettings) -> LabelValue | None:
     normalized = line.strip().lower()
-    custom = dict(settings.label_values)
+    custom = settings.label_lookup
     if normalized in custom:
         return custom[normalized]
     return _LABEL_SPELLINGS.get(normalized)
@@ -462,12 +462,16 @@ def _parse_pages(raw_fields: dict[str, str], mapping: FieldMapping) -> str | Non
 
 
 def _counts_as_empty(value: str, settings: ParseSettings) -> bool:
-    return value.strip().lower() in {v.lower() for v in settings.empty_values}
+    return value.strip().lower() in settings.empty_lookup
 
 
 def _ordered(mapping: FieldMapping, use_first: tuple[str, ...]) -> FieldMapping:
     first = {key: mapping.rows[key] for key in use_first if key in mapping.rows}
     return mapping.model_copy(update={"rows": {**first, **mapping.rows}})
+
+
+def strip_orcid_url(value: str) -> str:
+    return _ORCID_URL.sub("", value)
 
 
 def author_for_name(name: str, row: AuthorsRow, settings: ParseSettings) -> Author:
@@ -483,7 +487,7 @@ def author_for_name(name: str, row: AuthorsRow, settings: ParseSettings) -> Auth
 
 def add_author_detail(author: Author, row: AuthorsRow, value: str) -> None:
     if row.role == "orcid":
-        author.orcid = author.orcid or _ORCID_URL.sub("", value)
+        author.orcid = author.orcid or strip_orcid_url(value)
     elif row.role == "ids":
         author.other_ids.setdefault(row.id_key, value)
     elif row.role == "affiliations":
@@ -581,6 +585,37 @@ def apply_mapping(
         labels=labels,
         publication_date=_parse_publication_date(raw_fields, mapping),
     )
+
+
+TagLines = list[tuple[str, str]]
+LineAuthors = Callable[[TagLines, dict[str, AuthorsRow], ParseSettings], list[Author]]
+
+
+def join_tag_lines(lines: TagLines) -> dict[str, str]:
+    """A tag repeated per value (RIS, NBIB) becomes one raw field, one value a line."""
+    values: dict[str, list[str]] = {}
+    for tag, value in lines:
+        values.setdefault(tag, []).append(value)
+    return {
+        tag: "\n".join(v for v in tag_values if v) for tag, tag_values in values.items()
+    }
+
+
+def apply_line_mapping(
+    lines: TagLines,
+    raw_fields: dict[str, str],
+    mapping: FieldMapping,
+    settings: ParseSettings,
+    authors_from_lines: LineAuthors,
+) -> Record:
+    """Authors come from the lines in order, so each detail line stays with the
+    author line above it rather than being zipped by position."""
+    record = apply_mapping(raw_fields, mapping, settings)
+    author_rows = dict(mapping.rows_of(AuthorsRow))
+    if not author_rows:
+        return record
+    authors = authors_from_lines(lines, author_rows, settings)
+    return record.model_copy(update={"authors": authors})
 
 
 def override_aliases(

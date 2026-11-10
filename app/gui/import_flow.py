@@ -1,18 +1,24 @@
-﻿from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
-from functools import partial
 from pathlib import Path
 
 from nicegui import app, ui
 from nicegui.element import Element
 from sqlalchemy.orm import Session
 
+from app.db.activity_log import log_import
 from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
-from app.gui.activity_log import log_import
 from app.gui.busy import run_busy
 from app.gui.mapping_table import MappingScreen, render_mapping_table
-from app.gui.quirks_overview import QuirksScreen, render_quirks_overview
+from app.gui.quirks_overview import (
+    VIEW_MAPPING,
+    VIEW_PARSING,
+    MappingParsingViews,
+    QuirksScreen,
+    render_quirks_overview,
+    render_view_toggle,
+)
 from app.models.record import Record
 from app.parsers.bibtex import (
     parse_bibtex_file,
@@ -20,7 +26,15 @@ from app.parsers.bibtex import (
     read_bibtex_fields,
     suggest_bibtex_mapping,
 )
-from app.parsers.common import FileSummary, ParsedRow, ParseResult, merge_summaries
+from app.parsers.common import (
+    UNKNOWN,
+    FileSummary,
+    FileType,
+    ParsedRow,
+    ParseResult,
+    is_file_type,
+    merge_summaries,
+)
 from app.parsers.csv_ import (
     parse_csv_file,
     parse_csv_record,
@@ -33,7 +47,7 @@ from app.parsers.excel import (
     read_excel_headers,
     read_excel_sheets,
 )
-from app.parsers.mapping import FieldMapping, RowDefaults
+from app.parsers.mapping import FieldMapping, RowDefaults, TagLines
 from app.parsers.nbib import (
     parse_nbib_file,
     parse_nbib_record,
@@ -46,7 +60,6 @@ from app.parsers.profiles import (
     apply_profile,
     fix_record,
     has_profile,
-    profile_for,
 )
 from app.parsers.profiles.overview import (
     ParsingChoices,
@@ -63,31 +76,19 @@ from app.parsers.ris import (
     suggest_ris_mapping,
 )
 
-_TYPE_UNKNOWN = "unknown"
-_TYPE_RIS = "ris"
-_TYPE_NBIB = "nbib"
-_TYPE_CSV = "csv"
-_TYPE_TSV = "tsv"
-_TYPE_EXCEL = "excel"
-_TYPE_BIBTEX = "bibtex"
 _TYPE_OPTIONS = {
-    _TYPE_UNKNOWN: "Unknown",
-    _TYPE_RIS: "RIS",
-    _TYPE_NBIB: "NBIB",
-    _TYPE_CSV: "CSV",
-    _TYPE_TSV: "TSV",
-    _TYPE_EXCEL: "Excel",
-    _TYPE_BIBTEX: "BibTeX",
+    UNKNOWN: "Unknown",
+    "ris": "RIS",
+    "nbib": "NBIB",
+    "csv": "CSV",
+    "tsv": "TSV",
+    "excel": "Excel",
+    "bibtex": "BibTeX",
 }
 _TSV_DELIMITER = "\t"
 
-_VIEW_MAPPING = "mapping"
-_VIEW_PARSING = "parsing"
-_VIEW_OPTIONS = {_VIEW_MAPPING: "Mapping", _VIEW_PARSING: "Parsing"}
-
-_SOURCE_UNKNOWN = "unknown"
 _SOURCE_OPTIONS = {
-    _SOURCE_UNKNOWN: "Unknown",
+    UNKNOWN: "Unknown",
     **{key: profile.label for key, profile in PROFILES.items()},
 }
 
@@ -104,101 +105,107 @@ async def pick_files() -> list[Path]:
     return [Path(path) for path in selected] if selected else []
 
 
-def _parse_csv_lines(
-    lines: list[tuple[str, str]], mapping: FieldMapping, settings: ParseSettings
+@dataclass(frozen=True)
+class _TypeHandlers:
+    """One Type's parser functions, called the same way for every Type."""
+
+    read_keys: Callable[[Path, str | None, ParseSettings], FileSummary]
+    suggest: Callable[[list[str], FormatProfile], FieldMapping]
+    parse_record: Callable[[TagLines, FieldMapping, ParseSettings], ParsedRow]
+    parse_file: Callable[[Path, FieldMapping, str | None, ParseSettings], ParseResult]
+    noun: str
+
+
+def _suggest_columns(keys: list[str], profile: FormatProfile) -> FieldMapping:
+    return suggest_mapping(
+        keys, profile.suggestions, profile.row_defaults, profile.ignored_keys
+    )
+
+
+def _parse_columns(
+    lines: TagLines, mapping: FieldMapping, settings: ParseSettings
 ) -> ParsedRow:
     return parse_csv_record(dict(lines), mapping, settings)
 
 
-@dataclass
-class _FormatHandlers:
-    read_keys: Callable[[Path], FileSummary]
-    suggest: Callable[[list[str]], FieldMapping]
-    parse_record: Callable[[list[tuple[str, str]], FieldMapping], ParsedRow]
-    noun: str
-    profile: FormatProfile
+def _delimited(delimiter: str | None) -> _TypeHandlers:
+    return _TypeHandlers(
+        read_keys=lambda path, _, settings: read_csv_headers(path, delimiter, settings),
+        suggest=_suggest_columns,
+        parse_record=_parse_columns,
+        parse_file=lambda path, mapping, _, settings: parse_csv_file(
+            path, mapping, delimiter, settings
+        ),
+        noun="columns",
+    )
 
 
-def _handlers(
-    file_type: str, source: str, choices: ParsingChoices | None = None
-) -> _FormatHandlers | None:
-    if profile_for(source, file_type) is None:
-        return None
-    profile = profile_with(file_type, source, choices)
-    overrides, settings = profile.suggestions, profile.settings
-    defaults = profile.row_defaults
-    parse_csv = partial(_parse_csv_lines, settings=settings)
-    if file_type in (_TYPE_CSV, _TYPE_TSV):
-        suggest = partial(
-            suggest_mapping,
-            overrides=overrides,
-            defaults=defaults,
-            ignored_keys=profile.ignored_keys,
-        )
-        delimiter = _TSV_DELIMITER if file_type == _TYPE_TSV else None
-        read_keys = partial(read_csv_headers, delimiter=delimiter, settings=settings)
-        return _FormatHandlers(read_keys, suggest, parse_csv, "columns", profile)
-    if file_type == _TYPE_EXCEL:
-        suggest = partial(
-            suggest_mapping,
-            overrides=overrides,
-            defaults=defaults,
-            ignored_keys=profile.ignored_keys,
-        )
-        return _FormatHandlers(
-            read_excel_headers, suggest, parse_csv, "columns", profile
-        )
-    if file_type == _TYPE_RIS:
-        suggest = partial(suggest_ris_mapping, overrides=overrides, defaults=defaults)
-        return _FormatHandlers(
-            read_ris_tags,
-            suggest,
-            partial(parse_ris_record, settings=settings),
-            "tags",
-            profile,
-        )
-    if file_type == _TYPE_NBIB:
-        suggest = partial(suggest_nbib_mapping, overrides=overrides, defaults=defaults)
-        return _FormatHandlers(
-            read_nbib_tags,
-            suggest,
-            partial(parse_nbib_record, settings=settings),
-            "tags",
-            profile,
-        )
-    if file_type == _TYPE_BIBTEX:
-        suggest = partial(
-            suggest_bibtex_mapping, overrides=overrides, defaults=defaults
-        )
-        return _FormatHandlers(
-            read_bibtex_fields,
-            suggest,
-            partial(parse_bibtex_record, settings=settings),
-            "fields",
-            profile,
-        )
-    return None
+_TYPES: dict[FileType, _TypeHandlers] = {
+    "csv": _delimited(None),
+    "tsv": _delimited(_TSV_DELIMITER),
+    "excel": _TypeHandlers(
+        read_keys=lambda path, sheet, _: read_excel_headers(path, sheet),
+        suggest=_suggest_columns,
+        parse_record=_parse_columns,
+        parse_file=parse_excel_file,
+        noun="columns",
+    ),
+    "ris": _TypeHandlers(
+        read_keys=lambda path, _, __: read_ris_tags(path),
+        suggest=lambda keys, profile: suggest_ris_mapping(
+            keys, profile.suggestions, profile.row_defaults
+        ),
+        parse_record=parse_ris_record,
+        parse_file=lambda path, mapping, _, settings: parse_ris_file(
+            path, mapping, settings
+        ),
+        noun="tags",
+    ),
+    "nbib": _TypeHandlers(
+        read_keys=lambda path, _, __: read_nbib_tags(path),
+        suggest=lambda keys, profile: suggest_nbib_mapping(
+            keys, profile.suggestions, profile.row_defaults
+        ),
+        parse_record=parse_nbib_record,
+        parse_file=lambda path, mapping, _, settings: parse_nbib_file(
+            path, mapping, settings
+        ),
+        noun="tags",
+    ),
+    "bibtex": _TypeHandlers(
+        read_keys=lambda path, _, __: read_bibtex_fields(path),
+        suggest=lambda keys, profile: suggest_bibtex_mapping(
+            keys, profile.suggestions, profile.row_defaults
+        ),
+        parse_record=parse_bibtex_record,
+        parse_file=lambda path, mapping, _, settings: parse_bibtex_file(
+            path, mapping, settings
+        ),
+        noun="fields",
+    ),
+}
 
 
-def _suggestion(handlers: _FormatHandlers, summary: FileSummary) -> FieldMapping:
-    return handlers.suggest(list(summary.samples))
+def _suggestion(file_type: FileType, source: str, summary: FileSummary) -> FieldMapping:
+    return _TYPES[file_type].suggest(
+        list(summary.samples), profile_with(file_type, source)
+    )
 
 
 def preview_for(
-    file_type: str,
+    file_type: FileType,
     source: str,
     summary: FileSummary,
     choices: Callable[[], ParsingChoices | None] = lambda: None,
 ) -> Callable[[FieldMapping], Record]:
     """`choices` is read on every preview, so the Result follows the Parsing view."""
-    if profile_for(source, file_type) is None:
-        raise ValueError(f"unsupported file type: {file_type!r}")
+    handlers = _TYPES[file_type]
 
     def preview(mapping: FieldMapping) -> Record:
-        handlers = _handlers(file_type, source, choices())
-        assert handlers is not None
-        row = handlers.parse_record(list(summary.samples.items()), mapping)
-        return fix_record(handlers.profile, row.raw_fields, row.record, mapping)
+        profile = profile_with(file_type, source, choices())
+        lines = list(summary.samples.items())
+        row = handlers.parse_record(lines, mapping, profile.settings)
+        return fix_record(profile, row.raw_fields, row.record, mapping)
 
     return preview
 
@@ -207,89 +214,79 @@ def type_label(file_type: str) -> str:
     return _TYPE_OPTIONS[file_type]
 
 
-def row_defaults_for(file_type: str, source: str) -> RowDefaults:
-    profile = profile_for(source, file_type)
-    if profile is None:
-        raise ValueError(f"unsupported file type: {file_type!r}")
-    return profile.row_defaults
+def row_defaults_for(file_type: FileType, source: str) -> RowDefaults:
+    return profile_with(file_type, source).row_defaults
 
 
 def _detect(path: Path) -> tuple[str, str]:
-    file_type = detect_type(path) or _TYPE_UNKNOWN
-    if file_type == _TYPE_UNKNOWN:
-        return file_type, _SOURCE_UNKNOWN
-    return file_type, detect_source(path, file_type) or _SOURCE_UNKNOWN
+    file_type = detect_type(path)
+    if file_type is None:
+        return UNKNOWN, UNKNOWN
+    return file_type, detect_source(path, file_type) or UNKNOWN
 
 
 def common_detection(detected: list[tuple[str, str]]) -> tuple[str, str]:
     types = {file_type for file_type, _ in detected}
     sources = {source for _, source in detected}
-    file_type = types.pop() if len(types) == 1 else _TYPE_UNKNOWN
-    source = sources.pop() if len(sources) == 1 else _SOURCE_UNKNOWN
+    file_type = types.pop() if len(types) == 1 else UNKNOWN
+    source = sources.pop() if len(sources) == 1 else UNKNOWN
     return file_type, source
 
 
 def read_summary(
-    file_type: str, path: Path, sheet: str | None = None
-) -> FileSummary | None:
-    if file_type == _TYPE_EXCEL:
-        return read_excel_headers(path, sheet)
-    handlers = _handlers(file_type, _SOURCE_UNKNOWN)
-    return handlers.read_keys(path) if handlers is not None else None
+    file_type: FileType, path: Path, sheet: str | None = None
+) -> FileSummary:
+    settings = profile_with(file_type, UNKNOWN).settings
+    return _TYPES[file_type].read_keys(path, sheet, settings)
 
 
 def render_mapping(
     container: Element,
-    file_type: str,
+    file_type: FileType,
     name: str,
     summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
+    source: str = UNKNOWN,
     choices: Callable[[], ParsingChoices | None] = lambda: None,
 ) -> MappingScreen | None:
-    handlers = _handlers(file_type, source)
-    if handlers is None:
-        return None
-
     if not summary.samples:
         with container:
-            ui.notify(f"No {handlers.noun} to map in {name}", type="negative")
+            ui.notify(f"No {_TYPES[file_type].noun} to map in {name}", type="negative")
         return None
 
     return render_mapping_table(
         container,
         summary,
-        _suggestion(handlers, summary),
-        defaults=handlers.profile.row_defaults,
+        _suggestion(file_type, source, summary),
+        defaults=row_defaults_for(file_type, source),
         preview=preview_for(file_type, source, summary, choices),
     )
 
 
-def _store(
+def import_file(
     session: Session,
     path: Path,
-    file_type: str,
+    file_type: FileType,
     mapping: FieldMapping,
     summary: FileSummary,
-    result: ParseResult,
-    source: str,
-    choices: ParsingChoices | None,
+    source: str = UNKNOWN,
     sheet: str | None = None,
+    choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    handlers = _handlers(file_type, source, choices)
-    assert handlers is not None
-    result = apply_profile(result, handlers.profile, mapping)
+    profile = profile_with(file_type, source, choices)
+    result = _TYPES[file_type].parse_file(path, mapping, sheet, profile.settings)
+    result = apply_profile(result, profile, mapping)
     source_file = store_parsed_rows(
         session,
         filename=path.name,
         path=str(path),
         format=file_type,
-        source=source if source != _SOURCE_UNKNOWN else None,
+        source=source if source != UNKNOWN else None,
         sheet=sheet,
         parsed_rows=[(row.record, row.raw_fields) for row in result.rows],
         skipped_rows=[(row.row_number, row.reason) for row in result.skipped],
     )
     source_file.field_mapping = mapping.model_dump()
-    source_file.suggested_mapping = _suggestion(handlers, summary).model_dump()
+    source_file.suggested_mapping = _suggestion(file_type, source, summary).model_dump()
     source_file.file_summary = asdict(summary)
     source_file.quirk_choices = dump_choices(
         choices or default_choices(file_type, source)
@@ -298,121 +295,10 @@ def _store(
     return source_file
 
 
-def _settings(
-    file_type: str, source: str, choices: ParsingChoices | None
-) -> ParseSettings:
-    return profile_with(file_type, source, choices).settings
-
-
-def import_csv(
-    session: Session,
-    path: Path,
-    mapping: FieldMapping,
-    summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
-    choices: ParsingChoices | None = None,
-) -> SourceFile:
-    settings = _settings(_TYPE_CSV, source, choices)
-    result = parse_csv_file(path, mapping, settings=settings)
-    return _store(session, path, _TYPE_CSV, mapping, summary, result, source, choices)
-
-
-def import_tsv(
-    session: Session,
-    path: Path,
-    mapping: FieldMapping,
-    summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
-    choices: ParsingChoices | None = None,
-) -> SourceFile:
-    settings = _settings(_TYPE_TSV, source, choices)
-    result = parse_csv_file(path, mapping, _TSV_DELIMITER, settings)
-    return _store(session, path, _TYPE_TSV, mapping, summary, result, source, choices)
-
-
-def import_excel(
-    session: Session,
-    path: Path,
-    mapping: FieldMapping,
-    summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
-    sheet: str | None = None,
-    choices: ParsingChoices | None = None,
-) -> SourceFile:
-    settings = _settings(_TYPE_EXCEL, source, choices)
-    result = parse_excel_file(path, mapping, sheet, settings)
-    return _store(
-        session, path, _TYPE_EXCEL, mapping, summary, result, source, choices, sheet
-    )
-
-
-def import_ris(
-    session: Session,
-    path: Path,
-    mapping: FieldMapping,
-    summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
-    choices: ParsingChoices | None = None,
-) -> SourceFile:
-    result = parse_ris_file(path, mapping, _settings(_TYPE_RIS, source, choices))
-    return _store(session, path, _TYPE_RIS, mapping, summary, result, source, choices)
-
-
-def import_nbib(
-    session: Session,
-    path: Path,
-    mapping: FieldMapping,
-    summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
-    choices: ParsingChoices | None = None,
-) -> SourceFile:
-    result = parse_nbib_file(path, mapping, _settings(_TYPE_NBIB, source, choices))
-    return _store(session, path, _TYPE_NBIB, mapping, summary, result, source, choices)
-
-
-def import_bibtex(
-    session: Session,
-    path: Path,
-    mapping: FieldMapping,
-    summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
-    choices: ParsingChoices | None = None,
-) -> SourceFile:
-    result = parse_bibtex_file(path, mapping, _settings(_TYPE_BIBTEX, source, choices))
-    return _store(
-        session, path, _TYPE_BIBTEX, mapping, summary, result, source, choices
-    )
-
-
-def import_file(
-    session: Session,
-    path: Path,
-    file_type: str,
-    mapping: FieldMapping,
-    summary: FileSummary,
-    source: str = _SOURCE_UNKNOWN,
-    sheet: str | None = None,
-    choices: ParsingChoices | None = None,
-) -> SourceFile:
-    if file_type == _TYPE_CSV:
-        return import_csv(session, path, mapping, summary, source, choices)
-    if file_type == _TYPE_TSV:
-        return import_tsv(session, path, mapping, summary, source, choices)
-    if file_type == _TYPE_EXCEL:
-        return import_excel(session, path, mapping, summary, source, sheet, choices)
-    if file_type == _TYPE_RIS:
-        return import_ris(session, path, mapping, summary, source, choices)
-    if file_type == _TYPE_NBIB:
-        return import_nbib(session, path, mapping, summary, source, choices)
-    if file_type == _TYPE_BIBTEX:
-        return import_bibtex(session, path, mapping, summary, source, choices)
-    raise ValueError(f"unsupported file type: {file_type!r}")
-
-
 OnImport = Callable[
     [
         list[tuple[Path, FileSummary]],
-        str,
+        FileType,
         FieldMapping,
         str,
         str | None,
@@ -428,16 +314,15 @@ class ImportView:
     on_import: OnImport
     paths: list[Path] = field(default_factory=list)
     detected: list[tuple[str, str]] = field(default_factory=list)
-    file_type: str = _TYPE_UNKNOWN
-    source: str = _SOURCE_UNKNOWN
+    file_type: str = UNKNOWN
+    source: str = UNKNOWN
     summaries: list[FileSummary] = field(default_factory=list)
     sheets: list[str] = field(default_factory=list)
     sheet: str | None = None
-    view: str = _VIEW_MAPPING
+    view: str = VIEW_MAPPING
     mapping_screen: MappingScreen | None = None
     quirks_screen: QuirksScreen | None = None
-    mapping_container: Element | None = None
-    quirks_container: Element | None = None
+    views: MappingParsingViews | None = None
     import_button: ui.button | None = None
 
     def _name(self) -> str:
@@ -446,7 +331,7 @@ class ImportView:
         return f"{len(self.paths)} files"
 
     def _too_many_for_excel(self) -> bool:
-        return self.file_type == _TYPE_EXCEL and len(self.paths) > 1
+        return self.file_type == "excel" and len(self.paths) > 1
 
     def _mixed(self) -> bool:
         return len(set(self.detected)) > 1
@@ -488,11 +373,12 @@ class ImportView:
         self.sheet = None
 
         def read() -> tuple[list[str], str | None, list[FileSummary]]:
-            sheets = read_excel_sheets(paths[0]) if file_type == _TYPE_EXCEL else []
+            sheets = read_excel_sheets(paths[0]) if file_type == "excel" else []
             first_sheet = next(iter(sheets), None)
             sheet = previous_sheet if previous_sheet in sheets else first_sheet
-            summaries = [read_summary(file_type, path, sheet) for path in paths]
-            return sheets, sheet, [s for s in summaries if s is not None]
+            if not is_file_type(file_type):
+                return sheets, sheet, []
+            return sheets, sheet, [read_summary(file_type, p, sheet) for p in paths]
 
         if self._too_many_for_excel():
             with self.middle:
@@ -515,6 +401,7 @@ class ImportView:
         assert self.paths
         assert self.mapping_screen is not None
         assert self.quirks_screen is not None
+        assert is_file_type(self.file_type)
         return self.on_import(
             list(zip(self.paths, self.summaries, strict=True)),
             self.file_type,
@@ -530,47 +417,41 @@ class ImportView:
             return FieldMapping()
         return self.mapping_screen.current_mapping()
 
-    def _show_view(self, view: str) -> None:
+    def _on_view(self, view: str) -> None:
+        """Each view refreshes from the other's edits when it is shown."""
         self.view = view
-        assert self.mapping_container is not None
-        assert self.quirks_container is not None
-        self.mapping_container.set_visibility(view == _VIEW_MAPPING)
-        self.quirks_container.set_visibility(view == _VIEW_PARSING)
-        if view == _VIEW_MAPPING and self.mapping_screen is not None:
+        if view == VIEW_MAPPING and self.mapping_screen is not None:
             self.mapping_screen.refresh_results()
-        if view == _VIEW_PARSING and self.quirks_screen is not None:
+        if view == VIEW_PARSING and self.quirks_screen is not None:
             self.quirks_screen.refresh_ordering()
 
-    def _render_mapping_and_parsing(self) -> None:
-        toggle = ui.toggle(_VIEW_OPTIONS, value=self.view).props("dense no-caps")
-        quirks_container = ui.column().classes("items-center w-full")
-        mapping_container = ui.column().classes("items-center w-full")
+    def _render_mapping_and_parsing(self, file_type: FileType) -> None:
+        views = render_view_toggle(self.view, on_change=self._on_view)
         quirks_screen = render_quirks_overview(
-            quirks_container,
-            quirk_boxes(self.file_type, type_label(self.file_type)),
-            default_choices(self.file_type, self.source),
+            views.parsing,
+            quirk_boxes(file_type, type_label(file_type)),
+            default_choices(file_type, self.source),
             current_mapping=self._current_mapping,
         )
         mapping_screen = render_mapping(
-            mapping_container,
-            self.file_type,
+            views.mapping,
+            file_type,
             self._name(),
             merge_summaries(self.summaries),
             self.source,
             quirks_screen.current_choices,
         )
         if mapping_screen is None:
-            toggle.delete()
-            quirks_container.delete()
+            views.toggle.delete()
+            views.parsing.delete()
             return
         self.mapping_screen, self.quirks_screen = mapping_screen, quirks_screen
-        self.mapping_container = mapping_container
-        self.quirks_container = quirks_container
-        toggle.on_value_change(lambda e: self._show_view(e.value))
-        self._show_view(self.view)
+        self.views = views
+        self._on_view(self.view)
 
     def render(self) -> None:
-        type_known = self.file_type != _TYPE_UNKNOWN
+        file_type = self.file_type if is_file_type(self.file_type) else None
+        type_known = file_type is not None
         has_file = bool(self.paths)
 
         self.middle.clear()
@@ -620,9 +501,9 @@ class ImportView:
 
                     notice = ui.icon("warning", size="sm").classes("text-orange-7")
                     if (
-                        self.source != _SOURCE_UNKNOWN
-                        and type_known
-                        and not has_profile(self.source, self.file_type)
+                        self.source != UNKNOWN
+                        and file_type is not None
+                        and not has_profile(self.source, file_type)
                     ):
                         notice.tooltip(
                             "No profile for this source/type combination"
@@ -632,9 +513,9 @@ class ImportView:
                         notice.classes("invisible")
 
                 self.mapping_screen = self.quirks_screen = None
-                self.mapping_container = self.quirks_container = None
-                if self.paths and self.summaries and type_known:
-                    self._render_mapping_and_parsing()
+                self.views = None
+                if self.paths and self.summaries and file_type is not None:
+                    self._render_mapping_and_parsing(file_type)
                 has_mapping = self.mapping_screen is not None
 
                 with ui.row().classes("items-center gap-2"):

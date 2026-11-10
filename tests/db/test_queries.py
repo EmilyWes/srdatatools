@@ -259,6 +259,17 @@ def test_count_filled_fields__counts_non_empty_values(session: Session) -> None:
     ) == [("title", 2), ("doi", 1), ("authors", 1), ("keywords", 1), ("other_ids", 0)]
 
 
+def test_count_filled_fields__counts_set_numbers(session: Session) -> None:
+    session.add_all(
+        [Record(publication_year=2020), Record(publication_year=0), Record()]
+    )
+    session.commit()
+
+    assert count_filled_fields(session, ["publication_year"]) == [
+        ("publication_year", 2)
+    ]
+
+
 @pytest.fixture
 def keyworded(session: Session) -> Session:
     session.add_all(

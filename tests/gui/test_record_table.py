@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import Base, Label, Record, RecordSource, SourceFile
 from app.db.settings import set_setting
+from app.gui.format import keyword_key, label_key
 from app.gui.layout import shell
 from app.gui.record_table import (
     COLUMNS,
@@ -18,8 +19,6 @@ from app.gui.record_table import (
     LabelFormat,
     RecordSelection,
     column_field,
-    keyword_column_key,
-    label_column_key,
     load_columns,
     load_keyword_columns,
     load_label_columns,
@@ -352,8 +351,8 @@ def test_render_record_table__counts_use_dot_thousands_separator() -> None:
     assert labels[1] == "1.234"
 
 
-TIAB = label_column_key("tiab", "Emily")
-FT = label_column_key("ft", "screener 1.0")
+TIAB = label_key("tiab", "Emily")
+FT = label_key("ft", "screener 1.0")
 
 
 def _add_labels(session: Session) -> None:
@@ -503,7 +502,7 @@ def test_load_rows__each_label_value_has_a_number(
         )
     )
     session.commit()
-    key = label_column_key("ft", "screener 1")
+    key = label_key("ft", "screener 1")
 
     rows = load_rows(session, [key], label_format="numbers")
 
@@ -554,7 +553,7 @@ def test_load_rows__unlabeled_is_empty_but_keeps_its_slot(
         for value in ("unlabeled", "include", "unlabeled")
     )
     session.commit()
-    key = label_column_key("ft", "screener 1")
+    key = label_key("ft", "screener 1")
 
     rows = load_rows(session, [key], label_format=label_format)
 
@@ -566,8 +565,8 @@ def test_default_columns__doi_title_authors() -> None:
     assert DEFAULT_COLUMNS == ["doi", "title", "authors"]
 
 
-MESH = keyword_column_key("MeSH")
-AUTHOR = keyword_column_key("Author")
+MESH = keyword_key("MeSH")
+AUTHOR = keyword_key("Author")
 
 
 def _add_keywords(session: Session) -> None:
@@ -581,7 +580,7 @@ def _add_keywords(session: Session) -> None:
 
 
 def test_column_field__keyword_key_is_free_of_dots_and_brackets() -> None:
-    field = column_field(keyword_column_key("a.b [c]"))
+    field = column_field(keyword_key("a.b [c]"))
 
     assert all(char.isalnum() or char == "_" for char in field)
 

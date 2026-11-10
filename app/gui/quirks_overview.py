@@ -295,6 +295,55 @@ class QuirksScreen:
                 self._wire_enabled_by(item)
 
 
+VIEW_MAPPING = "mapping"
+VIEW_PARSING = "parsing"
+_VIEW_OPTIONS = {VIEW_MAPPING: "Mapping", VIEW_PARSING: "Parsing"}
+_STACKED_CLASSES = "col-start-1 row-start-1"
+_HIDDEN_VIEW_CLASSES = "h-0 overflow-hidden invisible"
+
+
+@dataclass
+class MappingParsingViews:
+    toggle: ui.toggle
+    mapping: ui.column
+    parsing: ui.column
+
+    def show(self, view: str) -> None:
+        for container, name in (
+            (self.mapping, VIEW_MAPPING),
+            (self.parsing, VIEW_PARSING),
+        ):
+            if view == name:
+                container.classes(remove=_HIDDEN_VIEW_CLASSES)
+            else:
+                container.classes(add=_HIDDEN_VIEW_CLASSES)
+
+
+def render_view_toggle(
+    view: str = VIEW_MAPPING, on_change: Callable[[str], Any] | None = None
+) -> MappingParsingViews:
+    """The Mapping | Parsing toggle above two containers, one shown at a time.
+
+    Both share one grid cell whose width only the mapping sets, so toggling
+    doesn't resize the middle pane: Parsing wraps its boxes to that width, and
+    the hidden view is collapsed rather than removed so its width still counts.
+    """
+    toggle = ui.toggle(_VIEW_OPTIONS, value=view).props("dense no-caps")
+    with ui.element("div").classes("grid w-fit max-w-full"):
+        mapping = ui.column().classes(_STACKED_CLASSES)
+        parsing = ui.column().classes(f"{_STACKED_CLASSES} w-0 min-w-full")
+    views = MappingParsingViews(toggle=toggle, mapping=mapping, parsing=parsing)
+
+    def change(value: str) -> None:
+        views.show(value)
+        if on_change is not None:
+            on_change(value)
+
+    views.toggle.on_value_change(lambda e: change(e.value))
+    views.show(view)
+    return views
+
+
 def render_quirks_overview(
     container: Element,
     boxes: list[QuirkBox],

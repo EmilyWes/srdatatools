@@ -1,3 +1,4 @@
+from app.parsers.common import FileType
 from app.parsers.profiles.asreview import ASREVIEW
 from app.parsers.profiles.base import FormatProfile, Profile, apply_profile, fix_record
 from app.parsers.profiles.default import DEFAULT_PROFILES
@@ -22,12 +23,12 @@ PROFILES: dict[str, Profile] = {
 }
 
 
-def has_profile(source: str, file_type: str) -> bool:
+def has_profile(source: str, file_type: FileType) -> bool:
     profile = PROFILES.get(source)
     return profile is not None and file_type in profile.formats
 
 
-def profile_for(source: str, file_type: str) -> FormatProfile | None:
+def profile_for(source: str, file_type: FileType) -> FormatProfile | None:
     """The source's profile for the Type, else the Type's default profile."""
     profile = PROFILES.get(source)
     if profile is not None and file_type in profile.formats:

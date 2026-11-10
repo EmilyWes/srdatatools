@@ -36,7 +36,7 @@ def test_profile_for__unknown_source_returns_type_default() -> None:
 
 
 def test_profile_for__unsupported_type_returns_none() -> None:
-    assert profile_for("unknown", "unknown") is None
+    assert profile_for("unknown", "unknown") is None  # type: ignore[arg-type]
 
 
 def test_has_profile__only_for_a_source_that_exports_the_type() -> None:
@@ -67,19 +67,24 @@ def test_default_profiles__nbib_keeps_first_publication_type() -> None:
     assert FirstValue("publication_type", "\n") not in DEFAULT_PROFILES["ris"].quirks
 
 
-def test_default_quirks__profile_quirks_come_after_the_type_defaults() -> None:
+def test_default_quirks__profile_quirks_go_before_pages_set() -> None:
     own = FirstValue("doi", "x")
 
-    assert default_quirks("ris", own) == (*DEFAULT_PROFILES["ris"].quirks, own)
+    assert default_quirks("ris", own) == (
+        DropEtAl(),
+        StripDoi(),
+        StripPmid(),
+        own,
+        ExpandPageRange(),
+    )
 
 
 def test_profiles__build_on_their_type_defaults() -> None:
     pubmed_csv = PUBMED.formats["csv"].quirks
     scopus_csv = SCOPUS.formats["csv"].quirks
 
-    assert pubmed_csv[: len(DEFAULT_PROFILES["csv"].quirks)] == (
-        DEFAULT_PROFILES["csv"].quirks
-    )
+    assert set(DEFAULT_PROFILES["csv"].quirks) <= set(pubmed_csv)
+    assert pubmed_csv[-1] == ExpandPageRange()
     assert StripLastAuthorTrailing() in pubmed_csv
     assert StripLastAuthorTrailing() not in scopus_csv
     assert EmbeddedAuthorIds("scopus_author_id") not in DEFAULT_PROFILES["csv"].quirks
@@ -103,6 +108,39 @@ def test_default_row_defaults__overrides_the_type_default() -> None:
     defaults = default_row_defaults("bibtex", delimiter=",")
 
     assert defaults == RowDefaults(delimiter=",", author_delimiter="\n")
+
+
+class _FailOnBadTitle:
+    def apply(
+        self,
+        raw_fields: dict[str, str],
+        record: Record,
+        mapping: FieldMapping,
+        settings: ParseSettings,
+    ) -> Record:
+        if record.title == "Bad":
+            raise ValueError("bad value")
+        return record
+
+
+def test_apply_profile__skips_record_a_quirk_fails_on_in_row_order() -> None:
+    profile = FormatProfile(
+        suggestions={},
+        matches=never_matches,
+        settings=ParseSettings(),
+        row_defaults=RowDefaults(),
+        quirks=(_FailOnBadTitle(),),
+    )
+    rows = [
+        ParsedRow(Record(title=title), {}, row_number)
+        for title, row_number in (("Good", 2), ("Bad", 3), ("Also", 5))
+    ]
+    result = ParseResult(rows=rows, skipped=[SkippedRow(4, "blank")])
+
+    fixed = apply_profile(result, profile, FieldMapping())
+
+    assert [row.record.title for row in fixed.rows] == ["Good", "Also"]
+    assert fixed.skipped == [SkippedRow(3, "bad value"), SkippedRow(4, "blank")]
 
 
 def test_apply_profile__runs_quirks_in_order_and_keeps_raw_fields_and_skipped() -> None:

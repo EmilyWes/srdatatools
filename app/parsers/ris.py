@@ -1,6 +1,7 @@
 import logging
 import re
 from collections.abc import Mapping
+from functools import partial
 from pathlib import Path
 
 from app.models.record import Author
@@ -11,6 +12,7 @@ from app.parsers.common import (
     SkippedRow,
     SummaryBuilder,
     decode_file,
+    parse_or_skip,
 )
 from app.parsers.mapping import (
     LINE_DELIMITER,
@@ -20,8 +22,9 @@ from app.parsers.mapping import (
     RowDefaults,
     Suggest,
     add_author_detail,
-    apply_mapping,
+    apply_line_mapping,
     author_for_name,
+    join_tag_lines,
     override_aliases,
 )
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
@@ -95,15 +98,10 @@ def parse_ris_record(
     mapping: FieldMapping,
     settings: ParseSettings = NO_QUIRKS,
 ) -> ParsedRow:
-    values: dict[str, list[str]] = {}
-    for tag, value in lines:
-        values.setdefault(tag, []).append(value)
-    raw_fields = {t: "\n".join(v for v in vs if v) for t, vs in values.items()}
-    record = apply_mapping(raw_fields, mapping, settings)
-    author_rows = dict(mapping.rows_of(AuthorsRow))
-    if author_rows:
-        authors = _authors_from_lines(lines, author_rows, settings)
-        record = record.model_copy(update={"authors": authors})
+    raw_fields = join_tag_lines(lines)
+    record = apply_line_mapping(
+        lines, raw_fields, mapping, settings, _authors_from_lines
+    )
     return ParsedRow(record=record, raw_fields=raw_fields)
 
 
@@ -140,7 +138,12 @@ def parse_ris_text(
             if lines and all(t != _TYPE_TAG for t, _ in lines):
                 skip(start_line, "record has no TY tag")
             elif lines:
-                rows.append(parse_ris_record(lines, mapping, settings))
+                parse_or_skip(
+                    rows,
+                    skipped,
+                    start_line,
+                    partial(parse_ris_record, lines, mapping, settings),
+                )
             lines = []
             continue
 

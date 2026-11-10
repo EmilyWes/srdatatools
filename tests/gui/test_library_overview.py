@@ -10,18 +10,15 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Base
 from app.db.settings import set_setting
+from app.gui.format import keyword_key, label_key
 from app.gui.layout import shell
 from app.gui.library_overview import (
-    format_count,
-    keyword_item_key,
-    label_item_key,
     load_hidden,
     overview_items,
     render_library_overview,
     render_overview_settings,
     reset_hidden,
     save_hidden,
-    source_label,
 )
 
 
@@ -91,20 +88,6 @@ def _render(middle: Element, hidden: set[str] | None = None) -> None:
         },
         hidden=hidden or set(),
     )
-
-
-def test_source_label__uses_profile_label() -> None:
-    assert source_label("pubmed") == "PubMed"
-
-
-def test_source_label__unknown_for_none() -> None:
-    assert source_label(None) == "Unknown"
-
-
-def test_format_count__dot_thousands_separator() -> None:
-    assert format_count(25694) == "25.694"
-    assert format_count(1234567) == "1.234.567"
-    assert format_count(999) == "999"
 
 
 def test_render_library_overview__completeness_as_percent_with_counts() -> None:
@@ -287,7 +270,7 @@ def test_render_library_overview__skips_hidden_items() -> None:
 
     _render(
         panes.middle,
-        {"completeness", label_item_key("tiab", "Emily"), keyword_item_key(None)},
+        {"completeness", label_key("tiab", "Emily"), keyword_key(None)},
     )
 
     labels = _labels(panes.middle)
@@ -333,9 +316,9 @@ def test_overview_items__fixed_items_then_labels_then_keywords() -> None:
         ("per_year", "Publication year"),
         ("publication_type", "Publication type"),
         ("source_files", "Source files"),
-        (label_item_key("ft", "screener 1"), "Labels: ft / screener 1"),
-        (keyword_item_key(None), "Keywords"),
-        (keyword_item_key("MeSH"), "Keywords: MeSH"),
+        (label_key("ft", "screener 1"), "Labels: ft / screener 1"),
+        (keyword_key(None), "Keywords"),
+        (keyword_key("MeSH"), "Keywords: MeSH"),
     ]
 
 
@@ -344,10 +327,10 @@ def test_load_hidden__empty_when_unset(session: Session) -> None:
 
 
 def test_save_hidden__roundtrip(session: Session) -> None:
-    save_hidden(session, {"per_year", keyword_item_key("MeSH")})
+    save_hidden(session, {"per_year", keyword_key("MeSH")})
     session.commit()
 
-    assert load_hidden(session) == {"per_year", keyword_item_key("MeSH")}
+    assert load_hidden(session) == {"per_year", keyword_key("MeSH")}
 
 
 def test_reset_hidden__shows_everything_again(session: Session) -> None:

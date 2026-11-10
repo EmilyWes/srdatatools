@@ -11,17 +11,18 @@ from multiple databases by hand.
 ## Status: work in progress
 
 This project is under active early development and is **not yet usable
-end-to-end**. Phase 0 (foundation — schema, database, packaging, CI, contribution
-basics) is complete; Phase 1 (import & storage) is in progress. There is no
-release build yet, and the feature set described below is the target, not
-the current state.
+end-to-end**: there is no export yet. Phase 0 (foundation — schema, database,
+packaging, CI, contribution basics) and Phase 1 (import & storage) are
+complete; Phase 2 (export & dedup) is next. There is no release build yet,
+and the feature set described below is the target, not the current state.
 
 See [design_document.md](design_document.md) for the full architecture, data
 model, and the phased feature to-do list that tracks current progress.
 
 ## What it will do
 
-- Import bibliographic records from RIS, NBIB (PubMed), and CSV files
+- Import bibliographic records from RIS, NBIB (PubMed), CSV/TSV, Excel, and
+  BibTeX files, including screening labels from tools like ASReview
 - Store everything in one local database so multiple source files can be
   combined without duplicate entries
 - Deduplicate records across sources (e.g. the same paper appearing in both

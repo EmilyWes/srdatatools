@@ -1,11 +1,17 @@
 import logging
+import shutil
 import sqlite3
+import sys
 from pathlib import Path
 
 import platformdirs
 import pytest
+from alembic.autogenerate import compare_metadata
+from alembic.migration import MigrationContext
+from sqlalchemy import create_engine
 
-from app.db.session import default_db_path, run_migrations
+from app.db.models import Base
+from app.db.session import default_db_path, project_root, run_migrations
 
 EXPECTED_TABLES = {
     "activity_log",
@@ -46,104 +52,19 @@ def test_run_migrations__creates_all_tables_at_given_path(tmp_path: Path) -> Non
     assert EXPECTED_TABLES <= tables
 
 
-def test_run_migrations__source_file_has_source_column(tmp_path: Path) -> None:
+def test_run_migrations__schema_matches_the_models(tmp_path: Path) -> None:
     db_path = tmp_path / "migration_test.db"
-
     run_migrations(db_path)
+    engine = create_engine(f"sqlite:///{db_path}")
 
-    connection = sqlite3.connect(db_path)
-    try:
-        columns = {
-            row[1] for row in connection.execute("pragma table_info(source_file)")
-        }
-    finally:
-        connection.close()
-
-    assert "source" in columns
-
-
-def test_run_migrations__source_file_has_nullable_sheet_column(
-    tmp_path: Path,
-) -> None:
-    db_path = tmp_path / "migration_test.db"
-
-    run_migrations(db_path)
-
-    connection = sqlite3.connect(db_path)
-    try:
-        notnull_by_column = {
-            row[1]: row[3]
-            for row in connection.execute("pragma table_info(source_file)")
-        }
-    finally:
-        connection.close()
-
-    assert notnull_by_column["sheet"] == 0
-
-
-def test_run_migrations__label_has_record_source_file_and_label_columns(
-    tmp_path: Path,
-) -> None:
-    db_path = tmp_path / "migration_test.db"
-
-    run_migrations(db_path)
-
-    connection = sqlite3.connect(db_path)
-    try:
-        columns = {row[1] for row in connection.execute("pragma table_info(label)")}
-    finally:
-        connection.close()
-
-    assert columns == {
-        "id",
-        "record_id",
-        "source_file_id",
-        "phase",
-        "screener",
-        "value",
-    }
-
-
-def test_run_migrations__source_file_mapping_columns_default_to_empty(
-    tmp_path: Path,
-) -> None:
-    db_path = tmp_path / "migration_test.db"
-
-    run_migrations(db_path)
-
-    connection = sqlite3.connect(db_path)
-    try:
-        connection.execute(
-            "insert into source_file (filename, format, imported_at, skipped_rows)"
-            " values ('export.ris', 'ris', '2026-01-01 00:00:00', '[]')"
+    with engine.connect() as connection:
+        context = MigrationContext.configure(
+            connection, opts={"compare_server_default": True}
         )
-        row = connection.execute(
-            "select field_mapping, suggested_mapping, file_summary from source_file"
-        ).fetchone()
-    finally:
-        connection.close()
+        differences = compare_metadata(context, Base.metadata)
+    engine.dispose()
 
-    assert row == ("{}", "{}", "{}")
-
-
-def test_run_migrations__source_file_quirk_choices_default_to_empty(
-    tmp_path: Path,
-) -> None:
-    db_path = tmp_path / "migration_test.db"
-
-    run_migrations(db_path)
-
-    connection = sqlite3.connect(db_path)
-    try:
-        connection.execute(
-            "insert into source_file (filename, format, imported_at, skipped_rows)"
-            " values ('export.ris', 'ris', '2026-01-01 00:00:00', '[]')"
-        )
-        row = connection.execute("select quirk_choices from source_file").fetchone()
-    finally:
-        connection.close()
-
-    assert row == ("{}",)
+    assert differences == []
 
 
 def test_run_migrations__activity_log_status_defaults_to_ok(tmp_path: Path) -> None:
@@ -187,3 +108,27 @@ def test_run_migrations__defaults_to_default_db_path(
     run_migrations()
 
     assert fallback_path.exists()
+
+
+def test_project_root__is_repo_root_when_not_frozen() -> None:
+    assert (project_root() / "alembic.ini").is_file()
+
+
+def test_run_migrations__frozen_reads_bundled_alembic_files(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Mirrors the data layout packaging/pyinstaller.spec bundles into _MEIPASS."""
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    shutil.copy(project_root() / "alembic.ini", bundle / "alembic.ini")
+    shutil.copytree(
+        project_root() / "app" / "db" / "migrations",
+        bundle / "app" / "db" / "migrations",
+    )
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle), raising=False)
+    db_path = tmp_path / "frozen.db"
+
+    run_migrations(db_path)
+
+    assert project_root() == bundle
+    assert db_path.exists()

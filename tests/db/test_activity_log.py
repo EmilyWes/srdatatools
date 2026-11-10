@@ -4,14 +4,15 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.db.models import ActivityLog, Base, SourceFile
-from app.gui.activity_log import (
+from app.db.activity_log import (
     clear_activity_log,
     log_import,
+    log_import_failed,
     log_library_deleted,
     log_records_deleted,
     log_removal,
 )
+from app.db.models import ActivityLog, Base, SourceFile
 
 
 @pytest.fixture
@@ -61,6 +62,16 @@ def test_log_import__status_ok_when_nothing_skipped(session: Session) -> None:
     entry = log_import(session, _source_file(row_count=3, skipped=0))
 
     assert entry.status == "ok"
+
+
+def test_log_import_failed__writes_warning_row_with_reason(session: Session) -> None:
+    log_import_failed(session, "x.csv", "could not decode x.csv")
+    session.commit()
+
+    entry = session.query(ActivityLog).one()
+    assert entry.message == "Import failed:\nx.csv\nReason: could not decode x.csv"
+    assert entry.action_type == "import"
+    assert entry.status == "warning"
 
 
 def test_log_removal__writes_remove_row_with_count(session: Session) -> None:

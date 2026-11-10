@@ -1,3 +1,4 @@
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -8,7 +9,13 @@ from alembic.config import Config
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+def project_root() -> Path:
+    """A frozen build unpacks its bundled alembic.ini and migrations to _MEIPASS."""
+    frozen_root: str | None = getattr(sys, "_MEIPASS", None)
+    if frozen_root is not None:
+        return Path(frozen_root)
+    return Path(__file__).resolve().parent.parent.parent
 
 
 def default_db_path() -> Path:
@@ -19,7 +26,7 @@ def default_db_path() -> Path:
 
 def run_migrations(db_path: Path | None = None) -> None:
     resolved_path = db_path if db_path is not None else default_db_path()
-    config = Config(PROJECT_ROOT / "alembic.ini")
+    config = Config(project_root() / "alembic.ini")
     config.set_main_option("sqlalchemy.url", f"sqlite:///{resolved_path}")
     config.attributes["configure_logger"] = False
     command.upgrade(config, "head")

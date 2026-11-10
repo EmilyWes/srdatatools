@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.parsers.common import ParseResult
+from app.parsers.common import FileType, ParseResult
 from app.parsers.csv_ import (
     parse_csv_file,
     parse_csv_text,
@@ -42,7 +42,7 @@ ER  -
 """
 
 
-def _csv_mapping(headers: list[str], file_type: str = "csv") -> FieldMapping:
+def _csv_mapping(headers: list[str], file_type: FileType = "csv") -> FieldMapping:
     profile = ASREVIEW.formats[file_type]
     return suggest_mapping(
         headers, profile.suggestions, profile.row_defaults, profile.ignored_keys
@@ -113,7 +113,7 @@ def _fixture(vendor: str, ext: str) -> Path:
     return matches[0]
 
 
-def _parse(path: Path, file_type: str) -> ParseResult:
+def _parse(path: Path, file_type: FileType) -> ParseResult:
     profile = ASREVIEW.formats[file_type]
     if file_type == "ris":
         mapping = suggest_ris_mapping(
@@ -133,7 +133,12 @@ def _parse(path: Path, file_type: str) -> ParseResult:
     return apply_profile(result, profile, mapping)
 
 
-_TYPES = {".csv": "csv", ".tsv": "tsv", ".xlsx": "excel", ".ris": "ris"}
+_TYPES: dict[str, FileType] = {
+    ".csv": "csv",
+    ".tsv": "tsv",
+    ".xlsx": "excel",
+    ".ris": "ris",
+}
 _FIXTURES = [
     ("openalex", ".csv"),
     ("openalex", ".tsv"),

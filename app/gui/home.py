@@ -1,8 +1,16 @@
+import logging
 from pathlib import Path
 from typing import Any
 
 from nicegui import ui
 
+from app.db.activity_log import (
+    clear_activity_log,
+    log_import_failed,
+    log_library_deleted,
+    log_records_deleted,
+    log_removal,
+)
 from app.db.models import SourceFile
 from app.db.queries import (
     count_filled_fields,
@@ -20,12 +28,6 @@ from app.db.queries import (
 from app.db.session import get_engine, session_scope
 from app.db.store import delete_library, delete_records, remove_source_file
 from app.gui.action_panel import render_right_panel
-from app.gui.activity_log import (
-    clear_activity_log,
-    log_library_deleted,
-    log_records_deleted,
-    log_removal,
-)
 from app.gui.busy import run_busy
 from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
@@ -56,9 +58,11 @@ from app.gui.record_table import (
     save_label_format,
 )
 from app.gui.source_file_view import render_source_file_view
-from app.parsers.common import FileSummary
+from app.parsers.common import FileSummary, FileType
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import ParsingChoices
+
+logger = logging.getLogger(__name__)
 
 _engine = get_engine()
 
@@ -223,7 +227,6 @@ def home() -> None:
         with session_scope(_engine) as session:
             nav = render_left_panel(
                 panes.left,
-                panes.middle,
                 list_source_files(session),
                 on_import=start_import,
                 on_overview=show_overview,
@@ -237,32 +240,44 @@ def home() -> None:
 
     async def on_confirmed(
         files: list[tuple[Path, FileSummary]],
-        file_type: str,
+        file_type: FileType,
         mapping: FieldMapping,
         source: str,
         sheet: str | None,
         choices: ParsingChoices,
     ) -> None:
-        def store() -> list[int]:
-            with session_scope(_engine) as session:
-                source_files = [
-                    import_file(
-                        session,
-                        path,
-                        file_type,
-                        mapping,
-                        summary,
-                        source,
-                        sheet,
-                        choices,
-                    )
-                    for path, summary in files
-                ]
-                session.flush()
-                return [source_file.id for source_file in source_files]
+        def store() -> tuple[list[int], list[tuple[str, str]]]:
+            """Each file is stored on its own, so one that fails doesn't undo
+            the others."""
+            source_file_ids: list[int] = []
+            failures: list[tuple[str, str]] = []
+            for path, summary in files:
+                try:
+                    with session_scope(_engine) as session:
+                        source_file = import_file(
+                            session,
+                            path,
+                            file_type,
+                            mapping,
+                            summary,
+                            source,
+                            sheet,
+                            choices,
+                        )
+                        session.flush()
+                        source_file_ids.append(source_file.id)
+                except (ValueError, OSError) as exc:
+                    logger.warning("Could not import %s", path, exc_info=True)
+                    failures.append((path.name, str(exc)))
+                    with session_scope(_engine) as session:
+                        log_import_failed(session, path.name, str(exc))
+            return source_file_ids, failures
 
         name = files[0][0].name if len(files) == 1 else f"{len(files)} files"
-        source_file_ids = await run_busy(f"Importing {name}…", store)
+        source_file_ids, failures = await run_busy(f"Importing {name}…", store)
+        with panes.middle:
+            for filename, reason in failures:
+                ui.notify(f"Could not import {filename}: {reason}", type="negative")
         if len(source_file_ids) == 1:
             refresh(select_key=f"source_file:{source_file_ids[0]}")
         else:

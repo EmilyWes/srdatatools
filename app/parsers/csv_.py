@@ -1,6 +1,7 @@
 import csv
 import logging
 from collections.abc import Mapping
+from functools import partial
 from io import StringIO
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from app.parsers.common import (
     SkippedRow,
     SummaryBuilder,
     decode_file,
+    parse_or_skip,
 )
 from app.parsers.mapping import (
     FieldMapping,
@@ -74,13 +76,14 @@ _SUGGESTIONS: dict[str, Suggest] = {
 ROW_DEFAULTS = RowDefaults()
 
 _EXTRA_FIELDS_KEY = "__extra__"
+_SNIFF_SAMPLE_SIZE = 2048
 
 
-def _sniff_dialect(sample: str) -> type[csv.Dialect] | str:
+def sniff_dialect(text: str) -> type[csv.Dialect] | None:
     try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+        dialect = csv.Sniffer().sniff(text[:_SNIFF_SAMPLE_SIZE], delimiters=",;	")
     except csv.Error:
-        return "excel"
+        return None
     # The sniffer guesses doublequote=False when its sample has no "" escape.
     dialect.doublequote = True
     return dialect
@@ -88,7 +91,7 @@ def _sniff_dialect(sample: str) -> type[csv.Dialect] | str:
 
 def _dialect(text: str, delimiter: str | None) -> type[csv.Dialect] | csv.Dialect | str:
     if delimiter is None:
-        return _sniff_dialect(text[:2048])
+        return sniff_dialect(text) or "excel"
     dialect = csv.excel()
     dialect.delimiter = delimiter
     return dialect
@@ -146,7 +149,12 @@ def parse_csv_text(
             logger.warning("Skipping row %d: blank", row_number)
             continue
 
-        rows.append(parse_csv_record(raw_fields, mapping, settings))
+        parse_or_skip(
+            rows,
+            skipped,
+            row_number,
+            partial(parse_csv_record, raw_fields, mapping, settings),
+        )
 
     return ParseResult(rows=rows, skipped=skipped)
 

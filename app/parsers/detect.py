@@ -3,7 +3,8 @@ import re
 from io import StringIO
 from pathlib import Path
 
-from app.parsers.common import decode_prefix
+from app.parsers.common import FileType, decode_prefix
+from app.parsers.csv_ import sniff_dialect
 from app.parsers.excel import read_excel_headers
 from app.parsers.profiles import PROFILES
 
@@ -14,20 +15,21 @@ _BIBTEX_ENTRY = re.compile(
     r"^[ \t]*@(?!(?:comment|string|preamble)\b)[A-Za-z]+[ \t]*[{(]",
     re.MULTILINE | re.IGNORECASE,
 )
-_EXTENSION_TYPES = {
+_EXTENSION_TYPES: dict[str, FileType] = {
     ".ris": "ris",
     ".nbib": "nbib",
     ".csv": "csv",
     ".tsv": "tsv",
     ".bib": "bibtex",
 }
-_CSV_SAMPLE_SIZE = 2048
 _DETECT_PREFIX_SIZE = 4 * 1024 * 1024
 
 
 def _sniff_tabular(text: str) -> str | None:
+    dialect = sniff_dialect(text)
+    if dialect is None:
+        return None
     try:
-        dialect = csv.Sniffer().sniff(text[:_CSV_SAMPLE_SIZE], delimiters=",;\t")
         reader = csv.reader(StringIO(text), dialect=dialect)
         header = next(reader, [])
         first_row = next(reader, [])
@@ -38,7 +40,7 @@ def _sniff_tabular(text: str) -> str | None:
     return None
 
 
-def _type_from_content(text: str) -> str | None:
+def _type_from_content(text: str) -> FileType | None:
     first_line = next((line for line in text.splitlines() if line.strip()), "")
     if _RIS_FIRST_LINE.match(first_line):
         return "ris"
@@ -52,7 +54,7 @@ def _type_from_content(text: str) -> str | None:
     return "tsv" if delimiter == "\t" else "csv"
 
 
-def detect_type(path: Path) -> str | None:
+def detect_type(path: Path) -> FileType | None:
     # A workbook is a zip archive, so its content can't be sniffed as text.
     if path.suffix.lower() == ".xlsx":
         return "excel"
@@ -63,14 +65,14 @@ def detect_type(path: Path) -> str | None:
     return file_type or _EXTENSION_TYPES.get(path.suffix.lower())
 
 
-def _detect_text(path: Path, file_type: str) -> str:
+def _detect_text(path: Path, file_type: FileType) -> str:
     """A workbook can't be read as text, so profiles see its tab-joined header row."""
     if file_type == "excel":
         return "	".join(read_excel_headers(path).samples)
     return decode_prefix(path, _DETECT_PREFIX_SIZE)
 
 
-def detect_source(path: Path, file_type: str) -> str | None:
+def detect_source(path: Path, file_type: FileType) -> str | None:
     try:
         text = _detect_text(path, file_type)
     except ValueError:

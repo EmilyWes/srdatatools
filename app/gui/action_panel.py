@@ -6,7 +6,7 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import ActivityLog
-from app.gui.library_overview import format_count
+from app.gui.format import format_count
 
 _ACTIONS = ["Deduplicate", "Enrich", "Snowball", "Export"]
 _STATUS_CLASSES = {"ok": "text-green-7", "warning": "text-orange-7"}

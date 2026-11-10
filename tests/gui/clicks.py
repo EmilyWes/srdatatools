@@ -1,9 +1,13 @@
 import asyncio
+from collections.abc import Coroutine
+from typing import Any, TypeVar
 
 import pytest
 from nicegui import background_tasks, core
 from nicegui.element import Element
 from nicegui.events import ClickEventArguments
+
+T = TypeVar("T")
 
 
 def click_and_wait(button: Element, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -19,3 +23,13 @@ def click_and_wait(button: Element, monkeypatch: pytest.MonkeyPatch) -> None:
         await asyncio.gather(*(set(background_tasks.running_tasks) - before))
 
     asyncio.run(click())
+
+
+def run_in(element: Element, handler: Coroutine[Any, Any, T]) -> T:
+    """Awaits a handler inside element's slot, as NiceGUI does for event handlers."""
+
+    async def run() -> T:
+        with element:
+            return await handler
+
+    return asyncio.run(run())

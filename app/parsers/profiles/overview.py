@@ -6,8 +6,10 @@ from pydantic import BaseModel, ValidationError
 
 from app.models.record import LabelValue
 from app.parsers.authors import AmbiguousNameSplit
+from app.parsers.common import FileType
 from app.parsers.mapping import LINE_DELIMITER
 from app.parsers.profiles import FormatProfile, profile_for
+from app.parsers.profiles.pubmed import CITATION_PARTS
 from app.parsers.profiles.scopus import EMBEDDED_AUTHOR_IDS, RIS_NOTES, URL_EID
 from app.parsers.quirks import (
     AffiliationLeadingName,
@@ -24,8 +26,9 @@ logger = logging.getLogger(__name__)
 
 Control = Literal["checkbox", "text", "number", "select", "note"]
 
-_FIELD_SIZE_TYPES = frozenset({"csv", "tsv"})
-_AUTHOR_COLUMN_TYPES = frozenset({"csv", "tsv", "excel", "bibtex"})
+_FIELD_SIZE_TYPES: frozenset[FileType] = frozenset({"csv", "tsv"})
+_AUTHOR_COLUMN_TYPES: frozenset[FileType] = frozenset({"csv", "tsv", "excel", "bibtex"})
+_CITATION_TYPES: frozenset[FileType] = frozenset({"csv", "tsv", "excel"})
 _LABEL_VALUES_SEPARATOR = "|"
 _LABEL_KEYS: dict[str, LabelValue] = {
     "label_include": "include",
@@ -64,6 +67,7 @@ class ParsingChoices(BaseModel):
     first_publication_type: bool
     ris_notes: bool
     eid_from_url: bool
+    citation_parts: bool
 
 
 @dataclass(frozen=True)
@@ -273,6 +277,15 @@ _RIS_NOTES_ITEM = QuirkItem(
     " an other ID is always set.",
     "checkbox",
 )
+_CITATION_PARTS_ITEM = QuirkItem(
+    "citation_parts",
+    "Values from Citation",
+    "PubMed CSV packs volume, issue and pages into its Citation column"
+    " (Nature. 2023 Aug;620(7974):589-594.); reads them into fields that are"
+    " still empty, even when Citation is set to ignore. Only that plain form is"
+    " read.",
+    "checkbox",
+)
 _RIS_AUTHOR_DETAILS = QuirkItem(
     "ris.author_details",
     "Author handling",
@@ -304,10 +317,12 @@ _KEY_CONTINUATION = QuirkItem(
 )
 
 
-def _type_items(file_type: str) -> tuple[QuirkItem, ...]:
+def _type_items(file_type: FileType) -> tuple[QuirkItem, ...]:
     items: list[QuirkItem] = []
     if file_type in _FIELD_SIZE_TYPES:
         items.append(_FIELD_SIZE)
+    if file_type in _CITATION_TYPES:
+        items.append(_CITATION_PARTS_ITEM)
     if file_type in _AUTHOR_COLUMN_TYPES:
         items.append(_AUTHOR_COLUMNS)
     if file_type == "nbib":
@@ -319,7 +334,7 @@ def _type_items(file_type: str) -> tuple[QuirkItem, ...]:
     return tuple(items)
 
 
-def quirk_boxes(file_type: str, type_label: str) -> list[QuirkBox]:
+def quirk_boxes(file_type: FileType, type_label: str) -> list[QuirkBox]:
     return [
         _ISSN_ISBN,
         _AUTHORS,
@@ -332,14 +347,14 @@ def quirk_boxes(file_type: str, type_label: str) -> list[QuirkBox]:
     ]
 
 
-def _profile(file_type: str, source: str) -> FormatProfile:
+def _profile(file_type: FileType, source: str) -> FormatProfile:
     profile = profile_for(source, file_type)
     if profile is None:
         raise ValueError(f"unsupported file type: {file_type!r}")
     return profile
 
 
-def default_choices(file_type: str, source: str) -> ParsingChoices:
+def default_choices(file_type: FileType, source: str) -> ParsingChoices:
     profile = _profile(file_type, source)
     settings, quirks = profile.settings, profile.quirks
     return ParsingChoices(
@@ -368,6 +383,7 @@ def default_choices(file_type: str, source: str) -> ParsingChoices:
         first_publication_type=_FIRST_PUBLICATION_TYPE in quirks,
         ris_notes=RIS_NOTES in quirks,
         eid_from_url=URL_EID in quirks,
+        citation_parts=CITATION_PARTS in quirks,
     )
 
 
@@ -381,12 +397,12 @@ def _label_values(choices: ParsingChoices) -> tuple[tuple[str, LabelValue], ...]
 
 
 def _quirks(choices: ParsingChoices) -> tuple[RecordQuirk, ...]:
-    """ID from name runs before Drop trailing, which would leave its ")" alone."""
+    """ID from name runs before Drop trailing, which would leave its ")" alone;
+    Pages set runs last, so it also expands pages from Citation."""
     candidates: list[tuple[bool, RecordQuirk]] = [
         (choices.drop_et_al, DropEtAl()),
         (choices.strip_doi, StripDoi()),
         (choices.strip_pmid, StripPmid()),
-        (choices.pages_set, ExpandPageRange()),
         (choices.first_publication_type, _FIRST_PUBLICATION_TYPE),
         (choices.id_from_name, EMBEDDED_AUTHOR_IDS),
         (
@@ -396,12 +412,14 @@ def _quirks(choices: ParsingChoices) -> tuple[RecordQuirk, ...]:
         (choices.drop_trailing, StripLastAuthorTrailing()),
         (choices.ris_notes, RIS_NOTES),
         (choices.eid_from_url, URL_EID),
+        (choices.citation_parts, CITATION_PARTS),
+        (choices.pages_set, ExpandPageRange()),
     ]
     return tuple(quirk for on, quirk in candidates if on)
 
 
 def profile_with(
-    file_type: str, source: str, choices: ParsingChoices | None = None
+    file_type: FileType, source: str, choices: ParsingChoices | None = None
 ) -> FormatProfile:
     """The selected profile with the choices applied; None keeps its defaults."""
     profile = _profile(file_type, source)
@@ -427,7 +445,9 @@ def dump_choices(choices: ParsingChoices) -> dict[str, Any]:
     return choices.model_dump(mode="json")
 
 
-def load_choices(data: dict[str, Any], file_type: str, source: str) -> ParsingChoices:
+def load_choices(
+    data: dict[str, Any], file_type: FileType, source: str
+) -> ParsingChoices:
     """Unknown keys are dropped and missing ones keep the profile's defaults."""
     defaults = default_choices(file_type, source)
     fields = ParsingChoices.model_fields

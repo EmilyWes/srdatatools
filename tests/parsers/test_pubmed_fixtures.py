@@ -3,17 +3,21 @@ from pathlib import Path
 import pytest
 
 from app.models.record import PartialDate, Record
-from app.parsers.common import ParseResult
+from app.parsers.common import FileType, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
 from app.parsers.nbib import parse_nbib_file, read_nbib_tags, suggest_nbib_mapping
 from app.parsers.profiles import apply_profile
 from app.parsers.profiles.pubmed import PUBMED
 from tests.vendor_data import vendor_file, vendor_files
 
-_FORMAT_BY_SUFFIX = {".txt": "nbib", ".nbib": "nbib", ".csv": "csv"}
+_FORMAT_BY_SUFFIX: dict[str, FileType] = {
+    ".txt": "nbib",
+    ".nbib": "nbib",
+    ".csv": "csv",
+}
 
 
-def _parse(path: Path, file_format: str) -> ParseResult:
+def _parse(path: Path, file_format: FileType) -> ParseResult:
     profile = PUBMED.formats[file_format]
     if file_format == "nbib":
         tags = list(read_nbib_tags(path).samples)
@@ -28,7 +32,7 @@ def _parse(path: Path, file_format: str) -> ParseResult:
     )
 
 
-def _records_by_pmid(suffix: str, file_format: str) -> dict[str, Record]:
+def _records_by_pmid(suffix: str, file_format: FileType) -> dict[str, Record]:
     result = _parse(vendor_file("pubmed", "small", suffix), file_format)
     assert result.skipped == []
     return {row.record.pmid: row.record for row in result.rows if row.record.pmid}
@@ -121,7 +125,8 @@ def test_pubmed_small_csv__applies_profile_fixes(
     csv_records: dict[str, Record],
 ) -> None:
     nature = csv_records["37587301"]
-    assert nature.volume is None
+    assert (nature.volume, nature.issue, nature.pages) == ("620", "7974", "589-594")
+    assert csv_records["11523304"].pages == "521-522"
     assert nature.publication_date == PartialDate(year=2023)
     assert csv_records["30527956"].authors[-1].full_name == "Walsworth AK"
     assert csv_records["37886492"].other_ids["pmc"] == "PMC10602114"

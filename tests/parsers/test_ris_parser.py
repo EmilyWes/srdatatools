@@ -1,12 +1,20 @@
-﻿from pathlib import Path
+from pathlib import Path
 
+import pytest
+
+import app.parsers.mapping as mapping_module
+from app.models.record import Record
+from app.parsers import ris
+from app.parsers.common import SkippedRow
 from app.parsers.mapping import (
     AuthorsRow,
+    FieldMapping,
     KeywordsRow,
     OtherIdRow,
     PagesRow,
     Suggest,
 )
+from app.parsers.quirks import ParseSettings
 from app.parsers.ris import (
     ROW_DEFAULTS,
     parse_ris_file,
@@ -464,3 +472,33 @@ def test_parse_ris_record__joins_repeated_tags() -> None:
     assert [a.full_name for a in row.record.authors] == ["Smith, John", "Doe, Jane"]
     assert row.record.title == "Some Paper"
     assert row.raw_fields["AU"] == "Smith, John\nDoe, Jane"
+
+
+def _fail_on_bad_title(monkeypatch: pytest.MonkeyPatch) -> None:
+    real = mapping_module.apply_mapping
+
+    def apply(
+        raw_fields: dict[str, str], mapping: FieldMapping, settings: ParseSettings
+    ) -> Record:
+        if "Bad" in raw_fields.values():
+            raise ValueError("bad value")
+        return real(raw_fields, mapping, settings)
+
+    monkeypatch.setattr(mapping_module, "apply_mapping", apply)
+
+
+def test_parse_ris_text__skips_record_that_fails_to_parse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _fail_on_bad_title(monkeypatch)
+    text = (
+        "TY  - JOUR\nTI  - Good\nER  - \n"
+        "TY  - JOUR\nTI  - Bad\nER  - \n"
+        "TY  - JOUR\nTI  - Also good\nER  - \n"
+    )
+
+    result = ris.parse_ris_text(text, mapping_of({"TI": "title"}))
+
+    assert [row.record.title for row in result.rows] == ["Good", "Also good"]
+    assert [row.row_number for row in result.rows] == [1, 7]
+    assert result.skipped == [SkippedRow(4, "bad value")]

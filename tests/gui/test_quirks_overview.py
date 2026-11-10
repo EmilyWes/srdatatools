@@ -3,7 +3,12 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.gui.layout import shell
-from app.gui.quirks_overview import QuirksScreen, render_quirks_overview
+from app.gui.quirks_overview import (
+    QuirksScreen,
+    render_quirks_overview,
+    render_view_toggle,
+)
+from app.parsers.common import FileType
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import (
     ParsingChoices,
@@ -15,7 +20,7 @@ from tests.mappings import mapping_of
 
 
 def _render(
-    file_type: str = "csv",
+    file_type: FileType = "csv",
     source: str = "unknown",
     chosen: ParsingChoices | None = None,
     mapping: FieldMapping | None = None,
@@ -332,3 +337,40 @@ def test_render_quirks_overview__label_and_empty_value_boxes_are_wide() -> None:
     assert "w-[7rem]" in screen.widgets["label_include"].classes
     assert "w-[7rem]" in screen.empty_rows[0].classes
     assert "w-[5.5rem]" in screen.widgets["preferred_qualifier"].classes
+
+
+def test_render_view_toggle__shows_one_view_and_reports_switches() -> None:
+    shell()
+    switched: list[str] = []
+
+    views = render_view_toggle(on_change=switched.append)
+
+    assert _shown(views.mapping) and not _shown(views.parsing)
+    views.toggle.value = "parsing"
+    assert _shown(views.parsing) and not _shown(views.mapping)
+    assert switched == ["parsing"]
+
+
+def test_render_view_toggle__starts_on_the_given_view() -> None:
+    shell()
+
+    views = render_view_toggle("parsing")
+
+    assert views.toggle.value == "parsing"
+    assert _shown(views.parsing) and not _shown(views.mapping)
+
+
+def test_render_view_toggle__only_mapping_sets_the_width() -> None:
+    shell()
+
+    views = render_view_toggle("parsing")
+
+    assert views.mapping.parent_slot is views.parsing.parent_slot
+    assert {"w-0", "min-w-full"} <= set(views.parsing.classes)
+    # Collapsed, not removed, so the hidden mapping still sets the width.
+    assert {"h-0", "invisible"} <= set(views.mapping.classes)
+    assert views.mapping.visible
+
+
+def _shown(element: Element) -> bool:
+    return "invisible" not in element.classes

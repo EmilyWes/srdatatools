@@ -1,5 +1,9 @@
 from pathlib import Path
 
+import pytest
+
+from app.models.record import Record
+from app.parsers import bibtex
 from app.parsers.bibtex import (
     ROW_DEFAULTS,
     parse_bibtex_file,
@@ -8,7 +12,9 @@ from app.parsers.bibtex import (
     read_bibtex_fields,
     suggest_bibtex_mapping,
 )
-from app.parsers.mapping import AuthorsRow, DateRow, Suggest
+from app.parsers.common import SkippedRow
+from app.parsers.mapping import AuthorsRow, DateRow, FieldMapping, Suggest
+from app.parsers.quirks import ParseSettings
 from tests.mappings import mapping_of, targets_of
 from tests.vendor_data import vendor_file
 
@@ -493,3 +499,33 @@ def test_parse_bibtex_file__reads_scopus_export() -> None:
     assert olsen.issn == "23330937"
     assert olsen.language == "English"
     assert olsen.notes == "Cited by: 0"
+
+
+def _fail_on_bad_title(monkeypatch: pytest.MonkeyPatch) -> None:
+    real = bibtex.apply_mapping
+
+    def apply(
+        raw_fields: dict[str, str], mapping: FieldMapping, settings: ParseSettings
+    ) -> Record:
+        if "Bad" in raw_fields.values():
+            raise ValueError("bad value")
+        return real(raw_fields, mapping, settings)
+
+    monkeypatch.setattr(bibtex, "apply_mapping", apply)
+
+
+def test_parse_bibtex_text__skips_record_that_fails_to_parse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _fail_on_bad_title(monkeypatch)
+    text = (
+        "@article{a,\n title={Good}\n}\n"
+        "@article{b,\n title={Bad}\n}\n"
+        "@article{c,\n title={Also good}\n}\n"
+    )
+
+    result = bibtex.parse_bibtex_text(text, mapping_of({"title": "title"}))
+
+    assert [row.record.title for row in result.rows] == ["Good", "Also good"]
+    assert [row.row_number for row in result.rows] == [1, 7]
+    assert result.skipped == [SkippedRow(4, "bad value")]

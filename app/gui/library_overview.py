@@ -7,7 +7,7 @@ from nicegui.element import Element
 from sqlalchemy.orm import Session
 
 from app.db.settings import delete_setting, get_setting, set_setting
-from app.parsers.profiles import PROFILES
+from app.gui.format import format_count, keyword_key, label_key
 
 _UNKNOWN = "Unknown"
 _HIDDEN_KEY = "overview_hidden"
@@ -63,14 +63,6 @@ COMPLETENESS_FIELDS = [
 ]
 
 
-def label_item_key(phase: str, screener: str) -> str:
-    return "label:" + json.dumps([phase, screener])
-
-
-def keyword_item_key(prefix: str | None) -> str:
-    return "keywords:" + json.dumps(prefix)
-
-
 def _keyword_title(prefix: str | None) -> str:
     return f"Keywords: {prefix}" if prefix is not None else "Keywords"
 
@@ -84,13 +76,10 @@ def overview_items(
         (_PUBLICATION_TYPE, "Publication type"),
         (_SOURCE_FILES, "Source files"),
         *(
-            (label_item_key(phase, screener), f"Labels: {phase} / {screener}")
+            (label_key(phase, screener), f"Labels: {phase} / {screener}")
             for phase, screener in label_pairs
         ),
-        *(
-            (keyword_item_key(prefix), _keyword_title(prefix))
-            for prefix in keyword_prefixes
-        ),
+        *((keyword_key(prefix), _keyword_title(prefix)) for prefix in keyword_prefixes),
     ]
 
 
@@ -105,17 +94,6 @@ def save_hidden(session: Session, hidden: Collection[str]) -> None:
 
 def reset_hidden(session: Session) -> None:
     delete_setting(session, _HIDDEN_KEY)
-
-
-def format_count(count: int) -> str:
-    return f"{count:,}".replace(",", ".")
-
-
-def source_label(source: str | None) -> str:
-    if source is None:
-        return _UNKNOWN
-    profile = PROFILES.get(source)
-    return profile.label if profile is not None else source
 
 
 def _completeness_chart(total: int, filled: Sequence[tuple[str, int]]) -> None:
@@ -304,12 +282,12 @@ def render_library_overview(
     pies = {
         pair: counts
         for pair, counts in label_counts.items()
-        if label_item_key(*pair) not in hidden
+        if label_key(*pair) not in hidden
     }
     keyword_tables = {
         prefix: counts
         for prefix, counts in keyword_counts.items()
-        if keyword_item_key(prefix) not in hidden
+        if keyword_key(prefix) not in hidden
     }
     middle.clear()
     with middle:

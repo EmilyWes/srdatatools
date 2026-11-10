@@ -153,7 +153,7 @@ def test_pubmed_csv__drops_et_al() -> None:
     assert [a.full_name for a in record.authors] == ["Rhodes CJ", "Walsworth AK"]
 
 
-def test_pubmed_csv__citation_is_not_parsed() -> None:
+def test_pubmed_csv__fills_volume_issue_and_pages_from_citation() -> None:
     record = _parse_csv(
         {
             "PMID": "1",
@@ -162,8 +162,14 @@ def test_pubmed_csv__citation_is_not_parsed() -> None:
         }
     )
 
-    assert (record.volume, record.issue, record.pages) == (None, None, None)
+    assert (record.volume, record.issue, record.pages) == ("620", "7974", "589-594")
     assert record.publication_date == PartialDate(year=2023)
+
+
+def test_pubmed_csv__expands_short_page_range_from_citation() -> None:
+    record = _parse_csv({"PMID": "1", "Citation": "Rev Med Liege. 2001;56(7):521-2."})
+
+    assert record.pages == "521-522"
 
 
 def test_pubmed_nbib__matches_nlm_owned_records() -> None:

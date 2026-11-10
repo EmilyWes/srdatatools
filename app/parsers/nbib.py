@@ -1,6 +1,7 @@
 import logging
 import re
 from collections.abc import Mapping
+from functools import partial
 from pathlib import Path
 
 from app.models.record import Author
@@ -11,6 +12,7 @@ from app.parsers.common import (
     SkippedRow,
     SummaryBuilder,
     decode_file,
+    parse_or_skip,
 )
 from app.parsers.mapping import (
     LINE_DELIMITER,
@@ -20,9 +22,11 @@ from app.parsers.mapping import (
     RowDefaults,
     Suggest,
     add_author_detail,
-    apply_mapping,
+    apply_line_mapping,
     author_for_name,
+    join_tag_lines,
     override_aliases,
+    strip_orcid_url,
 )
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
 from app.parsers.quirks import NO_QUIRKS, ParseSettings
@@ -69,7 +73,6 @@ _DOI_SUFFIX = " [doi]"
 _DOI_TAG = "DOI"
 _REQUIRED_TAG = "PMID"
 _ORCID_SCHEME = "ORCID"
-_ORCID_URL = re.compile(r"^https?://orcid\.org/")
 _EDITOR_TAGS = ("FED", "ED")
 
 
@@ -90,7 +93,7 @@ def _add_auid(author: Author, row: AuthorsRow, value: str) -> None:
     if not identifier:
         return
     if scheme.upper() == _ORCID_SCHEME:
-        author.orcid = _ORCID_URL.sub("", identifier)
+        author.orcid = strip_orcid_url(identifier)
     else:
         author.other_ids[scheme.lower() or row.id_key] = identifier
 
@@ -124,26 +127,21 @@ def parse_nbib_record(
     mapping: FieldMapping,
     settings: ParseSettings = NO_QUIRKS,
 ) -> ParsedRow:
-    values: dict[str, list[str]] = {}
-    for tag, value in lines:
-        values.setdefault(tag, []).append(value)
-    raw_fields = {t: "\n".join(v for v in vs if v) for t, vs in values.items()}
+    raw_fields = join_tag_lines(lines)
     doi = next(
         (
             doi
             for tag in _ID_TAGS
-            for value in values.get(tag, [])
+            for value in raw_fields.get(tag, "").splitlines()
             if (doi := _doi_from_id(value)) is not None
         ),
         None,
     )
     if doi is not None:
         raw_fields[_DOI_TAG] = doi
-    record = apply_mapping(raw_fields, mapping, settings)
-    author_rows = dict(mapping.rows_of(AuthorsRow))
-    if author_rows:
-        authors = _authors_from_lines(lines, author_rows, settings)
-        record = record.model_copy(update={"authors": authors})
+    record = apply_line_mapping(
+        lines, raw_fields, mapping, settings, _authors_from_lines
+    )
     return ParsedRow(record=record, raw_fields=raw_fields)
 
 
@@ -166,7 +164,12 @@ def parse_nbib_text(
         if all(tag != _REQUIRED_TAG for tag, _ in lines):
             skip(start_line, f"record has no {_REQUIRED_TAG} tag")
             return
-        rows.append(parse_nbib_record(lines, mapping, settings))
+        parse_or_skip(
+            rows,
+            skipped,
+            start_line,
+            partial(parse_nbib_record, lines, mapping, settings),
+        )
 
     for line_number, line in enumerate(text.splitlines(), start=1):
         if not line.strip():

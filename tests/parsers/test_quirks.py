@@ -6,6 +6,7 @@ from app.models.record import Affiliation, Author, Record
 from app.parsers.mapping import FieldMapping
 from app.parsers.quirks import (
     AffiliationLeadingName,
+    CitationParts,
     DropEtAl,
     EmbeddedAuthorIds,
     ExpandPageRange,
@@ -248,3 +249,37 @@ def test_affiliation_leading_name__drops_name_before_separator() -> None:
     assert record.authors[0].affiliations == [
         Affiliation(name="Guangxi Cartier Technology Ltd., Nanning")
     ]
+
+
+_CITATION = CitationParts("Citation")
+
+
+def test_citation_parts__fills_volume_issue_and_pages() -> None:
+    raw = {"Citation": "Nature. 2023 Aug;620(7974):589-594. doi: 10.1/x."}
+
+    record = _apply(_CITATION, Record(), raw)
+
+    assert (record.volume, record.issue, record.pages) == ("620", "7974", "589-594")
+
+
+def test_citation_parts__only_fills_empty_fields() -> None:
+    raw = {"Citation": "Nature. 2023 Mar;615(7950):34."}
+
+    record = _apply(_CITATION, Record(volume="1", pages="2-3"), raw)
+
+    assert (record.volume, record.issue, record.pages) == ("1", "7950", "2-3")
+
+
+@pytest.mark.parametrize(
+    "citation",
+    [
+        "J Ethnopharmacol. 2026 May 10;362:121354. doi: 10.1016/j.jep.2026.121354.",
+        "Res Sq [Preprint]. 2023 Oct 3:rs.3.rs-3382427. doi: 10.21203/rs.3/v1.",
+        "Med Sci (Paris). 2016 Nov;32 Hors série n°2:57-59. doi: 10.1051/x.",
+        "2016 May 3. In: Buzsáki G, editors. Brain [Internet]. Cham: Springer; 2016.",
+    ],
+)
+def test_citation_parts__ignores_values_not_in_the_plain_form(citation: str) -> None:
+    record = _apply(_CITATION, Record(), {"Citation": citation})
+
+    assert (record.volume, record.issue, record.pages) == (None, None, None)
