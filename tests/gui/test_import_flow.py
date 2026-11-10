@@ -868,63 +868,6 @@ def test_render_import_view__source_change_rerenders_mapping_and_is_passed_on(
     assert calls == ["pubmed"]
 
 
-def _result(screen: MappingScreen, header: str) -> str:
-    text: str = screen._row_for(header).result.text
-    return text
-
-
-def test_render_mapping__result_applies_pubmed_nbib_profile(tmp_path: Path) -> None:
-    nbib_path = tmp_path / "pubmed.nbib"
-    nbib_path.write_text(_PUBMED_NBIB_TEXT + "IS  - 1234-5678 (Print)\n")
-    panes = shell()
-
-    screen = _render_mapping(panes.middle, "nbib", nbib_path, "pubmed")
-
-    assert screen is not None
-    assert _result(screen, "PG") == "521-522"
-    assert _result(screen, "TI") == "Original."
-    assert _result(screen, "IS") == "ISSN 1234-5678"
-
-
-def test_render_mapping__result_without_source_skips_profile(tmp_path: Path) -> None:
-    csv_path = tmp_path / "scopus.csv"
-    csv_path.write_text('Authors,EID\n"Teng, Yu (60652739200)",2-s2.0-1\n')
-    panes = shell()
-
-    screen = _render_mapping(panes.middle, "csv", csv_path)
-
-    assert screen is not None
-    assert _result(screen, "Authors") == "Teng, Yu (60652739200)"
-
-
-def test_render_mapping__result_without_source_applies_type_defaults(
-    tmp_path: Path,
-) -> None:
-    nbib_path = tmp_path / "pubmed.nbib"
-    nbib_path.write_text(_PUBMED_NBIB_TEXT)
-    panes = shell()
-
-    screen = _render_mapping(panes.middle, "nbib", nbib_path)
-
-    assert screen is not None
-    assert _result(screen, "PG") == "521-522"
-
-
-def test_render_mapping__nbib_result_combines_fau_auid_and_ad(tmp_path: Path) -> None:
-    nbib_path = tmp_path / "authors.nbib"
-    nbib_path.write_text(
-        "PMID- 1\nFAU - Smith, John\nAUID- ORCID: 0000-0001-2345-6789\n"
-        "AD  - University X\n"
-    )
-    panes = shell()
-
-    screen = _render_mapping(panes.middle, "nbib", nbib_path)
-
-    assert screen is not None
-    expected = "Smith, John (ORCID 0000-0001-2345-6789; University X)"
-    assert [_result(screen, tag) for tag in ("FAU", "AUID", "AD")] == [expected] * 3
-
-
 def test_render_import_view__unknown_type_shows_select_type_tooltip() -> None:
     panes = shell()
 
@@ -1421,20 +1364,6 @@ def test_render_import_view__source_change_keeps_the_selected_view(
 
     assert _toggle(middle).value == "parsing"
     assert view.views is not None and _shown(view.views.parsing)
-
-
-def test_render_import_view__result_follows_parsing_after_switching_back(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    view, middle = _nbib_view(monkeypatch, tmp_path)
-    assert view.mapping_screen is not None and view.quirks_screen is not None
-    assert _result(view.mapping_screen, "PG") == "521-522"
-    _toggle(middle).value = "parsing"
-
-    view.quirks_screen.set_value("pages_set", False)
-    _toggle(middle).value = "mapping"
-
-    assert _result(view.mapping_screen, "PG") == "521-2"
 
 
 def test_render_import_view__import_passes_parsing_choices(

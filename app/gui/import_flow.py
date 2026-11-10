@@ -19,10 +19,8 @@ from app.gui.quirks_overview import (
     render_quirks_overview,
     render_view_toggle,
 )
-from app.models.record import Record
 from app.parsers.bibtex import (
     parse_bibtex_file,
-    parse_bibtex_record,
     read_bibtex_fields,
     suggest_bibtex_mapping,
 )
@@ -30,14 +28,12 @@ from app.parsers.common import (
     UNKNOWN,
     FileSummary,
     FileType,
-    ParsedRow,
     ParseResult,
     is_file_type,
     merge_summaries,
 )
 from app.parsers.csv_ import (
     parse_csv_file,
-    parse_csv_record,
     read_csv_headers,
     suggest_mapping,
 )
@@ -47,10 +43,9 @@ from app.parsers.excel import (
     read_excel_headers,
     read_excel_sheets,
 )
-from app.parsers.mapping import FieldMapping, RowDefaults, TagLines
+from app.parsers.mapping import FieldMapping, RowDefaults
 from app.parsers.nbib import (
     parse_nbib_file,
-    parse_nbib_record,
     read_nbib_tags,
     suggest_nbib_mapping,
 )
@@ -58,7 +53,6 @@ from app.parsers.profiles import (
     PROFILES,
     FormatProfile,
     apply_profile,
-    fix_record,
     has_profile,
 )
 from app.parsers.profiles.overview import (
@@ -71,7 +65,6 @@ from app.parsers.profiles.overview import (
 from app.parsers.quirks import ParseSettings
 from app.parsers.ris import (
     parse_ris_file,
-    parse_ris_record,
     read_ris_tags,
     suggest_ris_mapping,
 )
@@ -121,7 +114,6 @@ class _TypeHandlers:
 
     read_keys: Callable[[Path, str | None, ParseSettings], FileSummary]
     suggest: Callable[[list[str], FormatProfile], FieldMapping]
-    parse_record: Callable[[TagLines, FieldMapping, ParseSettings], ParsedRow]
     parse_file: Callable[[Path, FieldMapping, str | None, ParseSettings], ParseResult]
     noun: str
 
@@ -132,17 +124,10 @@ def _suggest_columns(keys: list[str], profile: FormatProfile) -> FieldMapping:
     )
 
 
-def _parse_columns(
-    lines: TagLines, mapping: FieldMapping, settings: ParseSettings
-) -> ParsedRow:
-    return parse_csv_record(dict(lines), mapping, settings)
-
-
 def _delimited(delimiter: str | None) -> _TypeHandlers:
     return _TypeHandlers(
         read_keys=lambda path, _, settings: read_csv_headers(path, delimiter, settings),
         suggest=_suggest_columns,
-        parse_record=_parse_columns,
         parse_file=lambda path, mapping, _, settings: parse_csv_file(
             path, mapping, delimiter, settings
         ),
@@ -156,7 +141,6 @@ _TYPES: dict[FileType, _TypeHandlers] = {
     "excel": _TypeHandlers(
         read_keys=lambda path, sheet, _: read_excel_headers(path, sheet),
         suggest=_suggest_columns,
-        parse_record=_parse_columns,
         parse_file=parse_excel_file,
         noun="columns",
     ),
@@ -165,7 +149,6 @@ _TYPES: dict[FileType, _TypeHandlers] = {
         suggest=lambda keys, profile: suggest_ris_mapping(
             keys, profile.suggestions, profile.row_defaults
         ),
-        parse_record=parse_ris_record,
         parse_file=lambda path, mapping, _, settings: parse_ris_file(
             path, mapping, settings
         ),
@@ -176,7 +159,6 @@ _TYPES: dict[FileType, _TypeHandlers] = {
         suggest=lambda keys, profile: suggest_nbib_mapping(
             keys, profile.suggestions, profile.row_defaults
         ),
-        parse_record=parse_nbib_record,
         parse_file=lambda path, mapping, _, settings: parse_nbib_file(
             path, mapping, settings
         ),
@@ -187,7 +169,6 @@ _TYPES: dict[FileType, _TypeHandlers] = {
         suggest=lambda keys, profile: suggest_bibtex_mapping(
             keys, profile.suggestions, profile.row_defaults
         ),
-        parse_record=parse_bibtex_record,
         parse_file=lambda path, mapping, _, settings: parse_bibtex_file(
             path, mapping, settings
         ),
@@ -200,24 +181,6 @@ def _suggestion(file_type: FileType, source: str, summary: FileSummary) -> Field
     return _TYPES[file_type].suggest(
         list(summary.samples), profile_with(file_type, source)
     )
-
-
-def preview_for(
-    file_type: FileType,
-    source: str,
-    summary: FileSummary,
-    choices: Callable[[], ParsingChoices | None] = lambda: None,
-) -> Callable[[FieldMapping], Record]:
-    """`choices` is read on every preview, so the Result follows the Parsing view."""
-    handlers = _TYPES[file_type]
-
-    def preview(mapping: FieldMapping) -> Record:
-        profile = profile_with(file_type, source, choices())
-        lines = list(summary.samples.items())
-        row = handlers.parse_record(lines, mapping, profile.settings)
-        return fix_record(profile, row.raw_fields, row.record, mapping)
-
-    return preview
 
 
 def type_label(file_type: str) -> str:
@@ -256,7 +219,6 @@ def render_mapping(
     name: str,
     summary: FileSummary,
     source: str = UNKNOWN,
-    choices: Callable[[], ParsingChoices | None] = lambda: None,
 ) -> MappingScreen | None:
     if not summary.samples:
         with container:
@@ -268,7 +230,6 @@ def render_mapping(
         summary,
         _suggestion(file_type, source, summary),
         defaults=row_defaults_for(file_type, source),
-        preview=preview_for(file_type, source, summary, choices),
     )
 
 
@@ -430,10 +391,8 @@ class ImportView:
         return self.mapping_screen.current_mapping()
 
     def _on_view(self, view: str | None) -> None:
-        """Each view refreshes from the other's edits when it is shown."""
+        """Parsing refreshes from the mapping's edits when it is shown."""
         self.view = view
-        if view == VIEW_MAPPING and self.mapping_screen is not None:
-            self.mapping_screen.refresh_results()
         if view == VIEW_PARSING and self.quirks_screen is not None:
             self.quirks_screen.refresh_ordering()
 
@@ -452,7 +411,6 @@ class ImportView:
             self._name(),
             merge_summaries(self.summaries),
             self.source,
-            quirks_screen.current_choices,
         )
         if mapping_screen is None:
             views.parsing.clear()
