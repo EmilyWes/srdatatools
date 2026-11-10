@@ -22,7 +22,6 @@ from app.gui.format import format_count
 from app.gui.mapping_table import ROW_FIELD_CSS, fill_color
 from app.gui.quirks_overview import (
     FIELD_CSS,
-    VIEW_MAPPING,
     render_box_frame,
     render_view_toggle,
 )
@@ -409,7 +408,7 @@ class ExportView:
                     ui.label(_records_count(len(self.records), self.selected)).classes(
                         "text-sm"
                     )
-                views = render_view_toggle(VIEW_MAPPING, parsing_label="Options")
+                views = render_view_toggle(parsing_label="Options")
                 self.mapping = views.mapping
                 self._render_mapping()
                 self._render_option_boxes(views.parsing)

@@ -1370,6 +1370,34 @@ def test_render_import_view__starts_on_mapping_with_parsing_hidden(
     assert _shown(view.views.mapping) and not _shown(view.views.parsing)
 
 
+def test_render_import_view__detected_source_and_type_start_retracted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    panes = shell()
+    path = tmp_path / "pubmed.nbib"
+    path.write_text(_DETECTED_PUBMED_TEXT)
+    _pick(monkeypatch, path)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
+
+    run_in(view.middle, view._select_files())
+
+    assert (view.file_type, view.source) == ("nbib", "pubmed")
+    assert _toggle(panes.middle).value is None
+    assert view.views is not None
+    assert not _shown(view.views.mapping) and not _shown(view.views.parsing)
+
+
+def test_render_import_view__source_change_keeps_retracted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view, middle = _nbib_view(monkeypatch, tmp_path)
+    _toggle(middle).value = None
+
+    view._set_source("pubmed")
+
+    assert _toggle(middle).value is None
+
+
 def test_render_import_view__toggle_switches_to_parsing_and_keeps_edits(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

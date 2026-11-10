@@ -319,7 +319,7 @@ class ImportView:
     summaries: list[FileSummary] = field(default_factory=list)
     sheets: list[str] = field(default_factory=list)
     sheet: str | None = None
-    view: str = VIEW_MAPPING
+    view: str | None = VIEW_MAPPING
     mapping_screen: MappingScreen | None = None
     quirks_screen: QuirksScreen | None = None
     views: MappingParsingViews | None = None
@@ -351,6 +351,8 @@ class ImportView:
                 f"Reading {self._name()}…", lambda: [_detect(path) for path in picked]
             )
             self.file_type, self.source = common_detection(self.detected)
+            detected = UNKNOWN not in (self.file_type, self.source)
+            self.view = None if detected else VIEW_MAPPING
             if self._mixed():
                 with self.middle:
                     ui.notify(_MIXED_WARNING, type="warning")
@@ -417,7 +419,7 @@ class ImportView:
             return FieldMapping()
         return self.mapping_screen.current_mapping()
 
-    def _on_view(self, view: str) -> None:
+    def _on_view(self, view: str | None) -> None:
         """Each view refreshes from the other's edits when it is shown."""
         self.view = view
         if view == VIEW_MAPPING and self.mapping_screen is not None:

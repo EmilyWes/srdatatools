@@ -341,14 +341,35 @@ def test_render_quirks_overview__label_and_empty_value_boxes_are_wide() -> None:
 
 def test_render_view_toggle__shows_one_view_and_reports_switches() -> None:
     shell()
-    switched: list[str] = []
+    switched: list[str | None] = []
 
-    views = render_view_toggle(on_change=switched.append)
+    views = render_view_toggle("mapping", on_change=switched.append)
 
     assert _shown(views.mapping) and not _shown(views.parsing)
     views.toggle.value = "parsing"
     assert _shown(views.parsing) and not _shown(views.mapping)
     assert switched == ["parsing"]
+
+
+def test_render_view_toggle__starts_retracted_by_default() -> None:
+    shell()
+
+    views = render_view_toggle()
+
+    assert views.toggle.value is None
+    assert not _shown(views.mapping) and not _shown(views.parsing)
+
+
+def test_render_view_toggle__clearing_the_value_retracts_both() -> None:
+    shell()
+    switched: list[str | None] = []
+    views = render_view_toggle("mapping", on_change=switched.append)
+
+    views.toggle.value = None
+
+    assert views.toggle.props["clearable"] is True
+    assert not _shown(views.mapping) and not _shown(views.parsing)
+    assert switched == [None]
 
 
 def test_render_view_toggle__starts_on_the_given_view() -> None:

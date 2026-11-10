@@ -204,7 +204,10 @@ def test_render_source_file_view__toggle_switches_between_mapping_and_parsing() 
     assert toggle.parent_slot is not None
     _, stack = toggle.parent_slot.children
     mapping, parsing = stack.default_slot.children
-    assert toggle.value == "mapping"
+    assert toggle.value is None
+    assert not _shown(mapping) and not _shown(parsing)
+
+    toggle.value = "mapping"
     assert _shown(mapping) and not _shown(parsing)
 
     toggle.value = "parsing"

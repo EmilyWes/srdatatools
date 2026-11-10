@@ -107,6 +107,13 @@ def test_render_export_view__says_which_records(selected: bool, line: str) -> No
     assert line in _texts(_view(selected=selected))
 
 
+def test_render_export_view__starts_retracted() -> None:
+    view = _view()
+
+    [toggle] = [e for e in view.middle.descendants() if isinstance(e, ui.toggle)]
+    assert toggle.value is None
+
+
 def test_render_export_view__one_row_per_column_with_default_names() -> None:
     view = _view()
 
