@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.db.activity_log import (
     clear_activity_log,
+    log_export,
+    log_export_failed,
     log_import,
     log_import_failed,
     log_library_deleted,
@@ -115,3 +117,23 @@ def test_log_records_deleted__writes_row_with_count(session: Session) -> None:
     assert entry.message == "Deleted records: 3"
     assert entry.action_type == "delete_records"
     assert entry.status == "ok"
+
+
+def test_log_export__writes_ok_row_with_filename_and_count(session: Session) -> None:
+    log_export(session, "library.csv", records=1234)
+    session.commit()
+
+    entry = session.query(ActivityLog).one()
+    assert entry.message == "Exported to:\nlibrary.csv\nRecords: 1.234"
+    assert entry.action_type == "export"
+    assert entry.status == "ok"
+
+
+def test_log_export_failed__writes_warning_row_with_reason(session: Session) -> None:
+    log_export_failed(session, "library.csv", "Permission denied")
+    session.commit()
+
+    entry = session.query(ActivityLog).one()
+    assert entry.message == "Export failed:\nlibrary.csv\nReason: Permission denied"
+    assert entry.action_type == "export"
+    assert entry.status == "warning"

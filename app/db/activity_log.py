@@ -4,6 +4,7 @@ from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.db.models import ActivityLog, SourceFile
+from app.gui.format import format_count
 
 
 def log_import(session: Session, source_file: SourceFile) -> ActivityLog:
@@ -62,6 +63,27 @@ def log_records_deleted(session: Session, count: int) -> ActivityLog:
         timestamp=datetime.datetime.now(),
         action_type="delete_records",
         message=f"Deleted records: {count}",
+    )
+    session.add(entry)
+    return entry
+
+
+def log_export(session: Session, filename: str, records: int) -> ActivityLog:
+    entry = ActivityLog(
+        timestamp=datetime.datetime.now(),
+        action_type="export",
+        message=f"Exported to:\n{filename}\nRecords: {format_count(records)}",
+    )
+    session.add(entry)
+    return entry
+
+
+def log_export_failed(session: Session, filename: str, reason: str) -> ActivityLog:
+    entry = ActivityLog(
+        timestamp=datetime.datetime.now(),
+        action_type="export",
+        message=f"Export failed:\n{filename}\nReason: {reason}",
+        status="warning",
     )
     session.add(entry)
     return entry
