@@ -403,10 +403,15 @@ def render_mapping_table(
 
     middle.clear()
     with middle:
-        table_classes = "gap-0 border rounded-borders max-w-full overflow-x-auto"
+        table_classes = (
+            "gap-0 border outline-variant rounded-xl max-w-full overflow-x-auto"
+        )
         with ui.column().classes(table_classes):
-            row_base = "w-full min-w-max no-wrap items-center gap-1 pl-0 border-b"
-            with ui.row().classes(f"{row_base} py-2 bg-grey-2"):
+            row_base = (
+                "w-full min-w-max no-wrap items-center gap-1 pl-0 border-b"
+                " outline-variant"
+            )
+            with ui.row().classes(f"{row_base} py-2 surface-container"):
                 with (
                     ui.element("div")
                     .classes(count_cell_classes)
@@ -420,7 +425,7 @@ def render_mapping_table(
                 status = _initial_status(header, suggestion)
                 row_classes = f"{row_base} py-0"
                 if i % 2 == 1:
-                    row_classes += " bg-grey-1"
+                    row_classes += " surface-low"
                 with ui.row().classes(row_classes):
                     filled = summary.filled.get(header, 0)
                     ratio = filled / summary.total_rows if summary.total_rows else 0.0

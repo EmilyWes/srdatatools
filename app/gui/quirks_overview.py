@@ -43,7 +43,7 @@ _WIDE_FIELD_WIDTH = "w-[7rem]"
 _TOOLTIP_CLASSES = "max-w-sm text-xs"
 _NOTE_CLASSES = "col-span-2 text-xs text-grey-6"
 _BOXES_CLASS = "quirk-boxes"
-_BOX_CLASSES = "quirk-box w-fit border border-gray-300 rounded px-3 pb-2"
+_BOX_CLASSES = "quirk-box w-fit border outline-variant rounded-xl px-3 pb-2"
 # CSS can't give wrapping boxes the width of the widest one, so a script does:
 # again whenever rows change, and when the hidden Parsing view is shown (hidden
 # boxes measure 0). Run, not added to the head: a script added late never runs.
@@ -335,7 +335,11 @@ def render_view_toggle(
     the hidden view is collapsed rather than removed so its width still counts.
     """
     options = {VIEW_MAPPING: "Mapping", VIEW_PARSING: parsing_label}
-    toggle = ui.toggle(options, value=view, clearable=True).props("dense no-caps")
+    toggle = (
+        ui.toggle(options, value=view, clearable=True)
+        .props("dense no-caps unelevated rounded toggle-color=secondary")
+        .classes("segmented")
+    )
     with ui.element("div").classes("grid w-fit max-w-full"):
         mapping = ui.column().classes(_STACKED_CLASSES)
         parsing = ui.column().classes(f"{_STACKED_CLASSES} w-0 min-w-full")

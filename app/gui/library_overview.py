@@ -9,6 +9,16 @@ from sqlalchemy.orm import Session
 from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.format import format_count, keyword_key, label_key
 from app.gui.mapping_table import fill_color
+from app.gui.theme import (
+    CHART_COLORS,
+    MULTIPLE_COLOR,
+    OTHER_COLOR,
+    UNKNOWN_COLOR,
+    UU_GREEN,
+    UU_ORANGE,
+    UU_RED,
+    UU_YELLOW,
+)
 
 _UNKNOWN = "Unknown"
 _HIDDEN_KEY = "overview_hidden"
@@ -16,36 +26,23 @@ _COMPLETENESS = "completeness"
 _PER_YEAR = "per_year"
 _PUBLICATION_TYPE = "publication_type"
 _SOURCE_FILES = "source_files"
-_BAR_COLOR = "#5470c6"
-# Quasar's green/orange/red, so the bars match the mapping's fill bars.
-_FILL_COLORS = {"green": "#4caf50", "orange": "#ff9800", "red": "#f44336"}
+# Same green/orange/red as the mapping's fill bars.
+_FILL_COLORS = {"green": UU_GREEN, "orange": UU_ORANGE, "red": UU_RED}
 _LABEL_COLORS = {
-    "include": "#21ba45",
-    "exclude": "#c10015",
-    "maybe": "#f2c037",
-    "unknown": "#9e9e9e",
-    "unlabeled": "#e0e0e0",
+    "include": UU_GREEN,
+    "exclude": UU_RED,
+    "maybe": UU_YELLOW,
+    "unknown": OTHER_COLOR,
+    "unlabeled": UNKNOWN_COLOR,
 }
-_TITLE_CLASSES = "text-sm text-grey-7"
+_TITLE_CLASSES = "title-small self-start"
 _BOX_CLASSES = "w-full h-56"
-_BOX_WIDTH = "18rem"
+_BOX_WIDTH = "17rem"
 _FRAME_CLASSES = (
-    f"w-[{_BOX_WIDTH}] gap-1 items-center p-2 border border-gray-300 rounded"
+    f"w-[{_BOX_WIDTH}] gap-2 items-center p-4 border outline-variant rounded-xl"
 )
 _TOP_KEYWORDS = 10
 _TOP_TYPES = 7
-_TYPE_COLORS = [
-    "#2a78d6",
-    "#eb6834",
-    "#1baf7a",
-    "#eda100",
-    "#e87ba4",
-    "#008300",
-    "#6250d6",
-]
-_OTHER_COLOR = "#9e9e9e"
-_UNKNOWN_COLOR = "#e0e0e0"
-_MULTIPLE_COLOR = "#616161"
 _MIN_SLICE_ANGLE = 5
 _KEYWORD_TABLE_CLASS = "overview-keywords"
 _KEYWORD_TABLE_CSS = (
@@ -160,7 +157,7 @@ def _year_chart(per_year: Sequence[tuple[int | None, int]]) -> None:
                 "series": [
                     {
                         "type": "bar",
-                        "color": _BAR_COLOR,
+                        "color": UU_YELLOW,
                         "itemStyle": {"borderRadius": [4, 4, 0, 0]},
                         "data": [counts.get(year, 0) for year in years],
                     }
@@ -221,9 +218,9 @@ def _top_slices(counts: Sequence[tuple[str, int]]) -> list[tuple[str, int, str]]
     return [
         *(
             (name, count, color)
-            for (name, count), color in zip(top, _TYPE_COLORS, strict=False)
+            for (name, count), color in zip(top, CHART_COLORS, strict=False)
         ),
-        ("Other", sum(count for _, count in counts[_TOP_TYPES:]), _OTHER_COLOR),
+        ("Other", sum(count for _, count in counts[_TOP_TYPES:]), OTHER_COLOR),
     ]
 
 
@@ -232,14 +229,14 @@ def _publication_type_pie(types: Sequence[tuple[str | None, int]]) -> None:
     unknown = sum(count for name, count in types if name is None)
     _pie(
         "Publication type",
-        [*_top_slices(known), (_UNKNOWN, unknown, _UNKNOWN_COLOR)],
+        [*_top_slices(known), (_UNKNOWN, unknown, UNKNOWN_COLOR)],
     )
 
 
 def _source_file_pie(per_file: Sequence[tuple[str, int]], multiple: int) -> None:
     _pie(
         "Source files",
-        [*_top_slices(per_file), ("Multiple files", multiple, _MULTIPLE_COLOR)],
+        [*_top_slices(per_file), ("Multiple files", multiple, MULTIPLE_COLOR)],
     )
 
 
@@ -269,7 +266,7 @@ def _keyword_table(prefix: str | None, counts: Sequence[tuple[str, int]]) -> Non
         table.add_slot(
             "body-cell-keyword",
             '<q-td :props="props" :title="props.value"'
-            ' class="ellipsis" style="max-width: 12rem">{{ props.value }}</q-td>',
+            ' class="ellipsis" style="max-width: 10rem">{{ props.value }}</q-td>',
         )
 
 
@@ -296,7 +293,7 @@ def render_library_overview(
     }
     middle.clear()
     with middle:
-        with ui.column().classes("w-full p-4 gap-4"):
+        with ui.column().classes("w-full p-6 gap-4"):
             if (
                 _COMPLETENESS in hidden
                 and _PER_YEAR in hidden
@@ -307,7 +304,7 @@ def render_library_overview(
                 ui.label(
                     "Everything is hidden. Use the gear next to Overview to choose"
                     " what's shown."
-                ).classes("text-sm text-grey-6")
+                ).classes("text-sm text-on-surface-variant")
             with ui.grid(columns=f"repeat(auto-fill, {_BOX_WIDTH})").classes(
                 "w-full gap-4 justify-evenly"
             ):
@@ -345,9 +342,9 @@ def render_overview_settings(
 
     middle.clear()
     with middle:
-        with ui.column().classes("w-full p-4 gap-2"):
-            ui.label("Overview settings").classes("text-lg")
-            ui.label("Shown").classes("text-sm text-grey-7")
+        with ui.column().classes("w-full p-6 gap-2"):
+            ui.label("Overview settings").classes("text-2xl")
+            ui.label("Shown").classes("title-small pt-2")
             with ui.column().classes("gap-0"):
                 for key, label in items:
                     ui.checkbox(
@@ -356,9 +353,9 @@ def render_overview_settings(
                         on_change=lambda e, key=key: toggle(key, e.value),
                     ).props("dense")
             with ui.row().classes("gap-2 pt-2"):
-                ui.button("Restore defaults", color=None, on_click=on_restore).classes(
-                    "text-sm"
-                ).props("dense")
-                ui.button("Back to overview", color=None, on_click=on_back).classes(
-                    "text-sm"
-                ).props("dense")
+                ui.button("Restore defaults", color=None, on_click=on_restore).props(
+                    "outline no-caps"
+                )
+                ui.button("Back to overview", color=None, on_click=on_back).props(
+                    "outline no-caps"
+                )

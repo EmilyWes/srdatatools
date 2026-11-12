@@ -9,7 +9,7 @@ from app.gui.layout import shell
 from app.gui.library_nav import LeftPanelNav, render_left_panel
 from tests.gui.clicks import click_and_wait
 
-_SELECTED_CLASS = "bg-blue-100"
+_SELECTED_CLASS = "bg-secondary"
 
 
 def _source_file(id_: int, filename: str) -> SourceFile:

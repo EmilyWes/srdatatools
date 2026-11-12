@@ -20,6 +20,14 @@ from app.gui.library_overview import (
     reset_hidden,
     save_hidden,
 )
+from app.gui.theme import (
+    CHART_COLORS,
+    MULTIPLE_COLOR,
+    OTHER_COLOR,
+    UNKNOWN_COLOR,
+    UU_GREEN,
+    UU_RED,
+)
 
 
 @pytest.fixture
@@ -98,9 +106,9 @@ def test_render_library_overview__completeness_as_percent_with_counts() -> None:
     chart = _charts(panes.middle)[0]
     assert chart.options["xAxis"]["data"] == ["Title", "DOI", "Abstract"]
     assert _series_data(chart) == [
-        {"value": 100.0, "count": "4", "itemStyle": {"color": "#4caf50"}},
-        {"value": 75.0, "count": "3", "itemStyle": {"color": "#4caf50"}},
-        {"value": 0.0, "count": "0", "itemStyle": {"color": "#f44336"}},
+        {"value": 100.0, "count": "4", "itemStyle": {"color": UU_GREEN}},
+        {"value": 75.0, "count": "3", "itemStyle": {"color": UU_GREEN}},
+        {"value": 0.0, "count": "0", "itemStyle": {"color": UU_RED}},
     ]
 
 
@@ -120,7 +128,7 @@ def test_render_library_overview__completeness_with_zero_records() -> None:
     )
 
     assert _series_data(_charts(panes.middle)[0]) == [
-        {"value": 0, "count": "0", "itemStyle": {"color": "#f44336"}}
+        {"value": 0, "count": "0", "itemStyle": {"color": UU_RED}}
     ]
 
 
@@ -148,8 +156,8 @@ def test_render_library_overview__publication_type_pie_with_unknown() -> None:
     _render(panes.middle)
 
     assert _pie_slices(_charts(panes.middle)[2]) == [
-        ("JOUR", 3, "#2a78d6"),
-        ("Unknown", 1, "#e0e0e0"),
+        ("JOUR", 3, CHART_COLORS[0]),
+        ("Unknown", 1, UNKNOWN_COLOR),
     ]
     assert "Publication type" in _labels(panes.middle)
 
@@ -175,7 +183,7 @@ def test_render_library_overview__publication_type_top_seven_then_other() -> Non
         *(f"type {n}" for n in range(7)),
         "Other",
     ]
-    assert slices[-1] == ("Other", 13 + 12, "#9e9e9e")
+    assert slices[-1] == ("Other", 13 + 12, OTHER_COLOR)
     assert len({color for _, _, color in slices}) == 8
 
 
@@ -185,8 +193,8 @@ def test_render_library_overview__source_file_pie_with_multiple_files() -> None:
     _render(panes.middle)
 
     assert _pie_slices(_charts(panes.middle)[3]) == [
-        ("pubmed.nbib", 3, "#2a78d6"),
-        ("Multiple files", 1, "#616161"),
+        ("pubmed.nbib", 3, CHART_COLORS[0]),
+        ("Multiple files", 1, MULTIPLE_COLOR),
     ]
     assert "Source files" in _labels(panes.middle)
 
@@ -212,7 +220,7 @@ def test_render_library_overview__source_file_pie_top_seven_then_other() -> None
         *(f"file {n}.ris" for n in range(7)),
         "Other",
     ]
-    assert slices[-1] == ("Other", 13, "#9e9e9e")
+    assert slices[-1] == ("Other", 13, OTHER_COLOR)
 
 
 def test_render_library_overview__one_pie_per_label_pair() -> None:
@@ -439,7 +447,7 @@ def test_render_library_overview__boxes_in_evenly_spaced_grid_with_frames() -> N
         for element in panes.middle.descendants()
         if isinstance(element, ui.grid)
     )
-    assert grid.style["grid-template-columns"] == "repeat(auto-fill, 18rem)"
+    assert grid.style["grid-template-columns"] == "repeat(auto-fill, 17rem)"
     assert "justify-evenly" in grid.classes
     frames = grid.default_slot.children
     assert len(frames) == 8

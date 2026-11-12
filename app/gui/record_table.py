@@ -263,7 +263,7 @@ def render_record_table(
 
     middle.clear()
     with middle:
-        with ui.column().classes("w-full h-screen p-4 gap-2 no-wrap"):
+        with ui.column().classes("w-full h-screen p-6 gap-3 no-wrap"):
             with ui.grid(columns="max-content 5rem max-content max-content").classes(
                 "items-center gap-x-2 gap-y-1"
             ):
@@ -271,10 +271,14 @@ def render_record_table(
                 ui.element("div")
                 ui.element("div")
                 filter_count = count_line("Rows in filter", len(rows))
-                clear_filters = ui.button("Clear all filters", color=None)
+                clear_filters = ui.button("Clear all filters", color=None).props(
+                    "outline"
+                )
                 ui.element("div")
                 selection_count = count_line("Rows in selection", len(selection.ids))
-                clear_selection = ui.button("Clear selection", color=None)
+                clear_selection = ui.button("Clear selection", color=None).props(
+                    "outline"
+                )
                 delete_selected = ui.button(
                     "Delete selected", color="negative", on_click=open_delete_dialog
                 )
@@ -307,14 +311,14 @@ def render_record_table(
                 delete_message = ui.label()
                 with ui.row().classes("w-full justify-end"):
                     ui.button("Cancel", color=None, on_click=delete_dialog.close).props(
-                        "flat"
+                        "flat no-caps"
                     )
                     ui.button("Delete", color="negative", on_click=delete)
         ui.add_css(_HEADER_CSS)
 
     delete_selected.set_enabled(bool(selection.ids))
     for button in (clear_filters, clear_selection, delete_selected):
-        button.classes("text-sm").props("dense no-caps")
+        button.classes("text-sm").props("dense no-caps unelevated")
     clear_filters.on_click(lambda: grid.run_grid_method("setFilterModel", None))
     clear_selection.on_click(lambda: grid.run_grid_method("deselectAll"))
 
@@ -360,9 +364,9 @@ def render_table_settings(
 
     middle.clear()
     with middle:
-        with ui.column().classes("w-full p-4 gap-2"):
-            ui.label("Table settings").classes("text-lg")
-            ui.label("Columns").classes("text-sm text-grey-7")
+        with ui.column().classes("w-full p-6 gap-2"):
+            ui.label("Table settings").classes("text-2xl")
+            ui.label("Columns").classes("title-small pt-2")
             with ui.column().classes("gap-0"):
                 for key in [*COLUMNS, *extra_columns]:
                     ui.checkbox(
@@ -370,16 +374,16 @@ def render_table_settings(
                         value=key in selected,
                         on_change=lambda e, key=key: toggle(key, e.value),
                     ).props("dense")
-            ui.label("Label values").classes("text-sm text-grey-7 pt-2")
+            ui.label("Label values").classes("title-small pt-3")
             ui.radio(
                 dict(_LABEL_FORMATS),
                 value=label_format,
                 on_change=lambda e: on_label_format(e.value),
             ).props("dense inline")
             with ui.row().classes("gap-2 pt-2"):
-                ui.button("Restore defaults", color=None, on_click=on_restore).classes(
-                    "text-sm"
-                ).props("dense")
-                ui.button("Back to table", color=None, on_click=on_back).classes(
-                    "text-sm"
-                ).props("dense")
+                ui.button("Restore defaults", color=None, on_click=on_restore).props(
+                    "outline no-caps"
+                )
+                ui.button("Back to table", color=None, on_click=on_back).props(
+                    "outline no-caps"
+                )

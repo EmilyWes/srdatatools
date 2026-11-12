@@ -7,14 +7,17 @@ from nicegui.element import Element
 
 from app.db.models import SourceFile
 
-_SELECTED_CLASS = "bg-blue-100"
+_SELECTED_CLASS = "bg-secondary"
 _IMPORT_KEY = "import"
 _OVERVIEW_KEY = "library:overview"
 _TABLE_KEY = "library:table"
 _ABOUT_KEY = "about"
 _HELP_KEY = "help"
-_HEADING_CLASSES = "w-44 text-xs text-grey-6 pt-1 text-center"
-_FILE_LIST_CLASSES = "w-full items-center flex-grow min-h-0 overflow-y-auto no-wrap"
+_HEADING_CLASSES = "label-medium px-4 pt-3 pb-1"
+_FILE_LIST_CLASSES = "w-full gap-1 flex-grow min-h-0 overflow-y-auto no-wrap"
+_ITEM_PROPS = "flat no-caps align=left"
+_ITEM_CLASSES = "nav-item w-full"
+_GEAR_PROPS = "flat dense round size=sm"
 
 
 @dataclass
@@ -53,8 +56,10 @@ def render_left_panel(
 ) -> LeftPanelNav:
     nav = LeftPanelNav()
     ui.add_css(
-        ".source-file-btn .q-btn__content"
-        " { white-space: normal; overflow-wrap: anywhere; text-align: center; }"
+        ".source-file-btn { height: auto; min-height: 40px; padding: 6px 12px; }"
+        " .source-file-btn .q-btn__content { gap: 8px; flex-wrap: nowrap; }"
+        " .source-file-btn .block { white-space: normal; overflow-wrap: anywhere;"
+        " text-align: left; font-size: 13px; line-height: 1.3; }"
     )
 
     def handle_import() -> Awaitable[None] | None:
@@ -81,40 +86,40 @@ def render_left_panel(
     left.clear()
     with left:
         import_button = (
-            ui.button("Import", color=None, on_click=handle_import)
-            .classes("w-44 text-sm")
-            .props("dense")
+            ui.button("Import", icon="upload_file", on_click=handle_import)
+            .classes("fab w-full my-2")
+            .props("unelevated no-caps")
         )
         nav.buttons[_IMPORT_KEY] = import_button
-        ui.separator()
+        ui.separator().classes("my-1")
 
         ui.label("Library").classes(_HEADING_CLASSES)
-        with ui.row().classes("w-44 items-center gap-1 no-wrap"):
+        with ui.row().classes("w-full items-center gap-1 no-wrap"):
             overview_button = (
-                ui.button("Overview", color=None)
-                .classes("flex-grow text-sm")
-                .props("dense")
+                ui.button("Dashboard", icon="insights", color=None)
+                .classes(f"{_ITEM_CLASSES} flex-grow")
+                .props(_ITEM_PROPS)
             )
             ui.button(
                 icon="settings", color=None, on_click=handle_overview_settings
-            ).props("flat dense round size=sm")
+            ).props(_GEAR_PROPS).classes("text-on-surface-variant")
         overview_button.on_click(lambda: nav.select(_OVERVIEW_KEY))
         nav.buttons[_OVERVIEW_KEY] = overview_button
 
-        with ui.row().classes("w-44 items-center gap-1 no-wrap"):
+        with ui.row().classes("w-full items-center gap-1 no-wrap"):
             table_button = (
-                ui.button("Table", color=None)
-                .classes("flex-grow text-sm")
-                .props("dense")
+                ui.button("Table", icon="table_chart", color=None)
+                .classes(f"{_ITEM_CLASSES} flex-grow")
+                .props(_ITEM_PROPS)
             )
             ui.button(
                 icon="settings", color=None, on_click=handle_table_settings
-            ).props("flat dense round size=sm")
+            ).props(_GEAR_PROPS).classes("text-on-surface-variant")
         table_button.on_click(lambda: nav.select(_TABLE_KEY))
         nav.buttons[_TABLE_KEY] = table_button
 
         if source_files:
-            ui.separator()
+            ui.separator().classes("my-1")
             ui.label("Imported files").classes(_HEADING_CLASSES)
 
         # Fills the space above About/Help and scrolls when the files don't fit.
@@ -122,19 +127,24 @@ def render_left_panel(
             for source_file in source_files:
                 key = f"source_file:{source_file.id}"
                 button = (
-                    ui.button(source_file.filename, color=None)
-                    .classes("w-44 text-xs source-file-btn")
-                    .props("dense")
+                    ui.button(source_file.filename, icon="description", color=None)
+                    .classes(f"{_ITEM_CLASSES} source-file-btn")
+                    .props(_ITEM_PROPS)
                 )
                 button.on_click(lambda key=key: nav.select(key))
                 nav.buttons[key] = button
                 if on_source_file is not None:
                     nav.views[key] = partial(on_source_file, source_file.id)
 
-        with ui.column().classes("items-center gap-2 pb-4"):
-            for key, text in ((_ABOUT_KEY, "About"), (_HELP_KEY, "Help")):
+        with ui.column().classes("w-full gap-1 pt-2 pb-4"):
+            for key, text, icon in (
+                (_ABOUT_KEY, "About", "info"),
+                (_HELP_KEY, "Help", "help_outline"),
+            ):
                 button = (
-                    ui.button(text, color=None).classes("w-44 text-sm").props("dense")
+                    ui.button(text, icon=icon, color=None)
+                    .classes(_ITEM_CLASSES)
+                    .props(_ITEM_PROPS)
                 )
                 button.on_click(lambda key=key: nav.select(key))
                 nav.buttons[key] = button

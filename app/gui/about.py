@@ -11,9 +11,9 @@ LICENSE_FILE = "LICENSE"
 THIRD_PARTY_FILE = "THIRD_PARTY_LICENSES.txt"
 THIRD_PARTY_SUMMARY_FILE = "THIRD_PARTY_SUMMARY.txt"
 HELP_PLACEHOLDER = "Help will be added later."
-_TITLE_CLASSES = "text-lg font-bold"
-_HEADING_CLASSES = "text-sm font-bold pt-2"
-_TEXT_BOX_CLASSES = "w-full h-64 border rounded-borders"
+_TITLE_CLASSES = "text-2xl"
+_HEADING_CLASSES = "title-small pt-3"
+_TEXT_BOX_CLASSES = "w-full h-64 border outline-variant rounded-xl surface-low"
 _EXPANSION_CLASSES = "w-full text-sm"
 
 
@@ -34,9 +34,9 @@ def render_about_view(middle: Element) -> None:
     version, summary = _version_and_summary()
     root = project_root()
     middle.clear()
-    with middle, ui.column().classes("w-full max-w-3xl gap-1 p-4"):
+    with middle, ui.column().classes("w-full max-w-3xl gap-1 p-6"):
         ui.label(PACKAGE).classes(_TITLE_CLASSES)
-        ui.label(f"Version {version}").classes("text-sm text-grey-7")
+        ui.label(f"Version {version}").classes("text-sm text-on-surface-variant")
         if summary:
             ui.label(summary).classes("text-sm")
         ui.link(REPOSITORY_URL, REPOSITORY_URL, new_tab=True).classes("text-sm")
@@ -50,6 +50,6 @@ def render_about_view(middle: Element) -> None:
 
 def render_help_view(middle: Element) -> None:
     middle.clear()
-    with middle, ui.column().classes("w-full gap-1 p-4"):
+    with middle, ui.column().classes("w-full gap-1 p-6"):
         ui.label("Help").classes(_TITLE_CLASSES)
         ui.label(HELP_PLACEHOLDER).classes("text-sm")
