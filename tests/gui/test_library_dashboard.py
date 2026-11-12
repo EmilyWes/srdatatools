@@ -160,6 +160,7 @@ def test_render_library_dashboard__show_in_table_passes_problem_columns() -> Non
 
     assert button.enabled
     assert shown == [["data_quality", "publication_date"]]
+    assert {"mt-auto", "self-center"} <= set(button.classes)
 
 
 def test_render_library_dashboard__show_in_table_disabled_without_problems() -> None:

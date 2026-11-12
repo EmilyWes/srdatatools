@@ -307,7 +307,7 @@ def _quality_table(
             color=None,
             on_click=lambda: on_show(columns) if on_show is not None else None,
         ).props("outline no-caps dense")
-        button.classes("self-end text-sm px-2")
+        button.classes("mt-auto self-center text-sm px-2")
         button.set_enabled(any(count for _, count in quality))
 
 
