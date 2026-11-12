@@ -23,8 +23,8 @@ CHART_COLORS = [
     UU_BROWN,
 ]
 OTHER_COLOR = "#9E9A8E"
-# A light tint of UU_GREEN, for a field filled in every record.
-COMPLETE_COLOR = "#9ED9CF"
+# Lime, for a field filled in every record.
+COMPLETE_COLOR = "#A4D65E"
 UNKNOWN_COLOR = "#E6E1D3"
 MULTIPLE_COLOR = "#5E5A4E"
 

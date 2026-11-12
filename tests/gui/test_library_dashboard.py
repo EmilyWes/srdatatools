@@ -124,10 +124,12 @@ def test_render_library_dashboard__data_quality_table_second() -> None:
     assert labels.index("Data quality") + 1 == next(
         i for i, label in enumerate(labels) if label.startswith("Publication year")
     )
-    assert _tables(panes.middle)[0].rows == [
-        {"name": "Unparsed dates", "count": "2"},
-        {"name": "Misaligned authors", "count": "0"},
+    table = _tables(panes.middle)[0]
+    assert table.rows == [
+        {"name": "Unparsed dates", "count": "2", "red": True},
+        {"name": "Misaligned authors", "count": "0", "red": False},
     ]
+    assert "text-red" in (table.slots["body-cell-count"].template or "")
 
 
 def test_render_library_dashboard__completeness_with_zero_records() -> None:

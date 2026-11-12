@@ -248,7 +248,10 @@ def _source_file_pie(per_file: Sequence[tuple[str, int]], multiple: int) -> None
 
 
 def _count_table(
-    title: str, name_label: str, counts: Sequence[tuple[str, int]]
+    title: str,
+    name_label: str,
+    counts: Sequence[tuple[str, int]],
+    red_above_zero: bool = False,
 ) -> None:
     with ui.column().classes(_FRAME_CLASSES):
         ui.label(title).classes(_TITLE_CLASSES)
@@ -264,7 +267,11 @@ def _count_table(
                     {"name": "count", "label": "Records", "field": "count"},
                 ],
                 rows=[
-                    {"name": name, "count": format_count(count)}
+                    {
+                        "name": name,
+                        "count": format_count(count),
+                        **({"red": count > 0} if red_above_zero else {}),
+                    }
                     for name, count in counts
                 ],
                 pagination=0,
@@ -277,6 +284,12 @@ def _count_table(
             '<q-td :props="props" :title="props.value"'
             ' class="ellipsis" style="max-width: 10rem">{{ props.value }}</q-td>',
         )
+        if red_above_zero:
+            table.add_slot(
+                "body-cell-count",
+                '<q-td :props="props" :class="{\'text-red\': props.row.red}">'
+                "{{ props.value }}</q-td>",
+            )
 
 
 def _keyword_table(prefix: str | None, counts: Sequence[tuple[str, int]]) -> None:
@@ -326,7 +339,7 @@ def render_library_dashboard(
                 if _COMPLETENESS not in hidden:
                     _completeness_chart(total, filled)
                 if _DATA_QUALITY not in hidden:
-                    _count_table("Data quality", "Check", quality)
+                    _count_table("Data quality", "Check", quality, red_above_zero=True)
                 if _PER_YEAR not in hidden:
                     _year_chart(per_year)
                 if _PUBLICATION_TYPE not in hidden:
