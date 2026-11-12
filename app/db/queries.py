@@ -180,7 +180,7 @@ def count_records_per_source_file(
     return [(filename, count) for filename, count in per_file if count], multiple
 
 
-def _record_schema(record: Record, labels: list[LabelSchema]) -> RecordSchema:
+def record_schema(record: Record, labels: list[LabelSchema]) -> RecordSchema:
     fields = {
         name: getattr(record, name)
         for name in RecordSchema.model_fields
@@ -232,7 +232,7 @@ def load_export_records(
     return [
         ExportRecord(
             id=record.id,
-            record=_record_schema(record, labels[record.id]),
+            record=record_schema(record, labels[record.id]),
             sources=sources[record.id],
         )
         for record in session.scalars(records_statement)

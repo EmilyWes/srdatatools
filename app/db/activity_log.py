@@ -1,4 +1,5 @@
 import datetime
+from collections import Counter
 
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
@@ -90,6 +91,26 @@ def log_export_failed(session: Session, filename: str, reason: str) -> ActivityL
         action_type="export",
         message=f"Export failed:\n{filename}\nReason: {reason}",
         status="warning",
+    )
+    session.add(entry)
+    return entry
+
+
+def log_cleaning(
+    session: Session, records: int, changed: int, per_step: Counter[str]
+) -> ActivityLog:
+    message = (
+        f"Cleaned {format_count(records)} records: {format_count(changed)} changed"
+    )
+    if per_step:
+        steps = ", ".join(
+            f"{step} {format_count(count)}" for step, count in per_step.most_common()
+        )
+        message += f" ({steps})"
+    entry = ActivityLog(
+        timestamp=datetime.datetime.now(),
+        action_type="clean",
+        message=message + ".",
     )
     session.add(entry)
     return entry
