@@ -269,11 +269,11 @@ _LABEL_SPELLINGS: dict[str, LabelValue] = {
 }
 
 # Hyphens may sit anywhere in an ID; a qualifier like "(Print)" may follow it.
-_ISSN_ISBN_TOKEN = re.compile(
+ISSN_ISBN_TOKEN = re.compile(
     r"(?<![\w-])(?P<id>\d[\d-]*[\dXx])(?![\w-])(?:\s*\((?P<qualifier>[^)]*)\))?"
 )
-_ISSN_LENGTH = 8
-_ISBN_LENGTHS = (10, 13)
+ISSN_LENGTH = 8
+ISBN_LENGTHS = (10, 13)
 
 
 def _label_for_line(line: str, settings: ParseSettings) -> LabelValue | None:
@@ -303,11 +303,11 @@ def _classify_issn_isbn(row: IssnIsbnRow, value: str) -> str:
     ISSN- or ISBN-length number."""
     if row.kind != "auto":
         return row.kind
-    for token in _ISSN_ISBN_TOKEN.finditer(value):
+    for token in ISSN_ISBN_TOKEN.finditer(value):
         length = len(token["id"].replace("-", ""))
-        if length == _ISSN_LENGTH:
+        if length == ISSN_LENGTH:
             return "issn"
-        if length in _ISBN_LENGTHS:
+        if length in ISBN_LENGTHS:
             return "isbn"
     logger.warning("Value %r is neither an ISSN nor an ISBN", value)
     return "issn"
@@ -435,7 +435,7 @@ def _parse_pages(raw_fields: dict[str, str], mapping: FieldMapping) -> str | Non
     return "-".join(piece for piece in (start, end) if piece) or None
 
 
-def _ordered(mapping: FieldMapping, use_first: tuple[str, ...]) -> FieldMapping:
+def ordered_mapping(mapping: FieldMapping, use_first: tuple[str, ...]) -> FieldMapping:
     first = {key: mapping.rows[key] for key in use_first if key in mapping.rows}
     return mapping.model_copy(update={"rows": {**first, **mapping.rows}})
 
@@ -459,7 +459,7 @@ def apply_mapping(
     mapping: FieldMapping,
     settings: ParseSettings = NO_QUIRKS,
 ) -> Record:
-    mapping = _ordered(mapping, settings.use_first)
+    mapping = ordered_mapping(mapping, settings.use_first)
     values: dict[str, Any] = {}
     other_ids: dict[str, str] = {}
     keywords: list[str] = []
