@@ -90,6 +90,22 @@ def test_detect_type__asreview_ris_fixture_by_content(tmp_path: Path) -> None:
     assert detect_type(path) == "ris"
 
 
+@pytest.mark.parametrize(
+    ("fixture", "expected"),
+    [
+        ("asreview/asreview_scopus_small_261022.tsv", "tsv"),
+        ("openalex/openalex_small_261030.csv", "csv"),
+    ],
+)
+def test_detect_type__tabular_with_long_cells_by_content(
+    tmp_path: Path, fixture: str, expected: str
+) -> None:
+    source = _DATA_DIR.parent / fixture
+    path = _write(tmp_path, "export.txt", source.read_text(encoding="utf-8"))
+
+    assert detect_type(path) == expected
+
+
 def test_detect_type__semicolon_csv_in_txt_file(tmp_path: Path) -> None:
     path = _write(tmp_path, "export.txt", "Title;Year\nA study;2020\n")
 

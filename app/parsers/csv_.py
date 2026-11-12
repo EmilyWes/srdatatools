@@ -75,13 +75,40 @@ _SUGGESTIONS: dict[str, Suggest] = {
 
 _EXTRA_FIELDS_KEY = "__extra__"
 _SNIFF_SAMPLE_SIZE = 2048
+_DELIMITERS = ",;\t"
+_CONSISTENT_ROWS = 5
+
+
+def _row_lengths(text: str, delimiter: str) -> set[int]:
+    reader = csv.reader(StringIO(text), delimiter=delimiter)
+    try:
+        rows = [row for _, row in zip(range(_CONSISTENT_ROWS), reader, strict=False)]
+    except csv.Error:
+        return set()
+    return {len(row) for row in rows if row} if len(rows) > 1 else set()
+
+
+def _consistent_delimiter(text: str) -> str | None:
+    """The delimiter giving the first rows one same column count above one; the
+    most columns wins."""
+    best, best_columns = None, 1
+    for delimiter in _DELIMITERS:
+        lengths = _row_lengths(text, delimiter)
+        if len(lengths) == 1 and (columns := lengths.pop()) > best_columns:
+            best, best_columns = delimiter, columns
+    return best
 
 
 def sniff_dialect(text: str) -> type[csv.Dialect] | None:
+    """The sniffer gives up when its sample cuts through long quoted cells; the
+    reader then tries each delimiter on the first rows."""
     try:
-        dialect = csv.Sniffer().sniff(text[:_SNIFF_SAMPLE_SIZE], delimiters=",;	")
+        dialect = csv.Sniffer().sniff(text[:_SNIFF_SAMPLE_SIZE], delimiters=_DELIMITERS)
     except csv.Error:
-        return None
+        delimiter = _consistent_delimiter(text)
+        if delimiter is None:
+            return None
+        return type("ConsistentDialect", (csv.excel,), {"delimiter": delimiter})
     # The sniffer guesses doublequote=False when its sample has no "" escape.
     dialect.doublequote = True
     return dialect

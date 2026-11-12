@@ -1,3 +1,5 @@
+import csv
+from io import StringIO
 from pathlib import Path
 
 import pytest
@@ -10,6 +12,7 @@ from app.parsers.csv_ import (
     parse_csv_record,
     parse_csv_text,
     read_csv_headers,
+    sniff_dialect,
     suggest_mapping,
 )
 from app.parsers.mapping import (
@@ -26,6 +29,7 @@ from app.parsers.mapping import (
 )
 from app.parsers.quirks import ParseSettings
 from tests.mappings import mapping_of, targets_of
+from tests.vendor_data import vendor_file
 
 CSV_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "data" / "general"
 
@@ -141,6 +145,31 @@ def test_parse_csv_text__sniffs_semicolon_delimiter() -> None:
 
     assert result.rows[0].record.title == "Some Paper"
     assert result.rows[0].record.doi == "10.1/x"
+
+
+def _semicolon_openalex_rows() -> str:
+    """OpenAlex's first rows, whose long cells make the sniffer give up."""
+    path = vendor_file("openalex", "small", ".csv")
+    with path.open(encoding="utf-8", newline="") as file:
+        rows = [row for _, row in zip(range(4), csv.reader(file), strict=False)]
+    out = StringIO()
+    csv.writer(out, delimiter=";").writerows(rows)
+    return out.getvalue()
+
+
+def test_sniff_dialect__falls_back_to_consistent_column_count() -> None:
+    dialect = sniff_dialect(_semicolon_openalex_rows())
+
+    assert dialect is not None and dialect.delimiter == ";"
+
+
+def test_parse_csv_text__semicolon_with_long_quoted_cells() -> None:
+    text = _semicolon_openalex_rows()
+
+    result = parse_csv_text(text, mapping_of({"Title": "title"}))
+
+    assert len(result.rows) == 3
+    assert result.rows[0].record.title
 
 
 def test_parse_csv_text__doubled_quote_after_sniff_sample_is_an_escape() -> None:
