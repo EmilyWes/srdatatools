@@ -237,6 +237,7 @@ def test_render_table_settings__checkboxes_reflect_columns() -> None:
         if isinstance(element, ui.checkbox)
     }
     assert len(checkboxes) == len(COLUMNS)
+    assert set(checkboxes) == set(COLUMNS.values())
     assert checkboxes["DOI"] is True
     assert checkboxes["Title"] is False
 
@@ -662,7 +663,18 @@ def test_render_record_table__keyword_column_header_and_field() -> None:
     assert column["headerName"] == "Keywords: MeSH"
 
 
-def test_render_table_settings__keyword_checkboxes_after_label_ones() -> None:
+def _box_checkboxes(middle: Element) -> dict[str, list[ui.checkbox]]:
+    boxes = {}
+    for box in middle.descendants():
+        if box.tag != "fieldset":
+            continue
+        [legend] = (e for e in box.descendants() if e.tag == "legend")
+        [title] = (e.text for e in legend.descendants() if isinstance(e, ui.label))
+        boxes[title] = [e for e in box.descendants() if isinstance(e, ui.checkbox)]
+    return boxes
+
+
+def test_render_table_settings__columns_grouped_in_boxes() -> None:
     panes = shell()
     changes: list[list[str]] = []
     render_table_settings(
@@ -676,21 +688,28 @@ def test_render_table_settings__keyword_checkboxes_after_label_ones() -> None:
         on_restore=lambda: None,
         on_back=lambda: None,
     )
-    checkboxes = [
-        element
-        for element in panes.middle.descendants()
-        if isinstance(element, ui.checkbox)
+    boxes = _box_checkboxes(panes.middle)
+
+    assert list(boxes) == [
+        "General",
+        "Authors",
+        "Publication",
+        "Identifiers",
+        "Keywords",
+        "Labels",
     ]
-
-    assert [box.text for box in checkboxes[-2:]] == [
-        "Label: ft / screener 1.0",
-        "Keywords: MeSH",
+    assert [box.text for box in boxes["Authors"]] == [
+        "Authors",
+        "Author IDs",
+        "Affiliations",
     ]
+    assert [box.text for box in boxes["Keywords"]] == ["Keywords", "Keywords: MeSH"]
+    assert [box.text for box in boxes["Labels"]] == ["Label: ft / screener 1.0"]
 
-    checkboxes[-1].value = True
-    checkboxes[-2].value = True
+    boxes["Labels"][0].value = True
+    boxes["Keywords"][1].value = True
 
-    assert changes == [["doi", MESH], ["doi", FT, MESH]]
+    assert changes == [["doi", FT], ["doi", FT, MESH]]
 
 
 def test_render_record_table__header_tooltip_is_full_name() -> None:

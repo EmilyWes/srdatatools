@@ -35,6 +35,7 @@ from app.gui.format import (
     label_text,
     source_label,
 )
+from app.gui.quirks_overview import render_box_frame
 from app.models.record import publication_year
 from app.parsers.mapping import split_keyword
 
@@ -86,6 +87,29 @@ COLUMNS: dict[str, str] = {
     "notes": "Notes",
 }
 DEFAULT_COLUMNS = ["doi", "title", "author_names"]
+# Table settings boxes; keyword prefix and label columns get boxes of their own.
+_COLUMN_BOXES: dict[str, tuple[str, ...]] = {
+    "General": (
+        "title",
+        "abstract",
+        "publication_type",
+        "language",
+        "notes",
+        "sources",
+    ),
+    "Authors": ("author_names", "author_ids", "author_affiliations"),
+    "Publication": (
+        "publication_date",
+        "publication_year",
+        "journal",
+        "conference_name",
+        "publisher",
+        "volume",
+        "issue",
+        "pages",
+    ),
+    "Identifiers": ("doi", "pmid", "issn", "isbn", "other_ids", "url"),
+}
 
 
 @dataclass
@@ -366,24 +390,34 @@ def render_table_settings(
             selected.discard(key)
         on_change(_in_display_order(selected, extra_columns))
 
+    def checkboxes(keys: Iterable[str]) -> None:
+        with ui.column().classes("col-span-2 gap-0"):
+            for key in keys:
+                ui.checkbox(
+                    _header(key),
+                    value=key in selected,
+                    on_change=lambda e, key=key: toggle(key, e.value),
+                ).props("dense")
+
     middle.clear()
     with middle:
         with ui.column().classes("w-full p-6 gap-2"):
             ui.label("Table settings").classes("text-2xl")
             ui.label("Columns").classes("title-small pt-2")
-            with ui.column().classes("gap-0"):
-                for key in [*COLUMNS, *extra_columns]:
-                    ui.checkbox(
-                        _header(key),
-                        value=key in selected,
-                        on_change=lambda e, key=key: toggle(key, e.value),
-                    ).props("dense")
-            ui.label("Label values").classes("title-small pt-3")
-            ui.radio(
-                dict(_LABEL_FORMATS),
-                value=label_format,
-                on_change=lambda e: on_label_format(e.value),
-            ).props("dense inline")
+            with ui.row().classes("gap-3 items-start"):
+                for title, keys in _COLUMN_BOXES.items():
+                    with render_box_frame(title):
+                        checkboxes(keys)
+                with render_box_frame("Keywords"):
+                    checkboxes(["keywords", *keyword_columns])
+                with render_box_frame("Labels"):
+                    checkboxes(label_columns)
+                    ui.label("Label values").classes("text-xs")
+                    ui.radio(
+                        dict(_LABEL_FORMATS),
+                        value=label_format,
+                        on_change=lambda e: on_label_format(e.value),
+                    ).props("dense inline")
             with ui.row().classes("gap-2 pt-2"):
                 ui.button("Restore defaults", color=None, on_click=on_restore).props(
                     "outline no-caps"
