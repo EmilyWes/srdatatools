@@ -63,6 +63,33 @@ def test_detect_type__nbib_in_txt_file(tmp_path: Path) -> None:
     assert detect_type(path) == "nbib"
 
 
+def test_detect_type__ris_after_asreview_record_number(tmp_path: Path) -> None:
+    text = "1.\nTY  - JOUR\nTI  - A title, with a comma\nER  - \n"
+    path = _write(tmp_path, "export.txt", text)
+
+    assert detect_type(path) == "ris"
+
+
+def test_detect_type__nbib_after_free_text_header(tmp_path: Path) -> None:
+    path = _write(tmp_path, "pubmed.txt", "Search results\n\nPMID- 1\nTI  - Title\n")
+
+    assert detect_type(path) == "nbib"
+
+
+def test_detect_type__ris_tag_after_the_first_lines_is_not_ris(tmp_path: Path) -> None:
+    text = "".join(f"line {n}\n" for n in range(10)) + "TY  - JOUR\nER  - \n"
+    path = _write(tmp_path, "notes.txt", text)
+
+    assert detect_type(path) is None
+
+
+def test_detect_type__asreview_ris_fixture_by_content(tmp_path: Path) -> None:
+    source = _DATA_DIR.parent / "asreview" / "asreview_scopus_small_261022.ris"
+    path = _write(tmp_path, "export.txt", source.read_text(encoding="utf-8"))
+
+    assert detect_type(path) == "ris"
+
+
 def test_detect_type__semicolon_csv_in_txt_file(tmp_path: Path) -> None:
     path = _write(tmp_path, "export.txt", "Title;Year\nA study;2020\n")
 

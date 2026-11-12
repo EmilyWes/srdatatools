@@ -8,8 +8,11 @@ from app.parsers.csv_ import sniff_dialect
 from app.parsers.excel import read_excel_headers
 from app.parsers.profiles import PROFILES
 
-_RIS_FIRST_LINE = re.compile(r"^TY  -")
-_NBIB_FIRST_LINE = re.compile(r"^PMID ?-")
+_RIS_START = re.compile(r"^TY  -")
+_NBIB_START = re.compile(r"^PMID ?-")
+# Room for lines before the first record (ASReview numbers its RIS records, "1."),
+# yet a tabular file with tag-like text deep in a cell isn't taken for RIS/NBIB.
+_START_LINES = 10
 # Searched, not matched on the first line: exports may start with a free-text header.
 _BIBTEX_ENTRY = re.compile(
     r"^[ \t]*@(?!(?:comment|string|preamble)\b)[A-Za-z]+[ \t]*[{(]",
@@ -41,11 +44,12 @@ def _sniff_tabular(text: str) -> str | None:
 
 
 def _type_from_content(text: str) -> FileType | None:
-    first_line = next((line for line in text.splitlines() if line.strip()), "")
-    if _RIS_FIRST_LINE.match(first_line):
-        return "ris"
-    if _NBIB_FIRST_LINE.match(first_line):
-        return "nbib"
+    lines = [line for line in text.splitlines() if line.strip()][:_START_LINES]
+    for line in lines:
+        if _RIS_START.match(line):
+            return "ris"
+        if _NBIB_START.match(line):
+            return "nbib"
     if _BIBTEX_ENTRY.search(text):
         return "bibtex"
     delimiter = _sniff_tabular(text)
