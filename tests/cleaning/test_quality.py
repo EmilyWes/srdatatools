@@ -1,4 +1,4 @@
-from app.cleaning.quality import quality_issues
+from app.cleaning.quality import problem_columns, quality_issues
 
 
 def test_quality_issues__none_for_a_clean_record() -> None:
@@ -23,3 +23,20 @@ def test_quality_issues__all_problems_in_check_order() -> None:
 
 def test_quality_issues__missing_fields_are_no_problem() -> None:
     assert quality_issues({}) == []
+
+
+def test_problem_columns__data_quality_plus_columns_of_found_problems() -> None:
+    counts = {"Unparsed dates": 0, "Misaligned authors": 3}
+
+    assert problem_columns(counts) == ["data_quality", "author_names", "author_ids"]
+
+
+def test_problem_columns__every_problem_found() -> None:
+    counts = {"Unparsed dates": 1, "Misaligned authors": 1}
+
+    assert problem_columns(counts) == [
+        "data_quality",
+        "publication_date",
+        "author_names",
+        "author_ids",
+    ]

@@ -149,6 +149,7 @@ def home() -> None:
                 count_label_values(session),
                 count_keywords(session),
                 load_hidden(session),
+                on_show_quality=show_quality_problems,
             )
 
     def save_dashboard_hidden(hidden: set[str]) -> None:
@@ -175,7 +176,7 @@ def home() -> None:
             on_back=show_dashboard,
         )
 
-    async def show_table() -> None:
+    async def show_table(quality_filter: bool = False) -> None:
         def load() -> tuple[list[dict[str, Any]], list[str]]:
             with session_scope(_engine) as session:
                 columns = load_columns(session)
@@ -184,8 +185,19 @@ def home() -> None:
 
         rows, columns = await run_busy("Loading library table…", load)
         render_record_table(
-            panes.middle, rows, columns, selection, on_delete=delete_selected
+            panes.middle,
+            rows,
+            columns,
+            selection,
+            on_delete=delete_selected,
+            quality_filter=quality_filter,
         )
+
+    async def show_quality_problems(columns: list[str]) -> None:
+        save_table_columns(columns)
+        if nav is not None:
+            nav.highlight("library:table")
+        await show_table(quality_filter=True)
 
     async def delete_selected(ids: set[int]) -> None:
         def delete() -> None:

@@ -1,4 +1,5 @@
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from app.models.record import CLEANED_DATE
@@ -31,11 +32,30 @@ def _misaligned_authors(fields: Fields) -> bool:
     return len(parse_author_ids(ids)) > name_count
 
 
-CHECKS: dict[str, Callable[[Fields], bool]] = {
-    "Unparsed dates": _unparsed_date,
-    "Misaligned authors": _misaligned_authors,
+@dataclass(frozen=True)
+class Check:
+    test: Callable[[Fields], bool]
+    # The record table columns that show the problem.
+    columns: tuple[str, ...]
+
+
+CHECKS: dict[str, Check] = {
+    "Unparsed dates": Check(_unparsed_date, ("publication_date",)),
+    "Misaligned authors": Check(_misaligned_authors, ("author_names", "author_ids")),
 }
 
 
 def quality_issues(fields: Fields) -> list[str]:
-    return [name for name, check in CHECKS.items() if check(fields)]
+    return [name for name, check in CHECKS.items() if check.test(fields)]
+
+
+def problem_columns(counts: Mapping[str, int]) -> list[str]:
+    """The data quality column plus the columns of each check that found
+    problems."""
+    columns = [
+        column
+        for name, check in CHECKS.items()
+        if counts.get(name)
+        for column in check.columns
+    ]
+    return ["data_quality", *columns]

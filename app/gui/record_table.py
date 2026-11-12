@@ -91,6 +91,12 @@ COLUMNS: dict[str, str] = {
 # Columns worked out from other fields rather than read from one.
 _DERIVED_COLUMNS = ("sources", "keywords", "publication_year", "data_quality")
 DEFAULT_COLUMNS = ["doi", "title", "author_names"]
+_QUALITY_FILTER_STATE: dict[str, Any] = {
+    "filter": {
+        "filterModel": {"data_quality": {"filterType": "text", "type": "notBlank"}}
+    },
+    "sort": {"sortModel": [{"colId": "data_quality", "sort": "asc"}]},
+}
 # Table settings boxes; keyword prefix and label columns get boxes of their own.
 _COLUMN_BOXES: dict[str, tuple[str, ...]] = {
     "General": (
@@ -276,8 +282,12 @@ def render_record_table(
     columns: Sequence[str],
     selection: RecordSelection,
     on_delete: Callable[[set[int]], Awaitable[None] | None] | None = None,
+    quality_filter: bool = False,
 ) -> None:
+    """quality_filter opens the table on the records with a data quality problem,
+    sorted by their problems."""
     selection.ids &= {row["id"] for row in rows}
+    shown = [row for row in rows if row.get("data_quality")] if quality_filter else rows
 
     def open_delete_dialog() -> None:
         count = format_count(len(selection.ids))
@@ -301,7 +311,7 @@ def render_record_table(
                 count_line("Total number of rows", len(rows))
                 ui.element("div")
                 ui.element("div")
-                filter_count = count_line("Rows in filter", len(rows))
+                filter_count = count_line("Rows in filter", len(shown))
                 clear_filters = ui.button("Clear all filters", color=None).props(
                     "outline"
                 )
@@ -335,7 +345,8 @@ def render_record_table(
                         "enableSelectionWithoutKeys": True,
                     },
                     "initialState": {
-                        "rowSelection": [str(id_) for id_ in sorted(selection.ids)]
+                        "rowSelection": [str(id_) for id_ in sorted(selection.ids)],
+                        **(_QUALITY_FILTER_STATE if quality_filter else {}),
                     },
                 },
                 auto_size_columns=False,

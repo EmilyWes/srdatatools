@@ -1,11 +1,12 @@
 import json
-from collections.abc import Callable, Collection, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from typing import Any
 
 from nicegui import ui
 from nicegui.element import Element
 from sqlalchemy.orm import Session
 
+from app.cleaning.quality import problem_columns
 from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.format import format_count, keyword_key, label_key
 from app.gui.mapping_table import fill_color
@@ -252,8 +253,8 @@ def _count_table(
     name_label: str,
     counts: Sequence[tuple[str, int]],
     zero_is_good: bool = False,
-) -> None:
-    with ui.column().classes(_FRAME_CLASSES):
+) -> Element:
+    with ui.column().classes(_FRAME_CLASSES) as frame:
         ui.label(title).classes(_TITLE_CLASSES)
         table = (
             ui.table(
@@ -291,6 +292,23 @@ def _count_table(
                 " :class=\"props.row.red ? 'text-red' : 'text-green'\">"
                 "{{ props.value }}</q-td>",
             )
+    return frame
+
+
+def _quality_table(
+    quality: Sequence[tuple[str, int]],
+    on_show: Callable[[list[str]], Awaitable[None] | None] | None,
+) -> None:
+    frame = _count_table("Data quality", "Check", quality, zero_is_good=True)
+    columns = problem_columns(dict(quality))
+    with frame:
+        button = ui.button(
+            "Show in table",
+            color=None,
+            on_click=lambda: on_show(columns) if on_show is not None else None,
+        ).props("outline no-caps dense")
+        button.classes("self-end text-sm px-2")
+        button.set_enabled(any(count for _, count in quality))
 
 
 def _keyword_table(prefix: str | None, counts: Sequence[tuple[str, int]]) -> None:
@@ -308,6 +326,7 @@ def render_library_dashboard(
     label_counts: Mapping[tuple[str, str], Mapping[str, int]],
     keyword_counts: Mapping[str | None, Sequence[tuple[str, int]]],
     hidden: Collection[str],
+    on_show_quality: Callable[[list[str]], Awaitable[None] | None] | None = None,
 ) -> None:
     pies = {
         pair: counts
@@ -340,7 +359,7 @@ def render_library_dashboard(
                 if _COMPLETENESS not in hidden:
                     _completeness_chart(total, filled)
                 if _DATA_QUALITY not in hidden:
-                    _count_table("Data quality", "Check", quality, zero_is_good=True)
+                    _quality_table(quality, on_show_quality)
                 if _PER_YEAR not in hidden:
                     _year_chart(per_year)
                 if _PUBLICATION_TYPE not in hidden:

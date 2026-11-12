@@ -462,6 +462,35 @@ def test_render_record_table__column_types_are_set_not_inferred() -> None:
     assert [column["cellDataType"] for column in columns] == ["text", "number"]
 
 
+def test_render_record_table__quality_filter_opens_on_problem_records() -> None:
+    panes = shell()
+    rows = [
+        _row(1, data_quality=""),
+        _row(2, data_quality="Unparsed dates"),
+        _row(3, data_quality="Unparsed dates | Misaligned authors"),
+    ]
+
+    render_record_table(
+        panes.middle, rows, ["data_quality"], RecordSelection(), quality_filter=True
+    )
+
+    state = _grid(panes.middle).options["initialState"]
+    assert state["filter"] == {
+        "filterModel": {"data_quality": {"filterType": "text", "type": "notBlank"}}
+    }
+    assert state["sort"] == {"sortModel": [{"colId": "data_quality", "sort": "asc"}]}
+    labels = [e.text for e in panes.middle.descendants() if isinstance(e, ui.label)]
+    assert labels[labels.index("Rows in filter:") + 1] == "2"
+
+
+def test_render_record_table__no_filter_by_default() -> None:
+    panes = shell()
+
+    render_record_table(panes.middle, [_row(1)], ["doi"], RecordSelection())
+
+    assert set(_grid(panes.middle).options["initialState"]) == {"rowSelection"}
+
+
 def test_render_record_table__cell_tooltip_shows_full_value_when_truncated() -> None:
     panes = shell()
 

@@ -133,6 +133,41 @@ def test_render_library_dashboard__data_quality_table_second() -> None:
     assert "props.row.red ? 'text-red' : 'text-green'" in template
 
 
+def _render_quality(quality: list[tuple[str, int]], shown: list[list[str]]) -> Element:
+    panes = shell()
+    render_library_dashboard(
+        panes.middle,
+        1,
+        [],
+        quality,
+        [],
+        [],
+        ([], 0),
+        {},
+        {},
+        {"completeness", "per_year", "publication_type", "source_files"},
+        on_show_quality=shown.append,
+    )
+    return panes.middle
+
+
+def test_render_library_dashboard__show_in_table_passes_problem_columns() -> None:
+    shown: list[list[str]] = []
+    middle = _render_quality([("Unparsed dates", 2), ("Misaligned authors", 0)], shown)
+    button = _button(middle, "Show in table")
+
+    _click(button)
+
+    assert button.enabled
+    assert shown == [["data_quality", "publication_date"]]
+
+
+def test_render_library_dashboard__show_in_table_disabled_without_problems() -> None:
+    middle = _render_quality([("Unparsed dates", 0), ("Misaligned authors", 0)], [])
+
+    assert not _button(middle, "Show in table").enabled
+
+
 def test_render_library_dashboard__completeness_with_zero_records() -> None:
     panes = shell()
 

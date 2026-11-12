@@ -17,6 +17,7 @@ from app.gui.home import home
 from app.gui.layout import ShellPanes
 from app.gui.library_dashboard import save_hidden
 from app.gui.library_nav import LeftPanelNav
+from app.gui.record_table import load_columns
 from app.parsers.common import FileSummary
 from app.parsers.profiles.overview import default_choices
 from tests.gui.clicks import click_and_wait
@@ -334,6 +335,36 @@ def test_home__clicking_table_shows_records_in_grid(
         if isinstance(element, ui.aggrid)
     )
     assert [row["title"] for row in grid.options["rowData"]] == ["A title"]
+
+
+def test_home__show_in_table_opens_problem_records(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_source_file_with_record(engine)
+    with Session(engine) as session:
+        session.query(Record).one().publication_date = "May 2020"
+        session.commit()
+    navs = _capture_navs(monkeypatch)
+    shells = _capture_shells(monkeypatch)
+    home()
+    show = next(
+        e
+        for e in shells[-1].middle.descendants()
+        if isinstance(e, ui.button) and e.text == "Show in table"
+    )
+
+    click_and_wait(show, monkeypatch)
+
+    assert navs[-1].selected_key == "library:table"
+    grid = next(e for e in shells[-1].middle.descendants() if isinstance(e, ui.aggrid))
+    assert [c["field"] for c in grid.options["columnDefs"]] == [
+        "publication_date",
+        "data_quality",
+    ]
+    assert grid.options["rowData"][0]["data_quality"] == "Unparsed dates"
+    assert "filter" in grid.options["initialState"]
+    with Session(engine) as session:
+        assert load_columns(session) == ["publication_date", "data_quality"]
 
 
 def test_home__selecting_source_file_shows_detail_view(
