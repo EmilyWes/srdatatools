@@ -129,7 +129,8 @@ def test_render_library_dashboard__data_quality_table_second() -> None:
         {"name": "Unparsed dates", "count": "2", "red": True},
         {"name": "Misaligned authors", "count": "0", "red": False},
     ]
-    assert "text-red" in (table.slots["body-cell-count"].template or "")
+    template = table.slots["body-cell-count"].template or ""
+    assert "props.row.red ? 'text-red' : 'text-green'" in template
 
 
 def test_render_library_dashboard__completeness_with_zero_records() -> None:

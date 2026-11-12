@@ -251,7 +251,7 @@ def _count_table(
     title: str,
     name_label: str,
     counts: Sequence[tuple[str, int]],
-    red_above_zero: bool = False,
+    zero_is_good: bool = False,
 ) -> None:
     with ui.column().classes(_FRAME_CLASSES):
         ui.label(title).classes(_TITLE_CLASSES)
@@ -270,7 +270,7 @@ def _count_table(
                     {
                         "name": name,
                         "count": format_count(count),
-                        **({"red": count > 0} if red_above_zero else {}),
+                        **({"red": count > 0} if zero_is_good else {}),
                     }
                     for name, count in counts
                 ],
@@ -284,10 +284,11 @@ def _count_table(
             '<q-td :props="props" :title="props.value"'
             ' class="ellipsis" style="max-width: 10rem">{{ props.value }}</q-td>',
         )
-        if red_above_zero:
+        if zero_is_good:
             table.add_slot(
                 "body-cell-count",
-                '<q-td :props="props" :class="{\'text-red\': props.row.red}">'
+                '<q-td :props="props"'
+                " :class=\"props.row.red ? 'text-red' : 'text-green'\">"
                 "{{ props.value }}</q-td>",
             )
 
@@ -339,7 +340,7 @@ def render_library_dashboard(
                 if _COMPLETENESS not in hidden:
                     _completeness_chart(total, filled)
                 if _DATA_QUALITY not in hidden:
-                    _count_table("Data quality", "Check", quality, red_above_zero=True)
+                    _count_table("Data quality", "Check", quality, zero_is_good=True)
                 if _PER_YEAR not in hidden:
                     _year_chart(per_year)
                 if _PUBLICATION_TYPE not in hidden:
