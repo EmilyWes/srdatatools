@@ -17,6 +17,8 @@ class PartialDate(BaseModel):
 
 
 _LEADING_YEAR = re.compile(r"\d{4}")
+# What cleaning writes: unknown month or day left empty.
+CLEANED_DATE = re.compile(r"(?P<year>\d{4})/(?P<month>\d{2})?/(?P<day>\d{2})?")
 
 
 def publication_year(date: str | None) -> int | None:

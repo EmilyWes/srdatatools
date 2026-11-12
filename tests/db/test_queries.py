@@ -14,6 +14,7 @@ from app.db.models import (
     SourceFile,
 )
 from app.db.queries import (
+    count_data_quality,
     count_filled_fields,
     count_keywords,
     count_label_values,
@@ -243,6 +244,41 @@ def test_count_label_values__records_per_value_with_missing_as_unlabeled(
 
 def test_count_label_values__empty_without_labels(session: Session) -> None:
     assert count_label_values(session) == {}
+
+
+def test_count_data_quality__unparsed_dates(session: Session) -> None:
+    dates = ["2020/05/01", "1994//", "2020/05/", "2020 May", "14/05/2020", "/03/", None]
+    session.add_all([Record(publication_date=date) for date in dates])
+    session.commit()
+
+    assert dict(count_data_quality(session))["Unparsed dates"] == 3
+
+
+@pytest.mark.parametrize(
+    ("names", "ids", "misaligned"),
+    [
+        ("A|B", "x:1|x:2", False),
+        ("A|B", "x:1", False),
+        ("A|B", "x:1|x:2|x:3", True),
+        (None, "x:1", True),
+        ("A|B", "x:[1;2]", True),
+        ("A|B", None, False),
+    ],
+)
+def test_count_data_quality__misaligned_authors(
+    session: Session, names: str | None, ids: str | None, misaligned: bool
+) -> None:
+    session.add(Record(author_names=names, author_ids=ids))
+    session.commit()
+
+    assert dict(count_data_quality(session))["Misaligned authors"] == misaligned
+
+
+def test_count_data_quality__rows_in_order(session: Session) -> None:
+    assert count_data_quality(session) == [
+        ("Unparsed dates", 0),
+        ("Misaligned authors", 0),
+    ]
 
 
 def test_count_filled_fields__counts_non_empty_values(session: Session) -> None:

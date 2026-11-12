@@ -7,9 +7,14 @@ from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.db.models import ActivityLog, Label, Record, RecordSource, SourceFile
 from app.export.columns import ExportRecord, ExportSource
+from app.models.record import CLEANED_DATE, publication_year
 from app.models.record import Label as LabelSchema
 from app.models.record import Record as RecordSchema
-from app.models.record import publication_year
+from app.parsers.authors import (
+    AUTHOR_JOINER,
+    parse_author_ids,
+    parse_unsplit_author_ids,
+)
 from app.parsers.mapping import split_keyword
 
 _EMPTY_JSON = ("[]", "{}", "null")
@@ -84,6 +89,25 @@ def count_records_per_year(session: Session) -> list[tuple[int | None, int]]:
         for date in session.scalars(select(Record.publication_date))
     )
     return sorted(counts.items(), key=lambda item: (item[0] is None, item[0] or 0))
+
+
+def _misaligned_authors(names: str | None, ids: str | None) -> bool:
+    """Unsplit ids aren't per author yet, so they count as misaligned."""
+    if not ids:
+        return False
+    if parse_unsplit_author_ids(ids):
+        return True
+    name_count = len(names.split(AUTHOR_JOINER)) if names else 0
+    return len(parse_author_ids(ids)) > name_count
+
+
+def count_data_quality(session: Session) -> list[tuple[str, int]]:
+    unparsed = misaligned = 0
+    statement = select(Record.publication_date, Record.author_names, Record.author_ids)
+    for date, names, ids in session.execute(statement):
+        unparsed += bool(date) and CLEANED_DATE.fullmatch(date) is None
+        misaligned += _misaligned_authors(names, ids)
+    return [("Unparsed dates", unparsed), ("Misaligned authors", misaligned)]
 
 
 def count_label_values(session: Session) -> dict[tuple[str, str], dict[str, int]]:

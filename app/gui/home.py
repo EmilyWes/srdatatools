@@ -19,6 +19,7 @@ from app.db.activity_log import (
 )
 from app.db.models import SourceFile
 from app.db.queries import (
+    count_data_quality,
     count_filled_fields,
     count_keywords,
     count_label_values,
@@ -141,6 +142,7 @@ def home() -> None:
                 panes.middle,
                 count_records(session),
                 [(COLUMNS[key], count) for key, count in filled],
+                count_data_quality(session),
                 count_records_per_year(session),
                 count_publication_types(session),
                 count_records_per_source_file(session),
