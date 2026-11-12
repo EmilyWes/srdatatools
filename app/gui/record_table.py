@@ -49,6 +49,11 @@ _HEADER_CSS = (
     f" .{_TABLE_CLASS} .ag-header-cell:hover"
     " { background-color: rgba(0, 0, 0, 0.06); }"
 )
+# Author IDs have hardly any spaces, so without these a tooltip runs off screen.
+_TOOLTIP_CSS = (
+    ".ag-tooltip { max-width: 50vw; max-height: 60vh; overflow: hidden;"
+    " overflow-wrap: anywhere; }"
+)
 _LABEL_FORMAT_KEY = "table_label_format"
 
 _LABEL_FORMATS: dict[LabelFormat, str] = {"numbers": "Numbers", "words": "Words"}
@@ -304,7 +309,7 @@ def render_record_table(
                         "flat no-caps"
                     )
                     ui.button("Delete", color="negative", on_click=delete)
-        ui.add_css(_HEADER_CSS)
+        ui.add_css(_HEADER_CSS + _TOOLTIP_CSS)
 
     delete_selected.set_enabled(bool(selection.ids))
     for button in (clear_filters, clear_selection, delete_selected):
