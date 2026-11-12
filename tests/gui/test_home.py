@@ -15,8 +15,8 @@ from app.db.models import ActivityLog, Base, Record, RecordSource, SourceFile
 from app.gui.action_panel import ActionPanel
 from app.gui.home import home
 from app.gui.layout import ShellPanes
+from app.gui.library_dashboard import save_hidden
 from app.gui.library_nav import LeftPanelNav
-from app.gui.library_overview import save_hidden
 from app.parsers.common import FileSummary
 from app.parsers.profiles.overview import default_choices
 from tests.gui.clicks import click_and_wait
@@ -107,7 +107,9 @@ def test_home__clear_log_empties_db_and_right_panel(
     assert panels[0].log.default_slot.children == []
 
 
-def test_home__shows_library_overview_on_start(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_home__shows_library_dashboard_on_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     shells: list[ShellPanes] = []
     shell = home_module.shell
 
@@ -128,7 +130,7 @@ def test_home__shows_library_overview_on_start(monkeypatch: pytest.MonkeyPatch) 
     assert "Field completeness" in labels
 
 
-def test_home__overview_hides_stored_hidden_items(
+def test_home__dashboard_hides_stored_hidden_items(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with Session(engine) as session:
@@ -267,7 +269,7 @@ def test_home__import_stores_given_summary_and_selects_new_file(
     assert navs[-1].selected_key == f"source_file:{source_file.id}"
 
 
-def test_home__multi_file_import_stores_each_file_and_selects_overview(
+def test_home__multi_file_import_stores_each_file_and_selects_dashboard(
     engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     first_path = tmp_path / "first.csv"
@@ -313,7 +315,7 @@ def test_home__multi_file_import_stores_each_file_and_selects_overview(
             asdict(second_summary),
         ]
         assert session.query(ActivityLog).filter_by(action_type="import").count() == 2
-    assert navs[-1].selected_key == "library:overview"
+    assert navs[-1].selected_key == "library:dashboard"
 
 
 def test_home__clicking_table_shows_records_in_grid(
@@ -352,7 +354,7 @@ def test_home__selecting_source_file_shows_detail_view(
     assert "Records in library" in labels
 
 
-def test_home__removing_source_file_deletes_logs_and_shows_overview(
+def test_home__removing_source_file_deletes_logs_and_shows_dashboard(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source_file_id = _add_source_file_with_record(engine)
@@ -374,11 +376,11 @@ def test_home__removing_source_file_deletes_logs_and_shows_overview(
         assert session.query(SourceFile).count() == 0
         assert session.query(Record).count() == 0
         assert session.query(ActivityLog).one().action_type == "remove"
-    assert navs[-1].selected_key == "library:overview"
+    assert navs[-1].selected_key == "library:dashboard"
     assert f"source_file:{source_file_id}" not in navs[-1].buttons
 
 
-def test_home__deleting_library_empties_db_logs_and_shows_overview(
+def test_home__deleting_library_empties_db_logs_and_shows_dashboard(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source_file_id = _add_source_file_with_record(engine)
@@ -410,7 +412,7 @@ def test_home__deleting_library_empties_db_logs_and_shows_overview(
         entry = session.query(ActivityLog).one()
         assert entry.action_type == "delete_library"
         assert "Records removed: 1" in entry.message
-    assert navs[-1].selected_key == "library:overview"
+    assert navs[-1].selected_key == "library:dashboard"
     assert f"source_file:{source_file_id}" not in navs[-1].buttons
 
 
@@ -535,7 +537,7 @@ def _capture_notifications(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return notifications
 
 
-def test_home__export_writes_csv_logs_notifies_and_shows_overview(
+def test_home__export_writes_csv_logs_notifies_and_shows_dashboard(
     engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     _add_source_file_with_record(engine)
@@ -555,7 +557,7 @@ def test_home__export_writes_csv_logs_notifies_and_shows_overview(
         assert entry.message == "Exported to:\nlibrary.csv\nRecords: 1"
         assert entry.status == "ok"
     assert notifications == ["Exported 1 record to library.csv"]
-    assert navs[-1].selected_key == "library:overview"
+    assert navs[-1].selected_key == "library:dashboard"
     assert len(navs) == 2
 
 

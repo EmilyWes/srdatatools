@@ -9,7 +9,7 @@ from app.gui.layout import shell
 from app.gui.library_nav import LeftPanelNav, render_left_panel
 from tests.gui.clicks import click_and_wait
 
-_SELECTED_CLASS = "bg-blue-100"
+_SELECTED_CLASS = "bg-secondary"
 
 
 def _source_file(id_: int, filename: str) -> SourceFile:
@@ -34,11 +34,11 @@ def test_render_left_panel__adds_import_and_library_with_no_source_files() -> No
 
     nav = render_left_panel(panes.left, [])
 
-    # Import, separator, "Library" label, Overview, Table row, space, About/Help
+    # Import, separator, "Library" label, Dashboard, Table row, space, About/Help
     assert len(panes.left.default_slot.children) == 7
     assert list(nav.buttons) == [
         "import",
-        "library:overview",
+        "library:dashboard",
         "library:table",
         "about",
         "help",
@@ -54,7 +54,7 @@ def test_render_left_panel__adds_one_entry_per_source_file() -> None:
 
     nav = render_left_panel(panes.left, source_files)
 
-    # Import, sep, "Library" label, Overview, Table row, sep, "Imported files" label,
+    # Import, sep, "Library" label, Dashboard, Table row, sep, "Imported files" label,
     # scrolling list with source_file:1 and source_file:2, About/Help
     assert len(panes.left.default_slot.children) == 9
     file_list = panes.left.default_slot.children[-2]
@@ -62,7 +62,7 @@ def test_render_left_panel__adds_one_entry_per_source_file() -> None:
     assert {"flex-grow", "overflow-y-auto"} <= set(file_list.classes)
     assert list(nav.buttons) == [
         "import",
-        "library:overview",
+        "library:dashboard",
         "library:table",
         "source_file:1",
         "source_file:2",
@@ -98,10 +98,10 @@ def test_render_left_panel__switching_selection_removes_previous_highlight() -> 
     source_files = [_source_file(1, "pubmed_export.nbib")]
     nav = render_left_panel(panes.left, source_files)
 
-    nav.select("library:overview")
+    nav.select("library:dashboard")
     nav.select("source_file:1")
 
-    assert _SELECTED_CLASS not in nav.buttons["library:overview"].classes
+    assert _SELECTED_CLASS not in nav.buttons["library:dashboard"].classes
     assert _SELECTED_CLASS in nav.buttons["source_file:1"].classes
 
 
@@ -164,12 +164,12 @@ def test_render_left_panel__import_button_uses_on_import_callback_when_given(
 def test_render_left_panel__clear_selection_removes_highlight() -> None:
     panes = shell()
     nav = render_left_panel(panes.left, [])
-    nav.select("library:overview")
+    nav.select("library:dashboard")
 
     nav.clear_selection()
 
     assert nav.selected_key is None
-    assert _SELECTED_CLASS not in nav.buttons["library:overview"].classes
+    assert _SELECTED_CLASS not in nav.buttons["library:dashboard"].classes
 
 
 def _click(button: ui.button) -> None:
@@ -184,7 +184,7 @@ def _gear(nav: LeftPanelNav, key: str) -> ui.button:
     return [c for c in row.children if isinstance(c, ui.button)][1]
 
 
-def test_render_left_panel__library_heading_above_overview_and_table() -> None:
+def test_render_left_panel__library_heading_above_dashboard_and_table() -> None:
     panes = shell()
 
     render_left_panel(panes.left, [])
@@ -194,20 +194,20 @@ def test_render_left_panel__library_heading_above_overview_and_table() -> None:
     assert heading.text == "Library"
 
 
-def test_render_left_panel__selecting_overview_and_table_calls_their_views() -> None:
+def test_render_left_panel__selecting_dashboard_and_table_calls_their_views() -> None:
     panes = shell()
     calls: list[str] = []
     nav = render_left_panel(
         panes.left,
         [],
-        on_overview=lambda: calls.append("overview"),
+        on_dashboard=lambda: calls.append("dashboard"),
         on_table=lambda: calls.append("table"),
     )
 
-    _click(nav.buttons["library:overview"])
+    _click(nav.buttons["library:dashboard"])
     _click(nav.buttons["library:table"])
 
-    assert calls == ["overview", "table"]
+    assert calls == ["dashboard", "table"]
     assert nav.selected_key == "library:table"
 
 
@@ -236,32 +236,32 @@ def test_render_left_panel__table_gear_opens_settings_with_table_highlighted() -
         on_table=lambda: calls.append("table"),
         on_table_settings=lambda: calls.append("settings"),
     )
-    nav.select("library:overview")
+    nav.select("library:dashboard")
 
     _click(_gear(nav, "library:table"))
 
     assert calls == ["settings"]
     assert nav.selected_key == "library:table"
     assert _SELECTED_CLASS in nav.buttons["library:table"].classes
-    assert _SELECTED_CLASS not in nav.buttons["library:overview"].classes
+    assert _SELECTED_CLASS not in nav.buttons["library:dashboard"].classes
 
 
-def test_render_left_panel__overview_gear_opens_settings_and_highlights() -> None:
+def test_render_left_panel__dashboard_gear_opens_settings_and_highlights() -> None:
     panes = shell()
     calls: list[str] = []
     nav = render_left_panel(
         panes.left,
         [],
-        on_overview=lambda: calls.append("overview"),
-        on_overview_settings=lambda: calls.append("settings"),
+        on_dashboard=lambda: calls.append("dashboard"),
+        on_dashboard_settings=lambda: calls.append("settings"),
     )
     nav.select("library:table")
 
-    _click(_gear(nav, "library:overview"))
+    _click(_gear(nav, "library:dashboard"))
 
     assert calls == ["settings"]
-    assert nav.selected_key == "library:overview"
-    assert _SELECTED_CLASS in nav.buttons["library:overview"].classes
+    assert nav.selected_key == "library:dashboard"
+    assert _SELECTED_CLASS in nav.buttons["library:dashboard"].classes
     assert _SELECTED_CLASS not in nav.buttons["library:table"].classes
 
 

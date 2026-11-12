@@ -160,8 +160,8 @@ def test_action_panel__show_log_colours_entries_by_status() -> None:
     )
 
     ok, warning = _log_labels(actions)
-    assert "text-green-7" in ok.classes
-    assert "text-orange-7" in warning.classes
+    assert "log-ok" in ok.classes
+    assert "log-warning" in warning.classes
 
 
 def test_action_panel__show_log_empty_entries_clears_log() -> None:

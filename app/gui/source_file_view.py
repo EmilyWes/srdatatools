@@ -38,11 +38,15 @@ def render_source_file_view(
                 "This cannot be undone."
             )
             with ui.row().classes("w-full justify-end"):
-                ui.button("Cancel", color=None, on_click=dialog.close).props("flat")
-                ui.button("Remove", color="negative", on_click=remove)
+                ui.button("Cancel", color=None, on_click=dialog.close).props(
+                    "flat no-caps"
+                )
+                ui.button("Remove", color="negative", on_click=remove).props(
+                    "unelevated no-caps"
+                )
 
-        with ui.column().classes("w-full p-4 gap-4"):
-            ui.label(source_file.filename).classes("text-lg")
+        with ui.column().classes("w-full p-6 gap-4"):
+            ui.label(source_file.filename).classes("text-2xl")
             with ui.grid(columns="max-content auto").classes("gap-x-4 gap-y-1"):
                 details = [
                     ("Source", source_label(source_file.source)),
@@ -60,8 +64,11 @@ def render_source_file_view(
                     ui.label("Records in library").classes("text-sm text-grey-7")
                     ui.label(format_count(records_in_library)).classes("text-3xl")
                 ui.button(
-                    "Remove from library", color=None, on_click=dialog.open
-                ).classes("text-sm").props("dense no-caps")
+                    "Remove from library",
+                    icon="delete",
+                    color="negative",
+                    on_click=dialog.open,
+                ).props("outline no-caps")
             with ui.column().classes("w-full gap-1"):
                 ui.label(
                     f"Skipped on import: {format_count(len(source_file.skipped_rows))}"

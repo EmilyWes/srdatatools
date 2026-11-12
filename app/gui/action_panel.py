@@ -7,9 +7,21 @@ from nicegui.element import Element
 
 from app.db.models import ActivityLog
 from app.gui.format import format_count
+from app.gui.theme import UU_GREEN, UU_ORANGE
 
-_ACTIONS = ["Deduplicate", "Enrich", "Snowball", "Export"]
-_STATUS_CLASSES = {"ok": "text-green-7", "warning": "text-orange-7"}
+_ACTIONS = {
+    "Deduplicate": "join_full",
+    "Enrich": "auto_awesome",
+    "Snowball": "hub",
+    "Export": "download",
+}
+_STATUS_CLASSES = {"ok": "log-ok", "warning": "log-warning"}
+_LOG_CSS = (
+    ".log-ok, .log-warning"
+    " { border-left: 3px solid; padding-left: 8px; overflow-wrap: anywhere; }"
+    f" .log-ok {{ border-color: {UU_GREEN}; }}"
+    f" .log-warning {{ border-color: {UU_ORANGE}; }}"
+)
 
 
 @dataclass
@@ -50,9 +62,11 @@ def render_right_panel(
             on_settings()
         middle.clear()
         with middle:
-            with ui.column().classes("pt-4 items-center w-full"):
-                ui.label(f"{action} settings").classes("text-lg")
-                ui.label("Not available yet.").classes("text-sm text-grey-6")
+            with ui.column().classes("p-6 gap-1 w-full"):
+                ui.label(f"{action} settings").classes("text-2xl")
+                ui.label("Not available yet.").classes(
+                    "text-sm text-on-surface-variant"
+                )
 
     def open_delete_dialog() -> None:
         source_files, records = (0, 0) if count_library is None else count_library()
@@ -67,24 +81,29 @@ def render_right_panel(
         delete_dialog.close()
         return None if on_delete_library is None else on_delete_library()
 
+    ui.add_css(_LOG_CSS)
     right.clear()
     with right:
-        with ui.column().classes("w-full items-center gap-6 pt-6 pb-12"):
-            for action in _ACTIONS:
+        with ui.column().classes("w-full gap-2 px-3 pt-5 pb-4"):
+            for action, icon in _ACTIONS.items():
                 exports = action == "Export"
-                with ui.row().classes("items-center gap-1 no-wrap"):
+                with ui.row().classes("w-full items-center gap-1 no-wrap"):
                     button = (
                         ui.button(
-                            action, color=None, on_click=on_export if exports else None
+                            action,
+                            icon=icon,
+                            color=None,
+                            on_click=on_export if exports else None,
                         )
-                        .classes("w-32 text-sm")
-                        .props("dense")
+                        .classes("tonal nav-item flex-grow")
+                        .props("no-caps align=left")
                     )
                     gear = ui.button(
                         icon="settings",
                         color=None,
                         on_click=lambda action=action: show_settings(action),
                     ).props("flat dense round size=sm")
+                    gear.classes("text-on-surface-variant")
                     if exports:
                         # Export's view holds its options; the hidden gear keeps
                         # the button lined up with the others.
@@ -93,26 +112,31 @@ def render_right_panel(
                         button.disable()
                         button.tooltip("Not implemented yet")
         # The log takes the height left over, so Delete library stays in view.
-        with ui.column().classes("w-full px-2 gap-1 flex-grow min-h-0 no-wrap"):
-            ui.label("Activity log").classes("text-xs text-grey-7")
-            log = ui.column().classes(
-                "w-full flex-grow min-h-0 gap-2 p-2 text-xs no-wrap overflow-auto"
-                " border rounded"
-            )
-            with ui.row().classes("w-full justify-end"):
+        with ui.column().classes("w-full px-3 gap-1 flex-grow min-h-0 no-wrap"):
+            with ui.row().classes("w-full items-center justify-between no-wrap"):
+                ui.label("Activity log").classes("label-medium px-1")
                 ui.button("Clear log", color=None, on_click=on_clear_log).props(
-                    "flat dense size=sm"
-                )
-        with ui.row().classes("w-full justify-center pt-4 pb-6"):
+                    "flat dense no-caps size=sm"
+                ).classes("text-on-surface-variant px-2")
+            log = ui.column().classes(
+                "w-full flex-grow min-h-0 gap-3 p-3 text-xs no-wrap overflow-auto"
+                " bg-white rounded-xl border outline-variant"
+            )
+        with ui.row().classes("w-full px-3 pt-3 pb-5"):
             ui.button(
-                "Delete library", color="negative", on_click=open_delete_dialog
-            ).classes("w-32 text-sm").props("dense")
+                "Delete library",
+                icon="delete_forever",
+                color="negative",
+                on_click=open_delete_dialog,
+            ).classes("w-full").props("outline no-caps")
         with ui.dialog() as delete_dialog, ui.card():
             delete_message = ui.label()
             with ui.row().classes("w-full justify-end"):
                 ui.button("Cancel", color=None, on_click=delete_dialog.close).props(
-                    "flat"
+                    "flat no-caps"
                 )
-                ui.button("Delete", color="negative", on_click=delete)
+                ui.button("Delete", color="negative", on_click=delete).props(
+                    "unelevated no-caps"
+                )
 
     return ActionPanel(right=right, log=log)

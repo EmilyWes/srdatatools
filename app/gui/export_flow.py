@@ -201,10 +201,12 @@ class ExportView:
         self.mapping.clear()
         count_cell_classes = "self-stretch flex items-center px-2 mr-1"
         count_cell_style = "background: rgba(0, 0, 0, 0.04)"
-        row_base = "w-full min-w-max no-wrap items-center gap-1 pl-0 border-b"
+        row_base = (
+            "w-full min-w-max no-wrap items-center gap-1 pl-0 border-b outline-variant"
+        )
         with self.mapping:
-            with ui.column().classes("gap-0 border rounded-borders"):
-                with ui.row().classes(f"{row_base} py-2 bg-grey-2"):
+            with ui.column().classes("gap-0 border outline-variant rounded-xl"):
+                with ui.row().classes(f"{row_base} py-2 surface-container"):
                     with (
                         ui.element("div")
                         .classes(count_cell_classes)
@@ -219,7 +221,7 @@ class ExportView:
                 for i, column in enumerate(self.columns):
                     row_classes = f"{row_base} py-0"
                     if i % 2 == 1:
-                        row_classes += " bg-grey-1"
+                        row_classes += " surface-low"
                     with ui.row().classes(row_classes):
                         with (
                             ui.element("div")
