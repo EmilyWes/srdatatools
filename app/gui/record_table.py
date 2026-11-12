@@ -42,6 +42,7 @@ _NUMBER_COLUMNS = {"publication_year", "publication_month", "publication_day"}
 _WIDE_COLUMNS = {"title", "abstract", "notes"}
 _SELECTION_TIMEOUT = 10.0
 _ROW_HEIGHT = 24
+_TOOLTIP_DELAY_MS = 500
 _TABLE_CLASS = "record-table"
 _HEADER_CSS = (
     f".{_TABLE_CLASS} .ag-header-cell {{ cursor: pointer; }}"
@@ -218,6 +219,7 @@ def _column_def(key: str) -> dict[str, Any]:
         "field": column_field(key),
         "headerName": _header(key),
         "headerTooltip": _header(key),
+        "tooltipField": column_field(key),
         "width": 400 if key in _WIDE_COLUMNS else 160,
         "filter": (
             "agNumberColumnFilter" if key in _NUMBER_COLUMNS else "agTextColumnFilter"
@@ -278,6 +280,8 @@ def render_record_table(
                         "cellStyle": {"fontSize": "12px"},
                     },
                     "rowHeight": _ROW_HEIGHT,
+                    "tooltipShowMode": "whenTruncated",
+                    "tooltipShowDelay": _TOOLTIP_DELAY_MS,
                     ":getRowId": "(params) => String(params.data.id)",
                     "rowSelection": {
                         "mode": "multiRow",

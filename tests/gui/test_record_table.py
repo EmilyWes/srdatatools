@@ -415,6 +415,19 @@ def test_render_record_table__label_column_header_and_field() -> None:
     assert column["filter"] == "agTextColumnFilter"
 
 
+def test_render_record_table__cell_tooltip_shows_full_value_when_truncated() -> None:
+    panes = shell()
+
+    render_record_table(panes.middle, [_row(1)], ["doi", FT], RecordSelection())
+
+    options = _grid(panes.middle).options
+    assert [column["tooltipField"] for column in options["columnDefs"]] == [
+        "doi",
+        column_field(FT),
+    ]
+    assert options["tooltipShowMode"] == "whenTruncated"
+
+
 def test_render_table_settings__label_checkboxes_after_fixed_ones() -> None:
     panes = shell()
     changes: list[list[str]] = []
