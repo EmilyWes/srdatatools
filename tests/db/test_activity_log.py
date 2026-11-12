@@ -168,3 +168,9 @@ def test_log_cleaning__nothing_changed(session: Session) -> None:
     log_cleaning(session, 5, 0, Counter())
 
     assert session.query(ActivityLog).one().message == ("Cleaned 5 records: 0 changed.")
+
+
+def test_log_cleaning__one_record_is_singular(session: Session) -> None:
+    log_cleaning(session, 1, 0, Counter())
+
+    assert session.query(ActivityLog).one().message == "Cleaned 1 record: 0 changed."

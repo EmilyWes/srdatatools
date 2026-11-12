@@ -46,7 +46,9 @@ def test_render_right_panel__builds_without_raising() -> None:
     render_right_panel(panes.right, panes.middle)
 
 
-def test_render_right_panel__action_buttons_in_order_only_export_enabled() -> None:
+def test_render_right_panel__action_buttons_in_order_cleaning_and_export_enabled() -> (
+    None
+):
     panes = shell()
 
     render_right_panel(panes.right, panes.middle)
@@ -60,7 +62,7 @@ def test_render_right_panel__action_buttons_in_order_only_export_enabled() -> No
         "Export",
     ]
     assert [button.enabled for button in action_buttons] == [
-        False,
+        True,
         False,
         False,
         False,
@@ -68,7 +70,7 @@ def test_render_right_panel__action_buttons_in_order_only_export_enabled() -> No
     ]
 
 
-def test_render_right_panel__settings_gear_for_every_action_but_export() -> None:
+def test_render_right_panel__no_settings_gear_for_cleaning_and_export() -> None:
     panes = shell()
 
     render_right_panel(panes.right, panes.middle)
@@ -76,7 +78,7 @@ def test_render_right_panel__settings_gear_for_every_action_but_export() -> None
     gears = [buttons[1] for buttons in _row_buttons(panes.right)]
     assert [gear.props["icon"] for gear in gears] == ["settings"] * 5
     assert ["invisible" in gear.classes for gear in gears] == [
-        False,
+        True,
         False,
         False,
         False,
@@ -99,6 +101,18 @@ def test_render_right_panel__gear_shows_settings_in_middle_and_calls_back() -> N
     assert len(middle_children) == 1
     labels = middle_children[0].default_slot.children
     assert labels[0].text == "Enrich settings"  # type: ignore[attr-defined]
+
+
+def test_render_right_panel__cleaning_button_calls_back() -> None:
+    panes = shell()
+    calls: list[None] = []
+    render_right_panel(
+        panes.right, panes.middle, on_cleaning=lambda: calls.append(None)
+    )
+
+    _click(_row_buttons(panes.right)[0][0])
+
+    assert calls == [None]
 
 
 def test_render_right_panel__export_button_calls_back() -> None:

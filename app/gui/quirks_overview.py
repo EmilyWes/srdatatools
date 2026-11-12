@@ -2,14 +2,14 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, TypeVar
+from typing import Any, Generic, TypeVar
 
 from nicegui import ui
 from nicegui.element import Element
+from pydantic import BaseModel
 
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import (
-    ParsingChoices,
     QuirkBox,
     QuirkItem,
     QuirkList,
@@ -80,6 +80,7 @@ _TITLE_CLASSES = "mx-auto px-1 text-sm font-bold"
 
 Widget = ui.checkbox | ui.input | ui.number | ui.select
 _W = TypeVar("_W", bound=Widget)
+_M = TypeVar("_M", bound=BaseModel)
 
 
 def _shared_keys(mapping: FieldMapping) -> list[str]:
@@ -97,9 +98,9 @@ def render_box_frame(title: str) -> Element:
 
 
 @dataclass
-class QuirksScreen:
+class QuirksScreen(Generic[_M]):
     readonly: bool
-    defaults: ParsingChoices
+    defaults: _M
     current_mapping: Callable[[], FieldMapping] | None = None
     widgets: dict[str, Widget] = field(default_factory=dict)
     empty_values: list[str] = field(default_factory=list)
@@ -115,7 +116,7 @@ class QuirksScreen:
             return int(widget.value) if widget.value else getattr(self.defaults, key)
         return widget.value
 
-    def current_choices(self) -> ParsingChoices:
+    def current_choices(self) -> _M:
         values = {key: self._value(key) for key in self.widgets}
         lists = {
             "empty_values": [v for v in self.empty_values if v.strip()],
@@ -288,7 +289,7 @@ class QuirksScreen:
         else:
             self.refresh_ordering()
 
-    def render_box(self, box: QuirkBox, chosen: ParsingChoices) -> None:
+    def render_box(self, box: QuirkBox, chosen: BaseModel) -> None:
         with render_box_frame(box.title):
             for item in box.items:
                 if isinstance(item, QuirkList):
@@ -359,12 +360,14 @@ def render_view_toggle(
 def render_quirks_overview(
     container: Element,
     boxes: list[QuirkBox],
-    defaults: ParsingChoices,
-    chosen: ParsingChoices | None = None,
+    defaults: _M,
+    chosen: _M | None = None,
     current_mapping: Callable[[], FieldMapping] | None = None,
-) -> QuirksScreen:
-    """`chosen` shows a stored import's choices read-only."""
-    shown = chosen or defaults
+    start: _M | None = None,
+) -> QuirksScreen[_M]:
+    """`chosen` shows a stored import's choices read-only; `start` opens editable
+    on other values than the defaults."""
+    shown = chosen or start or defaults
     lists = shown.model_dump()
     screen = QuirksScreen(
         readonly=chosen is not None,

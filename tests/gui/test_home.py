@@ -612,3 +612,62 @@ def test_home__export_with_cut_values_warns(
     ]
     with Session(engine) as session:
         assert session.query(ActivityLog).one().status == "warning"
+
+
+def _capture_cleaning_views(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    views: list[Any] = []
+    render_cleaning_view = home_module.render_cleaning_view
+
+    def capture(*args: Any, **kwargs: Any) -> Any:
+        view = render_cleaning_view(*args, **kwargs)
+        views.append(view)
+        return view
+
+    monkeypatch.setattr(home_module, "render_cleaning_view", capture)
+    return views
+
+
+def _cleaning_button(panes: ShellPanes) -> ui.button:
+    return next(
+        element
+        for element in panes.right.descendants()
+        if isinstance(element, ui.button) and element.text == "Cleaning"
+    )
+
+
+def test_home__cleaning_cleans_logs_and_notifies(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_source_file_with_record(engine)
+    with Session(engine) as session:
+        session.query(Record).one().pages = "521-2"
+        session.commit()
+    shells = _capture_shells(monkeypatch)
+    views = _capture_cleaning_views(monkeypatch)
+    notifications = _capture_notifications(monkeypatch)
+    home()
+    click_and_wait(_cleaning_button(shells[-1]), monkeypatch)
+
+    click_and_wait(views[-1].run_button, monkeypatch)
+
+    with Session(engine) as session:
+        assert session.query(Record).one().pages == "521-522"
+        entry = session.query(ActivityLog).one()
+        assert entry.message == "Cleaned 1 record: 1 changed (Pages set 1)."
+    assert notifications == ["Cleaned 1 record: 1 changed"]
+
+
+def test_home__cleaning_options_are_remembered_when_run(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_source_file_with_record(engine)
+    shells = _capture_shells(monkeypatch)
+    views = _capture_cleaning_views(monkeypatch)
+    home()
+    click_and_wait(_cleaning_button(shells[-1]), monkeypatch)
+    views[-1].screen.set_value("drop_trailing", True)
+
+    click_and_wait(views[-1].run_button, monkeypatch)
+    click_and_wait(_cleaning_button(shells[-1]), monkeypatch)
+
+    assert views[-1].screen.current_choices().drop_trailing

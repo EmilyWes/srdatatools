@@ -99,9 +99,8 @@ def log_export_failed(session: Session, filename: str, reason: str) -> ActivityL
 def log_cleaning(
     session: Session, records: int, changed: int, per_step: Counter[str]
 ) -> ActivityLog:
-    message = (
-        f"Cleaned {format_count(records)} records: {format_count(changed)} changed"
-    )
+    noun = "record" if records == 1 else "records"
+    message = f"Cleaned {format_count(records)} {noun}: {format_count(changed)} changed"
     if per_step:
         steps = ", ".join(
             f"{step} {format_count(count)}" for step, count in per_step.most_common()

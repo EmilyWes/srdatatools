@@ -290,7 +290,7 @@ class ImportView:
     sheet: str | None = None
     view: str | None = VIEW_MAPPING
     mapping_screen: MappingScreen | None = None
-    quirks_screen: QuirksScreen | None = None
+    quirks_screen: QuirksScreen[ParsingChoices] | None = None
     views: MappingParsingViews | None = None
     import_button: ui.button | None = None
 
