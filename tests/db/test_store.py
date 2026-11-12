@@ -503,7 +503,11 @@ def test_clean_records__writes_back_and_counts_per_step(session: Session) -> Non
     assert (first.volume, first.issue, first.pages) == ("620", "7974", "521-522")
     assert second.doi == "10.1038/x"
     assert (total, changed) == (3, 2)
-    assert per_step == {"Values from Citation": 1, "Pages set": 1, "Strip DOI": 1}
+    assert list(per_step.items()) == [
+        ("Strip DOI", 1),
+        ("Values from Citation", 1),
+        ("Pages set", 1),
+    ]
 
 
 def test_clean_records__only_the_given_ids(session: Session) -> None:

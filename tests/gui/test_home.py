@@ -653,7 +653,7 @@ def test_home__cleaning_cleans_logs_and_notifies(
     with Session(engine) as session:
         assert session.query(Record).one().pages == "521-522"
         entry = session.query(ActivityLog).one()
-        assert entry.message == "Cleaned 1 record: 1 changed (Pages set 1)."
+        assert entry.message == "Cleaned 1 record: 1 changed\nPages set: 1"
     assert notifications == ["Cleaned 1 record: 1 changed"]
 
 

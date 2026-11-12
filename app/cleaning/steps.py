@@ -478,6 +478,9 @@ def _steps(options: CleaningOptions) -> list[tuple[bool, str, Step]]:
     ]
 
 
+STEP_NAMES = [name for _, name, _ in _steps(CleaningOptions())]
+
+
 def clean_record(
     record: Record, context: CleaningContext, options: CleaningOptions
 ) -> tuple[Record, list[str]]:

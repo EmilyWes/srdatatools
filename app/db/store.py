@@ -7,7 +7,12 @@ from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.cleaning.options import CleaningOptions
-from app.cleaning.steps import CleaningContext, clean_record, file_separators
+from app.cleaning.steps import (
+    STEP_NAMES,
+    CleaningContext,
+    clean_record,
+    file_separators,
+)
 from app.db.models import Label, Record, RecordSource, SourceFile
 from app.db.queries import record_schema
 from app.models.record import Record as RecordSchema
@@ -129,7 +134,7 @@ def clean_records(
     """`ids` None cleans every record. A record is cleaned with its first source
     file's raw fields and mapping, and author separators are sniffed per source
     file. Returns the records cleaned, the records changed and the changes per
-    step."""
+    step, in the order the steps run."""
     statement = (
         select(Record)
         .options(selectinload(Record.sources).selectinload(RecordSource.source_file))
@@ -168,4 +173,7 @@ def clean_records(
         for name, value in cleaned.model_dump(exclude=_NOT_CLEANED).items():
             if getattr(record, name) != value:
                 setattr(record, name, value)
-    return len(records), changed, per_step
+    in_order = Counter(
+        {name: per_step[name] for name in STEP_NAMES if name in per_step}
+    )
+    return len(records), changed, in_order
