@@ -425,6 +425,20 @@ def test_render_record_table__label_column_header_and_field() -> None:
     assert column["filter"] == "agTextColumnFilter"
 
 
+def test_render_record_table__column_types_are_set_not_inferred() -> None:
+    panes = shell()
+
+    render_record_table(
+        panes.middle,
+        [_row(1)],
+        ["publication_date", "publication_year"],
+        RecordSelection(),
+    )
+
+    columns = _grid(panes.middle).options["columnDefs"]
+    assert [column["cellDataType"] for column in columns] == ["text", "number"]
+
+
 def test_render_record_table__cell_tooltip_shows_full_value_when_truncated() -> None:
     panes = shell()
 

@@ -231,6 +231,9 @@ def _column_def(key: str) -> dict[str, Any]:
         "headerName": _header(key),
         "headerTooltip": _header(key),
         "tooltipField": column_field(key),
+        # Without it AG Grid infers the type from the first row, and e.g. a date
+        # column inferred from 2017-03-21 renders a later 2023// as empty.
+        "cellDataType": "number" if key in _NUMBER_COLUMNS else "text",
         "width": 400 if key in _WIDE_COLUMNS else 160,
         "filter": (
             "agNumberColumnFilter" if key in _NUMBER_COLUMNS else "agTextColumnFilter"
