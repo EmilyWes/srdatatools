@@ -1,4 +1,4 @@
-from app.models.record import Author, Record
+from app.models.record import Record
 from app.parsers.common import ParsedRow, ParseResult, SkippedRow
 from app.parsers.mapping import FieldMapping, RowDefaults
 from app.parsers.profiles import apply_profile, has_profile, profile_for
@@ -50,7 +50,6 @@ def test_default_profiles__turn_on_the_generic_quirks() -> None:
         assert settings.issn_isbn_strip_extras
         assert settings.issn_isbn_only_one
         assert settings.label_values == ()
-        assert settings.ambiguous_name_split == "none"
 
 
 def test_default_profiles__turn_on_the_generic_quirks_for_every_type() -> None:
@@ -153,13 +152,13 @@ def test_apply_profile__runs_quirks_in_order_and_keeps_raw_fields_and_skipped() 
     )
     skipped = [SkippedRow(3, "bad")]
     raw = {"X": "Smith J.; et al."}
-    authors = [Author(full_name="Smith J."), Author(full_name="et al.")]
     result = ParseResult(
-        rows=[ParsedRow(Record(authors=authors), raw)], skipped=skipped
+        rows=[ParsedRow(Record(author_names="Smith J.; et al."), raw)],
+        skipped=skipped,
     )
 
     fixed = apply_profile(result, profile, FieldMapping())
 
-    assert fixed.rows[0].record.authors == [Author(full_name="Smith J")]
+    assert fixed.rows[0].record.author_names == "Smith J"
     assert fixed.rows[0].raw_fields == raw
     assert fixed.skipped == skipped

@@ -4,10 +4,9 @@ from typing import Literal
 
 from app.export.options import ExportOptions
 from app.gui.format import label_text, source_label
-from app.models.record import Author, Record
+from app.models.record import Record
 from app.parsers.mapping import split_keyword
 
-AuthorFormat = Literal["last_first", "first_last", "full_name"]
 DatePart = Literal["full", "year", "month", "day"]
 ExtraKind = Literal["record_id", "sources", "source_files"]
 
@@ -16,6 +15,9 @@ _ORIGINAL_SUFFIX = " (original)"
 
 _SCALAR_LABELS = {
     "title": "Title",
+    "author_names": "Authors",
+    "author_ids": "Author IDs",
+    "author_affiliations": "Affiliations",
     "journal": "Journal",
     "conference_name": "Conference",
     "volume": "Volume",
@@ -67,13 +69,6 @@ class ExportColumn:
 @dataclass
 class ScalarColumn(ExportColumn):
     field: str
-
-
-@dataclass
-class AuthorsColumn(ExportColumn):
-    format: AuthorFormat = "last_first"
-    name_separator: str = ", "
-    author_separator: str = "; "
 
 
 @dataclass
@@ -167,7 +162,9 @@ def export_columns(
     columns: list[ExportColumn] = [
         _extra("record_id"),
         _scalar("title"),
-        AuthorsColumn(key="authors", label="Authors", name="Authors"),
+        _scalar("author_names"),
+        _scalar("author_ids"),
+        _scalar("author_affiliations"),
         DateColumn(key="date", label="Publication date", name="Publication date"),
         _scalar("journal"),
         _scalar("conference_name"),
@@ -214,15 +211,6 @@ def _raw_keys(records: Sequence[ExportRecord], options: ExportOptions) -> list[s
     )
 
 
-def _author_text(author: Author, column: AuthorsColumn) -> str:
-    family, given = author.family_name, author.given_name
-    if column.format == "full_name" or not (family or given):
-        return author.full_name or " ".join(part for part in (given, family) if part)
-    if column.format == "first_last":
-        return " ".join(part for part in (given, family) if part)
-    return column.name_separator.join(part for part in (family, given) if part)
-
-
 def _date_text(record: Record, part: DatePart) -> str:
     date = record.publication_date
     if date is None or date.year is None:
@@ -249,9 +237,6 @@ def column_value(
     if isinstance(column, ScalarColumn):
         value = getattr(record, column.field)
         return "" if value is None else str(value)
-    if isinstance(column, AuthorsColumn):
-        names = (_author_text(author, column) for author in record.authors)
-        return column.author_separator.join(names)
     if isinstance(column, DateColumn):
         return _date_text(record, column.part)
     if isinstance(column, KeywordsColumn):

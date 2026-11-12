@@ -332,10 +332,7 @@ def test_render_mapping__ris_lists_distinct_tags_without_delimiter_box(
     assert [row.header for row in screen.rows] == ["TI", "AU", "TY"]
     assert [
         name for name, w in screen._row_for("AU").option_rows.items() if w.visible
-    ] == [
-        "role",
-        "separator",
-    ]
+    ] == ["role"]
 
 
 def test_render_mapping__ris_without_tags_notifies_and_returns_none(
@@ -401,10 +398,7 @@ def test_render_mapping__nbib_lists_distinct_tags_without_delimiter_box(
     assert [row.header for row in screen.rows] == ["PMID", "TI", "FAU"]
     assert [
         name for name, w in screen._row_for("FAU").option_rows.items() if w.visible
-    ] == [
-        "role",
-        "separator",
-    ]
+    ] == ["role"]
 
 
 def test_render_mapping__nbib_without_tags_notifies_and_returns_none(
@@ -473,7 +467,7 @@ def test_render_mapping__bibtex_lists_fields_and_hides_author_delimiter(
     assert [row.header for row in screen.rows] == ["title", "author", "@type", "@key"]
     assert [
         name for name, w in screen._row_for("author").option_rows.items() if w.visible
-    ] == ["role", "separator"]
+    ] == ["role"]
 
 
 def test_render_mapping__bibtex_without_entries_notifies_and_returns_none(
@@ -516,7 +510,7 @@ def test_render_mapping__tsv_lists_columns_with_delimiter_box(
     assert [row.header for row in screen.rows] == ["Title", "Authors"]
     assert [
         name for name, w in screen._row_for("Authors").option_rows.items() if w.visible
-    ] == ["role", "delimiter", "separator"]
+    ] == ["role", "delimiter"]
 
 
 def test_render_import_view__tsv_file_is_detected_and_enables_import(
@@ -755,7 +749,7 @@ def test_render_mapping__pubmed_nbib_suggests_jt_not_ta(tmp_path: Path) -> None:
     assert "TA" not in targets
 
 
-def test_render_mapping__pubmed_csv_splits_full_names_on_comma(
+def test_render_mapping__pubmed_csv_splits_author_names_on_comma(
     tmp_path: Path,
 ) -> None:
     csv_path = tmp_path / "pubmed.csv"
@@ -766,7 +760,7 @@ def test_render_mapping__pubmed_csv_splits_full_names_on_comma(
 
     assert screen is not None
     assert screen.current_mapping().rows["Authors"] == AuthorsRow(
-        role="full_name", delimiter=",", id_key="authors"
+        role="names", delimiter=",", id_key="authors"
     )
 
 
@@ -1131,7 +1125,7 @@ def test_render_mapping__excel_lists_columns_with_delimiter_box(
     assert [row.header for row in screen.rows] == ["Title", "Authors"]
     assert [
         name for name, w in screen._row_for("Authors").option_rows.items() if w.visible
-    ] == ["role", "delimiter", "separator"]
+    ] == ["role", "delimiter"]
 
 
 def _sheet_select(middle: Element) -> Any:

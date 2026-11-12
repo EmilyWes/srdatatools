@@ -248,16 +248,22 @@ def test_count_label_values__empty_without_labels(session: Session) -> None:
 def test_count_filled_fields__counts_non_empty_values(session: Session) -> None:
     session.add_all(
         [
-            Record(title="Paper", doi="10.1/a", authors=[{"full_name": "A"}]),
-            Record(title="", keywords=["x"], authors=[]),
+            Record(title="Paper", doi="10.1/a", author_names="A"),
+            Record(title="", keywords=["x"], author_names=""),
             Record(title="Other", other_ids={}),
         ]
     )
     session.commit()
 
     assert count_filled_fields(
-        session, ["title", "doi", "authors", "keywords", "other_ids"]
-    ) == [("title", 2), ("doi", 1), ("authors", 1), ("keywords", 1), ("other_ids", 0)]
+        session, ["title", "doi", "author_names", "keywords", "other_ids"]
+    ) == [
+        ("title", 2),
+        ("doi", 1),
+        ("author_names", 1),
+        ("keywords", 1),
+        ("other_ids", 0),
+    ]
 
 
 def test_count_filled_fields__counts_set_numbers(session: Session) -> None:
@@ -362,7 +368,7 @@ def test_load_export_records__builds_record_sources_and_labels(
     scopus = _mapped_file("scopus.csv", "scopus", ["Title"])
     record = Record(
         title="Deep learning",
-        authors=[{"family_name": "LeCun", "given_name": "Yann"}],
+        author_names="LeCun, Yann",
         publication_year=2015,
         publication_month=5,
         doi="10.1038/nature14539",
@@ -383,7 +389,7 @@ def test_load_export_records__builds_record_sources_and_labels(
 
     assert export.id == record.id
     assert export.record.title == "Deep learning"
-    assert export.record.authors[0].family_name == "LeCun"
+    assert export.record.author_names == "LeCun, Yann"
     date = export.record.publication_date
     assert date is not None
     assert (date.year, date.month, date.day) == (2015, 5, None)

@@ -5,8 +5,13 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING, Protocol
 
-from app.models.record import Affiliation, LabelValue, Record
-from app.parsers.authors import AmbiguousNameSplit
+from app.models.record import LabelValue, Record
+from app.parsers.authors import (
+    author_id,
+    format_author_ids,
+    merge_author_ids,
+    parse_author_ids,
+)
 
 # mapping.py imports ParseSettings at runtime, so FieldMapping is only for annotations.
 if TYPE_CHECKING:
@@ -16,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 _OTHER_IDS_PREFIX = "other_ids."
 _PAGE_RANGE = re.compile(r"^(?P<start>\d+)-(?P<end>\d+)$")
-_ET_AL = "et al."
-_NAME_WITH_ID = re.compile(r"^(?P<name>.*?)\s*\((?P<id>\d+)\)$")
+_TRAILING_ET_AL = re.compile(r"[\s,;|]*\bet al\.$")
+_TRAILING_ID = re.compile(r"\s*\((?P<id>\d+)\)\s*$")
 _DOI = re.compile(r"10\.\d{4,9}/\S+")
 _DIGITS = re.compile(r"\d+")
 _TRAILING_NON_NAME = ".,;:…" + string.whitespace
@@ -34,7 +39,6 @@ class ParseSettings:
     preferred_issn_qualifier: str | None = None
     # Lowercased value -> decision; overrides the built-in spellings.
     label_values: tuple[tuple[str, LabelValue], ...] = ()
-    ambiguous_name_split: AmbiguousNameSplit = "none"
     # Python's csv limit is process-wide, so the parser sets it before each parse.
     csv_field_size_limit: int = 1_000_000
     # Count as empty in any text field, so the next key mapped to it is used.
@@ -147,8 +151,10 @@ class DropEtAl:
         mapping: "FieldMapping",
         settings: ParseSettings,
     ) -> Record:
-        authors = [author for author in record.authors if author.full_name != _ET_AL]
-        return record.model_copy(update={"authors": authors})
+        if not record.author_names:
+            return record
+        names = _TRAILING_ET_AL.sub("", record.author_names)
+        return record.model_copy(update={"author_names": names or None})
 
 
 @dataclass(frozen=True)
@@ -160,13 +166,10 @@ class StripLastAuthorTrailing:
         mapping: "FieldMapping",
         settings: ParseSettings,
     ) -> Record:
-        last_name = record.authors[-1].full_name if record.authors else None
-        if not last_name:
+        if not record.author_names:
             return record
-        authors = list(record.authors)
-        full_name = last_name.rstrip(_TRAILING_NON_NAME)
-        authors[-1] = authors[-1].model_copy(update={"full_name": full_name})
-        return record.model_copy(update={"authors": authors})
+        names = record.author_names.rstrip(_TRAILING_NON_NAME)
+        return record.model_copy(update={"author_names": names or None})
 
 
 @dataclass(frozen=True)
@@ -257,7 +260,11 @@ class CitationParts:
 
 @dataclass(frozen=True)
 class EmbeddedAuthorIds:
-    """Scopus appends the author id to each full name: "Teng, Yu (60652739200)"."""
+    """Scopus appends the author id to each full name: "Teng, Yu (60652739200)".
+
+    The ids are added to each author's ids; when they can't be matched to the
+    authors by position they are dropped, but the names are still cleaned.
+    """
 
     id_key: str
 
@@ -268,20 +275,21 @@ class EmbeddedAuthorIds:
         mapping: "FieldMapping",
         settings: ParseSettings,
     ) -> Record:
-        authors = []
-        for author in record.authors:
-            match = _NAME_WITH_ID.match(author.full_name or "")
-            if match is None:
-                authors.append(author)
-                continue
-            names = {
-                name: _NAME_WITH_ID.sub(r"\g<name>", value)
-                for name in ("full_name", "family_name", "given_name")
-                if (value := getattr(author, name))
-            }
-            other_ids = {**author.other_ids, self.id_key: match["id"]}
-            authors.append(author.model_copy(update={**names, "other_ids": other_ids}))
-        return record.model_copy(update={"authors": authors})
+        separator = mapping.author_separator("names")
+        if not record.author_names or separator is None:
+            return record
+        names = record.author_names.split(separator)
+        matches = [_TRAILING_ID.search(name) for name in names]
+        if not any(matches):
+            return record
+        new_ids = [[author_id(self.id_key, m["id"])] if m else [] for m in matches]
+        merged = merge_author_ids(
+            parse_author_ids(record.author_ids), new_ids, "author names"
+        )
+        cleaned = separator.join(_TRAILING_ID.sub("", name) for name in names)
+        return record.model_copy(
+            update={"author_names": cleaned, "author_ids": format_author_ids(merged)}
+        )
 
 
 @dataclass(frozen=True)
@@ -300,12 +308,15 @@ class AffiliationLeadingName:
         mapping: "FieldMapping",
         settings: ParseSettings,
     ) -> Record:
-        authors = []
-        for author in record.authors:
-            affiliations = [
-                Affiliation(name=name)
-                for affiliation in author.affiliations
-                if (name := (affiliation.name or "").partition(self.separator)[2])
-            ]
-            authors.append(author.model_copy(update={"affiliations": affiliations}))
-        return record.model_copy(update={"authors": authors})
+        between = mapping.author_separator("affiliations")
+        if not record.author_affiliations or between is None:
+            return record
+        kept = []
+        for affiliation in record.author_affiliations.split(between):
+            name, found, rest = affiliation.partition(self.separator)
+            if found and rest:
+                leading = name[: len(name) - len(name.lstrip())]
+                kept.append(leading + rest)
+        return record.model_copy(
+            update={"author_affiliations": between.join(kept) or None}
+        )

@@ -345,48 +345,36 @@ def test_parse_bibtex_file__reads_realistic_export() -> None:
     assert second.pages == "7-9"
 
 
-def test_parse_bibtex_text__splits_authors_on_and() -> None:
+def test_parse_bibtex_text__joins_authors_split_on_and() -> None:
     text = "@article{key1, author = {Smith, John and Doe, Jane AND Roe, Rick}}"
 
-    authors = parse_bibtex_text(text, _MAPPING).rows[0].record.authors
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
 
-    assert [a.full_name for a in authors] == ["Smith, John", "Doe, Jane", "Roe, Rick"]
+    assert record.author_names == "Smith, John|Doe, Jane|Roe, Rick"
 
 
 def test_parse_bibtex_text__and_inside_braces_stays_one_author() -> None:
     text = "@article{key1, author = {{Barnes and Noble} and Doe, Jane}}"
 
-    authors = parse_bibtex_text(text, _MAPPING).rows[0].record.authors
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
 
-    assert [a.full_name for a in authors] == ["Barnes and Noble", "Doe, Jane"]
-
-
-def test_parse_bibtex_text__family_given_author_is_split() -> None:
-    text = '@article{key1, author = {M{\\"u}ller, Hans R.}}'
-
-    author = parse_bibtex_text(text, _MAPPING).rows[0].record.authors[0]
-
-    assert author.full_name == "Müller, Hans R."
-    assert author.family_name == "Müller"
-    assert author.given_name == "Hans R."
+    assert record.author_names == "Barnes and Noble|Doe, Jane"
 
 
-def test_parse_bibtex_text__given_family_author_keeps_full_name_only() -> None:
-    text = "@article{key1, author = {Jane Doe}}"
+def test_parse_bibtex_text__author_names_are_cleaned_but_not_split() -> None:
+    text = '@article{key1, author = {M{\\"u}ller, Hans R. and Jane Doe}}'
 
-    author = parse_bibtex_text(text, _MAPPING).rows[0].record.authors[0]
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
 
-    assert author.full_name == "Jane Doe"
-    assert author.family_name is None
-    assert author.given_name is None
+    assert record.author_names == "Müller, Hans R.|Jane Doe"
 
 
 def test_parse_bibtex_text__authors_ignore_keyword_delimiter() -> None:
     text = "@article{key1, author = {Smith; Jr., John and Doe, Jane}}"
 
-    authors = parse_bibtex_text(text, _MAPPING).rows[0].record.authors
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
 
-    assert [a.full_name for a in authors] == ["Smith; Jr., John", "Doe, Jane"]
+    assert record.author_names == "Smith; Jr., John|Doe, Jane"
 
 
 def test_parse_bibtex_record__unmapped_author_field_adds_no_authors() -> None:
@@ -394,7 +382,7 @@ def test_parse_bibtex_record__unmapped_author_field_adds_no_authors() -> None:
 
     row = parse_bibtex_record([("title", "T"), ("author", "Doe, Jane")], mapping)
 
-    assert row.record.authors == []
+    assert row.record.author_names is None
 
 
 def test_read_bibtex_fields__file_without_entries_has_no_samples(
@@ -468,17 +456,13 @@ def test_parse_bibtex_file__default_mapping_on_realistic_export() -> None:
 
     first, second = (row.record for row in parse_bibtex_file(path, mapping).rows)
 
-    assert [a.full_name for a in first.authors] == [
-        "Smith, John A.",
-        "Müller, Hans",
-        "Barnes and Noble",
-    ]
+    assert first.author_names == "Smith, John A.|Müller, Hans|Barnes and Noble"
     assert first.issue == "3"
     assert first.doi == "10.1016/j.jbi.2024.101"
     assert first.publication_date is not None
     assert (first.publication_date.year, first.publication_date.month) == (2024, 3)
     assert second.journal == "Proceedings of the 5th Conference"
-    assert [a.full_name for a in second.authors] == ["Jane Doe"]
+    assert second.author_names == "Jane Doe"
 
 
 def test_parse_bibtex_file__reads_scopus_export() -> None:
@@ -491,7 +475,9 @@ def test_parse_bibtex_file__reads_scopus_export() -> None:
     assert len(result.rows) == 10
     olsen = next(r.record for r in result.rows if r.raw_fields["@key"] == "Olsen202619")
     assert olsen.publication_type == "article"
-    assert [a.family_name for a in olsen.authors] == ["Olsen", "McDonald", "Kinney"]
+    assert olsen.author_names == (
+        "Olsen, Paul E.|McDonald, Nicholas G.|Kinney, Sean T."
+    )
     assert olsen.journal == "GSA Field Guides"
     assert olsen.volume == "77"
     assert olsen.pages == "19-65"

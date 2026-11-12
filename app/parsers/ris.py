@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
 
-from app.models.record import Author
+from app.parsers.authors import AuthorIds, author_id
 from app.parsers.common import (
     FileSummary,
     ParsedRow,
@@ -16,14 +16,11 @@ from app.parsers.common import (
 )
 from app.parsers.mapping import (
     LINE_DELIMITER,
-    NAME_ROLES,
     AuthorsRow,
     FieldMapping,
     RowDefaults,
     Suggest,
-    add_author_detail,
     apply_line_mapping,
-    author_for_name,
     join_tag_lines,
     override_aliases,
 )
@@ -70,27 +67,30 @@ _END_TAG = "ER"
 _TYPE_TAG = "TY"
 
 
-def _authors_from_lines(
-    lines: list[tuple[str, str]], rows: dict[str, AuthorsRow], settings: ParseSettings
-) -> list[Author]:
-    """A detail line (affiliation, ORCID, ID) belongs to the author directly above it.
-
-    Any other tag in between ends the author, so a block of affiliations listed
-    after all authors (as Scopus does) is not pinned on the last one.
-    """
-    authors: list[Author] = []
-    current: Author | None = None
+def _author_lines(
+    lines: list[tuple[str, str]], rows: dict[str, AuthorsRow]
+) -> tuple[list[tuple[str, str]], AuthorIds]:
+    """An ID line belongs to the author directly above it; an affiliation line may
+    sit in between, any other tag ends the author. Every name and affiliation
+    line is kept: Scopus lists the affiliations after all authors."""
+    kept: list[tuple[str, str]] = []
+    slots: AuthorIds = []
+    current: list[str] | None = None
     for tag, value in lines:
         row = rows.get(tag)
         if row is None:
             current = None
-        elif row.role in NAME_ROLES:
-            if value:
-                current = author_for_name(value, row, settings)
-                authors.append(current)
-        elif current is not None and value:
-            add_author_detail(current, row, value)
-    return authors
+        elif not value:
+            continue
+        elif row.role == "names":
+            current = []
+            slots.append(current)
+            kept.append((tag, value))
+        elif row.role == "affiliations":
+            kept.append((tag, value))
+        elif current is not None:
+            current.append(author_id(row.id_key, value))
+    return kept, slots
 
 
 def parse_ris_record(
@@ -99,9 +99,7 @@ def parse_ris_record(
     settings: ParseSettings = NO_QUIRKS,
 ) -> ParsedRow:
     raw_fields = join_tag_lines(lines)
-    record = apply_line_mapping(
-        lines, raw_fields, mapping, settings, _authors_from_lines
-    )
+    record = apply_line_mapping(lines, raw_fields, mapping, settings, _author_lines)
     return ParsedRow(record=record, raw_fields=raw_fields)
 
 

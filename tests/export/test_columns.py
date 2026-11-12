@@ -1,7 +1,6 @@
 import pytest
 
 from app.export.columns import (
-    AuthorsColumn,
     DateColumn,
     ExportColumn,
     ExportRecord,
@@ -15,7 +14,7 @@ from app.export.columns import (
     fill_count,
 )
 from app.export.options import ExportOptions
-from app.models.record import Author, Label, PartialDate, Record
+from app.models.record import Label, PartialDate, Record
 
 _OPTIONS = ExportOptions(empty_columns=True)
 
@@ -58,55 +57,27 @@ def _value(record: ExportRecord, key: str, options: ExportOptions = _OPTIONS) ->
     )
 
 
-_AUTHORS = [
-    Author(family_name="LeCun", given_name="Yann"),
-    Author(family_name="Bengio", given_name="Yoshua"),
-    Author(full_name="Hinton Geoffrey E."),
-]
-
-
-def test_column_value__authors_last_first_by_default() -> None:
-    record = _record(authors=_AUTHORS)
-
-    assert _value(record, "authors") == (
-        "LeCun, Yann; Bengio, Yoshua; Hinton Geoffrey E."
-    )
-
-
-@pytest.mark.parametrize(
-    ("column", "expected"),
-    [
-        (
-            AuthorsColumn(key="authors", label="", name="", format="first_last"),
-            "Yann LeCun; Yoshua Bengio; Hinton Geoffrey E.",
-        ),
-        (
-            AuthorsColumn(key="authors", label="", name="", format="full_name"),
-            "Yann LeCun; Yoshua Bengio; Hinton Geoffrey E.",
-        ),
-        (
-            AuthorsColumn(
-                key="authors",
-                label="",
-                name="",
-                name_separator=" ",
-                author_separator=" and ",
-            ),
-            "LeCun Yann and Bengio Yoshua and Hinton Geoffrey E.",
-        ),
-    ],
-)
-def test_column_value__authors_options(column: AuthorsColumn, expected: str) -> None:
-    assert column_value(column, _record(authors=_AUTHORS), _OPTIONS) == expected
-
-
-def test_column_value__authors_full_name_format_prefers_stored_full_name() -> None:
+def test_column_value__author_fields_are_written_as_stored() -> None:
     record = _record(
-        authors=[Author(family_name="Smith", given_name="J.", full_name="Smith, John")]
+        author_names="LeCun, Yann|Bengio, Yoshua",
+        author_ids="orcid:1|",
+        author_affiliations="NYU|Mila",
     )
-    column = AuthorsColumn(key="authors", label="", name="", format="full_name")
 
-    assert column_value(column, record, _OPTIONS) == "Smith, John"
+    assert _value(record, "author_names") == "LeCun, Yann|Bengio, Yoshua"
+    assert _value(record, "author_ids") == "orcid:1|"
+    assert _value(record, "author_affiliations") == "NYU|Mila"
+
+
+def test_export_columns__author_columns_follow_title() -> None:
+    columns = export_columns([_record()], _OPTIONS)
+
+    assert [(c.key, c.name) for c in columns[1:5]] == [
+        ("title", "Title"),
+        ("author_names", "Authors"),
+        ("author_ids", "Author IDs"),
+        ("author_affiliations", "Affiliations"),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -252,7 +223,7 @@ def test_export_columns__leaves_out_empty_columns_by_default() -> None:
     assert "title" in keys
     assert "doi" in keys
     assert "abstract" not in keys
-    assert "authors" not in keys
+    assert "author_names" not in keys
 
 
 def test_export_columns__empty_columns_option_keeps_them() -> None:

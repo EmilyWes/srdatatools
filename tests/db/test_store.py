@@ -20,8 +20,8 @@ from app.db.store import (
     remove_source_file,
     store_parsed_rows,
 )
-from app.models.record import Affiliation, Author, PartialDate
 from app.models.record import Label as LabelSchema
+from app.models.record import PartialDate
 from app.models.record import Record as RecordSchema
 
 
@@ -204,62 +204,27 @@ def test_store_parsed_rows__handles_multiple_rows_in_one_call(
     assert [record.title for record in records] == ["First", "Second", "Third"]
 
 
-def test_store_parsed_rows__no_authors_is_empty_list(session: Session) -> None:
-    store_parsed_rows(
-        session,
-        filename="scopus_export.csv",
-        path=None,
-        format="csv",
-        parsed_rows=[(RecordSchema(title="No Authors"), {})],
+def test_store_parsed_rows__stores_author_fields(session: Session) -> None:
+    schema = RecordSchema(
+        title="A Study of Things",
+        author_names="Smith, Jane|Doe, John",
+        author_ids="orcid:0000-0001-2345-6789|",
+        author_affiliations="University of Example",
     )
-    session.commit()
-
-    assert session.query(Record).one().authors == []
-
-
-def test_store_parsed_rows__stores_authors_in_order_as_full_dumps(
-    session: Session,
-) -> None:
-    jane = Author(
-        full_name="Jane Smith",
-        orcid="0000-0001-2345-6789",
-        affiliations=[Affiliation(name="University of Example")],
-    )
-    john = Author(full_name="John Doe")
-    schema = RecordSchema(title="A Study of Things", authors=[jane, john])
 
     store_parsed_rows(
         session,
-        filename="scopus_export.csv",
+        filename="scopus_export.ris",
         path=None,
-        format="csv",
+        format="ris",
         parsed_rows=[(schema, {})],
     )
     session.commit()
 
     record = session.query(Record).one()
-    assert record.authors == [jane.model_dump(), john.model_dump()]
-    assert [Author.model_validate(entry) for entry in record.authors] == [jane, john]
-
-
-def test_store_parsed_rows__same_orcid_on_two_records_is_stored_on_each(
-    session: Session,
-) -> None:
-    author = Author(full_name="Jane Smith", orcid="0000-0001-2345-6789")
-    first = RecordSchema(title="First Paper", authors=[author])
-    second = RecordSchema(title="Second Paper", authors=[author])
-
-    store_parsed_rows(
-        session,
-        filename="scopus_export.csv",
-        path=None,
-        format="csv",
-        parsed_rows=[(first, {}), (second, {})],
-    )
-    session.commit()
-
-    records = session.query(Record).order_by(Record.title).all()
-    assert [r.authors[0]["orcid"] for r in records] == [author.orcid, author.orcid]
+    assert record.author_names == "Smith, Jane|Doe, John"
+    assert record.author_ids == "orcid:0000-0001-2345-6789|"
+    assert record.author_affiliations == "University of Example"
 
 
 def test_store_parsed_rows__stores_skipped_rows_on_source_file(

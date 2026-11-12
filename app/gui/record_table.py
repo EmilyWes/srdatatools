@@ -55,11 +55,13 @@ _LABEL_FORMATS: dict[LabelFormat, str] = {"numbers": "Numbers", "words": "Words"
 COLUMNS: dict[str, str] = {
     "doi": "DOI",
     "title": "Title",
-    "authors": "Authors",
+    "author_names": "Authors",
     "publication_year": "Publication year",
     "journal": "Journal",
     "sources": "Sources",
     "abstract": "Abstract",
+    "author_ids": "Author IDs",
+    "author_affiliations": "Affiliations",
     "publication_month": "Publication month",
     "publication_day": "Publication day",
     "conference_name": "Conference",
@@ -77,7 +79,7 @@ COLUMNS: dict[str, str] = {
     "url": "URL",
     "notes": "Notes",
 }
-DEFAULT_COLUMNS = ["doi", "title", "authors"]
+DEFAULT_COLUMNS = ["doi", "title", "author_names"]
 
 
 @dataclass
@@ -157,20 +159,6 @@ def reset_label_format(session: Session) -> None:
     delete_setting(session, _LABEL_FORMAT_KEY)
 
 
-def _author_name(author: dict[str, Any]) -> str:
-    if author.get("full_name"):
-        return str(author["full_name"])
-    parts = [author.get("family_name"), author.get("given_name")]
-    return ", ".join(part for part in parts if part)
-
-
-def _authors(authors: list[dict[str, Any]]) -> str:
-    if not authors:
-        return ""
-    first = _author_name(authors[0])
-    return f"{first} et al." if len(authors) > 1 else first
-
-
 def _sources(sources: Sequence[str | None]) -> str:
     return ", ".join(dict.fromkeys(source_label(source) for source in sources))
 
@@ -178,9 +166,7 @@ def _sources(sources: Sequence[str | None]) -> str:
 def row_for(values: Mapping[str, Any]) -> dict[str, Any]:
     row: dict[str, Any] = {}
     for key, value in values.items():
-        if key == "authors":
-            value = _authors(value)
-        elif isinstance(value, list):
+        if isinstance(value, list):
             value = "; ".join(value)
         elif isinstance(value, dict):
             value = "; ".join(f"{name}: {id_}" for name, id_ in value.items())

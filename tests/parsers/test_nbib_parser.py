@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 import app.parsers.mapping as mapping_module
-from app.models.record import Author, Record
+from app.models.record import Record
 from app.parsers import nbib
 from app.parsers.common import SkippedRow
 from app.parsers.mapping import (
@@ -74,8 +74,7 @@ def test_parse_nbib_text__repeated_author_tags_become_separate_authors() -> None
 
     result = parse_nbib_text(text, _MAPPING)
 
-    authors = result.rows[0].record.authors
-    assert [author.full_name for author in authors] == ["Smith, John", "Doe, Jane"]
+    assert result.rows[0].record.author_names == "Smith, John|Doe, Jane"
 
 
 def test_parse_nbib_text__repeated_keyword_tags_collect_all() -> None:
@@ -354,10 +353,7 @@ def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
 
     first, second = (row.record for row in result.rows)
     assert first.pmid == "31234567"
-    assert [author.full_name for author in first.authors] == [
-        "Smith, John A",
-        "Doe, Jane",
-    ]
+    assert first.author_names == "Smith, John A|Doe, Jane"
     assert first.pages == "100-110"
     assert first.doi == "10.1016/j.jbi.2020.1"
     assert first.other_ids == {"pmc": "PMC7000001"}
@@ -439,8 +435,8 @@ _AUTHOR_MAPPING = mapping_of(
 )
 
 
-def _parse_authors(text: str, mapping: FieldMapping = _AUTHOR_MAPPING) -> list[Author]:
-    return parse_nbib_text(text, mapping).rows[0].record.authors
+def _parse_authors(text: str, mapping: FieldMapping = _AUTHOR_MAPPING) -> Record:
+    return parse_nbib_text(text, mapping).rows[0].record
 
 
 def test_parse_nbib_text__auid_orcid_attaches_to_preceding_author() -> None:
@@ -452,12 +448,9 @@ def test_parse_nbib_text__auid_orcid_attaches_to_preceding_author() -> None:
         "AUID- ORCID: 0000-0002-6000-6450\n"
     )
 
-    authors = _parse_authors(text)
+    record = _parse_authors(text)
 
-    assert [a.orcid for a in authors] == [
-        "0000-0001-8894-9875",
-        "0000-0002-6000-6450",
-    ]
+    assert record.author_ids == "orcid:0000-0001-8894-9875|orcid:0000-0002-6000-6450"
 
 
 def test_parse_nbib_text__orcid_url_prefix_is_stripped() -> None:
@@ -469,24 +462,35 @@ def test_parse_nbib_text__orcid_url_prefix_is_stripped() -> None:
         "AUID- ORCID: http://orcid.org/0000-0002-6000-6450\n"
     )
 
-    authors = _parse_authors(text)
+    record = _parse_authors(text)
 
-    assert [a.orcid for a in authors] == [
-        "0000-0001-8894-9875",
-        "0000-0002-6000-6450",
-    ]
+    assert record.author_ids == "orcid:0000-0001-8894-9875|orcid:0000-0002-6000-6450"
 
 
-def test_parse_nbib_text__non_orcid_auid_goes_to_author_other_ids() -> None:
+def test_parse_nbib_text__non_orcid_auid_keeps_its_scheme_as_key() -> None:
     text = "PMID- 1\nFAU - Smith, John\nAUID- ISNI: 0000 0001 2345 6789\n"
 
-    author = _parse_authors(text)[0]
-
-    assert author.orcid is None
-    assert author.other_ids == {"isni": "0000 0001 2345 6789"}
+    assert _parse_authors(text).author_ids == "isni:0000 0001 2345 6789"
 
 
-def test_parse_nbib_text__multiple_ad_lines_become_separate_affiliations() -> None:
+def test_parse_nbib_text__auid_without_scheme_uses_row_id_key() -> None:
+    text = "PMID- 1\nFAU - Smith, John\nAUID- 12345\n"
+
+    assert _parse_authors(text).author_ids == "auid:12345"
+
+
+def test_parse_nbib_text__several_auids_of_one_author_share_a_slot() -> None:
+    text = (
+        "PMID- 1\n"
+        "FAU - Smith, John\n"
+        "AUID- ORCID: 0000-0001-8894-9875\n"
+        "AUID- ISNI: 1\n"
+    )
+
+    assert _parse_authors(text).author_ids == "orcid:0000-0001-8894-9875, isni:1"
+
+
+def test_parse_nbib_text__ad_lines_are_joined_in_order() -> None:
     text = (
         "PMID- 1\n"
         "FAU - Smith, John\n"
@@ -496,15 +500,11 @@ def test_parse_nbib_text__multiple_ad_lines_become_separate_affiliations() -> No
         "AD  - Department C, University Z.\n"
     )
 
-    authors = _parse_authors(text)
-
-    assert [[aff.name for aff in a.affiliations] for a in authors] == [
-        [
-            "Department A, University X.",
-            "Department B, University Y. smith@example.org.",
-        ],
-        ["Department C, University Z."],
-    ]
+    assert _parse_authors(text).author_affiliations == (
+        "Department A, University X."
+        "|Department B, University Y. smith@example.org."
+        "|Department C, University Z."
+    )
 
 
 def test_parse_nbib_text__ad_continuation_line_is_joined() -> None:
@@ -515,20 +515,20 @@ def test_parse_nbib_text__ad_continuation_line_is_joined() -> None:
         "      Blacksburg, VA, USA.\n"
     )
 
-    author = _parse_authors(text)[0]
-
-    assert author.affiliations[0].name == (
+    assert _parse_authors(text).author_affiliations == (
         "Department of Geosciences, Virginia Tech, Blacksburg, VA, USA."
     )
 
 
-def test_parse_nbib_text__author_without_auid_or_ad_has_none() -> None:
-    text = "PMID- 1\nFAU - Smith, John\nAD  - Department A.\nFAU - Doe, Jane\n"
+def test_parse_nbib_text__author_without_auid_keeps_an_empty_id_slot() -> None:
+    text = (
+        "PMID- 1\n"
+        "FAU - Smith, John\n"
+        "FAU - Doe, Jane\n"
+        "AUID- ORCID: 0000-0002-6000-6450\n"
+    )
 
-    doe = _parse_authors(text)[1]
-
-    assert doe.orcid is None
-    assert doe.affiliations == []
+    assert _parse_authors(text).author_ids == "|orcid:0000-0002-6000-6450"
 
 
 def test_parse_nbib_text__auid_ad_before_first_author_are_ignored() -> None:
@@ -539,13 +539,12 @@ def test_parse_nbib_text__auid_ad_before_first_author_are_ignored() -> None:
         "FAU - Smith, John\n"
     )
 
-    author = _parse_authors(text)[0]
+    record = _parse_authors(text)
 
-    assert author.orcid is None
-    assert author.affiliations == []
+    assert (record.author_ids, record.author_affiliations) == (None, None)
 
 
-def test_parse_nbib_text__au_fallback_author_tag_groups_auid_ad() -> None:
+def test_parse_nbib_text__au_fallback_author_tag_groups_auid() -> None:
     mapping = mapping_of(
         {"AU": "authors", "AUID": _IDS, "AD": _AFFILIATIONS},
         defaults=ROW_DEFAULTS,
@@ -558,14 +557,14 @@ def test_parse_nbib_text__au_fallback_author_tag_groups_auid_ad() -> None:
         "AD  - Department A.\n"
     )
 
-    authors = _parse_authors(text, mapping)
+    record = _parse_authors(text, mapping)
 
-    assert [a.full_name for a in authors] == ["Smith J", "Doe J"]
-    assert authors[0].orcid == "0000-0001-8894-9875"
-    assert authors[1].affiliations[0].name == "Department A."
+    assert record.author_names == "Smith J|Doe J"
+    assert record.author_ids == "orcid:0000-0001-8894-9875|"
+    assert record.author_affiliations == "Department A."
 
 
-def test_parse_nbib_text__unmapped_auid_ad_are_not_attached() -> None:
+def test_parse_nbib_text__unmapped_auid_ad_are_not_read() -> None:
     text = (
         "PMID- 1\n"
         "FAU - Smith, John\n"
@@ -573,23 +572,10 @@ def test_parse_nbib_text__unmapped_auid_ad_are_not_attached() -> None:
         "AD  - Department A.\n"
     )
 
-    author = _parse_authors(text, _MAPPING)[0]
+    record = _parse_authors(text, _MAPPING)
 
-    assert author.orcid is None
-    assert author.affiliations == []
-
-
-def test_parse_nbib_text__auid_ad_values_are_not_author_names() -> None:
-    text = (
-        "PMID- 1\n"
-        "FAU - Smith, John\n"
-        "AUID- ORCID: 0000-0001-8894-9875\n"
-        "AD  - Department A.\n"
-    )
-
-    authors = _parse_authors(text)
-
-    assert [a.full_name for a in authors] == ["Smith, John"]
+    assert record.author_names == "Smith, John"
+    assert (record.author_ids, record.author_affiliations) == (None, None)
 
 
 def test_parse_nbib_text__ad_mapped_elsewhere_behaves_like_normal_tag() -> None:
@@ -599,7 +585,7 @@ def test_parse_nbib_text__ad_mapped_elsewhere_behaves_like_normal_tag() -> None:
     record = parse_nbib_text(text, mapping).rows[0].record
 
     assert record.notes == "Department A."
-    assert record.authors[0].affiliations == []
+    assert record.author_affiliations is None
 
 
 def test_suggest_nbib_mapping__maps_auid_and_ad_to_authors() -> None:
@@ -610,33 +596,10 @@ def test_suggest_nbib_mapping__maps_auid_and_ad_to_authors() -> None:
     }
 
 
-def test_parse_nbib_text__fau_is_split_into_family_and_given_name() -> None:
-    author = _parse_authors("PMID- 1\nFAU - Agnolín, Federico L\n")[0]
+def test_parse_nbib_text__names_are_kept_as_in_the_file() -> None:
+    record = _parse_authors("PMID- 1\nFAU - Agnolín, Federico L\nFAU - Madonna\n")
 
-    assert (author.family_name, author.given_name) == ("Agnolín", "Federico L")
-    assert author.full_name == "Agnolín, Federico L"
-
-
-def test_parse_nbib_text__fau_suffix_stays_in_given_name() -> None:
-    author = _parse_authors("PMID- 1\nFAU - Smith, John A Jr\n")[0]
-
-    assert (author.family_name, author.given_name) == ("Smith", "John A Jr")
-
-
-def test_parse_nbib_text__name_without_comma_is_not_split() -> None:
-    author = _parse_authors("PMID- 1\nFAU - Madonna\n")[0]
-
-    assert (author.family_name, author.given_name) == (None, None)
-    assert author.full_name == "Madonna"
-
-
-def test_parse_nbib_text__au_fallback_name_is_not_split() -> None:
-    mapping = mapping_of({"AU": "authors"}, defaults=ROW_DEFAULTS)
-
-    author = _parse_authors("PMID- 1\nAU  - Müller RT\n", mapping)[0]
-
-    assert (author.family_name, author.given_name) == (None, None)
-    assert author.full_name == "Müller RT"
+    assert record.author_names == "Agnolín, Federico L|Madonna"
 
 
 _KEYWORD_MAPPING = suggest_nbib_mapping(["OT", "MH"])
@@ -689,7 +652,7 @@ def test_parse_nbib_text__bti_fills_journal() -> None:
     assert record.journal == "Micro-, Meso- and Macro-Dynamics of the Brain"
 
 
-def test_parse_nbib_text__editor_ad_after_author_is_not_attached() -> None:
+def test_parse_nbib_text__editor_ad_is_left_out() -> None:
     text = (
         "PMID- 1\n"
         "FAU - Smith, John\n"
@@ -698,12 +661,10 @@ def test_parse_nbib_text__editor_ad_after_author_is_not_attached() -> None:
         "AD  - Department B.\n"
     )
 
-    author = _parse_authors(text)[0]
-
-    assert [a.name for a in author.affiliations] == ["Department A."]
+    assert _parse_authors(text).author_affiliations == "Department A."
 
 
-def test_parse_nbib_text__editor_auid_is_not_attached() -> None:
+def test_parse_nbib_text__editor_auid_is_left_out() -> None:
     text = (
         "PMID- 1\n"
         "FAU - Smith, John\n"
@@ -711,7 +672,7 @@ def test_parse_nbib_text__editor_auid_is_not_attached() -> None:
         "AUID- ORCID: 0000-0002-6000-6450\n"
     )
 
-    assert _parse_authors(text)[0].orcid is None
+    assert _parse_authors(text).author_ids is None
 
 
 def test_parse_nbib_text__author_after_editor_gets_its_own_ad() -> None:
@@ -723,10 +684,10 @@ def test_parse_nbib_text__author_after_editor_gets_its_own_ad() -> None:
         "AD  - Department A.\n"
     )
 
-    authors = _parse_authors(text)
+    record = _parse_authors(text)
 
-    assert [a.full_name for a in authors] == ["Smith, John"]
-    assert [a.name for a in authors[0].affiliations] == ["Department A."]
+    assert record.author_names == "Smith, John"
+    assert record.author_affiliations == "Department A."
 
 
 def test_parse_nbib_record__strips_is_qualifier() -> None:
@@ -753,10 +714,9 @@ def test_parse_nbib_record__attaches_auid_and_ad_to_preceding_fau() -> None:
 
     row = parse_nbib_record(lines, mapping)
 
-    [author] = row.record.authors
-    assert author.family_name == "Smith"
-    assert author.orcid == "0000-0001-2345-6789"
-    assert [a.name for a in author.affiliations] == ["University X"]
+    assert row.record.author_names == "Smith, John"
+    assert row.record.author_ids == "orcid:0000-0001-2345-6789"
+    assert row.record.author_affiliations == "University X"
 
 
 def _fail_on_bad_title(monkeypatch: pytest.MonkeyPatch) -> None:

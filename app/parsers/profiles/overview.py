@@ -5,7 +5,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, ValidationError
 
 from app.models.record import LabelValue
-from app.parsers.authors import AmbiguousNameSplit
 from app.parsers.common import FileType
 from app.parsers.mapping import LINE_DELIMITER
 from app.parsers.profiles import FormatProfile, profile_for
@@ -38,11 +37,6 @@ _LABEL_KEYS: dict[str, LabelValue] = {
 }
 
 _FIRST_PUBLICATION_TYPE = FirstValue("publication_type", LINE_DELIMITER)
-_NAME_SPLIT_CHOICES: dict[str, str] = {
-    "none": "Don't split",
-    "first": "At the first separator",
-    "last": "At the last separator",
-}
 
 
 class ParsingChoices(BaseModel):
@@ -53,7 +47,6 @@ class ParsingChoices(BaseModel):
     drop_trailing: bool
     id_from_name: bool
     affiliation_start: str
-    name_split: AmbiguousNameSplit
     label_include: str
     label_exclude: str
     label_maybe: str
@@ -76,7 +69,6 @@ class QuirkItem:
     label: str
     hover: str
     control: Control
-    choices: dict[str, str] | None = None
     enabled_by: str | None = None
     wide: bool = False
 
@@ -142,8 +134,8 @@ _AUTHORS = QuirkBox(
         QuirkItem(
             "id_from_name",
             "ID from name",
-            "Scopus adds the author ID to the name (Doe, John (12345)); reads it as"
-            " a separate ID called scopus_author_id.",
+            "Scopus adds the author ID to the name (Doe, John (12345)); removes it"
+            " from the name and adds it to the author IDs as scopus_author_id.",
             "checkbox",
         ),
         QuirkItem(
@@ -154,15 +146,6 @@ _AUTHORS = QuirkBox(
             " delimiter is only a name and is dropped. Leave empty to keep"
             " affiliations as they are.",
             "text",
-        ),
-        QuirkItem(
-            "name_split",
-            "Splitting option",
-            "When splitting author names on a separator, that separator might"
-            " appear several times (John, Doe, Jr.). Choose not to split, or to"
-            " split at the first or last separator.",
-            "select",
-            choices=_NAME_SPLIT_CHOICES,
         ),
     ),
 )
@@ -257,10 +240,10 @@ _FIELD_SIZE = QuirkItem(
 _AUTHOR_COLUMNS = QuirkItem(
     "author_columns",
     "Author matching",
-    "Author rows (names, ORCID, IDs, affiliations) are split on their author"
-    " separator and matched by position: the first non-empty names row sets the"
-    " authors. A row with a different number of entries is ignored (logged for"
-    " developers, not shown here).",
+    "Author names and affiliations are kept as in the file. Author ID rows are"
+    " split on their author separator and matched by position: the first"
+    " non-empty ID row sets the authors. An ID row with a different number of"
+    " entries is ignored (logged for developers, not shown here).",
     "note",
 )
 _FIRST_PUBLICATION_TYPE_ITEM = QuirkItem(
@@ -289,9 +272,9 @@ _CITATION_PARTS_ITEM = QuirkItem(
 _RIS_AUTHOR_DETAILS = QuirkItem(
     "ris.author_details",
     "Author handling",
-    "An AD/C1 (affiliation), ORCID or ID line only belongs to the author directly"
-    " above it. Any other tag in between ends that author, so Scopus's"
-    " affiliation block after all authors isn't pinned on the last one.",
+    "Author name and affiliation lines are joined with |. An author ID line only"
+    " belongs to the author directly above it (affiliation lines may sit in"
+    " between); any other tag in between ends that author.",
     "note",
 )
 _RIS_OUTSIDE_TEXT = QuirkItem(
@@ -367,7 +350,6 @@ def default_choices(file_type: FileType, source: str) -> ParsingChoices:
         affiliation_start=next(
             (q.separator for q in quirks if isinstance(q, AffiliationLeadingName)), ""
         ),
-        name_split=settings.ambiguous_name_split,
         **{
             key: _LABEL_VALUES_SEPARATOR.join(
                 value for value, label in settings.label_values if label == decision
@@ -431,7 +413,6 @@ def profile_with(
         issn_isbn_only_one=choices.only_one,
         preferred_issn_qualifier=choices.preferred_qualifier.strip() or None,
         label_values=_label_values(choices),
-        ambiguous_name_split=choices.name_split,
         csv_field_size_limit=choices.field_size_limit,
         empty_values=tuple(
             value.strip() for value in choices.empty_values if value.strip()

@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from app.models.record import PartialDate, Record
+from app.parsers.authors import AUTHOR_JOINER, parse_author_ids
 from app.parsers.common import FileType, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
 from app.parsers.nbib import parse_nbib_file, read_nbib_tags, suggest_nbib_mapping
@@ -83,12 +84,10 @@ def test_pubmed_small_nbib__book_chapter_uses_book_title_as_journal(
     record = nbib_records["28590685"]
 
     assert record.journal == "Micro-, Meso- and Macro-Dynamics of the Brain"
-    assert len(record.authors) == 11
-    laurent = record.authors[0]
-    assert laurent.family_name == "Laurent"
-    assert len(laurent.affiliations) == 1
-    assert laurent.affiliations[0].name is not None
-    assert laurent.affiliations[0].name.startswith(
+    names = (record.author_names or "").split(AUTHOR_JOINER)
+    assert len(names) == 11
+    assert names[0].startswith("Laurent, ")
+    assert (record.author_affiliations or "").startswith(
         "Max Planck Institute for Brain Research"
     )
 
@@ -96,23 +95,23 @@ def test_pubmed_small_nbib__book_chapter_uses_book_title_as_journal(
 def test_pubmed_small_nbib__authors_have_orcids_and_affiliations(
     nbib_records: dict[str, Record],
 ) -> None:
-    authors = nbib_records["37587301"].authors
+    record = nbib_records["37587301"]
+    names = (record.author_names or "").split(AUTHOR_JOINER)
+    ids = parse_author_ids(record.author_ids)
 
-    assert len(authors) == 9
-    muller, garcia, nesbitt = authors[0], authors[2], authors[8]
-    assert (muller.family_name, muller.given_name) == ("Müller", "Rodrigo T")
-    assert muller.orcid == "0000-0001-8894-9875"
-    assert len(muller.affiliations) == 2
-    assert muller.affiliations[1].name == (
+    assert len(names) == len(ids) == 9
+    assert names[0] == "Müller, Rodrigo T"
+    assert ids[0] == ["orcid:0000-0001-8894-9875"]
+    assert ids[2] == []
+    assert ids[8] == ["orcid:0000-0002-7017-1652"]
+    affiliations = (record.author_affiliations or "").split(AUTHOR_JOINER)
+    assert (
         "Programa de Pós-Graduação em Biodiversidade Animal, Universidade Federal "
         "de Santa Maria, Santa Maria, Brazil. rodrigotmuller@hotmail.com."
-    )
-    assert garcia.orcid is None
-    assert len(garcia.affiliations) == 2
-    assert nesbitt.orcid == "0000-0002-7017-1652"
-    assert [a.name for a in nesbitt.affiliations] == [
+    ) in affiliations
+    assert affiliations[-1] == (
         "Department of Geosciences, Virginia Tech, Blacksburg, VA, USA."
-    ]
+    )
 
 
 def test_pubmed_small_csv__parses_every_record(
@@ -128,7 +127,7 @@ def test_pubmed_small_csv__applies_profile_fixes(
     assert (nature.volume, nature.issue, nature.pages) == ("620", "7974", "589-594")
     assert csv_records["11523304"].pages == "521-522"
     assert nature.publication_date == PartialDate(year=2023)
-    assert csv_records["30527956"].authors[-1].full_name == "Walsworth AK"
+    assert (csv_records["30527956"].author_names or "").endswith(", Walsworth AK")
     assert csv_records["37886492"].other_ids["pmc"] == "PMC10602114"
 
 

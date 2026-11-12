@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from app.models.record import Record
+from app.parsers.authors import AUTHOR_JOINER, parse_author_ids
 from app.parsers.bibtex import (
     parse_bibtex_file,
     read_bibtex_fields,
@@ -88,22 +89,29 @@ def test_openalex_small__ris_and_bibtex_are_not_detected(suffix: str) -> None:
     assert detect_source(path, _FORMAT_BY_SUFFIX[suffix]) is None
 
 
-def test_openalex_small_csv__zips_author_ids_and_orcids(
+def _names(record: Record) -> list[str]:
+    return (record.author_names or "").split(AUTHOR_JOINER)
+
+
+def test_openalex_small_csv__groups_author_ids_and_orcids(
     csv_records: dict[str, Record],
 ) -> None:
-    baron = csv_records[_DINOSAUR_DOI].authors[0]
-    assert baron.full_name == "Matthew G. Baron"
-    assert baron.orcid == "0000-0001-9069-7638"
-    assert baron.other_ids == {"openalex_author_id": "A5091833725"}
+    dinosaur = csv_records[_DINOSAUR_DOI]
+    assert _names(dinosaur)[0] == "Matthew G. Baron"
+    assert set(parse_author_ids(dinosaur.author_ids)[0]) == {
+        "orcid:0000-0001-9069-7638",
+        "openalex_author_id:A5091833725",
+    }
 
-    chicken_authors = csv_records[_CHICKEN_DOI].authors
-    assert len(chicken_authors) == 100
-    hillier = chicken_authors[0]
-    assert (hillier.orcid, hillier.other_ids) == (None, {})
-    mcpherson = chicken_authors[12]
-    assert mcpherson.full_name == "John D. McPherson"
-    assert mcpherson.orcid == "0000-0001-8049-9347"
-    assert mcpherson.other_ids == {"openalex_author_id": "A5047690257"}
+    chicken = csv_records[_CHICKEN_DOI]
+    chicken_ids = parse_author_ids(chicken.author_ids)
+    assert len(_names(chicken)) == len(chicken_ids) == 100
+    assert chicken_ids[0] == []
+    assert _names(chicken)[12] == "John D. McPherson"
+    assert set(chicken_ids[12]) == {
+        "orcid:0000-0001-8049-9347",
+        "openalex_author_id:A5047690257",
+    }
 
 
 def test_openalex_small_csv__applies_profile_fixes(
@@ -120,19 +128,17 @@ def test_openalex_small_csv__applies_profile_fixes(
     assert "[Topic] Paleontology and Evolutionary Biology" in dinosaur.keywords
 
 
-def test_openalex_small_ris__attaches_c1_affiliations_to_authors(
+def test_openalex_small_ris__joins_au_and_c1_lines(
     ris_records: dict[str, Record],
 ) -> None:
-    baron, norman, _ = ris_records[_DINOSAUR_DOI].authors
+    dinosaur = ris_records[_DINOSAUR_DOI]
 
-    assert baron.full_name == "Baron, Matthew"
-    assert baron.affiliations[0].name == (
+    assert _names(dinosaur)[:2] == ["Baron, Matthew", "NORMAN, DAVID"]
+    assert (dinosaur.author_affiliations or "").startswith(
         "Department of Earth Sciences, Natural History Museum, Cromwell Road, "
-        "London SW7 5BD, UK"
+        "London SW7 5BD, UK|"
     )
-    assert norman.full_name == "NORMAN, DAVID"
-    assert norman.affiliations
-    assert ris_records[_CHICKEN_DOI].authors[0].affiliations
+    assert ris_records[_CHICKEN_DOI].author_affiliations
 
 
 def test_openalex_small_bibtex__splits_keywords_on_comma(
@@ -153,7 +159,7 @@ def test_openalex_small__formats_agree_on_ids_and_titles(
     for doi, record in csv_records.items():
         for other in (ris_records[doi], bibtex_records[doi]):
             assert other.title == record.title, doi
-            assert len(other.authors) == len(record.authors), doi
+            assert len(_names(other)) == len(_names(record)), doi
 
 
 @pytest.mark.big

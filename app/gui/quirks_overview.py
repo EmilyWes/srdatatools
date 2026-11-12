@@ -175,8 +175,6 @@ class QuirksScreen:
         widget: Widget
         if item.control == "checkbox":
             widget = ui.checkbox(value=value)
-        elif item.control == "select":
-            widget = ui.select(item.choices or {}, value=value)
         elif item.control == "number":
             widget = ui.number(value=value, min=1, precision=0)
         else:

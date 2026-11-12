@@ -3,7 +3,7 @@ from io import StringIO
 
 import pytest
 
-from app.models.record import Affiliation, Author, Record
+from app.models.record import Record
 from app.parsers.bibtex import parse_bibtex_text, suggest_bibtex_mapping
 from app.parsers.csv_ import parse_csv_text, suggest_mapping
 from app.parsers.mapping import FieldMapping
@@ -101,25 +101,18 @@ def test_openalex_csv__suggests_only_exact_columns() -> None:
     }
 
 
-def test_openalex_csv__zips_author_ids_and_orcids_by_position() -> None:
+_IDS = (
+    "openalex_author_id:A5091833725, orcid:0000-0001-9069-7638"
+    "|openalex_author_id:A5085682707"
+    "|openalex_author_id:A5053220301, orcid:0000-0003-0412-3000"
+)
+
+
+def test_openalex_csv__keeps_names_and_groups_ids_per_author() -> None:
     record = _parse_csv(_AUTHOR_ROW)
 
-    assert record.authors == [
-        Author(
-            full_name="Matthew G. Baron",
-            orcid="0000-0001-9069-7638",
-            other_ids={"openalex_author_id": "A5091833725"},
-        ),
-        Author(
-            full_name="DAVID B. NORMAN",
-            other_ids={"openalex_author_id": "A5085682707"},
-        ),
-        Author(
-            full_name="Paul M. Barrett",
-            orcid="0000-0003-0412-3000",
-            other_ids={"openalex_author_id": "A5053220301"},
-        ),
-    ]
+    assert record.author_names == "Matthew G. Baron|DAVID B. NORMAN|Paul M. Barrett"
+    assert record.author_ids == _IDS
 
 
 def test_openalex_csv__mismatched_column_is_ignored_with_warning(
@@ -130,25 +123,24 @@ def test_openalex_csv__mismatched_column_is_ignored_with_warning(
     with caplog.at_level("WARNING"):
         record = _parse_csv(row)
 
-    assert all(author.orcid is None for author in record.authors)
-    assert [a.other_ids["openalex_author_id"] for a in record.authors] == [
-        "A5091833725",
-        "A5085682707",
-        "A5053220301",
-    ]
+    assert record.author_ids == (
+        "openalex_author_id:A5091833725"
+        "|openalex_author_id:A5085682707"
+        "|openalex_author_id:A5053220301"
+    )
     assert "ORCID" in caplog.text
 
 
-def test_openalex_csv__empty_id_columns_leave_authors_bare() -> None:
+def test_openalex_csv__empty_id_columns_leave_no_ids() -> None:
     record = _parse_csv({"Author": "Robert T. Bakker", "Author IDs": "", "ORCID": ""})
 
-    assert record.authors == [Author(full_name="Robert T. Bakker")]
+    assert (record.author_names, record.author_ids) == ("Robert T. Bakker", None)
 
 
 def test_openalex_csv__unmapped_authors_stay_empty() -> None:
     record = _parse_csv(_AUTHOR_ROW, FieldMapping())
 
-    assert record.authors == []
+    assert (record.author_names, record.author_ids) == (None, None)
 
 
 def test_openalex_csv__ignored_orcid_column_is_not_used() -> None:
@@ -156,48 +148,19 @@ def test_openalex_csv__ignored_orcid_column_is_not_used() -> None:
 
     record = _parse_csv(_AUTHOR_ROW, mapping)
 
-    assert all(author.orcid is None for author in record.authors)
-    assert record.authors[0].other_ids == {"openalex_author_id": "A5091833725"}
+    assert record.author_ids == (
+        "openalex_author_id:A5091833725"
+        "|openalex_author_id:A5085682707"
+        "|openalex_author_id:A5053220301"
+    )
 
 
-def test_openalex_csv__ignored_author_ids_column_is_not_used() -> None:
-    mapping = _without(_suggest_csv(list(_AUTHOR_ROW)), "Author IDs")
-
-    record = _parse_csv(_AUTHOR_ROW, mapping)
-
-    assert all(author.other_ids == {} for author in record.authors)
-    assert record.authors[0].orcid == "0000-0001-9069-7638"
-
-
-def test_openalex_csv__ignored_names_fall_back_to_orcid_for_author_count() -> None:
+def test_openalex_csv__ignored_names_still_give_ids() -> None:
     mapping = _without(_suggest_csv(list(_AUTHOR_ROW)), "Author")
 
     record = _parse_csv(_AUTHOR_ROW, mapping)
 
-    assert record.authors == [
-        Author(
-            orcid="0000-0001-9069-7638",
-            other_ids={"openalex_author_id": "A5091833725"},
-        ),
-        Author(other_ids={"openalex_author_id": "A5085682707"}),
-        Author(
-            orcid="0000-0003-0412-3000",
-            other_ids={"openalex_author_id": "A5053220301"},
-        ),
-    ]
-
-
-def test_openalex_csv__only_author_ids_mapped_gives_id_only_authors() -> None:
-    mapping = _without(_suggest_csv(list(_AUTHOR_ROW)), "Author", "ORCID")
-
-    record = _parse_csv(_AUTHOR_ROW, mapping)
-
-    assert [author.other_ids for author in record.authors] == [
-        {"openalex_author_id": "A5091833725"},
-        {"openalex_author_id": "A5085682707"},
-        {"openalex_author_id": "A5053220301"},
-    ]
-    assert all(a.full_name is None and a.orcid is None for a in record.authors)
+    assert (record.author_names, record.author_ids) == (None, _IDS)
 
 
 def test_openalex_csv__ignored_concept_column_adds_no_concepts() -> None:
@@ -250,7 +213,7 @@ def test_openalex_csv__matches_work_id_and_concept_ids_headers() -> None:
     assert not _CSV_PROFILE.matches("Title,Work ID\nA,W1\n")
 
 
-def test_openalex_ris__attaches_c1_affiliations_to_authors() -> None:
+def test_openalex_ris__joins_au_and_c1_lines() -> None:
     text = (
         "TY  - JOUR\nAU  - Baron, Matthew\nC1  - Natural History Museum\n"
         "AU  - Norman, David\nC1  - University of Cambridge\nER  - \n"
@@ -269,20 +232,10 @@ def test_openalex_ris__attaches_c1_affiliations_to_authors() -> None:
         .record
     )
 
-    assert record.authors == [
-        Author(
-            full_name="Baron, Matthew",
-            family_name="Baron",
-            given_name="Matthew",
-            affiliations=[Affiliation(name="Natural History Museum")],
-        ),
-        Author(
-            full_name="Norman, David",
-            family_name="Norman",
-            given_name="David",
-            affiliations=[Affiliation(name="University of Cambridge")],
-        ),
-    ]
+    assert record.author_names == "Baron, Matthew|Norman, David"
+    assert record.author_affiliations == (
+        "Natural History Museum|University of Cambridge"
+    )
 
 
 def test_openalex_ris__never_matches() -> None:

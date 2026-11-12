@@ -15,20 +15,6 @@ class PartialDate(BaseModel):
         return self
 
 
-class Affiliation(BaseModel):
-    name: str | None = None
-    ror_id: str | None = None
-
-
-class Author(BaseModel):
-    family_name: str | None = None
-    given_name: str | None = None
-    full_name: str | None = None
-    orcid: str | None = None
-    other_ids: dict[str, str] = Field(default_factory=dict)
-    affiliations: list[Affiliation] = Field(default_factory=list)
-
-
 LabelValue = Literal["include", "exclude", "maybe", "unknown", "unlabeled"]
 
 
@@ -40,7 +26,10 @@ class Label(BaseModel):
 
 class Record(BaseModel):
     title: str | None = None
-    authors: list[Author] = Field(default_factory=list)
+    author_names: str | None = None
+    # One slot per author, "key:value" ids; see app.parsers.authors.
+    author_ids: str | None = None
+    author_affiliations: str | None = None
     abstract: str | None = None
     publication_date: PartialDate | None = None
     journal: str | None = None

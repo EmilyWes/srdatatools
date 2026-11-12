@@ -3,7 +3,7 @@ from pathlib import Path
 from app.export.columns import ExportColumn, ExportRecord, export_columns
 from app.export.csv_ import write_csv
 from app.export.options import ExportOptions
-from app.models.record import Author, PartialDate, Record
+from app.models.record import PartialDate, Record
 from app.parsers.csv_ import parse_csv_text, suggest_mapping
 
 _RECORDS = [
@@ -11,10 +11,7 @@ _RECORDS = [
         id=1,
         record=Record(
             title="Deep learning, a review",
-            authors=[
-                Author(family_name="LeCun", given_name="Yann"),
-                Author(family_name="Bengio", given_name="Yoshua"),
-            ],
+            author_names="LeCun, Yann; Bengio, Yoshua",
             abstract="First line.\nSecond line.",
             publication_date=PartialDate(year=2015, month=5),
             doi="10.1038/nature14539",
@@ -25,7 +22,7 @@ _RECORDS = [
         id=2,
         record=Record(
             title="Gradient-based learning applied to document recognition",
-            authors=[Author(family_name="LeCun", given_name="Yann")],
+            author_names="LeCun, Yann",
             publication_date=PartialDate(year=1998),
             doi="10.1109/5.726791",
         ),
@@ -102,10 +99,7 @@ def test_write_csv__round_trips_through_the_csv_importer(tmp_path: Path) -> None
     assert not result.skipped
     first = result.rows[0].record
     assert first.title == "Deep learning, a review"
-    assert [(a.family_name, a.given_name) for a in first.authors] == [
-        ("LeCun", "Yann"),
-        ("Bengio", "Yoshua"),
-    ]
+    assert first.author_names == "LeCun, Yann; Bengio, Yoshua"
     assert first.doi == "10.1038/nature14539"
     assert first.publication_date == PartialDate(year=2015, month=5)
     assert "deep learning" in first.keywords

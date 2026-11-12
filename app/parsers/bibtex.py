@@ -7,6 +7,7 @@ from functools import partial
 from itertools import zip_longest
 from pathlib import Path
 
+from app.parsers.authors import AUTHOR_JOINER
 from app.parsers.common import (
     FileSummary,
     ParsedRow,
@@ -238,7 +239,7 @@ def _split_authors(value: str) -> list[str]:
 
 def _author_lines(value: str) -> str:
     names = (clean_value(_AUTHOR_FIELD, name) for name in _split_authors(value))
-    return LINE_DELIMITER.join(name for name in names if name)
+    return AUTHOR_JOINER.join(name for name in names if name)
 
 
 def parse_bibtex_record(

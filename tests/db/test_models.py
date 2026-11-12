@@ -32,11 +32,12 @@ def test_record__create_with_authors_and_source(session: Session) -> None:
         imported_at=datetime.datetime(2026, 1, 1),
         row_count=1,
     )
-    authors = [
-        {"family_name": "Smith", "orcid": "0000-0001-2345-6789"},
-        {"family_name": "Doe"},
-    ]
-    record = Record(title="A Study of Things", doi="10.1000/abc", authors=authors)
+    record = Record(
+        title="A Study of Things",
+        doi="10.1000/abc",
+        author_names="Smith|Doe",
+        author_ids="orcid:0000-0001-2345-6789|",
+    )
     record.sources = [
         RecordSource(source_file=source_file, raw_fields={"TI": "A Study of Things"})
     ]
@@ -45,12 +46,13 @@ def test_record__create_with_authors_and_source(session: Session) -> None:
 
     fetched = session.query(Record).one()
     assert fetched.title == "A Study of Things"
-    assert fetched.authors == authors
+    assert fetched.author_names == "Smith|Doe"
+    assert fetched.author_ids == "orcid:0000-0001-2345-6789|"
     assert fetched.sources[0].source_file.filename == "pubmed_export.nbib"
     assert fetched.sources[0].raw_fields == {"TI": "A Study of Things"}
 
 
-def test_record__authors_and_skipped_rows_default_to_empty_lists(
+def test_record__no_authors_and_no_skipped_rows(
     session: Session,
 ) -> None:
     session.add(Record(title="No Authors"))
@@ -65,7 +67,7 @@ def test_record__authors_and_skipped_rows_default_to_empty_lists(
     )
     session.commit()
 
-    assert session.query(Record).one().authors == []
+    assert session.query(Record).one().author_names is None
     assert session.query(SourceFile).one().skipped_rows == []
 
 

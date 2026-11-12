@@ -71,8 +71,7 @@ def test_parse_ris_text__repeated_author_tags_become_separate_authors() -> None:
 
     result = parse_ris_text(text, _MAPPING)
 
-    authors = result.rows[0].record.authors
-    assert [author.full_name for author in authors] == ["Smith, John", "Doe, Jane"]
+    assert result.rows[0].record.author_names == "Smith, John|Doe, Jane"
 
 
 _AFFILIATION_MAPPING = mapping_of(
@@ -81,47 +80,78 @@ _AFFILIATION_MAPPING = mapping_of(
 )
 
 
-def test_parse_ris_text__attaches_adjacent_affiliations_to_author() -> None:
+def test_parse_ris_text__joins_affiliation_lines_in_order() -> None:
     text = (
-        "TY  - JOUR\nAU  - Smith, John\nC1  - Uni A\nC1  - Uni B\n"
+        "TY  - JOUR\nAU  - Smith, John\nAD  - Uni A\nAD  - Uni B\n"
         "AU  - Doe, Jane\nAD  - Uni C\nER  - \n"
     )
 
-    authors = parse_ris_text(text, _AFFILIATION_MAPPING).rows[0].record.authors
+    record = parse_ris_text(text, _AFFILIATION_MAPPING).rows[0].record
 
-    assert [author.full_name for author in authors] == ["Smith, John", "Doe, Jane"]
-    assert [a.name for a in authors[0].affiliations] == ["Uni A", "Uni B"]
-    assert [a.name for a in authors[1].affiliations] == ["Uni C"]
-
-
-def test_parse_ris_text__author_without_affiliation_gets_none() -> None:
-    text = "TY  - JOUR\nAU  - Smith, John\nAU  - Doe, Jane\nC1  - Uni C\nER  - \n"
-
-    authors = parse_ris_text(text, _AFFILIATION_MAPPING).rows[0].record.authors
-
-    assert authors[0].affiliations == []
-    assert [a.name for a in authors[1].affiliations] == ["Uni C"]
+    assert record.author_names == "Smith, John|Doe, Jane"
+    assert record.author_affiliations == "Uni A|Uni B|Uni C"
 
 
-def test_parse_ris_text__ignores_affiliations_not_adjacent_to_author() -> None:
+def test_parse_ris_text__first_affiliation_tag_with_lines_wins() -> None:
+    text = "TY  - JOUR\nAU  - Smith, John\nC1  - Uni A\nAD  - Uni B\nER  - \n"
+
+    record = parse_ris_text(text, _AFFILIATION_MAPPING).rows[0].record
+
+    assert record.author_affiliations == "Uni B"
+
+
+def test_parse_ris_text__keeps_affiliations_listed_after_all_authors() -> None:
     text = (
         "TY  - JOUR\nAU  - Smith, John\nAU  - Doe, Jane\nTI  - Some Paper\n"
         "AD  - Uni A\nAD  - Uni B\nER  - \n"
     )
 
-    authors = parse_ris_text(text, _AFFILIATION_MAPPING).rows[0].record.authors
+    record = parse_ris_text(text, _AFFILIATION_MAPPING).rows[0].record
 
-    assert [author.full_name for author in authors] == ["Smith, John", "Doe, Jane"]
-    assert all(author.affiliations == [] for author in authors)
+    assert record.author_affiliations == "Uni A|Uni B"
+
+
+_ID_MAPPING = mapping_of(
+    {
+        "TI": "title",
+        "AU": "authors",
+        "AD": _AFFILIATIONS,
+        "ID": Suggest("authors", {"role": "ids", "id_key": "orcid"}),
+    },
+    defaults=ROW_DEFAULTS,
+)
+
+
+def test_parse_ris_text__id_line_belongs_to_the_author_above() -> None:
+    text = (
+        "TY  - JOUR\nAU  - Smith, John\nAD  - Uni A\n"
+        "ID  - https://orcid.org/0000-0001-2345-6789\n"
+        "AU  - Doe, Jane\nAU  - Roe, Rick\nID  - 0000-0002-0000-0000\nER  - \n"
+    )
+
+    record = parse_ris_text(text, _ID_MAPPING).rows[0].record
+
+    assert record.author_ids == ("orcid:0000-0001-2345-6789||orcid:0000-0002-0000-0000")
+
+
+def test_parse_ris_text__other_tag_ends_the_author_for_id_lines() -> None:
+    text = (
+        "TY  - JOUR\nAU  - Smith, John\nTI  - Some Paper\n"
+        "ID  - 0000-0001-2345-6789\nER  - \n"
+    )
+
+    record = parse_ris_text(text, _ID_MAPPING).rows[0].record
+
+    assert record.author_ids is None
 
 
 def test_parse_ris_text__unmapped_affiliation_tag_is_ignored() -> None:
     text = "TY  - JOUR\nAU  - Smith, John\nC1  - Uni A\nER  - \n"
 
-    authors = parse_ris_text(text, _MAPPING).rows[0].record.authors
+    record = parse_ris_text(text, _MAPPING).rows[0].record
 
-    assert [author.full_name for author in authors] == ["Smith, John"]
-    assert authors[0].affiliations == []
+    assert record.author_names == "Smith, John"
+    assert record.author_affiliations is None
 
 
 def test_parse_ris_text__repeated_keyword_tags_collect_all() -> None:
@@ -315,16 +345,12 @@ def test_parse_ris_text__py_and_da_combine_into_one_date() -> None:
     assert (date.year, date.month, date.day) == (2020, 3, 15)
 
 
-def test_parse_ris_text__splits_names_into_family_and_given() -> None:
+def test_parse_ris_text__keeps_names_as_in_the_file() -> None:
     text = "TY  - JOUR\nAU  - Smith, John\nAU  - Madonna\nER  - \n"
 
     result = parse_ris_text(text, suggest_ris_mapping(["AU"]))
 
-    authors = result.rows[0].record.authors
-    assert [(a.family_name, a.given_name) for a in authors] == [
-        ("Smith", "John"),
-        (None, None),
-    ]
+    assert result.rows[0].record.author_names == "Smith, John|Madonna"
 
 
 def test_suggest_ris_mapping__first_of_alternate_title_tags_wins_in_parse() -> None:
@@ -386,10 +412,7 @@ def test_parse_ris_file__default_mapping_on_realistic_export() -> None:
 
     first = result.rows[0].record
     assert first.publication_type == "JOUR"
-    assert [author.full_name for author in first.authors] == [
-        "Smith, John A.",
-        "Doe, Jane",
-    ]
+    assert first.author_names == "Smith, John A.|Doe, Jane"
     assert first.pages == "100-110"
     assert first.doi == "10.1016/j.jbi.2020.1"
     assert first.publication_date is not None
@@ -469,7 +492,7 @@ def test_parse_ris_record__joins_repeated_tags() -> None:
 
     row = parse_ris_record(lines, _MAPPING)
 
-    assert [a.full_name for a in row.record.authors] == ["Smith, John", "Doe, Jane"]
+    assert row.record.author_names == "Smith, John|Doe, Jane"
     assert row.record.title == "Some Paper"
     assert row.raw_fields["AU"] == "Smith, John\nDoe, Jane"
 
