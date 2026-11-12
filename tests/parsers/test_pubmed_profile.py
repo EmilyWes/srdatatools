@@ -135,22 +135,22 @@ def test_pubmed_csv__suggests_exact_journal_and_nbib_id_keys() -> None:
     assert mapping.match_kinds["Journal/Book"] == "exact"
 
 
-def test_pubmed_csv__suggests_full_name_authors_split_on_comma() -> None:
+def test_pubmed_csv__suggests_author_names_split_on_comma() -> None:
     assert _suggest_csv(["Authors"]).rows == {
-        "Authors": AuthorsRow(role="full_name", delimiter=",", id_key="authors")
+        "Authors": AuthorsRow(role="names", delimiter=",", id_key="authors")
     }
 
 
 def test_pubmed_csv__strips_trailing_period_from_last_author() -> None:
     record = _parse_csv({"PMID": "1", "Authors": "Romano M, Novacek MJ."})
 
-    assert [a.full_name for a in record.authors] == ["Romano M", "Novacek MJ"]
+    assert record.author_names == "Romano M, Novacek MJ"
 
 
 def test_pubmed_csv__drops_et_al() -> None:
     record = _parse_csv({"PMID": "1", "Authors": "Rhodes CJ, Walsworth AK, et al."})
 
-    assert [a.full_name for a in record.authors] == ["Rhodes CJ", "Walsworth AK"]
+    assert record.author_names == "Rhodes CJ, Walsworth AK"
 
 
 def test_pubmed_csv__fills_volume_issue_and_pages_from_citation() -> None:

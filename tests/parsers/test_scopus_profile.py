@@ -3,7 +3,7 @@ from io import StringIO
 
 import pytest
 
-from app.models.record import Affiliation, Author, Record
+from app.models.record import Record
 from app.parsers.bibtex import parse_bibtex_text, suggest_bibtex_mapping
 from app.parsers.csv_ import parse_csv_text, suggest_mapping
 from app.parsers.mapping import AuthorsRow, FieldMapping, Suggest, make_row
@@ -87,41 +87,29 @@ def test_scopus_csv__ignores_conference_details_and_publication_stage() -> None:
     }
 
 
-def test_scopus_csv__zips_author_columns_by_position() -> None:
+_IDS = "scopus_author_id:60652739200|scopus_author_id:59534195400"
+
+
+def test_scopus_csv__cleans_author_columns() -> None:
     record = _parse_csv(_AUTHOR_ROW)
 
-    assert record.authors == [
-        Author(
-            full_name="Teng, Yu",
-            family_name="Teng",
-            given_name="Yu",
-            other_ids={"scopus_author_id": "60652739200"},
-            affiliations=[
-                Affiliation(name="Guangxi Cartier Technology Ltd., Nanning, China")
-            ],
-        ),
-        Author(
-            full_name="Han, Yiyong",
-            family_name="Han",
-            given_name="Yiyong",
-            other_ids={"scopus_author_id": "59534195400"},
-            affiliations=[Affiliation(name="Nanning University, Guangxi, China")],
-        ),
-    ]
+    assert record.author_names == "Teng, Yu; Han, Yiyong"
+    assert record.author_ids == _IDS
+    assert record.author_affiliations == (
+        "Guangxi Cartier Technology Ltd., Nanning, China;"
+        " Nanning University, Guangxi, China"
+    )
 
 
-def test_scopus_csv__abbreviated_names_mapped_by_hand_zip_with_ids() -> None:
+def test_scopus_csv__abbreviated_names_mapped_by_hand() -> None:
     row = {"Authors": "Teng Y.; Han Y.", "Author(s) ID": "60652739200; 59534195400"}
 
     record = _parse_csv(row, _with_abbreviated_names(_suggest_csv(list(row))))
 
-    assert record.authors == [
-        Author(full_name="Teng Y.", other_ids={"scopus_author_id": "60652739200"}),
-        Author(full_name="Han Y.", other_ids={"scopus_author_id": "59534195400"}),
-    ]
+    assert (record.author_names, record.author_ids) == ("Teng Y.; Han Y.", _IDS)
 
 
-def test_scopus_csv__author_without_affiliation_gets_none() -> None:
+def test_scopus_csv__affiliation_that_is_only_a_name_is_dropped() -> None:
     record = _parse_csv(
         {
             "Author full names": "Teng, Yu (60652739200); Han, Yiyong (59534195400)",
@@ -129,27 +117,23 @@ def test_scopus_csv__author_without_affiliation_gets_none() -> None:
         }
     )
 
-    assert record.authors[0].affiliations == [Affiliation(name="Nanning University")]
-    assert record.authors[1].affiliations == []
+    assert record.author_affiliations == "Nanning University"
 
 
-def test_scopus_csv__mismatched_column_is_ignored_with_warning(
+def test_scopus_csv__ids_in_names_for_other_author_count_are_ignored(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     row = {
-        "Author full names": "Teng, Yu; Han, Yiyong",
+        "Author full names": "Teng, Yu (60652739200); Han, Yiyong (59534195400)",
         "Author(s) ID": "60652739200",
     }
 
     with caplog.at_level("WARNING"):
         record = _parse_csv(row)
 
-    assert [author.full_name for author in record.authors] == [
-        "Teng, Yu",
-        "Han, Yiyong",
-    ]
-    assert all(author.other_ids == {} for author in record.authors)
-    assert "Author(s) ID" in caplog.text
+    assert record.author_names == "Teng, Yu; Han, Yiyong"
+    assert record.author_ids == "scopus_author_id:60652739200"
+    assert "author names" in caplog.text
 
 
 def _without(mapping: FieldMapping, *ignored: str) -> FieldMapping:
@@ -172,7 +156,7 @@ def test_scopus_csv__ignored_author_id_column_is_not_used() -> None:
 
     record = _parse_csv(row, mapping)
 
-    assert record.authors == [Author(full_name="Teng Y."), Author(full_name="Han Y.")]
+    assert (record.author_names, record.author_ids) == ("Teng Y.; Han Y.", None)
 
 
 def test_scopus_csv__ignored_affiliations_column_is_not_used() -> None:
@@ -180,17 +164,16 @@ def test_scopus_csv__ignored_affiliations_column_is_not_used() -> None:
 
     record = _parse_csv(_AUTHOR_ROW, mapping)
 
-    assert all(author.affiliations == [] for author in record.authors)
-    assert record.authors[0].family_name == "Teng"
+    assert record.author_affiliations is None
+    assert record.author_names == "Teng, Yu; Han, Yiyong"
 
 
-def test_scopus_csv__ignored_full_names_give_id_only_authors() -> None:
+def test_scopus_csv__ignored_full_names_still_give_ids() -> None:
     mapping = _without(_suggest_csv(list(_AUTHOR_ROW)), "Author full names")
 
     record = _parse_csv(_AUTHOR_ROW, mapping)
 
-    assert [author.full_name for author in record.authors] == [None, None]
-    assert record.authors[0].other_ids == {"scopus_author_id": "60652739200"}
+    assert (record.author_names, record.author_ids) == (None, _IDS)
 
 
 def test_scopus_csv__ignored_index_keywords_column_is_not_used() -> None:
@@ -205,7 +188,7 @@ def test_scopus_csv__ignored_index_keywords_column_is_not_used() -> None:
 def test_scopus_csv__unmapped_authors_stay_empty() -> None:
     record = _parse_csv(_AUTHOR_ROW, FieldMapping())
 
-    assert record.authors == []
+    assert (record.author_names, record.author_ids) == (None, None)
 
 
 def test_scopus_csv__prefixes_author_keywords_only() -> None:

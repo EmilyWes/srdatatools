@@ -53,7 +53,7 @@ _KEYWORD_TABLE_CSS = (
 )
 COMPLETENESS_FIELDS = [
     "title",
-    "authors",
+    "author_names",
     "abstract",
     "publication_year",
     "journal",

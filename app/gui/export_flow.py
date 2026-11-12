@@ -8,7 +8,6 @@ from nicegui.element import Element
 from webview import FileDialog
 
 from app.export.columns import (
-    AuthorsColumn,
     DateColumn,
     ExportColumn,
     ExportRecord,
@@ -54,11 +53,6 @@ _NAME_WIDTH = "width: 24ch"
 _FIELD_WIDTH = "width: 20ch"
 _BOX_FIELD_CLASSES = "quirk-field text-xs w-[7rem]"
 
-_AUTHOR_FORMATS = {
-    "last_first": "Names: last, first",
-    "first_last": "Names: first last",
-    "full_name": "Full name",
-}
 _DATE_PARTS = {"full": "Full date", "year": "Year", "month": "Month", "day": "Day"}
 
 _DELIMITERS = {",": "Comma", ";": "Semicolon", "\t": "Tab"}
@@ -88,7 +82,6 @@ class _Row:
     name: ui.input
     count: ui.linear_progress
     example: ui.label
-    option_rows: dict[str, ui.row] = field(default_factory=dict)
 
 
 @dataclass
@@ -150,13 +143,7 @@ class ExportView:
 
     def _set_column_option(self, row: _Row, name: str, value: str) -> None:
         setattr(row.column, name, value)
-        self._refresh_option_visibility(row)
         self._refresh_row(row)
-
-    def _refresh_option_visibility(self, row: _Row) -> None:
-        name_row = row.option_rows.get("name_separator")
-        if name_row is not None and isinstance(row.column, AuthorsColumn):
-            name_row.set_visibility(row.column.format == "last_first")
 
     def _option(
         self,
@@ -166,7 +153,7 @@ class ExportView:
         label: str,
         choices: dict[str, str] | None = None,
     ) -> None:
-        with ui.row().classes(_OPTION_ROW_CLASSES) as option_row:
+        with ui.row().classes(_OPTION_ROW_CLASSES):
             ui.label(f"{short}:").classes(_OPTION_LABEL_CLASSES).tooltip(label)
             value = getattr(row.column, name)
             widget: ui.select | ui.input
@@ -180,16 +167,10 @@ class ExportView:
             widget.on_value_change(
                 lambda e: self._set_column_option(row, name, e.value or "")
             )
-        row.option_rows[name] = option_row
 
     def _render_options(self, row: _Row) -> None:
         column = row.column
-        if isinstance(column, AuthorsColumn):
-            self._option(row, "format", "fmt", "Format", _AUTHOR_FORMATS)
-            self._option(row, "name_separator", "name", "Name separator")
-            self._option(row, "author_separator", "aut", "Author separator")
-            self._refresh_option_visibility(row)
-        elif isinstance(column, DateColumn):
+        if isinstance(column, DateColumn):
             self._option(row, "part", "part", "Part", _DATE_PARTS)
         elif isinstance(column, KeywordsColumn):
             self._option(row, "delimiter", "sep", "Delimiter")

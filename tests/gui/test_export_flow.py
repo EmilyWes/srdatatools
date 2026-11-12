@@ -12,7 +12,7 @@ from app.export.options import ExportOptions
 from app.gui import export_flow
 from app.gui.export_flow import ExportView, pick_save_path, render_export_view
 from app.gui.layout import shell
-from app.models.record import Author, Record
+from app.models.record import Record
 from tests.gui.clicks import click_and_wait, run_in
 
 
@@ -34,7 +34,7 @@ def _records() -> list[ExportRecord]:
             id=1,
             record=Record(
                 title="Deep learning",
-                authors=[Author(family_name="LeCun", given_name="Yann")],
+                author_names="LeCun, Yann",
                 doi="10.1038/nature14539",
             ),
             sources=[
@@ -150,15 +150,10 @@ def test_export_view__edited_name_turns_blue() -> None:
     assert row.name.props["bg-color"] == "blue-2"
 
 
-def test_export_view__author_format_updates_example_and_hides_name_separator() -> None:
-    view = _view()
-    row = _row(view, "authors")
+def test_export_view__author_names_row_shows_stored_value() -> None:
+    row = _row(_view(), "author_names")
+
     assert row.example.text == "LeCun, Yann"
-
-    view._set_column_option(row, "format", "first_last")
-
-    assert row.example.text == "Yann LeCun"
-    assert row.option_rows["name_separator"].visible is False
 
 
 def test_export_view__original_data_adds_raw_rows_and_disables_ignored() -> None:

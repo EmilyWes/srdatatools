@@ -7,15 +7,14 @@ from typing import Annotated, Any, Literal, TypeVar, get_args
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_validator
 
-from app.models.record import (
-    Affiliation,
-    Author,
-    Label,
-    LabelValue,
-    PartialDate,
-    Record,
+from app.models.record import Label, LabelValue, PartialDate, Record
+from app.parsers.authors import (
+    AUTHOR_JOINER,
+    AuthorIds,
+    author_id,
+    format_author_ids,
+    merge_author_ids,
 )
-from app.parsers.authors import author_from_name
 from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
 logger = logging.getLogger(__name__)
@@ -94,15 +93,11 @@ KEYWORDS_TARGET = "keywords"
 LABEL_TARGET = "label"
 DEFAULT_PHASE = "ft"
 DEFAULT_SCREENER = "screener 1"
-DEFAULT_NAME_SEPARATOR = ","
 # RIS and NBIB repeat a tag per value, and BibTeX authors are split before mapping.
 LINE_DELIMITER = "\n"
 
-AuthorRole = Literal[
-    "full_name", "first_last", "last_first", "orcid", "ids", "affiliations"
-]
-NAME_ROLES: tuple[AuthorRole, ...] = ("full_name", "first_last", "last_first")
-_ORCID_URL = re.compile(r"^https?://orcid\.org/")
+AuthorRole = Literal["names", "ids", "affiliations"]
+_AUTHOR_FIELDS = {"names": "author_names", "affiliations": "author_affiliations"}
 
 
 class ScalarRow(BaseModel):
@@ -132,9 +127,8 @@ class OtherIdRow(BaseModel):
 
 class AuthorsRow(BaseModel):
     target: Literal["authors"] = "authors"
-    role: AuthorRole = "last_first"
+    role: AuthorRole = "names"
     delimiter: str
-    separator: str = DEFAULT_NAME_SEPARATOR
     id_key: str = Field(min_length=1)
 
 
@@ -201,6 +195,16 @@ class FieldMapping(BaseModel):
 
     def rows_of(self, row_type: type[_Row]) -> list[tuple[str, _Row]]:
         return [(k, row) for k, row in self.rows.items() if isinstance(row, row_type)]
+
+    def author_separator(self, role: AuthorRole) -> str | None:
+        """What separates the authors in the stored value: the first row of that
+        role's delimiter; values that come one per line are joined with
+        AUTHOR_JOINER."""
+        rows = (row for _, row in self.rows_of(AuthorsRow) if row.role == role)
+        row = next(rows, None)
+        if row is None:
+            return None
+        return AUTHOR_JOINER if row.delimiter == LINE_DELIMITER else row.delimiter
 
 
 @dataclass(frozen=True)
@@ -470,30 +474,6 @@ def _ordered(mapping: FieldMapping, use_first: tuple[str, ...]) -> FieldMapping:
     return mapping.model_copy(update={"rows": {**first, **mapping.rows}})
 
 
-def strip_orcid_url(value: str) -> str:
-    return _ORCID_URL.sub("", value)
-
-
-def author_for_name(name: str, row: AuthorsRow, settings: ParseSettings) -> Author:
-    if row.role == "full_name":
-        return Author(full_name=name)
-    return author_from_name(
-        name,
-        row.separator,
-        settings.ambiguous_name_split,
-        family_first=row.role == "last_first",
-    )
-
-
-def add_author_detail(author: Author, row: AuthorsRow, value: str) -> None:
-    if row.role == "orcid":
-        author.orcid = author.orcid or strip_orcid_url(value)
-    elif row.role == "ids":
-        author.other_ids.setdefault(row.id_key, value)
-    elif row.role == "affiliations":
-        author.affiliations.append(Affiliation(name=value))
-
-
 def _split_positions(value: str | None, delimiter: str) -> list[str]:
     """Keeps empty pieces so positions line up across the columns."""
     if not value or not value.strip():
@@ -501,43 +481,11 @@ def _split_positions(value: str | None, delimiter: str) -> list[str]:
     return [piece.strip() for piece in value.split(delimiter)]
 
 
-def _zip_authors(
-    raw_fields: dict[str, str], mapping: FieldMapping, settings: ParseSettings
-) -> list[Author]:
-    """Authors zipped by position from parallel, delimited columns.
-
-    The first non-empty name column sets the authors; with none, the first
-    non-empty other column sets the count. A column with a different count is
-    ignored with a warning.
-    """
-    columns = [
-        (key, row, values)
-        for key, row in mapping.rows_of(AuthorsRow)
-        if (values := _split_positions(raw_fields.get(key), row.delimiter))
+def _id_slots(row: AuthorsRow, value: str) -> AuthorIds:
+    return [
+        [author_id(row.id_key, piece)] if piece else []
+        for piece in _split_positions(value, row.delimiter)
     ]
-    names = next(((r, v) for _, r, v in columns if r.role in NAME_ROLES), None)
-    details = [(k, r, v) for k, r, v in columns if r.role not in NAME_ROLES]
-    if names is not None:
-        name_row, name_values = names
-        authors = [
-            author_for_name(name, name_row, settings) if name else Author()
-            for name in name_values
-        ]
-    else:
-        authors = [Author() for _ in (details[0][2] if details else [])]
-    for key, row, values in details:
-        if len(values) != len(authors):
-            logger.warning(
-                "%r has %d entries for %d authors; ignoring it",
-                key,
-                len(values),
-                len(authors),
-            )
-            continue
-        for author, value in zip(authors, values, strict=True):
-            if value:
-                add_author_detail(author, row, value)
-    return [a for a in authors if a.full_name or a.orcid or a.other_ids]
 
 
 def apply_mapping(
@@ -550,6 +498,7 @@ def apply_mapping(
     other_ids: dict[str, str] = {}
     keywords: list[str] = []
     labels: list[Label] = []
+    author_ids: AuthorIds = []
     for key, row in mapping.rows.items():
         value = (raw_fields.get(key) or "").strip()
         if isinstance(row, LabelRow):
@@ -575,12 +524,17 @@ def apply_mapping(
             keywords.extend(
                 row.tagged(keyword) for keyword in _split_list(value, row.delimiter)
             )
+        elif isinstance(row, AuthorsRow):
+            if row.role == "ids":
+                author_ids = merge_author_ids(author_ids, _id_slots(row, value), key)
+            elif not _counts_as_empty(value, settings):
+                values.setdefault(_AUTHOR_FIELDS[row.role], value)
 
     return Record(
         **values,
         pages=_parse_pages(raw_fields, mapping),
         other_ids=other_ids,
-        authors=_zip_authors(raw_fields, mapping, settings),
+        author_ids=format_author_ids(author_ids),
         keywords=keywords,
         labels=labels,
         publication_date=_parse_publication_date(raw_fields, mapping),
@@ -588,7 +542,8 @@ def apply_mapping(
 
 
 TagLines = list[tuple[str, str]]
-LineAuthors = Callable[[TagLines, dict[str, AuthorsRow], ParseSettings], list[Author]]
+# The name and affiliation lines to keep, plus each author's ids.
+LineAuthors = Callable[[TagLines, dict[str, AuthorsRow]], tuple[TagLines, AuthorIds]]
 
 
 def join_tag_lines(lines: TagLines) -> dict[str, str]:
@@ -606,16 +561,29 @@ def apply_line_mapping(
     raw_fields: dict[str, str],
     mapping: FieldMapping,
     settings: ParseSettings,
-    authors_from_lines: LineAuthors,
+    author_lines: LineAuthors,
 ) -> Record:
-    """Authors come from the lines in order, so each detail line stays with the
-    author line above it rather than being zipped by position."""
-    record = apply_mapping(raw_fields, mapping, settings)
+    """The kept name and affiliation lines are joined with AUTHOR_JOINER; the ids
+    come from the lines in order, so each stays with its author line rather than
+    being matched by position."""
     author_rows = dict(mapping.rows_of(AuthorsRow))
-    if not author_rows:
-        return record
-    authors = authors_from_lines(lines, author_rows, settings)
-    return record.model_copy(update={"authors": authors})
+    kept, author_ids = author_lines(lines, author_rows)
+    joined = {
+        tag: AUTHOR_JOINER.join(value for t, value in kept if t == tag)
+        for tag, row in author_rows.items()
+        if row.role != "ids"
+    }
+    without_ids = {
+        key: row
+        for key, row in mapping.rows.items()
+        if not (isinstance(row, AuthorsRow) and row.role == "ids")
+    }
+    record = apply_mapping(
+        {**raw_fields, **joined},
+        mapping.model_copy(update={"rows": without_ids}),
+        settings,
+    )
+    return record.model_copy(update={"author_ids": format_author_ids(author_ids)})
 
 
 def override_aliases(

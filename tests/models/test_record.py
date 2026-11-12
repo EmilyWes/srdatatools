@@ -1,31 +1,22 @@
 import pytest
 from pydantic import ValidationError
 
-from app.models.record import Affiliation, Author, PartialDate, Record
+from app.models.record import PartialDate, Record
 
 
 def test_record__empty_constructs_successfully() -> None:
     record = Record()
     assert record.title is None
-    assert record.authors == []
+    assert record.author_names is None
     assert record.other_ids == {}
 
 
 def test_record__full_valid_record_round_trips_all_fields() -> None:
     record = Record(
         title="A Study of Things",
-        authors=[
-            Author(
-                family_name="Smith",
-                given_name="Jane",
-                orcid="0000-0001-2345-6789",
-                other_ids={"scopus_author_id": "12345"},
-                affiliations=[
-                    Affiliation(name="University of Example", ror_id="01abc23de"),
-                    Affiliation(name="Example Hospital"),
-                ],
-            )
-        ],
+        author_names="Smith, Jane; Doe, John",
+        author_ids="orcid:0000-0001-2345-6789, scopus_author_id:12345|",
+        author_affiliations="University of Example; Example Hospital",
         abstract="An abstract.",
         publication_date=PartialDate(year=2020, month=6, day=15),
         journal="Journal of Examples",
@@ -46,32 +37,12 @@ def test_record__full_valid_record_round_trips_all_fields() -> None:
     )
 
     assert record.title == "A Study of Things"
-    assert record.authors[0].family_name == "Smith"
-    assert record.authors[0].orcid == "0000-0001-2345-6789"
-    assert record.authors[0].other_ids == {"scopus_author_id": "12345"}
-    assert record.authors[0].affiliations[0].ror_id == "01abc23de"
+    assert record.author_names == "Smith, Jane; Doe, John"
+    assert record.author_ids == "orcid:0000-0001-2345-6789, scopus_author_id:12345|"
+    assert record.author_affiliations == "University of Example; Example Hospital"
     assert record.publication_date == PartialDate(year=2020, month=6, day=15)
     assert record.other_ids == {"eid": "2-s2.0-12345"}
     assert record.keywords == ["testing", "examples"]
-
-
-def test_author__full_name_fallback_for_unsplittable_name() -> None:
-    author = Author(full_name="World Health Organization")
-    assert author.family_name is None
-    assert author.given_name is None
-    assert author.full_name == "World Health Organization"
-
-
-def test_author__multiple_affiliations() -> None:
-    author = Author(
-        family_name="Doe",
-        affiliations=[
-            Affiliation(name="University A"),
-            Affiliation(name="University B", ror_id="02xyz34fg"),
-        ],
-    )
-    assert len(author.affiliations) == 2
-    assert author.affiliations[1].ror_id == "02xyz34fg"
 
 
 @pytest.mark.parametrize(

@@ -156,14 +156,13 @@ def test_parse_csv_text__doubled_quote_after_sniff_sample_is_an_escape() -> None
     assert result.rows[-1].record.abstract == 'The "deep-water" model, again'
 
 
-def test_parse_csv_text__splits_authors_on_delimiter() -> None:
+def test_parse_csv_text__keeps_authors_as_in_the_file() -> None:
     text = "Authors\nJane Smith; John Doe\n"
     mapping = mapping_of({"Authors": "authors"})
 
     result = parse_csv_text(text, mapping)
 
-    authors = result.rows[0].record.authors
-    assert [author.full_name for author in authors] == ["Jane Smith", "John Doe"]
+    assert result.rows[0].record.author_names == "Jane Smith; John Doe"
 
 
 def test_parse_csv_text__splits_keywords_on_delimiter() -> None:
@@ -176,15 +175,14 @@ def test_parse_csv_text__splits_keywords_on_delimiter() -> None:
 
 
 def test_parse_csv_text__uses_custom_list_delimiter() -> None:
-    text = "Authors\nJane Smith| John Doe\n"
+    text = "IDs\n1| 2\n"
     mapping = mapping_of(
-        {"Authors": Suggest("authors", {"delimiter": "|", "role": "full_name"})}
+        {"IDs": Suggest("authors", {"delimiter": "|", "role": "ids", "id_key": "x"})}
     )
 
     result = parse_csv_text(text, mapping)
 
-    authors = result.rows[0].record.authors
-    assert [author.full_name for author in authors] == ["Jane Smith", "John Doe"]
+    assert result.rows[0].record.author_ids == "x:1|x:2"
 
 
 def test_parse_csv_text__first_non_empty_name_column_sets_the_authors() -> None:
@@ -193,8 +191,7 @@ def test_parse_csv_text__first_non_empty_name_column_sets_the_authors() -> None:
 
     result = parse_csv_text(text, mapping)
 
-    authors = result.rows[0].record.authors
-    assert [author.full_name for author in authors] == ["John Doe", "Alice Lee"]
+    assert result.rows[0].record.author_names == "John Doe; Alice Lee"
 
 
 def test_parse_csv_text__combines_multiple_keyword_columns_in_order() -> None:
@@ -206,14 +203,14 @@ def test_parse_csv_text__combines_multiple_keyword_columns_in_order() -> None:
     assert result.rows[0].record.keywords == ["machine learning", "nlp", "llms"]
 
 
-def test_parse_csv_text__empty_authors_column_gives_empty_list() -> None:
+def test_parse_csv_text__empty_authors_column_gives_no_authors() -> None:
     text = "Title,Authors\nSome Paper,\n"
     mapping = mapping_of({"Title": "title", "Authors": "authors"})
 
     result = parse_csv_text(text, mapping)
 
     assert result.skipped == []
-    assert result.rows[0].record.authors == []
+    assert result.rows[0].record.author_names is None
 
 
 @pytest.mark.parametrize(
@@ -576,7 +573,7 @@ def test_parse_csv_record__applies_mapping() -> None:
     row = parse_csv_record(raw_fields, mapping)
 
     assert row.record.title == "Some Paper"
-    assert [a.full_name for a in row.record.authors] == ["Smith, J", "Doe, J"]
+    assert row.record.author_names == "Smith, J; Doe, J"
     assert row.raw_fields == raw_fields
 
 
@@ -599,7 +596,7 @@ def test_parse_csv_file__tab_delimiter_maps_fields() -> None:
     assert len(result.rows) == 3
     record = result.rows[0].record
     assert record.title == "Deep learning for screening, a review"
-    assert [a.full_name for a in record.authors] == ["Smith, Jane", "Doe, John"]
+    assert record.author_names == "Smith, Jane; Doe, John"
     assert record.doi == "10.1000/abc123"
     assert record.keywords == ["active learning", "screening"]
     assert record.publication_date is not None

@@ -115,16 +115,12 @@ _OPTIONS: dict[str, tuple[_Option, ...]] = {
             "role",
             "Role",
             {
-                "full_name": "Full name (not split)",
-                "first_last": "Names: first, last",
-                "last_first": "Names: last, first",
-                "orcid": "ORCID",
+                "names": "Names",
                 "ids": "Author IDs",
                 "affiliations": "Affiliations",
             },
         ),
         _Option("delimiter", "aut", "Author separator", strip=False),
-        _Option("separator", "name", "Name separator", strip=False),
         _Option("id_key", "key", "ID key"),
     ),
     KEYWORDS_TARGET: (
@@ -141,8 +137,6 @@ _OPTIONS: dict[str, tuple[_Option, ...]] = {
 def _shows_option(row: RowMapping, name: str) -> bool:
     if isinstance(row, DateRow) and name == "order":
         return row.part == "full"
-    if isinstance(row, AuthorsRow) and name == "separator":
-        return row.role in ("first_last", "last_first")
     if isinstance(row, AuthorsRow) and name == "id_key":
         return row.role == "ids"
     if name == "delimiter":
@@ -157,9 +151,6 @@ def _needs_a_look(row: RowMapping, name: str, sample: str) -> bool:
     if name == "delimiter":
         delimiter: str = getattr(row, name)
         return delimiter not in sample
-    if isinstance(row, AuthorsRow) and name == "separator":
-        names = sample.split(row.delimiter)
-        return not any(row.separator in author for author in names)
     if isinstance(row, DateRow) and name == "order":
         return is_ambiguous_date(sample)
     return False

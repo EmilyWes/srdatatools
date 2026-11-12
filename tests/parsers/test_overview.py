@@ -141,7 +141,6 @@ def test_default_choices__unknown_source_defaults() -> None:
     assert choices.pages_set
     assert not (choices.drop_trailing or choices.id_from_name)
     assert choices.affiliation_start == ""
-    assert choices.name_split == "none"
     assert choices.empty_values == ["[Not Available]."]
     assert choices.use_first == []
     assert choices.field_size_limit == 1_000_000
@@ -219,7 +218,6 @@ def test_profile_with__applies_the_settings() -> None:
         only_one=False,
         preferred_qualifier=" print ",
         label_unlabeled="",
-        name_split="last",
         field_size_limit=500,
         use_first=["B", "A"],
     )
@@ -230,7 +228,6 @@ def test_profile_with__applies_the_settings() -> None:
     assert not settings.issn_isbn_only_one
     assert settings.preferred_issn_qualifier == "print"
     assert settings.label_values == ()
-    assert settings.ambiguous_name_split == "last"
     assert settings.csv_field_size_limit == 500
     assert settings.use_first == ("B", "A")
 

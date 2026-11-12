@@ -45,7 +45,7 @@ PUBMED = Profile(
         ),
         "csv": FormatProfile(
             suggestions={
-                "authors": Suggest("authors", {"role": "full_name"}),
+                "authors": Suggest("authors"),
                 "journal/book": Suggest("journal"),
                 "pmcid": Suggest("other_ids", {"key": "pmc"}),
                 "nihms id": Suggest("other_ids", {"key": "mid"}),

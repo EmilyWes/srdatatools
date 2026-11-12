@@ -2,8 +2,8 @@ import re
 
 import pytest
 
-from app.models.record import Affiliation, Author, Record
-from app.parsers.mapping import FieldMapping
+from app.models.record import Record
+from app.parsers.mapping import FieldMapping, Suggest
 from app.parsers.quirks import (
     AffiliationLeadingName,
     CitationParts,
@@ -101,23 +101,32 @@ def test_strip_doi__without_doi_leaves_record_unchanged() -> None:
     assert _apply(StripDoi(), Record()).doi is None
 
 
-def test_drop_et_al__drops_placeholder_author() -> None:
-    record = Record(authors=[Author(full_name="Smith J"), Author(full_name="et al.")])
+@pytest.mark.parametrize(
+    ("names", "expected"),
+    [
+        ("Smith J|et al.", "Smith J"),
+        ("Smith J, Doe A, et al.", "Smith J, Doe A"),
+        ("Smith J; et al.", "Smith J"),
+        ("Smith J et al.", "Smith J"),
+        ("et al.", None),
+    ],
+)
+def test_drop_et_al__drops_trailing_et_al(names: str, expected: str | None) -> None:
+    record = Record(author_names=names)
 
-    assert _apply(DropEtAl(), record).authors == [Author(full_name="Smith J")]
+    assert _apply(DropEtAl(), record).author_names == expected
 
 
-def test_strip_last_author_trailing__strips_only_the_last_author() -> None:
-    record = Record(authors=[Author(full_name="Smith J."), Author(full_name="Doe A.")])
+def test_drop_et_al__keeps_names_without_et_al() -> None:
+    record = Record(author_names="Smith J|Petal.")
 
-    authors = _apply(StripLastAuthorTrailing(), record).authors
-
-    assert [a.full_name for a in authors] == ["Smith J.", "Doe A"]
+    assert _apply(DropEtAl(), record).author_names == "Smith J|Petal."
 
 
 @pytest.mark.parametrize(
-    ("name", "expected"),
+    ("names", "expected"),
     [
+        ("Smith J.|Doe A.", "Smith J.|Doe A"),
         ("Doe ...", "Doe"),
         ("Doe A.;, ", "Doe A"),
         ("Doe…", "Doe"),
@@ -125,15 +134,15 @@ def test_strip_last_author_trailing__strips_only_the_last_author() -> None:
     ],
 )
 def test_strip_last_author_trailing__strips_punctuation_and_spaces(
-    name: str, expected: str
+    names: str, expected: str
 ) -> None:
-    record = Record(authors=[Author(full_name=name)])
+    record = Record(author_names=names)
 
-    assert _apply(StripLastAuthorTrailing(), record).authors[0].full_name == expected
+    assert _apply(StripLastAuthorTrailing(), record).author_names == expected
 
 
 def test_strip_last_author_trailing__without_authors_leaves_record_unchanged() -> None:
-    assert _apply(StripLastAuthorTrailing(), Record()).authors == []
+    assert _apply(StripLastAuthorTrailing(), Record()) == Record()
 
 
 _EID_FROM_URL = IdFromUrl(
@@ -200,55 +209,99 @@ def test_ris_notes__runs_when_tag_is_not_mapped() -> None:
 _EMBEDDED_IDS = EmbeddedAuthorIds("scopus_author_id")
 
 
-def test_embedded_author_ids__moves_id_out_of_split_name() -> None:
-    author = Author(
-        full_name="Teng, Yu (60652739200)",
-        family_name="Teng",
-        given_name="Yu (60652739200)",
+_SCOPUS_AUTHORS = mapping_of(
+    {
+        "Author full names": Suggest("authors", {"delimiter": ";"}),
+        "Author(s) ID": Suggest(
+            "authors",
+            {"role": "ids", "delimiter": ";", "id_key": "scopus_author_id"},
+        ),
+        "Authors with affiliations": Suggest(
+            "authors", {"role": "affiliations", "delimiter": ";"}
+        ),
+    }
+)
+
+
+def test_embedded_author_ids__moves_ids_out_of_names() -> None:
+    record = Record(author_names="Teng, Yu (60652739200); Han, Li (57190000001)")
+
+    record = _apply(_EMBEDDED_IDS, record, mapping=_SCOPUS_AUTHORS)
+
+    assert record.author_names == "Teng, Yu; Han, Li"
+    assert record.author_ids == (
+        "scopus_author_id:60652739200|scopus_author_id:57190000001"
     )
 
-    record = _apply(_EMBEDDED_IDS, Record(authors=[author]))
 
-    assert record.authors == [
-        Author(
-            full_name="Teng, Yu",
-            family_name="Teng",
-            given_name="Yu",
-            other_ids={"scopus_author_id": "60652739200"},
-        )
-    ]
+def test_embedded_author_ids__drops_ids_already_from_a_column() -> None:
+    record = Record(
+        author_names="Teng (1); Han (2)",
+        author_ids="scopus_author_id:1|scopus_author_id:3",
+    )
+
+    record = _apply(_EMBEDDED_IDS, record, mapping=_SCOPUS_AUTHORS)
+
+    assert record.author_ids == (
+        "scopus_author_id:1|scopus_author_id:3, scopus_author_id:2"
+    )
 
 
-def test_embedded_author_ids__overrides_id_from_column() -> None:
-    author = Author(full_name="Teng (1)", other_ids={"scopus_author_id": "2"})
+def test_embedded_author_ids__keeps_empty_slot_for_name_without_id() -> None:
+    record = Record(author_names="Teng (1); Han")
 
-    record = _apply(_EMBEDDED_IDS, Record(authors=[author]))
+    record = _apply(_EMBEDDED_IDS, record, mapping=_SCOPUS_AUTHORS)
 
-    assert record.authors == [
-        Author(full_name="Teng", other_ids={"scopus_author_id": "1"})
-    ]
+    assert (record.author_names, record.author_ids) == (
+        "Teng; Han",
+        "scopus_author_id:1|",
+    )
+
+
+def test_embedded_author_ids__other_author_count_still_cleans_names(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    record = Record(author_names="Teng (1); Han (2)", author_ids="orcid:x")
+
+    record = _apply(_EMBEDDED_IDS, record, mapping=_SCOPUS_AUTHORS)
+
+    assert (record.author_names, record.author_ids) == ("Teng; Han", "orcid:x")
+    assert "author names" in caplog.text
 
 
 def test_embedded_author_ids__leaves_name_without_id_unchanged() -> None:
-    record = Record(authors=[Author(full_name="Teng, Yu (Jr)")])
+    record = Record(author_names="Teng, Yu (Jr)")
+
+    assert _apply(_EMBEDDED_IDS, record, mapping=_SCOPUS_AUTHORS) == record
+
+
+def test_embedded_author_ids__without_names_row_leaves_record_unchanged() -> None:
+    record = Record(author_names="Teng (1)")
 
     assert _apply(_EMBEDDED_IDS, record) == record
 
 
 def test_affiliation_leading_name__drops_name_before_separator() -> None:
-    author = Author(
-        full_name="Teng Y.",
-        affiliations=[
-            Affiliation(name="Teng Y., Guangxi Cartier Technology Ltd., Nanning"),
-            Affiliation(name="Teng Y."),
-        ],
+    record = Record(
+        author_affiliations=(
+            "Teng Y., Guangxi Cartier Technology Ltd., Nanning; Han L.;"
+            " Doe J., Utrecht University"
+        )
     )
 
-    record = _apply(AffiliationLeadingName(), Record(authors=[author]))
+    record = _apply(AffiliationLeadingName(), record, mapping=_SCOPUS_AUTHORS)
 
-    assert record.authors[0].affiliations == [
-        Affiliation(name="Guangxi Cartier Technology Ltd., Nanning")
-    ]
+    assert record.author_affiliations == (
+        "Guangxi Cartier Technology Ltd., Nanning; Utrecht University"
+    )
+
+
+def test_affiliation_leading_name__only_names_leaves_no_affiliations() -> None:
+    record = Record(author_affiliations="Teng Y.; Han L.")
+
+    record = _apply(AffiliationLeadingName(), record, mapping=_SCOPUS_AUTHORS)
+
+    assert record.author_affiliations is None
 
 
 _CITATION = CitationParts("Citation")

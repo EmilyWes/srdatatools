@@ -120,7 +120,7 @@ def test_render_quirks_overview__note_is_grey_text_without_control() -> None:
 
     note = _label(middle, "Author matching")
     assert "text-grey-6" in note.classes
-    assert _tooltip(note).startswith("Author rows")
+    assert _tooltip(note).startswith("Author names and affiliations")
     assert "author_columns" not in screen.widgets
 
 
@@ -166,18 +166,6 @@ def test_render_quirks_overview__labeling_box_has_a_text_box_per_decision() -> N
     screen.set_value("label_include", "asreview_relevant")
 
     assert screen.current_choices().label_include == "asreview_relevant"
-
-
-def test_render_quirks_overview__changed_dropdown_is_tinted_blue() -> None:
-    screen = _render()
-    widget = screen.widgets["name_split"]
-
-    screen.set_value("name_split", "last")
-    assert widget.props["bg-color"] == "blue-2"
-    assert screen.current_choices().name_split == "last"
-
-    screen.set_value("name_split", "none")
-    assert "bg-color" not in widget.props
 
 
 def test_render_quirks_overview__field_size_limit_is_numeric() -> None:
@@ -285,7 +273,6 @@ def test_render_quirks_overview__restore_defaults_resets_every_choice() -> None:
     screen.set_value("drop_et_al", False)
     screen.set_value("affiliation_start", "; ")
     screen.set_value("field_size_limit", 500)
-    screen.set_value("name_split", "last")
     screen.empty_rows[1].value = "none"
     screen.order_rows[0].value = "B"
 

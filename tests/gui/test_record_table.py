@@ -119,11 +119,11 @@ def test_columns__cover_every_record_field_plus_sources() -> None:
     assert set(COLUMNS) == record_fields | {"sources"}
 
 
-def test_row_for__formats_authors_lists_and_dicts() -> None:
+def test_row_for__formats_lists_and_dicts() -> None:
     row = row_for(
         {
             "id": 7,
-            "authors": [{"full_name": "Smith, J"}, {"full_name": "Doe, A"}],
+            "author_names": "Smith, J; Doe, A",
             "keywords": ["alpha", "beta"],
             "other_ids": {"wos": "123"},
             "publication_year": 2020,
@@ -133,22 +133,12 @@ def test_row_for__formats_authors_lists_and_dicts() -> None:
 
     assert row == {
         "id": 7,
-        "authors": "Smith, J et al.",
+        "author_names": "Smith, J; Doe, A",
         "keywords": "alpha; beta",
         "other_ids": "wos: 123",
         "publication_year": 2020,
         "doi": None,
     }
-
-
-def test_row_for__single_author_without_et_al() -> None:
-    row = row_for({"authors": [{"family_name": "Smith", "given_name": "J"}]})
-
-    assert row["authors"] == "Smith, J"
-
-
-def test_row_for__no_authors() -> None:
-    assert row_for({"authors": []})["authors"] == ""
 
 
 def test_load_rows__only_requested_columns(session: Session) -> None:
@@ -562,7 +552,7 @@ def test_load_rows__unlabeled_is_empty_but_keeps_its_slot(
 
 
 def test_default_columns__doi_title_authors() -> None:
-    assert DEFAULT_COLUMNS == ["doi", "title", "authors"]
+    assert DEFAULT_COLUMNS == ["doi", "title", "author_names"]
 
 
 MESH = keyword_key("MeSH")

@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from app.models.record import Record
+from app.parsers.authors import parse_author_ids
 from app.parsers.bibtex import (
     parse_bibtex_file,
     read_bibtex_fields,
@@ -79,19 +80,20 @@ def test_scopus_small__detects_scopus_source(suffix: str) -> None:
     assert detect_source(path, _FORMAT_BY_SUFFIX[suffix]) == "scopus"
 
 
-def test_scopus_small_csv__zips_author_columns(
+def test_scopus_small_csv__cleans_author_columns(
     csv_records: dict[str, Record],
 ) -> None:
-    authors = csv_records[_NODOSAUR_EID].authors
+    record = csv_records[_NODOSAUR_EID]
+    ids = parse_author_ids(record.author_ids)
 
-    oyabu = authors[0]
-    assert (oyabu.family_name, oyabu.given_name) == ("Oyabu", "Shumpei")
-    assert oyabu.other_ids == {"scopus_author_id": "60900075400"}
-    assert [a.name for a in oyabu.affiliations] == [
+    assert (record.author_names or "").startswith("Oyabu, Shumpei; ")
+    assert ids[0] == ["scopus_author_id:60900075400"]
+    assert all(ids)
+    assert len(ids) == len((record.author_names or "").split(";"))
+    assert (record.author_affiliations or "").startswith(
         "Department of Natural History and Planetary Sciences, Hokkaido University, "
-        "Kita 10, Nishi 8, Kita-ku, Hokkaido, Sapporo, 060-0810, Japan"
-    ]
-    assert all(author.other_ids for author in authors)
+        "Kita 10, Nishi 8, Kita-ku, Hokkaido, Sapporo, 060-0810, Japan;"
+    )
 
 
 def test_scopus_small_csv__prefixes_author_keywords(

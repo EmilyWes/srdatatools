@@ -213,14 +213,13 @@ def test_parse_excel_file__skips_whitespace_only_row(tmp_path: Path) -> None:
     assert result.skipped[0].reason == "row is blank"
 
 
-def test_parse_excel_file__splits_authors_on_delimiter(tmp_path: Path) -> None:
+def test_parse_excel_file__keeps_authors_as_in_the_file(tmp_path: Path) -> None:
     path = _workbook(tmp_path, {"Sheet1": [["Authors"], ["Jane Smith; John Doe"]]})
     mapping = mapping_of({"Authors": "authors"})
 
     result = parse_excel_file(path, mapping)
 
-    authors = result.rows[0].record.authors
-    assert [author.full_name for author in authors] == ["Jane Smith", "John Doe"]
+    assert result.rows[0].record.author_names == "Jane Smith; John Doe"
 
 
 def test_parse_excel_file__non_workbook_file_raises(tmp_path: Path) -> None:

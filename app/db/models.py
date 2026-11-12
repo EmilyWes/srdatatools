@@ -14,7 +14,9 @@ class Record(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str | None]
-    authors: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    author_names: Mapped[str | None]
+    author_ids: Mapped[str | None]
+    author_affiliations: Mapped[str | None]
     abstract: Mapped[str | None]
     publication_year: Mapped[int | None]
     publication_month: Mapped[int | None]

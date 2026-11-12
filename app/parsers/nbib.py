@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
 
-from app.models.record import Author
+from app.parsers.authors import AuthorIds, author_id
 from app.parsers.common import (
     FileSummary,
     ParsedRow,
@@ -16,17 +16,13 @@ from app.parsers.common import (
 )
 from app.parsers.mapping import (
     LINE_DELIMITER,
-    NAME_ROLES,
     AuthorsRow,
     FieldMapping,
     RowDefaults,
     Suggest,
-    add_author_detail,
     apply_line_mapping,
-    author_for_name,
     join_tag_lines,
     override_aliases,
-    strip_orcid_url,
 )
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
 from app.parsers.quirks import NO_QUIRKS, ParseSettings
@@ -72,7 +68,6 @@ _ID_TAGS = ("AID", "LID")
 _DOI_SUFFIX = " [doi]"
 _DOI_TAG = "DOI"
 _REQUIRED_TAG = "PMID"
-_ORCID_SCHEME = "ORCID"
 _EDITOR_TAGS = ("FED", "ED")
 
 
@@ -83,27 +78,25 @@ def _doi_from_id(value: str) -> str | None:
     return stripped.removesuffix(_DOI_SUFFIX).strip() or None
 
 
-def _add_auid(author: Author, row: AuthorsRow, value: str) -> None:
-    """AUID values look like "ORCID: 0000-0001-8894-9875"; without a scheme the
-    row's ID key is used."""
+def _auid(row: AuthorsRow, value: str) -> str | None:
+    """AUID values look like "ORCID: 0000-0001-8894-9875"; the scheme is the key,
+    without one the row's ID key is used."""
     scheme, colon, identifier = value.partition(":")
     if not colon:
         scheme, identifier = "", value
-    scheme, identifier = scheme.strip(), identifier.strip()
-    if not identifier:
-        return
-    if scheme.upper() == _ORCID_SCHEME:
-        author.orcid = strip_orcid_url(identifier)
-    else:
-        author.other_ids[scheme.lower() or row.id_key] = identifier
+    if not identifier.strip():
+        return None
+    return author_id(scheme.strip().lower() or row.id_key, identifier)
 
 
-def _authors_from_lines(
-    lines: list[tuple[str, str]], rows: dict[str, AuthorsRow], settings: ParseSettings
-) -> list[Author]:
-    """Detail lines (AUID, AD) belong to the author or editor name line before them."""
-    authors: list[Author] = []
-    current: Author | None = None
+def _author_lines(
+    lines: list[tuple[str, str]], rows: dict[str, AuthorsRow]
+) -> tuple[list[tuple[str, str]], AuthorIds]:
+    """AUID and AD lines belong to the author or editor name line before them;
+    an editor's, or one before the first author, is left out."""
+    kept: list[tuple[str, str]] = []
+    slots: AuthorIds = []
+    current: list[str] | None = None
     for tag, value in lines:
         row = rows.get(tag)
         if row is None:
@@ -112,14 +105,17 @@ def _authors_from_lines(
             continue
         if not value:
             continue
-        if row.role in NAME_ROLES:
-            current = author_for_name(value, row, settings)
-            authors.append(current)
-        elif current is not None and row.role == "ids":
-            _add_auid(current, row, value)
-        elif current is not None:
-            add_author_detail(current, row, value)
-    return authors
+        if row.role == "names":
+            current = []
+            slots.append(current)
+            kept.append((tag, value))
+        elif current is None:
+            continue
+        elif row.role == "affiliations":
+            kept.append((tag, value))
+        elif (auid := _auid(row, value)) is not None:
+            current.append(auid)
+    return kept, slots
 
 
 def parse_nbib_record(
@@ -139,9 +135,7 @@ def parse_nbib_record(
     )
     if doi is not None:
         raw_fields[_DOI_TAG] = doi
-    record = apply_line_mapping(
-        lines, raw_fields, mapping, settings, _authors_from_lines
-    )
+    record = apply_line_mapping(lines, raw_fields, mapping, settings, _author_lines)
     return ParsedRow(record=record, raw_fields=raw_fields)
 
 
