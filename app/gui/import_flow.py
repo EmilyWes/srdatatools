@@ -43,7 +43,7 @@ from app.parsers.excel import (
     read_excel_headers,
     read_excel_sheets,
 )
-from app.parsers.mapping import FieldMapping, RowDefaults
+from app.parsers.mapping import FieldMapping
 from app.parsers.nbib import (
     parse_nbib_file,
     read_nbib_tags,
@@ -118,9 +118,7 @@ class _TypeHandlers:
 
 
 def _suggest_columns(keys: list[str], profile: FormatProfile) -> FieldMapping:
-    return suggest_mapping(
-        keys, profile.suggestions, profile.row_defaults, profile.ignored_keys
-    )
+    return suggest_mapping(keys, profile.suggestions, profile.ignored_keys)
 
 
 def _delimited(delimiter: str | None) -> _TypeHandlers:
@@ -145,9 +143,7 @@ _TYPES: dict[FileType, _TypeHandlers] = {
     ),
     "ris": _TypeHandlers(
         read_keys=lambda path, _, __: read_ris_tags(path),
-        suggest=lambda keys, profile: suggest_ris_mapping(
-            keys, profile.suggestions, profile.row_defaults
-        ),
+        suggest=lambda keys, profile: suggest_ris_mapping(keys, profile.suggestions),
         parse_file=lambda path, mapping, _, settings: parse_ris_file(
             path, mapping, settings
         ),
@@ -155,9 +151,7 @@ _TYPES: dict[FileType, _TypeHandlers] = {
     ),
     "nbib": _TypeHandlers(
         read_keys=lambda path, _, __: read_nbib_tags(path),
-        suggest=lambda keys, profile: suggest_nbib_mapping(
-            keys, profile.suggestions, profile.row_defaults
-        ),
+        suggest=lambda keys, profile: suggest_nbib_mapping(keys, profile.suggestions),
         parse_file=lambda path, mapping, _, settings: parse_nbib_file(
             path, mapping, settings
         ),
@@ -165,9 +159,7 @@ _TYPES: dict[FileType, _TypeHandlers] = {
     ),
     "bibtex": _TypeHandlers(
         read_keys=lambda path, _, __: read_bibtex_fields(path),
-        suggest=lambda keys, profile: suggest_bibtex_mapping(
-            keys, profile.suggestions, profile.row_defaults
-        ),
+        suggest=lambda keys, profile: suggest_bibtex_mapping(keys, profile.suggestions),
         parse_file=lambda path, mapping, _, settings: parse_bibtex_file(
             path, mapping, settings
         ),
@@ -184,10 +176,6 @@ def _suggestion(file_type: FileType, source: str, summary: FileSummary) -> Field
 
 def type_label(file_type: str) -> str:
     return _TYPE_OPTIONS[file_type]
-
-
-def row_defaults_for(file_type: FileType, source: str) -> RowDefaults:
-    return profile_with(file_type, source).row_defaults
 
 
 def _detect(path: Path) -> tuple[str, str]:
@@ -225,10 +213,7 @@ def render_mapping(
         return None
 
     return render_mapping_table(
-        container,
-        summary,
-        _suggestion(file_type, source, summary),
-        defaults=row_defaults_for(file_type, source),
+        container, summary, _suggestion(file_type, source, summary)
     )
 
 

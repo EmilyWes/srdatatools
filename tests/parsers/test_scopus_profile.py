@@ -18,7 +18,6 @@ def _suggest_csv(headers: list[str]) -> FieldMapping:
     return suggest_mapping(
         headers,
         _CSV_PROFILE.suggestions,
-        _CSV_PROFILE.row_defaults,
         _CSV_PROFILE.ignored_keys,
     )
 
@@ -96,7 +95,7 @@ def _without(mapping: FieldMapping, *ignored: str) -> FieldMapping:
 
 
 def _with_abbreviated_names(mapping: FieldMapping) -> FieldMapping:
-    row = make_row(Suggest("authors"), "Authors", _CSV_PROFILE.row_defaults)
+    row = make_row(Suggest("authors"), "Authors")
     return FieldMapping(rows={"Authors": row, **mapping.rows})
 
 
@@ -175,9 +174,7 @@ def test_scopus_csv__does_not_match_header_without_eid() -> None:
 def _parse_ris(body: str) -> Record:
     text = f"TY  - JOUR\n{body}ER  - \n"
     tags = list(dict.fromkeys(line[:2] for line in text.splitlines()))
-    mapping = suggest_ris_mapping(
-        tags, _RIS_PROFILE.suggestions, _RIS_PROFILE.row_defaults
-    )
+    mapping = suggest_ris_mapping(tags, _RIS_PROFILE.suggestions)
     result = parse_ris_text(text, mapping, settings=_RIS_PROFILE.settings)
     return result.rows[0].record
 
@@ -211,9 +208,7 @@ def _parse_bibtex(fields: str, mapping: FieldMapping | None = None) -> Record:
             "@key",
             *(line.split("=")[0].strip() for line in fields.splitlines()),
         ]
-        mapping = suggest_bibtex_mapping(
-            keys, _BIBTEX_PROFILE.suggestions, _BIBTEX_PROFILE.row_defaults
-        )
+        mapping = suggest_bibtex_mapping(keys, _BIBTEX_PROFILE.suggestions)
     result = parse_bibtex_text(text, mapping, settings=_BIBTEX_PROFILE.settings)
     return result.rows[0].record
 

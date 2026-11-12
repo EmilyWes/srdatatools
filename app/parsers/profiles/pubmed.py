@@ -5,7 +5,6 @@ from io import StringIO
 from app.parsers.mapping import Suggest
 from app.parsers.profiles.base import FormatProfile, Profile
 from app.parsers.profiles.default import (
-    default_row_defaults,
     default_settings,
 )
 
@@ -36,7 +35,6 @@ PUBMED = Profile(
             },
             matches=_matches_nbib,
             settings=default_settings("nbib"),
-            row_defaults=default_row_defaults("nbib"),
         ),
         "csv": FormatProfile(
             suggestions={
@@ -47,7 +45,6 @@ PUBMED = Profile(
             },
             matches=_matches_csv,
             settings=default_settings("csv"),
-            row_defaults=default_row_defaults("csv"),
         ),
     },
 )

@@ -217,11 +217,6 @@ class FieldMapping(BaseModel):
 
 
 @dataclass(frozen=True)
-class RowDefaults:
-    pass
-
-
-@dataclass(frozen=True)
 class Suggest:
     """A suggested row: its target plus any options that differ from the defaults."""
 
@@ -234,7 +229,7 @@ def default_other_id_key(header: str) -> str:
     return slug or "id"
 
 
-def default_row(target: str, key: str, defaults: RowDefaults) -> RowMapping:
+def default_row(target: str, key: str) -> RowMapping:
     if target == DATE_TARGET:
         return DateRow()
     if target == PAGES_TARGET:
@@ -258,8 +253,8 @@ def row_with(row: RowMapping, options: Mapping[str, str]) -> RowMapping:
     return _ROW_ADAPTER.validate_python({**row.model_dump(), **options})
 
 
-def make_row(suggest: Suggest, key: str, defaults: RowDefaults) -> RowMapping:
-    return row_with(default_row(suggest.target, key, defaults), suggest.options)
+def make_row(suggest: Suggest, key: str) -> RowMapping:
+    return row_with(default_row(suggest.target, key), suggest.options)
 
 
 _LABEL_SPELLINGS: dict[str, LabelValue] = {
@@ -531,7 +526,6 @@ def override_aliases(
 def suggest_mapping(
     keys: list[str],
     suggestions: Mapping[str, Suggest],
-    defaults: RowDefaults,
     *,
     lenient: bool,
 ) -> FieldMapping:
@@ -554,6 +548,6 @@ def suggest_mapping(
             suggest, kind = Suggest(OTHER_IDS_TARGET), "id_fallback"
         else:
             continue
-        rows[key] = make_row(suggest, key, defaults)
+        rows[key] = make_row(suggest, key)
         match_kinds[key] = kind
     return FieldMapping(rows=rows, match_kinds=match_kinds)

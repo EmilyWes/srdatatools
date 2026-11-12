@@ -21,10 +21,10 @@ def _parse(path: Path, file_format: FileType) -> ParseResult:
     profile = PUBMED.formats[file_format]
     if file_format == "nbib":
         tags = list(read_nbib_tags(path).samples)
-        mapping = suggest_nbib_mapping(tags, profile.suggestions, profile.row_defaults)
+        mapping = suggest_nbib_mapping(tags, profile.suggestions)
         return parse_nbib_file(path, mapping, settings=profile.settings)
     headers = list(read_csv_headers(path).samples)
-    mapping = suggest_mapping(headers, profile.suggestions, profile.row_defaults)
+    mapping = suggest_mapping(headers, profile.suggestions)
     return parse_csv_file(path, mapping, settings=profile.settings)
 
 

@@ -30,16 +30,14 @@ def _parse(path: Path, file_format: FileType) -> ParseResult:
     profile = SCOPUS.formats[file_format]
     if file_format == "csv":
         headers = list(read_csv_headers(path).samples)
-        mapping = suggest_mapping(
-            headers, profile.suggestions, profile.row_defaults, profile.ignored_keys
-        )
+        mapping = suggest_mapping(headers, profile.suggestions, profile.ignored_keys)
         return parse_csv_file(path, mapping, settings=profile.settings)
     if file_format == "ris":
         tags = list(read_ris_tags(path).samples)
-        mapping = suggest_ris_mapping(tags, profile.suggestions, profile.row_defaults)
+        mapping = suggest_ris_mapping(tags, profile.suggestions)
         return parse_ris_file(path, mapping, settings=profile.settings)
     keys = list(read_bibtex_fields(path).samples)
-    mapping = suggest_bibtex_mapping(keys, profile.suggestions, profile.row_defaults)
+    mapping = suggest_bibtex_mapping(keys, profile.suggestions)
     return parse_bibtex_file(path, mapping, settings=profile.settings)
 
 

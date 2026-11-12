@@ -17,7 +17,6 @@ from app.parsers.mapping import (
     TARGETS,
     AuthorsRow,
     FieldMapping,
-    RowDefaults,
     RowMapping,
     default_row,
     row_with,
@@ -232,7 +231,6 @@ class _Row:
 
 @dataclass
 class MappingScreen:
-    defaults: RowDefaults
     # Read-only text boxes show the stored value itself rather than a placeholder.
     readonly: bool = False
     rows: list[_Row] = field(default_factory=list)
@@ -251,7 +249,7 @@ class MappingScreen:
         elif row.mapped is not None and row.mapped.target == target:
             row.base = row.mapped
         else:
-            row.base = default_row(target, row.header, self.defaults)
+            row.base = default_row(target, row.header)
         row.inputs = {}
         row.options.clear()
         base = row.base.model_dump() if row.base is not None else {}
@@ -332,10 +330,9 @@ def render_mapping_table(
     summary: FileSummary,
     suggestion: FieldMapping,
     *,
-    defaults: RowDefaults,
     chosen: FieldMapping | None = None,
 ) -> MappingScreen:
-    screen = MappingScreen(defaults=defaults, readonly=chosen is not None)
+    screen = MappingScreen(readonly=chosen is not None)
     samples = summary.samples
     headers = _sorted_headers(list(samples), suggestion)
     input_width = _input_width_ch(headers)

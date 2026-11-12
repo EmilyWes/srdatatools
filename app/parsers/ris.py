@@ -17,7 +17,6 @@ from app.parsers.common import (
 from app.parsers.mapping import (
     AuthorsRow,
     FieldMapping,
-    RowDefaults,
     Suggest,
     apply_line_mapping,
     join_tag_lines,
@@ -59,7 +58,6 @@ _SUGGESTIONS: dict[str, Suggest] = {
     "y1": Suggest("date"),
     "an": Suggest("other_ids"),
 }
-ROW_DEFAULTS = RowDefaults()
 
 _TAG_LINE = re.compile(r"^(?P<tag>[A-Z][A-Z0-9])  -(?: (?P<value>.*))?$")
 _END_TAG = "ER"
@@ -176,7 +174,6 @@ def read_ris_tags(path: Path) -> FileSummary:
 def suggest_ris_mapping(
     tags: list[str],
     overrides: Mapping[str, Suggest] | None = None,
-    defaults: RowDefaults = ROW_DEFAULTS,
 ) -> FieldMapping:
     suggestions = override_aliases(_SUGGESTIONS, overrides or {})
-    return _suggest_mapping(tags, suggestions, defaults, lenient=False)
+    return _suggest_mapping(tags, suggestions, lenient=False)

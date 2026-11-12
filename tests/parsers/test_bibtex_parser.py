@@ -5,7 +5,6 @@ import pytest
 from app.models.record import Record
 from app.parsers import bibtex
 from app.parsers.bibtex import (
-    ROW_DEFAULTS,
     parse_bibtex_file,
     parse_bibtex_record,
     parse_bibtex_text,
@@ -33,8 +32,7 @@ _MAPPING = mapping_of(
         "month": Suggest("date", {"part": "month"}),
         "note": "notes",
         "author": "authors",
-    },
-    ROW_DEFAULTS,
+    }
 )
 
 

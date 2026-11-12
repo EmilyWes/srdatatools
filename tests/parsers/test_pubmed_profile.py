@@ -12,14 +12,14 @@ from tests.mappings import targets_of
 def _parse_nbib(text: str) -> Record:
     tags = list(dict.fromkeys(line[:4].strip() for line in text.splitlines()))
     profile = PUBMED.formats["nbib"]
-    mapping = suggest_nbib_mapping(tags, profile.suggestions, profile.row_defaults)
+    mapping = suggest_nbib_mapping(tags, profile.suggestions)
     result = parse_nbib_text(text, mapping, settings=profile.settings)
     return result.rows[0].record
 
 
 def _suggest_csv(headers: list[str]) -> FieldMapping:
     profile = PUBMED.formats["csv"]
-    return suggest_mapping(headers, profile.suggestions, profile.row_defaults)
+    return suggest_mapping(headers, profile.suggestions)
 
 
 def _parse_csv(row: dict[str, str]) -> Record:

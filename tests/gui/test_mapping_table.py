@@ -18,15 +18,11 @@ from app.parsers.mapping import (
     LabelRow,
     OtherIdRow,
     PagesRow,
-    RowDefaults,
     ScalarRow,
     Suggest,
 )
-from app.parsers.ris import ROW_DEFAULTS as RIS_DEFAULTS
 from app.parsers.ris import suggest_ris_mapping
 from tests.mappings import mapping_of, targets_of
-
-_DEFAULTS = RowDefaults()
 
 
 def _summary(samples: dict[str, str]) -> FileSummary:
@@ -39,7 +35,6 @@ def _render_samples(samples: dict[str, str]) -> MappingScreen:
         panes.middle,
         _summary(samples),
         suggest_mapping(list(samples)),
-        defaults=_DEFAULTS,
     )
 
 
@@ -49,7 +44,6 @@ def _render_ris_samples(samples: dict[str, str]) -> MappingScreen:
         panes.middle,
         _summary(samples),
         suggest_ris_mapping(list(samples)),
-        defaults=RIS_DEFAULTS,
     )
 
 
@@ -141,7 +135,6 @@ def test_render_mapping_table__renders_only_the_table() -> None:
         panes.middle,
         _summary({"Title": ""}),
         suggest_mapping(["Title"]),
-        defaults=_DEFAULTS,
     )
 
     assert len(panes.middle.default_slot.children) == 1
@@ -279,7 +272,6 @@ def test_render_mapping_table__sample_has_full_value_tooltip_only_when_non_empty
         panes.middle,
         _summary(samples),
         suggest_mapping(list(samples)),
-        defaults=_DEFAULTS,
     )
 
     targets = {
@@ -415,7 +407,6 @@ def test_render_mapping_table__truncated_input_header_has_full_value_tooltip() -
         panes.middle,
         _summary({long_header: "", "Title": ""}),
         suggest_mapping([long_header, "Title"]),
-        defaults=_DEFAULTS,
     )
 
     tooltips = [t.text for t in panes.middle.descendants() if isinstance(t, Tooltip)]
@@ -432,7 +423,6 @@ def test_render_mapping_table__shows_filled_bar_per_row_with_count_tooltip() -> 
         panes.middle,
         summary,
         suggest_mapping(list(samples)),
-        defaults=_DEFAULTS,
     )
 
     title, notes, year = (screen._row_for(h).count for h in samples)
@@ -462,7 +452,6 @@ def test_render_mapping_table__filled_bar_color_by_thirds(
         panes.middle,
         summary,
         suggest_mapping(["Title"]),
-        defaults=_DEFAULTS,
     )
 
     assert screen._row_for("Title").count.props["color"] == color
@@ -476,7 +465,6 @@ def test_render_mapping_table__empty_file_bar_is_empty() -> None:
         panes.middle,
         summary,
         suggest_mapping(["Title"]),
-        defaults=_DEFAULTS,
     )
 
     assert screen._row_for("Title").count.value == 0.0
@@ -489,7 +477,6 @@ def _render_chosen(headers: list[str], chosen: FieldMapping) -> MappingScreen:
         panes.middle,
         _summary(samples),
         suggest_mapping(headers),
-        defaults=_DEFAULTS,
         chosen=chosen,
     )
 

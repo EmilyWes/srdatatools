@@ -1,4 +1,3 @@
-from app.parsers.mapping import RowDefaults
 from app.parsers.profiles import has_profile, profile_for
 from app.parsers.profiles.default import (
     DEFAULT_PROFILES,
@@ -40,10 +39,3 @@ def test_default_settings__overrides_the_type_default() -> None:
     settings = default_settings("nbib", label_values=(("-1", "exclude"),))
 
     assert settings.label_values == (("-1", "exclude"),)
-
-
-def test_default_profiles__use_each_types_row_defaults() -> None:
-    assert DEFAULT_PROFILES["csv"].row_defaults == RowDefaults()
-    assert DEFAULT_PROFILES["ris"].row_defaults == RowDefaults()
-    assert DEFAULT_PROFILES["nbib"].row_defaults == RowDefaults()
-    assert DEFAULT_PROFILES["bibtex"].row_defaults == RowDefaults()

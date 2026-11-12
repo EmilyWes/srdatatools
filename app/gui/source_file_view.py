@@ -6,7 +6,7 @@ from nicegui.element import Element
 
 from app.db.models import SourceFile
 from app.gui.format import format_count, source_label
-from app.gui.import_flow import row_defaults_for, type_label
+from app.gui.import_flow import type_label
 from app.gui.mapping_table import render_mapping_table
 from app.gui.quirks_overview import render_quirks_overview, render_view_toggle
 from app.parsers.common import UNKNOWN, FileSummary, FileType
@@ -98,7 +98,6 @@ def render_source_file_view(
                     views.mapping,
                     summary,
                     FieldMapping.model_validate(source_file.suggested_mapping),
-                    defaults=row_defaults_for(file_type, source),
                     chosen=FieldMapping.model_validate(source_file.field_mapping),
                 )
                 render_quirks_overview(

@@ -43,9 +43,7 @@ ER  -
 
 def _csv_mapping(headers: list[str], file_type: FileType = "csv") -> FieldMapping:
     profile = ASREVIEW.formats[file_type]
-    return suggest_mapping(
-        headers, profile.suggestions, profile.row_defaults, profile.ignored_keys
-    )
+    return suggest_mapping(headers, profile.suggestions, profile.ignored_keys)
 
 
 def test_asreview_csv__suggests_label_and_rispy_columns() -> None:
@@ -118,7 +116,6 @@ def _parse(path: Path, file_type: FileType) -> ParseResult:
         mapping = suggest_ris_mapping(
             ["TY", "N1", "TI", "SP", "EP", "IS"],
             profile.suggestions,
-            profile.row_defaults,
         )
         result = parse_ris_file(path, mapping, profile.settings)
     elif file_type == "excel":

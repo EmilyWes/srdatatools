@@ -18,7 +18,6 @@ def _suggest_csv(headers: list[str]) -> FieldMapping:
     return suggest_mapping(
         headers,
         _CSV_PROFILE.suggestions,
-        _CSV_PROFILE.row_defaults,
         _CSV_PROFILE.ignored_keys,
     )
 
@@ -177,9 +176,7 @@ def test_openalex_ris__joins_au_and_c1_lines() -> None:
         "TY  - JOUR\nAU  - Baron, Matthew\nC1  - Natural History Museum\n"
         "AU  - Norman, David\nC1  - University of Cambridge\nER  - \n"
     )
-    mapping = suggest_ris_mapping(
-        ["TY", "AU", "C1"], _RIS_PROFILE.suggestions, _RIS_PROFILE.row_defaults
-    )
+    mapping = suggest_ris_mapping(["TY", "AU", "C1"], _RIS_PROFILE.suggestions)
 
     record = (
         parse_ris_text(text, mapping, settings=_RIS_PROFILE.settings).rows[0].record
@@ -197,9 +194,7 @@ def test_openalex_ris__never_matches() -> None:
 
 def test_openalex_bibtex__keeps_keywords_unsplit() -> None:
     text = "@article{baron2017new,\n  keywords = {dinosaur phylogeny, Ornithischia}\n}"
-    mapping = suggest_bibtex_mapping(
-        ["keywords"], _BIBTEX_PROFILE.suggestions, _BIBTEX_PROFILE.row_defaults
-    )
+    mapping = suggest_bibtex_mapping(["keywords"], _BIBTEX_PROFILE.suggestions)
 
     result = parse_bibtex_text(text, mapping, settings=_BIBTEX_PROFILE.settings)
 

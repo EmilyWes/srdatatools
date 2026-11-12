@@ -25,17 +25,15 @@ def _mapping(path: Path, file_type: FileType, source: str) -> FieldMapping:
     assert profile is not None
     if file_type == "csv":
         headers = list(read_csv_headers(path).samples)
-        return suggest_mapping(
-            headers, profile.suggestions, profile.row_defaults, profile.ignored_keys
-        )
+        return suggest_mapping(headers, profile.suggestions, profile.ignored_keys)
     if file_type == "ris":
         tags = list(read_ris_tags(path).samples)
-        return suggest_ris_mapping(tags, profile.suggestions, profile.row_defaults)
+        return suggest_ris_mapping(tags, profile.suggestions)
     if file_type == "nbib":
         tags = list(read_nbib_tags(path).samples)
-        return suggest_nbib_mapping(tags, profile.suggestions, profile.row_defaults)
+        return suggest_nbib_mapping(tags, profile.suggestions)
     keys = list(read_bibtex_fields(path).samples)
-    return suggest_bibtex_mapping(keys, profile.suggestions, profile.row_defaults)
+    return suggest_bibtex_mapping(keys, profile.suggestions)
 
 
 def _cleaned(

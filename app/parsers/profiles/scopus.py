@@ -5,7 +5,6 @@ from io import StringIO
 from app.parsers.mapping import Suggest
 from app.parsers.profiles.base import FormatProfile, Profile
 from app.parsers.profiles.default import (
-    default_row_defaults,
     default_settings,
 )
 
@@ -52,7 +51,6 @@ SCOPUS = Profile(
             },
             matches=_matches_csv,
             settings=default_settings("csv"),
-            row_defaults=default_row_defaults("csv"),
             # "Authors" abbreviates the given names in "Author full names".
             ignored_keys=frozenset(
                 {
@@ -71,7 +69,6 @@ SCOPUS = Profile(
             },
             matches=_matches_ris,
             settings=default_settings("ris"),
-            row_defaults=default_row_defaults("ris"),
         ),
         "bibtex": FormatProfile(
             suggestions={
@@ -84,7 +81,6 @@ SCOPUS = Profile(
             },
             matches=_matches_bibtex,
             settings=default_settings("bibtex"),
-            row_defaults=default_row_defaults("bibtex"),
         ),
     },
 )

@@ -5,7 +5,6 @@ from app.parsers.common import FileType
 from app.parsers.mapping import Suggest
 from app.parsers.profiles.base import FormatProfile, Profile
 from app.parsers.profiles.default import (
-    default_row_defaults,
     default_settings,
 )
 
@@ -52,7 +51,6 @@ def _tabular(file_type: FileType) -> FormatProfile:
         suggestions=_TABULAR_SUGGESTIONS,
         matches=_matches_tabular,
         settings=default_settings(file_type),
-        row_defaults=default_row_defaults(file_type),
         ignored_keys=_TABULAR_IGNORED,
     )
 
@@ -68,7 +66,6 @@ ASREVIEW = Profile(
             suggestions={"n1": Suggest("label")},
             matches=_matches_ris,
             settings=default_settings("ris", label_values=_RIS_LABEL_VALUES),
-            row_defaults=default_row_defaults("ris"),
         ),
     },
 )

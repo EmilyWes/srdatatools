@@ -2,7 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from app.parsers.common import FileType
-from app.parsers.mapping import RowDefaults, Suggest
+from app.parsers.mapping import Suggest
 from app.parsers.quirks import ParseSettings
 
 MatchesText = Callable[[str], bool]
@@ -13,7 +13,6 @@ class FormatProfile:
     suggestions: dict[str, Suggest]
     matches: MatchesText
     settings: ParseSettings
-    row_defaults: RowDefaults
     ignored_keys: frozenset[str] = frozenset()
 
 

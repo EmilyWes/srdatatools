@@ -20,7 +20,6 @@ from app.parsers.common import (
 from app.parsers.mapping import (
     AuthorsRow,
     FieldMapping,
-    RowDefaults,
     Suggest,
     apply_mapping,
     override_aliases,
@@ -58,7 +57,6 @@ _SUGGESTIONS: dict[str, Suggest] = {
     "month": Suggest("date", {"part": "month"}),
     "keywords": Suggest("keywords"),
 }
-ROW_DEFAULTS = RowDefaults()
 
 _IGNORED_ENTRY_TYPES = frozenset({"comment", "string", "preamble"})
 _ENTRY_START = re.compile(
@@ -295,7 +293,6 @@ def read_bibtex_fields(path: Path) -> FileSummary:
 def suggest_bibtex_mapping(
     keys: list[str],
     overrides: Mapping[str, Suggest] | None = None,
-    defaults: RowDefaults = ROW_DEFAULTS,
 ) -> FieldMapping:
     suggestions = override_aliases(_SUGGESTIONS, overrides or {})
-    return _suggest_mapping(keys, suggestions, defaults, lenient=False)
+    return _suggest_mapping(keys, suggestions, lenient=False)

@@ -15,7 +15,6 @@ from app.parsers.mapping import (
     Suggest,
 )
 from app.parsers.nbib import (
-    ROW_DEFAULTS,
     parse_nbib_file,
     parse_nbib_record,
     parse_nbib_text,
@@ -42,7 +41,6 @@ _MAPPING = mapping_of(
         "JT": "journal",
         "DOI": "doi",
     },
-    defaults=ROW_DEFAULTS,
 )
 
 
@@ -404,7 +402,6 @@ def test_read_nbib_tags__empty_file_has_zero_rows(tmp_path: Path) -> None:
 
 _AUTHOR_MAPPING = mapping_of(
     {"FAU": "authors", "AUID": _IDS, "AD": _AFFILIATIONS},
-    defaults=ROW_DEFAULTS,
 )
 
 
@@ -520,7 +517,6 @@ def test_parse_nbib_text__auid_ad_before_first_author_are_ignored() -> None:
 def test_parse_nbib_text__au_fallback_author_tag_groups_auid() -> None:
     mapping = mapping_of(
         {"AU": "authors", "AUID": _IDS, "AD": _AFFILIATIONS},
-        defaults=ROW_DEFAULTS,
     )
     text = (
         "PMID- 1\n"
@@ -552,7 +548,7 @@ def test_parse_nbib_text__unmapped_auid_ad_are_not_read() -> None:
 
 
 def test_parse_nbib_text__ad_mapped_elsewhere_behaves_like_normal_tag() -> None:
-    mapping = mapping_of({"FAU": "authors", "AD": "notes"}, defaults=ROW_DEFAULTS)
+    mapping = mapping_of({"FAU": "authors", "AD": "notes"})
     text = "PMID- 1\nFAU - Smith, John\nAD  - Department A.\n"
 
     record = parse_nbib_text(text, mapping).rows[0].record
@@ -598,7 +594,7 @@ def test_parse_nbib_text__ot_keywords_have_no_prefix() -> None:
 
 
 def test_parse_nbib_text__mh_mapped_elsewhere_has_no_prefix() -> None:
-    mapping = mapping_of({"MH": "notes"}, defaults=ROW_DEFAULTS)
+    mapping = mapping_of({"MH": "notes"})
 
     record = parse_nbib_text("PMID- 1\nMH  - *Dinosaurs\n", mapping).rows[0].record
 
@@ -664,9 +660,7 @@ def test_parse_nbib_text__author_after_editor_gets_its_own_ad() -> None:
 
 
 def test_parse_nbib_record__keeps_is_qualifier() -> None:
-    mapping = mapping_of(
-        {"IS": Suggest("issn_isbn", {"kind": "issn"})}, defaults=ROW_DEFAULTS
-    )
+    mapping = mapping_of({"IS": Suggest("issn_isbn", {"kind": "issn"})})
 
     row = parse_nbib_record([("IS", "1234-5678 (Print)")], mapping, _NBIB_SETTINGS)
 
@@ -677,7 +671,6 @@ def test_parse_nbib_record__keeps_is_qualifier() -> None:
 def test_parse_nbib_record__attaches_auid_and_ad_to_preceding_fau() -> None:
     mapping = mapping_of(
         {"FAU": "authors", "AUID": _IDS, "AD": _AFFILIATIONS},
-        defaults=ROW_DEFAULTS,
     )
     lines = [
         ("FAU", "Smith, John"),

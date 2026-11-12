@@ -16,7 +16,6 @@ from app.parsers.common import (
 )
 from app.parsers.mapping import (
     FieldMapping,
-    RowDefaults,
     Suggest,
     apply_mapping,
     override_aliases,
@@ -73,7 +72,6 @@ _SUGGESTIONS: dict[str, Suggest] = {
         Suggest("label"),
     ),
 }
-ROW_DEFAULTS = RowDefaults()
 
 _EXTRA_FIELDS_KEY = "__extra__"
 _SNIFF_SAMPLE_SIZE = 2048
@@ -196,9 +194,8 @@ def read_csv_headers(
 def suggest_mapping(
     headers: list[str],
     overrides: Mapping[str, Suggest] | None = None,
-    defaults: RowDefaults = ROW_DEFAULTS,
     ignored_keys: frozenset[str] = frozenset(),
 ) -> FieldMapping:
     suggestions = override_aliases(_SUGGESTIONS, overrides or {})
     kept = [h for h in headers if h.strip().lower() not in ignored_keys]
-    return _suggest_mapping(kept, suggestions, defaults, lenient=True)
+    return _suggest_mapping(kept, suggestions, lenient=True)

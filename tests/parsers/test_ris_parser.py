@@ -17,7 +17,6 @@ from app.parsers.mapping import (
 from app.parsers.profiles.default import DEFAULT_PROFILES
 from app.parsers.quirks import ParseSettings
 from app.parsers.ris import (
-    ROW_DEFAULTS,
     parse_ris_file,
     parse_ris_record,
     parse_ris_text,
@@ -40,7 +39,6 @@ _MAPPING = mapping_of(
         "N1": "notes",
         "T2": "journal",
     },
-    defaults=ROW_DEFAULTS,
 )
 
 
@@ -77,7 +75,6 @@ def test_parse_ris_text__repeated_author_tags_become_separate_authors() -> None:
 
 _AFFILIATION_MAPPING = mapping_of(
     {"TI": "title", "AU": "authors", "AD": _AFFILIATIONS, "C1": _AFFILIATIONS},
-    defaults=ROW_DEFAULTS,
 )
 
 
@@ -119,7 +116,6 @@ _ID_MAPPING = mapping_of(
         "AD": _AFFILIATIONS,
         "ID": Suggest("authors", {"role": "ids", "id_key": "orcid"}),
     },
-    defaults=ROW_DEFAULTS,
 )
 
 

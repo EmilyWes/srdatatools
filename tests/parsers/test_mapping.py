@@ -13,7 +13,6 @@ from app.parsers.mapping import (
     LabelRow,
     OtherIdRow,
     PagesRow,
-    RowDefaults,
     ScalarRow,
     Suggest,
     apply_mapping,
@@ -30,8 +29,6 @@ from app.parsers.mapping import (
 )
 from app.parsers.quirks import ParseSettings
 from tests.mappings import mapping_of
-
-_DEFAULTS = RowDefaults()
 
 
 def test_field_mapping__rejects_other_id_without_key() -> None:
@@ -53,36 +50,32 @@ def test_field_mapping__round_trips_through_a_dump() -> None:
 
 
 def test_default_row__fills_each_targets_default_options() -> None:
-    defaults = RowDefaults()
-
-    assert default_row("title", "TI", defaults) == ScalarRow(target="title")
-    assert default_row("date", "DA", defaults) == DateRow(part="full")
-    assert default_row("pages", "PG", defaults) == PagesRow(part="range")
-    assert default_row("issn_isbn", "SN", defaults) == IssnIsbnRow(kind="auto")
-    assert default_row("other_ids", "Work ID", defaults) == OtherIdRow(key="work_id")
-    assert default_row("authors", "Author IDs", defaults) == AuthorsRow(
+    assert default_row("title", "TI") == ScalarRow(target="title")
+    assert default_row("date", "DA") == DateRow(part="full")
+    assert default_row("pages", "PG") == PagesRow(part="range")
+    assert default_row("issn_isbn", "SN") == IssnIsbnRow(kind="auto")
+    assert default_row("other_ids", "Work ID") == OtherIdRow(key="work_id")
+    assert default_row("authors", "Author IDs") == AuthorsRow(
         role="names", id_key="author_ids"
     )
-    assert default_row("keywords", "KW", defaults) == KeywordsRow()
-    assert default_row("label", "L", defaults) == LabelRow(
-        phase="ft", screener="screener 1"
-    )
+    assert default_row("keywords", "KW") == KeywordsRow()
+    assert default_row("label", "L") == LabelRow(phase="ft", screener="screener 1")
 
 
 def test_default_row__rejects_unknown_target() -> None:
     with pytest.raises(ValueError, match="unknown Record field"):
-        default_row("not_a_field", "X", _DEFAULTS)
+        default_row("not_a_field", "X")
 
 
 def test_make_row__applies_suggested_options_over_defaults() -> None:
-    row = make_row(Suggest("authors", {"role": "ids"}), "ORCID", _DEFAULTS)
+    row = make_row(Suggest("authors", {"role": "ids"}), "ORCID")
 
     assert row == AuthorsRow(role="ids", id_key="orcid")
 
 
 def test_make_row__rejects_invalid_option() -> None:
     with pytest.raises(ValidationError):
-        make_row(Suggest("date", {"part": "week"}), "DA", _DEFAULTS)
+        make_row(Suggest("date", {"part": "week"}), "DA")
 
 
 def test_apply_mapping__first_non_empty_value_wins_for_scalar() -> None:
@@ -610,9 +603,7 @@ def _targets(mapping: FieldMapping) -> dict[str, str]:
 def test_suggest_mapping__strict_matches_exact_aliases_only() -> None:
     suggestions = {"ti": Suggest("title"), "do": Suggest("doi")}
 
-    mapping = suggest_mapping(
-        ["TI", "tj", "Custom ID"], suggestions, _DEFAULTS, lenient=False
-    )
+    mapping = suggest_mapping(["TI", "tj", "Custom ID"], suggestions, lenient=False)
 
     assert _targets(mapping) == {"TI": "title"}
 
@@ -620,7 +611,7 @@ def test_suggest_mapping__strict_matches_exact_aliases_only() -> None:
 def test_suggest_mapping__builds_rows_with_suggested_options() -> None:
     suggestions = {"pmcid": Suggest("other_ids", {"key": "pmc"})}
 
-    mapping = suggest_mapping(["PMCID"], suggestions, _DEFAULTS, lenient=True)
+    mapping = suggest_mapping(["PMCID"], suggestions, lenient=True)
 
     assert mapping.rows == {"PMCID": OtherIdRow(key="pmc")}
 
@@ -628,17 +619,9 @@ def test_suggest_mapping__builds_rows_with_suggested_options() -> None:
 def test_suggest_mapping__several_keys_may_share_a_target() -> None:
     suggestions = {"da": Suggest("date"), "py": Suggest("date")}
 
-    mapping = suggest_mapping(["PY", "DA"], suggestions, _DEFAULTS, lenient=False)
+    mapping = suggest_mapping(["PY", "DA"], suggestions, lenient=False)
 
     assert _targets(mapping) == {"PY": "date", "DA": "date"}
-
-
-def test_suggest_mapping__uses_row_defaults() -> None:
-    mapping = suggest_mapping(
-        ["DA"], {"da": Suggest("date", {"part": "year"})}, _DEFAULTS, lenient=False
-    )
-
-    assert mapping.rows == {"DA": DateRow(part="year")}
 
 
 def test_suggest_mapping__records_match_kind_per_key() -> None:
@@ -647,7 +630,6 @@ def test_suggest_mapping__records_match_kind_per_key() -> None:
     mapping = suggest_mapping(
         ["DOI", "Article Titles", "Custom ID", "Zzzqqqxx123"],
         suggestions,
-        _DEFAULTS,
         lenient=True,
     )
 
@@ -662,7 +644,7 @@ def test_suggest_mapping__lenient_fuzzy_matches_and_falls_back_to_id() -> None:
     suggestions = {"article title": Suggest("title")}
 
     mapping = suggest_mapping(
-        ["Article Titles", "Custom ID"], suggestions, _DEFAULTS, lenient=True
+        ["Article Titles", "Custom ID"], suggestions, lenient=True
     )
 
     assert mapping.rows == {
