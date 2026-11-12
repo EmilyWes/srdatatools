@@ -30,9 +30,23 @@ def test_runtime_closure__excludes_dev_and_build_extras() -> None:
 
 
 def test_render__has_python_packages_and_web_assets() -> None:
-    text = _script().render()
+    script = _script()
+
+    text = script.render(script.runtime_closure())
 
     assert text.startswith("srdatatools bundles the following third-party software.")
     assert "\nPython 3." in text
     assert "\nnicegui " in text
     assert "Apache ECharts (Apache-2.0)" in text
+
+
+def test_render_summary__one_line_per_component_without_urls() -> None:
+    script = _script()
+    closure = script.runtime_closure()
+
+    lines = script.render_summary(closure).splitlines()
+
+    assert lines[0].startswith("Python 3.")
+    assert len(lines) == 1 + len(closure) + len(script.WEB_ASSETS)
+    assert "Apache ECharts (Apache-2.0)" in lines
+    assert not any("://" in line for line in lines)

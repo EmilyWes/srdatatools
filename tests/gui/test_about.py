@@ -26,9 +26,18 @@ def test_render_about_view__shows_version_link_and_both_licenses() -> None:
     [link] = [e for e in panes.middle.descendants() if isinstance(e, ui.link)]
     assert link.props["href"] == REPOSITORY_URL
     root = project_root()
-    assert (root / "LICENSE").read_text(encoding="utf-8") in texts
-    third_party = (root / "THIRD_PARTY_LICENSES.txt").read_text(encoding="utf-8")
-    assert third_party in texts
+    for name in ("LICENSE", "THIRD_PARTY_SUMMARY.txt", "THIRD_PARTY_LICENSES.txt"):
+        assert (root / name).read_text(encoding="utf-8") in texts
+
+
+def test_render_about_view__license_texts_start_collapsed() -> None:
+    panes = shell()
+
+    render_about_view(panes.middle)
+
+    expansions = [e for e in panes.middle.descendants() if isinstance(e, ui.expansion)]
+    assert [e.props["label"] for e in expansions] == ["License", "Full license texts"]
+    assert not any(e.value for e in expansions)
 
 
 def test_render_help_view__shows_placeholder() -> None:

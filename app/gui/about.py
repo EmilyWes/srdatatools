@@ -9,10 +9,12 @@ PACKAGE = "srdatatools"
 REPOSITORY_URL = "https://github.com/EmilyWes/srdatatools"
 LICENSE_FILE = "LICENSE"
 THIRD_PARTY_FILE = "THIRD_PARTY_LICENSES.txt"
+THIRD_PARTY_SUMMARY_FILE = "THIRD_PARTY_SUMMARY.txt"
 HELP_PLACEHOLDER = "Help will be added later."
 _TITLE_CLASSES = "text-lg font-bold"
 _HEADING_CLASSES = "text-sm font-bold pt-2"
 _TEXT_BOX_CLASSES = "w-full h-64 border rounded-borders"
+_EXPANSION_CLASSES = "w-full text-sm"
 
 
 def _version_and_summary() -> tuple[str, str]:
@@ -38,10 +40,12 @@ def render_about_view(middle: Element) -> None:
         if summary:
             ui.label(summary).classes("text-sm")
         ui.link(REPOSITORY_URL, REPOSITORY_URL, new_tab=True).classes("text-sm")
-        ui.label("License").classes(_HEADING_CLASSES)
-        _text_box((root / LICENSE_FILE).read_text(encoding="utf-8"))
+        with ui.expansion("License").classes(_EXPANSION_CLASSES):
+            _text_box((root / LICENSE_FILE).read_text(encoding="utf-8"))
         ui.label("Third-party software").classes(_HEADING_CLASSES)
-        _text_box((root / THIRD_PARTY_FILE).read_text(encoding="utf-8"))
+        _text_box((root / THIRD_PARTY_SUMMARY_FILE).read_text(encoding="utf-8"))
+        with ui.expansion("Full license texts").classes(_EXPANSION_CLASSES):
+            _text_box((root / THIRD_PARTY_FILE).read_text(encoding="utf-8"))
 
 
 def render_help_view(middle: Element) -> None:

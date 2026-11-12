@@ -1,4 +1,5 @@
-"""Write THIRD_PARTY_LICENSES.txt for the packages a frozen build ships.
+"""Write THIRD_PARTY_LICENSES.txt (full notices) and THIRD_PARTY_SUMMARY.txt
+(one line per component) for the software a frozen build ships.
 
 Run from the repo root, in the environment the executable is built from:
 `python packaging/third_party_licenses.py`
@@ -16,7 +17,9 @@ from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
 ROOT_PACKAGE = "srdatatools"
-OUTPUT = Path(__file__).resolve().parent.parent / "THIRD_PARTY_LICENSES.txt"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+OUTPUT = REPO_ROOT / "THIRD_PARTY_LICENSES.txt"
+SUMMARY = REPO_ROOT / "THIRD_PARTY_SUMMARY.txt"
 _LICENSE_FILE = re.compile(r"licen[cs]e|copying|notice", re.IGNORECASE)
 _SEPARATOR = "=" * 79
 
@@ -113,21 +116,38 @@ def _section(title: str, body: str) -> str:
     return f"{_SEPARATOR}\n{title}\n{_SEPARATOR}\n\n{body}\n"
 
 
-def render() -> str:
-    version = ".".join(map(str, sys.version_info[:3]))
+def _python_title() -> str:
+    return f"Python {'.'.join(map(str, sys.version_info[:3]))} (PSF-2.0)"
+
+
+def _title(dist: Distribution) -> str:
+    return f"{dist.metadata['Name']} {dist.version} ({license_name(dist)})"
+
+
+def render(dists: list[Distribution]) -> str:
     sections = [
         "srdatatools bundles the following third-party software.\n",
-        _section(f"Python {version} (PSF-2.0)", _python_license()),
+        _section(_python_title(), _python_license()),
     ]
-    for dist in runtime_closure():
-        title = f"{dist.metadata['Name']} {dist.version} ({license_name(dist)})"
+    for dist in dists:
         texts = license_texts(dist) or ["No license file included in the package."]
-        sections.append(_section(title, "\n\n".join(texts)))
+        sections.append(_section(_title(dist), "\n\n".join(texts)))
     assets = "\n".join(f"{name} ({spdx}): {url}" for name, spdx, url in WEB_ASSETS)
     sections.append(_section("Web libraries and fonts bundled with NiceGUI", assets))
     return "\n".join(sections)
 
 
+def render_summary(dists: list[Distribution]) -> str:
+    lines = [
+        _python_title(),
+        *map(_title, dists),
+        *(f"{name} ({spdx})" for name, spdx, _ in WEB_ASSETS),
+    ]
+    return "\n".join(lines) + "\n"
+
+
 if __name__ == "__main__":
-    OUTPUT.write_text(render(), encoding="utf-8", newline="\n")
-    print(f"Wrote {OUTPUT}")
+    closure = runtime_closure()
+    for path, text in ((OUTPUT, render(closure)), (SUMMARY, render_summary(closure))):
+        path.write_text(text, encoding="utf-8", newline="\n")
+        print(f"Wrote {path}")
