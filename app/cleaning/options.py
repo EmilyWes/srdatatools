@@ -16,6 +16,7 @@ class CleaningOptions(BaseModel):
     split_authors: bool = True
     names_separator: str = ""
     affiliations_separator: str = ""
+    ids_separator: str = ""
     id_from_name: bool = True
     author_strip_extras: bool = False
     affiliation_start: str = ""
@@ -96,8 +97,8 @@ _AUTHORS = QuirkBox(
         QuirkItem(
             "split_authors",
             "Split authors",
-            "Separates the author names and affiliations with |, so each author"
-            " can be told apart. Needed for the options below.",
+            "Separates the author names, affiliations and IDs with |, so each"
+            " author can be told apart. Needed for the options below.",
             "checkbox",
         ),
         QuirkItem(
@@ -114,6 +115,15 @@ _AUTHORS = QuirkBox(
             "Affiliations separator",
             "What separates the affiliations in the imported value. Leave empty"
             " to detect it per imported file, as for the names.",
+            "text",
+            enabled_by="split_authors",
+        ),
+        QuirkItem(
+            "ids_separator",
+            "IDs separator",
+            "What separates the author IDs in an imported column, e.g. Scopus's"
+            " Author(s) ID. Leave empty to detect it per imported file, as for"
+            " the names.",
             "text",
             enabled_by="split_authors",
         ),

@@ -120,7 +120,6 @@ _OPTIONS: dict[str, tuple[_Option, ...]] = {
                 "affiliations": "Affiliations",
             },
         ),
-        _Option("delimiter", "aut", "Author separator", strip=False),
         _Option("id_key", "key", "ID key"),
     ),
     KEYWORDS_TARGET: (

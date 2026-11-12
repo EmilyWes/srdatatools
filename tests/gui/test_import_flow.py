@@ -315,7 +315,7 @@ def test_import_file__saves_ris_suggestion_with_row_options(
     )
 
     suggested = FieldMapping.model_validate(source_file.suggested_mapping)
-    assert suggested.rows["AU"] == AuthorsRow(delimiter="\n", id_key="au")
+    assert suggested.rows["AU"] == AuthorsRow(id_key="au")
     assert set(source_file.file_summary["samples"]) == {"TI", "AU", "TY"}
 
 
@@ -454,7 +454,7 @@ def test_import_file__bibtex_stores_records_and_skipped_rows(
     ]
 
 
-def test_render_mapping__bibtex_lists_fields_and_hides_author_delimiter(
+def test_render_mapping__bibtex_lists_fields(
     tmp_path: Path,
 ) -> None:
     bibtex_path = tmp_path / "export.bib"
@@ -497,7 +497,7 @@ def test_render_import_view__bibtex_file_is_detected_and_enables_import(
     assert view.import_button.enabled is True
 
 
-def test_render_mapping__tsv_lists_columns_with_delimiter_box(
+def test_render_mapping__tsv_lists_columns(
     tmp_path: Path,
 ) -> None:
     tsv_path = tmp_path / "export.tsv"
@@ -510,7 +510,7 @@ def test_render_mapping__tsv_lists_columns_with_delimiter_box(
     assert [row.header for row in screen.rows] == ["Title", "Authors"]
     assert [
         name for name, w in screen._row_for("Authors").option_rows.items() if w.visible
-    ] == ["role", "delimiter"]
+    ] == ["role"]
 
 
 def test_render_import_view__tsv_file_is_detected_and_enables_import(
@@ -760,7 +760,7 @@ def test_render_mapping__pubmed_csv_splits_author_names_on_comma(
 
     assert screen is not None
     assert screen.current_mapping().rows["Authors"] == AuthorsRow(
-        role="names", delimiter=",", id_key="authors"
+        role="names", id_key="authors"
     )
 
 
@@ -1113,7 +1113,7 @@ def test_read_summary__excel_reads_first_sheet_by_default(tmp_path: Path) -> Non
     assert list(summary.samples) == ["Title", "DOI"]
 
 
-def test_render_mapping__excel_lists_columns_with_delimiter_box(
+def test_render_mapping__excel_lists_columns(
     tmp_path: Path,
 ) -> None:
     path = _workbook(tmp_path, {"Sheet1": [["Title", "Authors"], ["A", "B; C"]]})
@@ -1125,7 +1125,7 @@ def test_render_mapping__excel_lists_columns_with_delimiter_box(
     assert [row.header for row in screen.rows] == ["Title", "Authors"]
     assert [
         name for name, w in screen._row_for("Authors").option_rows.items() if w.visible
-    ] == ["role", "delimiter"]
+    ] == ["role"]
 
 
 def _sheet_select(middle: Element) -> Any:

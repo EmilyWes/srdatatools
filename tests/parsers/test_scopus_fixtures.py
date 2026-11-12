@@ -3,7 +3,6 @@ from pathlib import Path
 import pytest
 
 from app.models.record import Record
-from app.parsers.authors import parse_author_ids
 from app.parsers.bibtex import (
     parse_bibtex_file,
     read_bibtex_fields,
@@ -84,12 +83,9 @@ def test_scopus_small_csv__keeps_author_columns_as_in_the_file(
     csv_records: dict[str, Record],
 ) -> None:
     record = csv_records[_NODOSAUR_EID]
-    ids = parse_author_ids(record.author_ids)
 
     assert (record.author_names or "").startswith("Oyabu, Shumpei (60900075400); ")
-    assert ids[0] == ["scopus_author_id:60900075400"]
-    assert all(ids)
-    assert len(ids) == len((record.author_names or "").split(";"))
+    assert (record.author_ids or "").startswith("scopus_author_id:[60900075400; ")
     assert (record.author_affiliations or "").startswith(
         "Oyabu S., Department of Natural History and Planetary Sciences, "
         "Hokkaido University, Kita 10, Nishi 8, Kita-ku, Hokkaido, Sapporo, "

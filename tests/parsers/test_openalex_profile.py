@@ -1,8 +1,6 @@
 import csv
 from io import StringIO
 
-import pytest
-
 from app.models.record import Record
 from app.parsers.bibtex import parse_bibtex_text, suggest_bibtex_mapping
 from app.parsers.csv_ import parse_csv_text, suggest_mapping
@@ -96,34 +94,18 @@ def test_openalex_csv__suggests_only_exact_columns() -> None:
     }
 
 
+_OPENALEX_IDS = "openalex_author_id:[A5091833725|A5085682707|A5053220301]"
 _IDS = (
-    "openalex_author_id:A5091833725, orcid:0000-0001-9069-7638"
-    "|openalex_author_id:A5085682707"
-    "|openalex_author_id:A5053220301, orcid:0000-0003-0412-3000"
+    f"{_OPENALEX_IDS}, orcid:[https://orcid.org/0000-0001-9069-7638"
+    "||https://orcid.org/0000-0003-0412-3000]"
 )
 
 
-def test_openalex_csv__keeps_names_and_groups_ids_per_author() -> None:
+def test_openalex_csv__keeps_names_and_id_columns_unsplit() -> None:
     record = _parse_csv(_AUTHOR_ROW)
 
     assert record.author_names == "Matthew G. Baron|DAVID B. NORMAN|Paul M. Barrett"
     assert record.author_ids == _IDS
-
-
-def test_openalex_csv__mismatched_column_is_ignored_with_warning(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    row = {**_AUTHOR_ROW, "ORCID": "https://orcid.org/0000-0001-9069-7638"}
-
-    with caplog.at_level("WARNING"):
-        record = _parse_csv(row)
-
-    assert record.author_ids == (
-        "openalex_author_id:A5091833725"
-        "|openalex_author_id:A5085682707"
-        "|openalex_author_id:A5053220301"
-    )
-    assert "ORCID" in caplog.text
 
 
 def test_openalex_csv__empty_id_columns_leave_no_ids() -> None:
@@ -143,11 +125,7 @@ def test_openalex_csv__ignored_orcid_column_is_not_used() -> None:
 
     record = _parse_csv(_AUTHOR_ROW, mapping)
 
-    assert record.author_ids == (
-        "openalex_author_id:A5091833725"
-        "|openalex_author_id:A5085682707"
-        "|openalex_author_id:A5053220301"
-    )
+    assert record.author_ids == _OPENALEX_IDS
 
 
 def test_openalex_csv__ignored_names_still_give_ids() -> None:

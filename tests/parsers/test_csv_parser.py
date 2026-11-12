@@ -174,15 +174,13 @@ def test_parse_csv_text__splits_keywords_on_delimiter() -> None:
     assert result.rows[0].record.keywords == ["machine learning", "nlp"]
 
 
-def test_parse_csv_text__uses_custom_list_delimiter() -> None:
+def test_parse_csv_text__keeps_author_id_column_unsplit() -> None:
     text = "IDs\n1| 2\n"
-    mapping = mapping_of(
-        {"IDs": Suggest("authors", {"delimiter": "|", "role": "ids", "id_key": "x"})}
-    )
+    mapping = mapping_of({"IDs": Suggest("authors", {"role": "ids", "id_key": "x"})})
 
     result = parse_csv_text(text, mapping)
 
-    assert result.rows[0].record.author_ids == "x:1|x:2"
+    assert result.rows[0].record.author_ids == "x:[1| 2]"
 
 
 def test_parse_csv_text__first_non_empty_name_column_sets_the_authors() -> None:
@@ -448,7 +446,7 @@ def test_read_csv_headers__decodes_cp1252_file() -> None:
     [
         ("Article Title", ScalarRow(target="title")),
         ("Source title", ScalarRow(target="journal")),
-        ("Author full names", AuthorsRow(delimiter=";", id_key="author_full_names")),
+        ("Author full names", AuthorsRow(id_key="author_full_names")),
         ("Author Keywords", KeywordsRow(delimiter=";")),
         ("DOI", ScalarRow(target="doi")),
         ("Document Type", ScalarRow(target="publication_type")),

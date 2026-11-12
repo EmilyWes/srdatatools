@@ -10,10 +10,10 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_valid
 from app.models.record import Label, LabelValue, PartialDate, Record
 from app.parsers.authors import (
     AUTHOR_JOINER,
+    ID_JOINER,
     AuthorIds,
-    author_id,
     format_author_ids,
-    merge_author_ids,
+    unsplit_author_ids,
 )
 from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
@@ -93,7 +93,7 @@ KEYWORDS_TARGET = "keywords"
 LABEL_TARGET = "label"
 DEFAULT_PHASE = "ft"
 DEFAULT_SCREENER = "screener 1"
-# RIS and NBIB repeat a tag per value, and BibTeX authors are split before mapping.
+# RIS and NBIB repeat a tag per value.
 LINE_DELIMITER = "\n"
 
 AuthorRole = Literal["names", "ids", "affiliations"]
@@ -128,7 +128,6 @@ class OtherIdRow(BaseModel):
 class AuthorsRow(BaseModel):
     target: Literal["authors"] = "authors"
     role: AuthorRole = "names"
-    delimiter: str
     id_key: str = Field(min_length=1)
 
 
@@ -196,21 +195,10 @@ class FieldMapping(BaseModel):
     def rows_of(self, row_type: type[_Row]) -> list[tuple[str, _Row]]:
         return [(k, row) for k, row in self.rows.items() if isinstance(row, row_type)]
 
-    def author_separator(self, role: AuthorRole) -> str | None:
-        """What separates the authors in the stored value: the first row of that
-        role's delimiter; values that come one per line are joined with
-        AUTHOR_JOINER."""
-        rows = (row for _, row in self.rows_of(AuthorsRow) if row.role == role)
-        row = next(rows, None)
-        if row is None:
-            return None
-        return AUTHOR_JOINER if row.delimiter == LINE_DELIMITER else row.delimiter
-
 
 @dataclass(frozen=True)
 class RowDefaults:
     delimiter: str = ";"
-    author_delimiter: str | None = None
     date_order: DateOrder = "eu"
 
 
@@ -237,8 +225,7 @@ def default_row(target: str, key: str, defaults: RowDefaults) -> RowMapping:
     if target == OTHER_IDS_TARGET:
         return OtherIdRow(key=default_other_id_key(key))
     if target == AUTHORS_TARGET:
-        delimiter = defaults.author_delimiter or defaults.delimiter
-        return AuthorsRow(delimiter=delimiter, id_key=default_other_id_key(key))
+        return AuthorsRow(id_key=default_other_id_key(key))
     if target == KEYWORDS_TARGET:
         return KeywordsRow(delimiter=defaults.delimiter)
     if target == LABEL_TARGET:
@@ -440,20 +427,6 @@ def ordered_mapping(mapping: FieldMapping, use_first: tuple[str, ...]) -> FieldM
     return mapping.model_copy(update={"rows": {**first, **mapping.rows}})
 
 
-def _split_positions(value: str | None, delimiter: str) -> list[str]:
-    """Keeps empty pieces so positions line up across the columns."""
-    if not value or not value.strip():
-        return []
-    return [piece.strip() for piece in value.split(delimiter)]
-
-
-def _id_slots(row: AuthorsRow, value: str) -> AuthorIds:
-    return [
-        [author_id(row.id_key, piece)] if piece else []
-        for piece in _split_positions(value, row.delimiter)
-    ]
-
-
 def apply_mapping(
     raw_fields: dict[str, str],
     mapping: FieldMapping,
@@ -464,7 +437,7 @@ def apply_mapping(
     other_ids: dict[str, str] = {}
     keywords: list[str] = []
     labels: list[Label] = []
-    author_ids: AuthorIds = []
+    author_ids: list[str] = []
     for key, row in mapping.rows.items():
         value = (raw_fields.get(key) or "").strip()
         if isinstance(row, LabelRow):
@@ -490,7 +463,7 @@ def apply_mapping(
             )
         elif isinstance(row, AuthorsRow):
             if row.role == "ids":
-                author_ids = merge_author_ids(author_ids, _id_slots(row, value), key)
+                author_ids.append(unsplit_author_ids(row.id_key, value))
             else:
                 values.setdefault(_AUTHOR_FIELDS[row.role], value)
 
@@ -498,7 +471,7 @@ def apply_mapping(
         **values,
         pages=_parse_pages(raw_fields, mapping),
         other_ids=other_ids,
-        author_ids=format_author_ids(author_ids),
+        author_ids=ID_JOINER.join(author_ids) or None,
         keywords=keywords,
         labels=labels,
         publication_date=_parse_publication_date(raw_fields, mapping),

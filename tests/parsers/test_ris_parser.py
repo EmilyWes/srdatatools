@@ -321,8 +321,8 @@ def test_suggest_ris_mapping__uses_newline_delimiter_and_row_options() -> None:
     suggestions = suggest_ris_mapping(["AU", "AD", "KW", "SP", "EP"])
 
     assert suggestions.rows == {
-        "AU": AuthorsRow(delimiter="\n", id_key="au"),
-        "AD": AuthorsRow(role="affiliations", delimiter="\n", id_key="ad"),
+        "AU": AuthorsRow(id_key="au"),
+        "AD": AuthorsRow(role="affiliations", id_key="ad"),
         "KW": KeywordsRow(delimiter="\n"),
         "SP": PagesRow(part="start"),
         "EP": PagesRow(part="end"),

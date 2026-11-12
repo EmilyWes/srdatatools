@@ -46,10 +46,10 @@ def test_default_profiles__use_each_types_row_defaults() -> None:
     assert DEFAULT_PROFILES["csv"].row_defaults == RowDefaults()
     assert DEFAULT_PROFILES["ris"].row_defaults == RowDefaults(delimiter="\n")
     assert DEFAULT_PROFILES["nbib"].row_defaults == RowDefaults(delimiter="\n")
-    assert DEFAULT_PROFILES["bibtex"].row_defaults == RowDefaults(author_delimiter="\n")
+    assert DEFAULT_PROFILES["bibtex"].row_defaults == RowDefaults()
 
 
 def test_default_row_defaults__overrides_the_type_default() -> None:
-    defaults = default_row_defaults("bibtex", delimiter=",")
+    defaults = default_row_defaults("ris", delimiter=",")
 
-    assert defaults == RowDefaults(delimiter=",", author_delimiter="\n")
+    assert defaults == RowDefaults(delimiter=",")

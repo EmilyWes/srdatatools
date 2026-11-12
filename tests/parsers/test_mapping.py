@@ -5,7 +5,6 @@ from pydantic import ValidationError
 
 from app.models.record import Label
 from app.parsers.mapping import (
-    LINE_DELIMITER,
     AuthorsRow,
     DateRow,
     FieldMapping,
@@ -60,22 +59,12 @@ def test_default_row__fills_each_targets_default_options() -> None:
     assert default_row("issn_isbn", "SN", defaults) == IssnIsbnRow(kind="auto")
     assert default_row("other_ids", "Work ID", defaults) == OtherIdRow(key="work_id")
     assert default_row("authors", "Author IDs", defaults) == AuthorsRow(
-        role="names", delimiter="|", id_key="author_ids"
+        role="names", id_key="author_ids"
     )
     assert default_row("keywords", "KW", defaults) == KeywordsRow(delimiter="|")
     assert default_row("label", "L", defaults) == LabelRow(
         phase="ft", screener="screener 1"
     )
-
-
-def test_default_row__author_delimiter_overrides_list_delimiter() -> None:
-    defaults = RowDefaults(author_delimiter="\n")
-
-    authors = default_row("authors", "author", defaults)
-    keywords = default_row("keywords", "keywords", defaults)
-
-    assert isinstance(authors, AuthorsRow) and authors.delimiter == "\n"
-    assert isinstance(keywords, KeywordsRow) and keywords.delimiter == ";"
 
 
 def test_default_row__rejects_unknown_target() -> None:
@@ -86,7 +75,7 @@ def test_default_row__rejects_unknown_target() -> None:
 def test_make_row__applies_suggested_options_over_defaults() -> None:
     row = make_row(Suggest("authors", {"role": "ids"}), "ORCID", _DEFAULTS)
 
-    assert row == AuthorsRow(role="ids", delimiter=";", id_key="orcid")
+    assert row == AuthorsRow(role="ids", id_key="orcid")
 
 
 def test_make_row__rejects_invalid_option() -> None:
@@ -449,12 +438,10 @@ def test_keywords_row__tags_keyword_only_with_a_prefix() -> None:
 
 
 _PARALLEL = {
-    "Author": Suggest("authors", {"delimiter": "|"}),
-    "ORCID": Suggest("authors", {"role": "ids", "delimiter": "|", "id_key": "orcid"}),
-    "Author IDs": Suggest(
-        "authors", {"role": "ids", "delimiter": "|", "id_key": "openalex_author_id"}
-    ),
-    "Affiliations": Suggest("authors", {"role": "affiliations", "delimiter": "|"}),
+    "Author": Suggest("authors"),
+    "ORCID": Suggest("authors", {"role": "ids", "id_key": "orcid"}),
+    "Author IDs": Suggest("authors", {"role": "ids", "id_key": "openalex_author_id"}),
+    "Affiliations": Suggest("authors", {"role": "affiliations"}),
 }
 
 
@@ -468,35 +455,14 @@ def test_apply_mapping__keeps_names_and_affiliations_as_in_the_file() -> None:
     assert record.author_ids is None
 
 
-def test_apply_mapping__groups_id_columns_per_author() -> None:
-    raw = {
-        "ORCID": "|https://orcid.org/0000-0001-2345-6789",
-        "Author IDs": "A1|A2",
-    }
+def test_apply_mapping__keeps_each_id_column_unsplit_under_its_key() -> None:
+    raw = {"ORCID": " |https://orcid.org/0000-0001 ", "Author IDs": "A1|A2"}
 
     record = apply_mapping(raw, mapping_of(_PARALLEL))
 
     assert record.author_ids == (
-        "openalex_author_id:A1|orcid:0000-0001-2345-6789, openalex_author_id:A2"
+        "orcid:[|https://orcid.org/0000-0001], openalex_author_id:[A1|A2]"
     )
-
-
-def test_apply_mapping__id_slots_without_ids_stay_empty() -> None:
-    record = apply_mapping({"Author IDs": "A1||A3"}, mapping_of(_PARALLEL))
-
-    assert record.author_ids == "openalex_author_id:A1||openalex_author_id:A3"
-
-
-def test_apply_mapping__ignores_misaligned_id_column_with_warning(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    raw = {"ORCID": "1|2", "Author IDs": "A1|A2|A3"}
-
-    with caplog.at_level(logging.WARNING):
-        record = apply_mapping(raw, mapping_of(_PARALLEL))
-
-    assert record.author_ids == "orcid:1|orcid:2"
-    assert "'Author IDs' has 3 authors' ids for 2 authors" in caplog.text
 
 
 def test_apply_mapping__first_non_empty_name_column_wins() -> None:
@@ -513,19 +479,6 @@ def test_apply_mapping__unmapped_author_columns_are_not_read() -> None:
     record = apply_mapping({"Author": "Ann Lee", "Author IDs": "A1"}, mapping)
 
     assert (record.author_names, record.author_ids) == ("Ann Lee", None)
-
-
-def test_field_mapping__author_separator_is_first_row_delimiter() -> None:
-    mapping = mapping_of(_PARALLEL)
-
-    assert mapping.author_separator("names") == "|"
-    assert mapping_of({"X": "title"}).author_separator("names") is None
-
-
-def test_field_mapping__author_separator_of_line_values_is_author_joiner() -> None:
-    mapping = mapping_of({"AU": Suggest("authors", {"delimiter": LINE_DELIMITER})})
-
-    assert mapping.author_separator("names") == "|"
 
 
 @pytest.mark.parametrize(

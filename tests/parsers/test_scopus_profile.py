@@ -52,12 +52,10 @@ def test_scopus_csv__suggests_author_columns_but_not_abbreviated_names() -> None
     mapping = _suggest_csv(list(_AUTHOR_ROW))
 
     assert mapping.rows == {
-        "Author full names": AuthorsRow(delimiter=";", id_key="author_full_names"),
-        "Author(s) ID": AuthorsRow(
-            role="ids", delimiter=";", id_key="scopus_author_id"
-        ),
+        "Author full names": AuthorsRow(id_key="author_full_names"),
+        "Author(s) ID": AuthorsRow(role="ids", id_key="scopus_author_id"),
         "Authors with affiliations": AuthorsRow(
-            role="affiliations", delimiter=";", id_key="authors_with_affiliations"
+            role="affiliations", id_key="authors_with_affiliations"
         ),
     }
 
@@ -80,7 +78,7 @@ def test_scopus_csv__ignores_conference_details_and_publication_stage() -> None:
     }
 
 
-_IDS = "scopus_author_id:60652739200|scopus_author_id:59534195400"
+_IDS = "scopus_author_id:[60652739200; 59534195400]"
 
 
 def test_scopus_csv__abbreviated_names_mapped_by_hand() -> None:

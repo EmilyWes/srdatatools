@@ -7,10 +7,12 @@ from app.cleaning.options import CleaningOptions
 from app.models.record import Record
 from app.parsers.authors import (
     AUTHOR_JOINER,
+    AuthorIds,
     author_id,
     format_author_ids,
     merge_author_ids,
     parse_author_ids,
+    parse_unsplit_author_ids,
 )
 from app.parsers.mapping import (
     ISBN_LENGTHS,
@@ -64,6 +66,7 @@ class CleaningContext:
     use_first: tuple[str, ...] = ()
     names_separator: str | None = None
     affiliations_separator: str | None = None
+    ids_separator: str | None = None
 
 
 Step = Callable[[Record, CleaningContext, CleaningOptions], Record]
@@ -82,16 +85,21 @@ def sniff_separator(values: Iterable[str | None]) -> str | None:
 
 def file_separators(
     records: Sequence[Record], options: CleaningOptions
-) -> tuple[str | None, str | None]:
-    """The names and affiliations separators for one source file's records: the
-    chosen ones, else sniffed from the records."""
+) -> tuple[str | None, str | None, str | None]:
+    """The names, affiliations and ids separators for one source file's records:
+    the chosen ones, else sniffed from the records."""
     names = options.names_separator or sniff_separator(
         record.author_names for record in records
     )
     affiliations = options.affiliations_separator or sniff_separator(
         record.author_affiliations for record in records
     )
-    return names, affiliations
+    ids = options.ids_separator or sniff_separator(
+        value
+        for record in records
+        for _, value in parse_unsplit_author_ids(record.author_ids)
+    )
+    return names, affiliations, ids
 
 
 def expand_page_range(pages: str) -> str:
@@ -110,8 +118,7 @@ def _counts_as_empty(value: str, options: CleaningOptions) -> bool:
 
 def _raw_value(key: str, context: CleaningContext) -> str:
     value = (context.raw_fields.get(key) or "").strip()
-    row = context.mapping.rows[key]
-    if isinstance(row, AuthorsRow) and row.delimiter == LINE_DELIMITER:
+    if isinstance(context.mapping.rows[key], AuthorsRow):
         return AUTHOR_JOINER.join(line for line in value.splitlines() if line)
     return value
 
@@ -154,6 +161,21 @@ def _split(value: str | None, separator: str | None) -> str | None:
     return AUTHOR_JOINER.join(piece for piece in pieces if piece) or None
 
 
+def _split_ids(value: str | None, separator: str | None) -> str | None:
+    """Each "key:[value]" column is split by position and merged per author;
+    without a separator its value is one author's id."""
+    columns = parse_unsplit_author_ids(value)
+    if not columns:
+        return value
+    slots: AuthorIds = []
+    for key, ids in columns:
+        split = ids.split(separator) if separator else [ids]
+        pieces = (piece.strip() for piece in split)
+        new = [[author_id(key, piece)] if piece else [] for piece in pieces]
+        slots = merge_author_ids(slots, new, key)
+    return format_author_ids(slots)
+
+
 def split_authors(
     record: Record, context: CleaningContext, options: CleaningOptions
 ) -> Record:
@@ -163,6 +185,7 @@ def split_authors(
             "author_affiliations": _split(
                 record.author_affiliations, context.affiliations_separator
             ),
+            "author_ids": _split_ids(record.author_ids, context.ids_separator),
         }
     )
 

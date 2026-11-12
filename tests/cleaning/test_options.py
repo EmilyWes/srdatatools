@@ -99,6 +99,7 @@ def test_cleaning_boxes__split_authors_enables_its_dependants() -> None:
     assert enabled_by_split == [
         "names_separator",
         "affiliations_separator",
+        "ids_separator",
         "id_from_name",
         "author_strip_extras",
         "affiliation_start",

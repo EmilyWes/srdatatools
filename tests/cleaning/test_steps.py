@@ -24,7 +24,7 @@ from app.cleaning.steps import (
     strip_pmid,
 )
 from app.models.record import Record
-from app.parsers.mapping import FieldMapping, Suggest
+from app.parsers.mapping import FieldMapping
 from tests.mappings import mapping_of
 
 _OPTIONS = CleaningOptions()
@@ -37,6 +37,7 @@ def _context(
     use_first: tuple[str, ...] = (),
     names: str | None = None,
     affiliations: str | None = None,
+    ids: str | None = None,
 ) -> CleaningContext:
     return CleaningContext(
         raw_fields=raw_fields or {},
@@ -44,6 +45,7 @@ def _context(
         use_first=use_first,
         names_separator=names,
         affiliations_separator=affiliations,
+        ids_separator=ids,
     )
 
 
@@ -184,9 +186,19 @@ def test_sniff_separator__picks_the_candidate_in_most_values(
 
 
 def test_file_separators__chosen_separator_wins_over_sniffing() -> None:
-    records = [Record(author_names="A; B", author_affiliations="X; Y")]
+    records = [
+        Record(
+            author_names="A; B",
+            author_affiliations="X; Y",
+            author_ids="scopus_author_id:[1|2]",
+        )
+    ]
 
-    assert file_separators(records, _options(names_separator=",")) == (",", ";")
+    assert file_separators(records, _options(names_separator=",")) == (
+        ",",
+        ";",
+        "|",
+    )
 
 
 def test_split_authors__joins_names_and_affiliations_with_bar() -> None:
@@ -211,6 +223,54 @@ def test_split_authors__without_separator_leaves_record_unchanged() -> None:
     record = Record(author_names="Teng, Yu; Han, Li")
 
     assert split_authors(record, _NO_CONTEXT, _OPTIONS) == record
+
+
+def test_split_authors__splits_id_column_per_author() -> None:
+    record = Record(author_ids="scopus_author_id:[601; 602;603]")
+
+    cleaned = split_authors(record, _context(ids=";"), _OPTIONS)
+
+    assert cleaned.author_ids == (
+        "scopus_author_id:601|scopus_author_id:602|scopus_author_id:603"
+    )
+
+
+def test_split_authors__merges_id_columns_by_position() -> None:
+    record = Record(
+        author_ids="openalex_author_id:[A1|A2|A3], orcid:[https://orcid.org/0-1||0-3]"
+    )
+
+    cleaned = split_authors(record, _context(ids="|"), _OPTIONS)
+
+    assert cleaned.author_ids == (
+        "openalex_author_id:A1, orcid:0-1|openalex_author_id:A2"
+        "|openalex_author_id:A3, orcid:0-3"
+    )
+
+
+def test_split_authors__id_column_with_other_author_count_is_ignored(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    record = Record(author_ids="openalex_author_id:[A1|A2], orcid:[0-1]")
+
+    cleaned = split_authors(record, _context(ids="|"), _OPTIONS)
+
+    assert cleaned.author_ids == "openalex_author_id:A1|openalex_author_id:A2"
+    assert "orcid" in caplog.text
+
+
+def test_split_authors__without_ids_separator_the_column_is_one_author() -> None:
+    record = Record(author_ids="scopus_author_id:[601]")
+
+    cleaned = split_authors(record, _NO_CONTEXT, _OPTIONS)
+
+    assert cleaned.author_ids == "scopus_author_id:601"
+
+
+def test_split_authors__ids_already_split_are_left_alone() -> None:
+    record = Record(author_ids="scopus_author_id:601|scopus_author_id:602")
+
+    assert split_authors(record, _context(ids=";"), _OPTIONS) == record
 
 
 def test_id_from_name__moves_ids_out_of_names() -> None:
@@ -480,13 +540,8 @@ def test_clear_empty_values__match_the_whole_value() -> None:
     assert clear_empty_values(record, _NO_CONTEXT, _OPTIONS) == record
 
 
-def test_clear_empty_values__refill_author_names_from_line_tags() -> None:
-    mapping = mapping_of(
-        {
-            "AU": Suggest("authors", {"delimiter": "\n"}),
-            "A2": Suggest("authors", {"delimiter": "\n"}),
-        }
-    )
+def test_clear_empty_values__refill_author_names_joins_lines_with_bar() -> None:
+    mapping = mapping_of({"AU": "authors", "A2": "authors"})
     raw = {"AU": "n/a", "A2": "Doe, J\nRoe, K"}
     options = _options(empty_values=["n/a"])
 

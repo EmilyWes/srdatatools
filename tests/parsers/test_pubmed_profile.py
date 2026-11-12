@@ -84,7 +84,7 @@ def test_pubmed_csv__suggests_exact_journal_and_nbib_id_keys() -> None:
 
 def test_pubmed_csv__suggests_author_names_split_on_comma() -> None:
     assert _suggest_csv(["Authors"]).rows == {
-        "Authors": AuthorsRow(role="names", delimiter=",", id_key="authors")
+        "Authors": AuthorsRow(role="names", id_key="authors")
     }
 
 

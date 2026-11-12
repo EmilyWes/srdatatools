@@ -18,7 +18,6 @@ from app.parsers.common import (
     parse_or_skip,
 )
 from app.parsers.mapping import (
-    LINE_DELIMITER,
     AuthorsRow,
     FieldMapping,
     RowDefaults,
@@ -59,7 +58,7 @@ _SUGGESTIONS: dict[str, Suggest] = {
     "month": Suggest("date", {"part": "month"}),
     "keywords": Suggest("keywords"),
 }
-ROW_DEFAULTS = RowDefaults(author_delimiter=LINE_DELIMITER)
+ROW_DEFAULTS = RowDefaults()
 
 _IGNORED_ENTRY_TYPES = frozenset({"comment", "string", "preamble"})
 _ENTRY_START = re.compile(

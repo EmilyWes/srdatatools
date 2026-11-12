@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from app.models.record import Record
-from app.parsers.authors import AUTHOR_JOINER, parse_author_ids
+from app.parsers.authors import AUTHOR_JOINER
 from app.parsers.bibtex import (
     parse_bibtex_file,
     read_bibtex_fields,
@@ -92,25 +92,16 @@ def _names(record: Record) -> list[str]:
     return (record.author_names or "").split(AUTHOR_JOINER)
 
 
-def test_openalex_small_csv__groups_author_ids_and_orcids(
+def test_openalex_small_csv__keeps_author_id_columns_unsplit(
     csv_records: dict[str, Record],
 ) -> None:
     dinosaur = csv_records[_DINOSAUR_DOI]
-    assert _names(dinosaur)[0] == "Matthew G. Baron"
-    assert set(parse_author_ids(dinosaur.author_ids)[0]) == {
-        "orcid:0000-0001-9069-7638",
-        "openalex_author_id:A5091833725",
-    }
 
-    chicken = csv_records[_CHICKEN_DOI]
-    chicken_ids = parse_author_ids(chicken.author_ids)
-    assert len(_names(chicken)) == len(chicken_ids) == 100
-    assert chicken_ids[0] == []
-    assert _names(chicken)[12] == "John D. McPherson"
-    assert set(chicken_ids[12]) == {
-        "orcid:0000-0001-8049-9347",
-        "openalex_author_id:A5047690257",
-    }
+    assert _names(dinosaur)[0] == "Matthew G. Baron"
+    assert (dinosaur.author_ids or "").startswith("openalex_author_id:[A5091833725|")
+    assert ", orcid:[https://orcid.org/0000-0001-9069-7638|" in (
+        dinosaur.author_ids or ""
+    )
 
 
 def test_openalex_small_csv__keeps_values_as_in_the_file(

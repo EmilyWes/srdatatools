@@ -56,7 +56,7 @@ def _cleaned(
     else:
         result = parse_bibtex_file(path, mapping, settings)
     records = [row.record for row in result.rows]
-    names, affiliations = file_separators(records, options)
+    names, affiliations, ids = file_separators(records, options)
     return [
         clean_record(
             row.record,
@@ -65,6 +65,7 @@ def _cleaned(
                 mapping=mapping,
                 names_separator=names,
                 affiliations_separator=affiliations,
+                ids_separator=ids,
             ),
             options,
         )[0]
@@ -145,6 +146,27 @@ def test_cleaned_pubmed_csv__fills_parts_from_citation_and_drops_et_al() -> None
     assert (nature.volume, nature.issue, nature.pages) == ("620", "7974", "589-594")
     assert records["11523304"].pages == "521-522"
     assert (records["30527956"].author_names or "").endswith(", Walsworth AK")
+
+
+def test_cleaned_openalex_csv__groups_author_ids_and_orcids() -> None:
+    records = {r.doi: r for r in _cleaned("openalex", ".csv", "csv")}
+
+    dinosaur = records["10.1038/nature21700"]
+    assert set(parse_author_ids(dinosaur.author_ids)[0]) == {
+        "orcid:0000-0001-9069-7638",
+        "openalex_author_id:A5091833725",
+    }
+
+    chicken = records["10.1038/nature03154"]
+    names = (chicken.author_names or "").split(AUTHOR_JOINER)
+    ids = parse_author_ids(chicken.author_ids)
+    assert len(names) == len(ids) == 100
+    assert ids[0] == []
+    assert names[12] == "John D. McPherson"
+    assert set(ids[12]) == {
+        "orcid:0000-0001-8049-9347",
+        "openalex_author_id:A5047690257",
+    }
 
 
 def test_cleaned_openalex_csv__strips_pmid_and_keeps_one_issn() -> None:

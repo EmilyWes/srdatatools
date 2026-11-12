@@ -174,9 +174,8 @@ def test_render_mapping_table__picking_a_target_shows_its_default_options() -> N
     screen.set_target("Scopus Author ID", "authors")
 
     assert screen._row_for("Scopus Author ID").inputs["role"].value == "names"
-    assert _input(screen, "Scopus Author ID", "delimiter").props["placeholder"] == ";"
     assert screen.current_mapping().rows == {
-        "Scopus Author ID": AuthorsRow(delimiter=";", id_key="scopus_author_id")
+        "Scopus Author ID": AuthorsRow(id_key="scopus_author_id")
     }
 
 
@@ -230,11 +229,11 @@ def test_render_mapping_table__date_order_only_shows_for_full_date() -> None:
 def test_render_mapping_table__only_author_ids_show_id_key() -> None:
     screen = _render(["Authors"])
 
-    assert _visible_options(screen, "Authors") == ["role", "delimiter"]
+    assert _visible_options(screen, "Authors") == ["role"]
     screen.set_option("Authors", "role", "ids")
-    assert _visible_options(screen, "Authors") == ["role", "delimiter", "id_key"]
+    assert _visible_options(screen, "Authors") == ["role", "id_key"]
     screen.set_option("Authors", "role", "affiliations")
-    assert _visible_options(screen, "Authors") == ["role", "delimiter"]
+    assert _visible_options(screen, "Authors") == ["role"]
 
 
 def test_render_mapping_table__one_value_per_line_hides_delimiter() -> None:
@@ -274,12 +273,10 @@ def test_render_mapping_table__options_have_short_labels_with_full_tooltips() ->
     }
     assert {name: label.text for name, label in labels.items()} == {
         "role": "role:",
-        "delimiter": "aut:",
         "id_key": "key:",
     }
     assert tooltips == {
         "role": ["Role"],
-        "delimiter": ["Author separator"],
         "id_key": ["ID key"],
     }
 
@@ -532,7 +529,7 @@ def test_render_mapping_table__chosen_options_are_kept() -> None:
     chosen = mapping_of(
         {
             "PMCID": Suggest("other_ids", {"key": "pmc"}),
-            "Authors": Suggest("authors", {"role": "affiliations", "delimiter": "|"}),
+            "Authors": Suggest("authors", {"role": "affiliations"}),
         }
     )
 
@@ -613,7 +610,6 @@ def test_render_mapping_table__options_fitting_the_example_are_green() -> None:
     screen = _render_samples({"Authors": "Smith, J; Doe, J", "Year": "2020"})
 
     assert _option_color(screen, "Authors", "role") == "green-2"
-    assert _option_color(screen, "Authors", "delimiter") == "green-2"
     assert _option_color(screen, "Year", "part") == "green-2"
 
 
@@ -636,9 +632,8 @@ def test_render_mapping_table__typing_the_placeholder_is_not_a_change() -> None:
 
 
 def test_render_mapping_table__separators_missing_from_example_are_orange() -> None:
-    screen = _render_samples({"Authors": "Smith J, Doe J", "Keywords": "a, b"})
+    screen = _render_samples({"Keywords": "a, b"})
 
-    assert _option_color(screen, "Authors", "delimiter") == "orange-2"
     assert _option_color(screen, "Keywords", "delimiter") == "orange-2"
     assert _option_color(screen, "Keywords", "prefix") == "green-2"
 
@@ -660,6 +655,6 @@ def test_render_mapping_table__ambiguous_example_date_makes_order_orange() -> No
 
 
 def test_render_mapping_table__empty_example_gives_no_orange() -> None:
-    screen = _render(["Authors"])
+    screen = _render(["Keywords"])
 
-    assert _option_color(screen, "Authors", "delimiter") == "green-2"
+    assert _option_color(screen, "Keywords", "delimiter") == "green-2"

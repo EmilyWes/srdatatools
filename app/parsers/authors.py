@@ -6,9 +6,20 @@ logger = logging.getLogger(__name__)
 AUTHOR_JOINER = "|"
 ID_JOINER = ", "
 _ORCID_URL = re.compile(r"^https?://orcid\.org/")
+_UNSPLIT_IDS = re.compile(r"(?:^|, )(?P<key>[^:\[\]]+):\[(?P<value>[^\]]*)\]")
 
 # One list of "key:value" ids per author, in author order.
 AuthorIds = list[list[str]]
+
+
+def unsplit_author_ids(key: str, value: str) -> str:
+    """A column holding every author's ids, stored as "key:[value]" until
+    cleaning splits it per author."""
+    return f"{key}:[{value}]"
+
+
+def parse_unsplit_author_ids(value: str | None) -> list[tuple[str, str]]:
+    return [(m["key"], m["value"]) for m in _UNSPLIT_IDS.finditer(value or "")]
 
 
 def strip_orcid_url(value: str) -> str:

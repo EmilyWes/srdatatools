@@ -432,7 +432,7 @@ def test_suggest_bibtex_mapping__maps_common_fields() -> None:
         "month": "date",
         "number": "issue",
     }
-    assert mapping.rows["author"] == AuthorsRow(delimiter="\n", id_key="author")
+    assert mapping.rows["author"] == AuthorsRow(id_key="author")
     assert mapping.rows["year"] == DateRow(part="year")
 
 

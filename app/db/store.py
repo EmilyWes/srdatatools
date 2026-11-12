@@ -108,11 +108,13 @@ def delete_records(session: Session, ids: Collection[int]) -> int:
 
 
 def _context(
-    source: RecordSource | None, separators: tuple[str | None, str | None]
+    source: RecordSource | None, separators: tuple[str | None, str | None, str | None]
 ) -> CleaningContext:
     if source is None:
         return CleaningContext(
-            names_separator=separators[0], affiliations_separator=separators[1]
+            names_separator=separators[0],
+            affiliations_separator=separators[1],
+            ids_separator=separators[2],
         )
     source_file = source.source_file
     return CleaningContext(
@@ -121,6 +123,7 @@ def _context(
         use_first=tuple(source_file.quirk_choices.get("use_first", [])),
         names_separator=separators[0],
         affiliations_separator=separators[1],
+        ids_separator=separators[2],
     )
 
 
