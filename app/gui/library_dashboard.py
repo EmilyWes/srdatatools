@@ -21,7 +21,7 @@ from app.gui.theme import (
 )
 
 _UNKNOWN = "Unknown"
-_HIDDEN_KEY = "overview_hidden"
+_HIDDEN_KEY = "dashboard_hidden"
 _COMPLETENESS = "completeness"
 _PER_YEAR = "per_year"
 _PUBLICATION_TYPE = "publication_type"
@@ -44,7 +44,7 @@ _FRAME_CLASSES = (
 _TOP_KEYWORDS = 10
 _TOP_TYPES = 7
 _MIN_SLICE_ANGLE = 5
-_KEYWORD_TABLE_CLASS = "overview-keywords"
+_KEYWORD_TABLE_CLASS = "dashboard-keywords"
 _KEYWORD_TABLE_CSS = (
     f".{_KEYWORD_TABLE_CLASS} tr, .{_KEYWORD_TABLE_CLASS} th,"
     f" .{_KEYWORD_TABLE_CLASS} td"
@@ -67,7 +67,7 @@ def _keyword_title(prefix: str | None) -> str:
     return f"Keywords: {prefix}" if prefix is not None else "Keywords"
 
 
-def overview_items(
+def dashboard_items(
     label_pairs: Sequence[tuple[str, str]], keyword_prefixes: Sequence[str | None]
 ) -> list[tuple[str, str]]:
     return [
@@ -270,7 +270,7 @@ def _keyword_table(prefix: str | None, counts: Sequence[tuple[str, int]]) -> Non
         )
 
 
-def render_library_overview(
+def render_library_dashboard(
     middle: Element,
     total: int,
     filled: Sequence[tuple[str, int]],
@@ -302,7 +302,7 @@ def render_library_overview(
                 and not (pies or keyword_tables)
             ):
                 ui.label(
-                    "Everything is hidden. Use the gear next to Overview to choose"
+                    "Everything is hidden. Use the gear next to Dashboard to choose"
                     " what's shown."
                 ).classes("text-sm text-on-surface-variant")
             with ui.grid(columns=f"repeat(auto-fill, {_BOX_WIDTH})").classes(
@@ -323,7 +323,7 @@ def render_library_overview(
         ui.add_css(_KEYWORD_TABLE_CSS)
 
 
-def render_overview_settings(
+def render_dashboard_settings(
     middle: Element,
     items: Sequence[tuple[str, str]],
     hidden: Collection[str],
@@ -343,7 +343,7 @@ def render_overview_settings(
     middle.clear()
     with middle:
         with ui.column().classes("w-full p-6 gap-2"):
-            ui.label("Overview settings").classes("text-2xl")
+            ui.label("Dashboard settings").classes("text-2xl")
             ui.label("Shown").classes("title-small pt-2")
             with ui.column().classes("gap-0"):
                 for key, label in items:
@@ -356,6 +356,6 @@ def render_overview_settings(
                 ui.button("Restore defaults", color=None, on_click=on_restore).props(
                     "outline no-caps"
                 )
-                ui.button("Back to overview", color=None, on_click=on_back).props(
+                ui.button("Back to dashboard", color=None, on_click=on_back).props(
                     "outline no-caps"
                 )

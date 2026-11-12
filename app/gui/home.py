@@ -45,16 +45,16 @@ from app.gui.export_flow import render_export_view
 from app.gui.format import format_count
 from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
-from app.gui.library_nav import LeftPanelNav, render_left_panel
-from app.gui.library_overview import (
+from app.gui.library_dashboard import (
     COMPLETENESS_FIELDS,
+    dashboard_items,
     load_hidden,
-    overview_items,
-    render_library_overview,
-    render_overview_settings,
+    render_dashboard_settings,
+    render_library_dashboard,
     reset_hidden,
     save_hidden,
 )
+from app.gui.library_nav import LeftPanelNav, render_left_panel
 from app.gui.record_table import (
     COLUMNS,
     LabelFormat,
@@ -123,10 +123,10 @@ def home() -> None:
         with session_scope(_engine) as session:
             actions.show_log(list_activity_log(session))
 
-    def show_overview() -> None:
+    def show_dashboard() -> None:
         with session_scope(_engine) as session:
             filled = count_filled_fields(session, COMPLETENESS_FIELDS)
-            render_library_overview(
+            render_library_dashboard(
                 panes.middle,
                 count_records(session),
                 [(COLUMNS[key], count) for key, count in filled],
@@ -138,28 +138,28 @@ def home() -> None:
                 load_hidden(session),
             )
 
-    def save_overview_hidden(hidden: set[str]) -> None:
+    def save_dashboard_hidden(hidden: set[str]) -> None:
         with session_scope(_engine) as session:
             save_hidden(session, hidden)
 
-    def restore_overview_hidden() -> None:
+    def restore_dashboard_hidden() -> None:
         with session_scope(_engine) as session:
             reset_hidden(session)
-        show_overview_settings()
+        show_dashboard_settings()
 
-    def show_overview_settings() -> None:
+    def show_dashboard_settings() -> None:
         with session_scope(_engine) as session:
-            items = overview_items(
+            items = dashboard_items(
                 list_label_columns(session), list(count_keywords(session))
             )
             hidden = load_hidden(session)
-        render_overview_settings(
+        render_dashboard_settings(
             panes.middle,
             items,
             hidden,
-            on_change=save_overview_hidden,
-            on_restore=restore_overview_hidden,
-            on_back=show_overview,
+            on_change=save_dashboard_hidden,
+            on_restore=restore_dashboard_hidden,
+            on_back=show_dashboard,
         )
 
     async def show_table() -> None:
@@ -237,15 +237,15 @@ def home() -> None:
         await run_busy(f"Removing {filename}…", remove)
         refresh()
 
-    def refresh(select_key: str = "library:overview") -> None:
+    def refresh(select_key: str = "library:dashboard") -> None:
         nonlocal nav
         with session_scope(_engine) as session:
             nav = render_left_panel(
                 panes.left,
                 list_source_files(session),
                 on_import=start_import,
-                on_overview=show_overview,
-                on_overview_settings=show_overview_settings,
+                on_dashboard=show_dashboard,
+                on_dashboard_settings=show_dashboard_settings,
                 on_table=show_table,
                 on_table_settings=show_table_settings,
                 on_source_file=show_source_file,

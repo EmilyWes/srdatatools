@@ -9,7 +9,7 @@ from app.db.models import SourceFile
 
 _SELECTED_CLASS = "bg-secondary"
 _IMPORT_KEY = "import"
-_OVERVIEW_KEY = "library:overview"
+_DASHBOARD_KEY = "library:dashboard"
 _TABLE_KEY = "library:table"
 _ABOUT_KEY = "about"
 _HELP_KEY = "help"
@@ -46,8 +46,8 @@ def render_left_panel(
     left: Element,
     source_files: Sequence[SourceFile],
     on_import: Callable[[], Awaitable[None] | None] | None = None,
-    on_overview: Callable[[], Awaitable[None] | None] | None = None,
-    on_overview_settings: Callable[[], Awaitable[None] | None] | None = None,
+    on_dashboard: Callable[[], Awaitable[None] | None] | None = None,
+    on_dashboard_settings: Callable[[], Awaitable[None] | None] | None = None,
     on_table: Callable[[], Awaitable[None] | None] | None = None,
     on_table_settings: Callable[[], Awaitable[None] | None] | None = None,
     on_source_file: Callable[[int], Awaitable[None] | None] | None = None,
@@ -66,16 +66,16 @@ def render_left_panel(
         nav.highlight(_IMPORT_KEY)
         return on_import() if on_import is not None else None
 
-    def handle_overview_settings() -> Awaitable[None] | None:
-        nav.highlight(_OVERVIEW_KEY)
-        return on_overview_settings() if on_overview_settings is not None else None
+    def handle_dashboard_settings() -> Awaitable[None] | None:
+        nav.highlight(_DASHBOARD_KEY)
+        return on_dashboard_settings() if on_dashboard_settings is not None else None
 
     def handle_table_settings() -> Awaitable[None] | None:
         nav.highlight(_TABLE_KEY)
         return on_table_settings() if on_table_settings is not None else None
 
-    if on_overview is not None:
-        nav.views[_OVERVIEW_KEY] = on_overview
+    if on_dashboard is not None:
+        nav.views[_DASHBOARD_KEY] = on_dashboard
     if on_table is not None:
         nav.views[_TABLE_KEY] = on_table
     if on_about is not None:
@@ -95,16 +95,16 @@ def render_left_panel(
 
         ui.label("Library").classes(_HEADING_CLASSES)
         with ui.row().classes("w-full items-center gap-1 no-wrap"):
-            overview_button = (
+            dashboard_button = (
                 ui.button("Dashboard", icon="insights", color=None)
                 .classes(f"{_ITEM_CLASSES} flex-grow")
                 .props(_ITEM_PROPS)
             )
             ui.button(
-                icon="settings", color=None, on_click=handle_overview_settings
+                icon="settings", color=None, on_click=handle_dashboard_settings
             ).props(_GEAR_PROPS).classes("text-on-surface-variant")
-        overview_button.on_click(lambda: nav.select(_OVERVIEW_KEY))
-        nav.buttons[_OVERVIEW_KEY] = overview_button
+        dashboard_button.on_click(lambda: nav.select(_DASHBOARD_KEY))
+        nav.buttons[_DASHBOARD_KEY] = dashboard_button
 
         with ui.row().classes("w-full items-center gap-1 no-wrap"):
             table_button = (

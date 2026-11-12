@@ -12,11 +12,11 @@ from app.db.models import Base
 from app.db.settings import set_setting
 from app.gui.format import keyword_key, label_key
 from app.gui.layout import shell
-from app.gui.library_overview import (
+from app.gui.library_dashboard import (
+    dashboard_items,
     load_hidden,
-    overview_items,
-    render_library_overview,
-    render_overview_settings,
+    render_dashboard_settings,
+    render_library_dashboard,
     reset_hidden,
     save_hidden,
 )
@@ -79,7 +79,7 @@ def _button(middle: Element, text: str) -> ui.button:
 
 
 def _render(middle: Element, hidden: set[str] | None = None) -> None:
-    render_library_overview(
+    render_library_dashboard(
         middle,
         total=4,
         filled=[("Title", 4), ("DOI", 3), ("Abstract", 0)],
@@ -98,7 +98,7 @@ def _render(middle: Element, hidden: set[str] | None = None) -> None:
     )
 
 
-def test_render_library_overview__completeness_as_percent_with_counts() -> None:
+def test_render_library_dashboard__completeness_as_percent_with_counts() -> None:
     panes = shell()
 
     _render(panes.middle)
@@ -112,10 +112,10 @@ def test_render_library_overview__completeness_as_percent_with_counts() -> None:
     ]
 
 
-def test_render_library_overview__completeness_with_zero_records() -> None:
+def test_render_library_dashboard__completeness_with_zero_records() -> None:
     panes = shell()
 
-    render_library_overview(
+    render_library_dashboard(
         panes.middle,
         0,
         [("Title", 0)],
@@ -132,7 +132,7 @@ def test_render_library_overview__completeness_with_zero_records() -> None:
     ]
 
 
-def test_render_library_overview__year_chart_fills_gaps_and_omits_unknown() -> None:
+def test_render_library_dashboard__year_chart_fills_gaps_and_omits_unknown() -> None:
     panes = shell()
 
     _render(panes.middle)
@@ -150,7 +150,7 @@ def _pie_slices(chart: ui.echart) -> list[tuple[str, int, str]]:
     ]
 
 
-def test_render_library_overview__publication_type_pie_with_unknown() -> None:
+def test_render_library_dashboard__publication_type_pie_with_unknown() -> None:
     panes = shell()
 
     _render(panes.middle)
@@ -162,11 +162,11 @@ def test_render_library_overview__publication_type_pie_with_unknown() -> None:
     assert "Publication type" in _labels(panes.middle)
 
 
-def test_render_library_overview__publication_type_top_seven_then_other() -> None:
+def test_render_library_dashboard__publication_type_top_seven_then_other() -> None:
     panes = shell()
     types: list[tuple[str | None, int]] = [(f"type {n}", 20 - n) for n in range(9)]
 
-    render_library_overview(
+    render_library_dashboard(
         panes.middle,
         200,
         [],
@@ -187,7 +187,7 @@ def test_render_library_overview__publication_type_top_seven_then_other() -> Non
     assert len({color for _, _, color in slices}) == 8
 
 
-def test_render_library_overview__source_file_pie_with_multiple_files() -> None:
+def test_render_library_dashboard__source_file_pie_with_multiple_files() -> None:
     panes = shell()
 
     _render(panes.middle)
@@ -199,11 +199,11 @@ def test_render_library_overview__source_file_pie_with_multiple_files() -> None:
     assert "Source files" in _labels(panes.middle)
 
 
-def test_render_library_overview__source_file_pie_top_seven_then_other() -> None:
+def test_render_library_dashboard__source_file_pie_top_seven_then_other() -> None:
     panes = shell()
     files = [(f"file {n}.ris", 20 - n) for n in range(8)]
 
-    render_library_overview(
+    render_library_dashboard(
         panes.middle,
         200,
         [],
@@ -223,7 +223,7 @@ def test_render_library_overview__source_file_pie_top_seven_then_other() -> None
     assert slices[-1] == ("Other", 13, OTHER_COLOR)
 
 
-def test_render_library_overview__one_pie_per_label_pair() -> None:
+def test_render_library_dashboard__one_pie_per_label_pair() -> None:
     panes = shell()
 
     _render(panes.middle)
@@ -238,7 +238,7 @@ def test_render_library_overview__one_pie_per_label_pair() -> None:
     assert "Labels: tiab / Emily" in _labels(panes.middle)
 
 
-def test_render_library_overview__one_keyword_table_per_prefix() -> None:
+def test_render_library_dashboard__one_keyword_table_per_prefix() -> None:
     panes = shell()
 
     _render(panes.middle)
@@ -254,11 +254,11 @@ def test_render_library_overview__one_keyword_table_per_prefix() -> None:
     assert "Keywords: MeSH" in labels
 
 
-def test_render_library_overview__keyword_table_shows_top_ten_records() -> None:
+def test_render_library_dashboard__keyword_table_shows_top_ten_records() -> None:
     panes = shell()
     counts = [(f"keyword {n}", 20 - n) for n in range(12)]
 
-    render_library_overview(
+    render_library_dashboard(
         panes.middle,
         20,
         [],
@@ -275,7 +275,7 @@ def test_render_library_overview__keyword_table_shows_top_ten_records() -> None:
     assert [column["label"] for column in table.columns] == ["Keyword", "Records"]
 
 
-def test_render_library_overview__skips_hidden_items() -> None:
+def test_render_library_dashboard__skips_hidden_items() -> None:
     panes = shell()
 
     _render(
@@ -291,10 +291,10 @@ def test_render_library_overview__skips_hidden_items() -> None:
     assert len(_tables(panes.middle)) == 1
 
 
-def test_render_library_overview__hint_when_everything_hidden() -> None:
+def test_render_library_dashboard__hint_when_everything_hidden() -> None:
     panes = shell()
 
-    render_library_overview(
+    render_library_dashboard(
         panes.middle,
         3,
         [],
@@ -308,11 +308,11 @@ def test_render_library_overview__hint_when_everything_hidden() -> None:
 
     assert _charts(panes.middle) == []
     assert _labels(panes.middle) == [
-        "Everything is hidden. Use the gear next to Overview to choose what's shown."
+        "Everything is hidden. Use the gear next to Dashboard to choose what's shown."
     ]
 
 
-def test_render_library_overview__replaces_previous_middle_content() -> None:
+def test_render_library_dashboard__replaces_previous_middle_content() -> None:
     panes = shell()
 
     _render(panes.middle)
@@ -320,8 +320,8 @@ def test_render_library_overview__replaces_previous_middle_content() -> None:
     assert "Content" not in _labels(panes.middle)
 
 
-def test_overview_items__fixed_items_then_labels_then_keywords() -> None:
-    assert overview_items([("ft", "screener 1")], [None, "MeSH"]) == [
+def test_dashboard_items__fixed_items_then_labels_then_keywords() -> None:
+    assert dashboard_items([("ft", "screener 1")], [None, "MeSH"]) == [
         ("completeness", "Field completeness"),
         ("per_year", "Publication year"),
         ("publication_type", "Publication type"),
@@ -344,7 +344,7 @@ def test_save_hidden__roundtrip(session: Session) -> None:
 
 
 def test_reset_hidden__shows_everything_again(session: Session) -> None:
-    set_setting(session, "overview_hidden", json.dumps(["completeness"]))
+    set_setting(session, "dashboard_hidden", json.dumps(["completeness"]))
     session.commit()
 
     reset_hidden(session)
@@ -353,12 +353,12 @@ def test_reset_hidden__shows_everything_again(session: Session) -> None:
     assert load_hidden(session) == set()
 
 
-def test_render_overview_settings__checkboxes_reflect_hidden() -> None:
+def test_render_dashboard_settings__checkboxes_reflect_hidden() -> None:
     panes = shell()
 
-    render_overview_settings(
+    render_dashboard_settings(
         panes.middle,
-        overview_items([], ["MeSH"]),
+        dashboard_items([], ["MeSH"]),
         {"per_year"},
         on_change=print,
         on_restore=print,
@@ -379,12 +379,12 @@ def test_render_overview_settings__checkboxes_reflect_hidden() -> None:
     }
 
 
-def test_render_overview_settings__toggling_reports_hidden_items() -> None:
+def test_render_dashboard_settings__toggling_reports_hidden_items() -> None:
     panes = shell()
     changes: list[set[str]] = []
-    render_overview_settings(
+    render_dashboard_settings(
         panes.middle,
-        overview_items([], []),
+        dashboard_items([], []),
         {"per_year"},
         on_change=changes.append,
         on_restore=lambda: None,
@@ -401,10 +401,10 @@ def test_render_overview_settings__toggling_reports_hidden_items() -> None:
     assert changes == [{"completeness", "per_year"}]
 
 
-def test_render_overview_settings__restore_and_back_buttons_call_back() -> None:
+def test_render_dashboard_settings__restore_and_back_buttons_call_back() -> None:
     panes = shell()
     calls: list[str] = []
-    render_overview_settings(
+    render_dashboard_settings(
         panes.middle,
         [],
         set(),
@@ -414,12 +414,12 @@ def test_render_overview_settings__restore_and_back_buttons_call_back() -> None:
     )
 
     _click(_button(panes.middle, "Restore defaults"))
-    _click(_button(panes.middle, "Back to overview"))
+    _click(_button(panes.middle, "Back to dashboard"))
 
     assert calls == ["restore", "back"]
 
 
-def test_render_library_overview__pies_have_truncated_legend_top_right() -> None:
+def test_render_library_dashboard__pies_have_truncated_legend_top_right() -> None:
     panes = shell()
 
     _render(panes.middle, {"completeness", "per_year"})
@@ -437,7 +437,7 @@ def test_render_library_overview__pies_have_truncated_legend_top_right() -> None
         assert chart.options["series"][0]["minAngle"] == 5
 
 
-def test_render_library_overview__boxes_in_evenly_spaced_grid_with_frames() -> None:
+def test_render_library_dashboard__boxes_in_evenly_spaced_grid_with_frames() -> None:
     panes = shell()
 
     _render(panes.middle)

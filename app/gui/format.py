@@ -28,7 +28,7 @@ def source_label(source: str | None) -> str:
 
 
 def label_key(phase: str, screener: str) -> str:
-    """Identifies a label phase + screener in the table and overview settings."""
+    """Identifies a label phase + screener in the table and dashboard settings."""
     return _LABEL_PREFIX + json.dumps([phase, screener])
 
 
@@ -42,7 +42,7 @@ def label_pair(key: str) -> tuple[str, str]:
 
 
 def keyword_key(prefix: str | None) -> str:
-    """Identifies a keyword prefix (None: unprefixed) in the table and overview
+    """Identifies a keyword prefix (None: unprefixed) in the table and dashboard
     settings."""
     return _KEYWORD_PREFIX + json.dumps(prefix)
 
