@@ -9,9 +9,8 @@ from app.gui.mapping_table import (
     _input_width_ch,
     render_mapping_table,
 )
-from app.models.record import Record
 from app.parsers.common import FileSummary
-from app.parsers.csv_ import parse_csv_record, suggest_mapping
+from app.parsers.csv_ import suggest_mapping
 from app.parsers.mapping import (
     AuthorsRow,
     DateRow,
@@ -24,9 +23,8 @@ from app.parsers.mapping import (
     ScalarRow,
     Suggest,
 )
-from app.parsers.profiles.default import DEFAULT_PROFILES
 from app.parsers.ris import ROW_DEFAULTS as RIS_DEFAULTS
-from app.parsers.ris import parse_ris_record, suggest_ris_mapping
+from app.parsers.ris import suggest_ris_mapping
 from tests.mappings import mapping_of, targets_of
 
 _DEFAULTS = RowDefaults()
@@ -36,10 +34,6 @@ def _summary(samples: dict[str, str]) -> FileSummary:
     return FileSummary(samples, dict.fromkeys(samples, 0), 0)
 
 
-def _no_preview(mapping: FieldMapping) -> Record:
-    return Record()
-
-
 def _render_samples(samples: dict[str, str]) -> MappingScreen:
     panes = shell()
     return render_mapping_table(
@@ -47,7 +41,6 @@ def _render_samples(samples: dict[str, str]) -> MappingScreen:
         _summary(samples),
         suggest_mapping(list(samples)),
         defaults=_DEFAULTS,
-        preview=lambda mapping: parse_csv_record(samples, mapping).record,
     )
 
 
@@ -58,13 +51,7 @@ def _render_ris_samples(samples: dict[str, str]) -> MappingScreen:
         _summary(samples),
         suggest_ris_mapping(list(samples)),
         defaults=RIS_DEFAULTS,
-        preview=lambda mapping: parse_ris_record(list(samples.items()), mapping).record,
     )
-
-
-def _result(screen: MappingScreen, header: str) -> str:
-    text: str = screen._row_for(header).result.text
-    return text
 
 
 def _render(headers: list[str]) -> MappingScreen:
@@ -156,7 +143,6 @@ def test_render_mapping_table__renders_only_the_table() -> None:
         _summary({"Title": ""}),
         suggest_mapping(["Title"]),
         defaults=_DEFAULTS,
-        preview=_no_preview,
     )
 
     assert len(panes.middle.default_slot.children) == 1
@@ -230,7 +216,6 @@ def test_render_mapping_table__typed_prefix_loses_brackets_and_spaces() -> None:
     screen.set_option("Keywords", "prefix", " [Author] ")
 
     assert screen.current_mapping().rows["Keywords"].model_dump()["prefix"] == "Author"
-    assert _result(screen, "Keywords") == "[Author] a | [Author] b"
 
 
 def test_render_mapping_table__date_order_only_shows_for_full_date() -> None:
@@ -319,7 +304,6 @@ def test_render_mapping_table__sample_has_full_value_tooltip_only_when_non_empty
         _summary(samples),
         suggest_mapping(list(samples)),
         defaults=_DEFAULTS,
-        preview=_no_preview,
     )
 
     targets = {
@@ -456,7 +440,6 @@ def test_render_mapping_table__truncated_input_header_has_full_value_tooltip() -
         _summary({long_header: "", "Title": ""}),
         suggest_mapping([long_header, "Title"]),
         defaults=_DEFAULTS,
-        preview=_no_preview,
     )
 
     tooltips = [t.text for t in panes.middle.descendants() if isinstance(t, Tooltip)]
@@ -474,7 +457,6 @@ def test_render_mapping_table__shows_filled_bar_per_row_with_count_tooltip() -> 
         summary,
         suggest_mapping(list(samples)),
         defaults=_DEFAULTS,
-        preview=_no_preview,
     )
 
     title, notes, year = (screen._row_for(h).count for h in samples)
@@ -505,7 +487,6 @@ def test_render_mapping_table__filled_bar_color_by_thirds(
         summary,
         suggest_mapping(["Title"]),
         defaults=_DEFAULTS,
-        preview=_no_preview,
     )
 
     assert screen._row_for("Title").count.props["color"] == color
@@ -520,157 +501,9 @@ def test_render_mapping_table__empty_file_bar_is_empty() -> None:
         summary,
         suggest_mapping(["Title"]),
         defaults=_DEFAULTS,
-        preview=_no_preview,
     )
 
     assert screen._row_for("Title").count.value == 0.0
-
-
-def test_render_mapping_table__result_shows_parsed_scalar() -> None:
-    screen = _render_samples({"Title": "Some Paper", "DOI": "https://doi.org/10.1/XYZ"})
-
-    assert _result(screen, "Title") == "Some Paper"
-    assert _result(screen, "DOI") == "10.1/xyz"
-
-
-def test_render_mapping_table__result_updates_when_target_changes() -> None:
-    screen = _render_samples({"Title": "Some Paper"})
-
-    screen.set_target("Title", "notes")
-
-    assert _result(screen, "Title") == "Some Paper"
-    screen.set_target("Title", "date")
-    assert _result(screen, "Title") == "not parsed"
-
-
-def test_render_mapping_table__result_is_blank_for_ignored_and_empty_rows() -> None:
-    screen = _render_samples({"Zzzqqqxx123": "something", "Title": ""})
-
-    assert _result(screen, "Zzzqqqxx123") == ""
-    assert _result(screen, "Title") == ""
-
-
-def test_render_mapping_table__result_combines_page_start_and_end() -> None:
-    screen = _render_samples({"Page start": "12", "Page end": "15"})
-
-    assert _result(screen, "Page start") == "12-15"
-    assert _result(screen, "Page end") == "12-15"
-
-
-def test_render_mapping_table__result_updates_when_an_option_changes() -> None:
-    screen = _render_samples({"Page start": "12", "Page end": "4"})
-
-    screen.set_option("Page end", "part", "count")
-
-    assert _result(screen, "Page start") == "12-15"
-
-
-def test_render_mapping_table__result_combines_date_and_year() -> None:
-    screen = _render_samples({"Date": "2020-03-15", "Year": "2021"})
-
-    assert _result(screen, "Date") == "2021-03-15"
-    assert _result(screen, "Year") == "2021-03-15"
-
-
-def test_render_mapping_table__result_follows_date_order() -> None:
-    screen = _render_samples({"Date": "03/04/2020"})
-    assert _result(screen, "Date") == "2020-04-03"
-
-    screen.set_option("Date", "order", "us")
-
-    assert _result(screen, "Date") == "2020-03-04"
-
-
-def test_render_mapping_table__unparseable_result_is_red_not_parsed() -> None:
-    screen = _render_samples({"Date": "sometime"})
-
-    result = screen._row_for("Date").result
-    assert result.text == "not parsed"
-    assert "text-negative" in result.classes
-
-
-def _result_color(screen: MappingScreen, header: str) -> list[str]:
-    return [
-        c
-        for c in screen._row_for(header).result.classes
-        if c in ("text-grey-7", "text-positive", "text-negative")
-    ]
-
-
-def test_render_mapping_table__unchanged_result_is_grey() -> None:
-    screen = _render_samples({"Title": "Some Paper"})
-
-    assert _result_color(screen, "Title") == ["text-grey-7"]
-
-
-def test_render_mapping_table__changed_result_is_green() -> None:
-    screen = _render_samples({"DOI": "10.1/XYZ", "Page start": "12", "Page end": "15"})
-
-    assert _result_color(screen, "DOI") == ["text-positive"]
-    assert _result_color(screen, "Page start") == ["text-positive"]
-
-
-def test_render_mapping_table__blank_result_is_grey() -> None:
-    screen = _render_samples({"Zzzqqqxx123": "something", "Title": ""})
-
-    assert _result_color(screen, "Zzzqqqxx123") == ["text-grey-7"]
-    assert _result_color(screen, "Title") == ["text-grey-7"]
-
-
-def test_render_mapping_table__result_color_updates_when_target_changes() -> None:
-    screen = _render_samples({"Title": "Some Paper"})
-
-    screen.set_target("Title", "date")
-
-    assert _result_color(screen, "Title") == ["text-negative"]
-
-
-def test_render_mapping_table__result_splits_authors_with_row_delimiter() -> None:
-    screen = _render_samples({"Authors": "Smith, J; Doe, J"})
-    assert _result(screen, "Authors") == "Smith, J | Doe, J"
-
-    screen.set_option("Authors", "delimiter", ",")
-
-    assert _result(screen, "Authors") == "Smith | J; Doe | J"
-
-
-def test_render_mapping_table__result_labels_issn_and_isbn() -> None:
-    samples = {"SN": "1234-5678; 978-3-16-148410-0"}
-    settings = DEFAULT_PROFILES["ris"].settings
-    screen = render_mapping_table(
-        shell().middle,
-        _summary(samples),
-        suggest_ris_mapping(list(samples)),
-        defaults=RIS_DEFAULTS,
-        preview=lambda mapping: parse_ris_record(
-            list(samples.items()), mapping, settings
-        ).record,
-    )
-
-    assert _result(screen, "SN") == "ISSN 1234-5678 | ISBN 978-3-16-148410-0"
-
-
-def _result_tooltips(screen: MappingScreen, header: str) -> list[str]:
-    result = screen._row_for(header).result
-    return [t.text for t in result.descendants() if isinstance(t, Tooltip)]
-
-
-def test_render_mapping_table__result_has_full_value_tooltip_only_when_non_empty() -> (
-    None
-):
-    screen = _render_samples({"Title": "Some Paper", "Notes": ""})
-
-    assert _result_tooltips(screen, "Title") == ["Some Paper"]
-    assert _result_tooltips(screen, "Notes") == []
-
-
-def test_render_mapping_table__result_tooltip_is_replaced_on_refresh() -> None:
-    screen = _render_samples({"Title": "Some Paper"})
-
-    screen.set_target("Title", "date")
-    assert _result_tooltips(screen, "Title") == []
-    screen.set_target("Title", "notes")
-    assert _result_tooltips(screen, "Title") == ["Some Paper"]
 
 
 def _render_chosen(headers: list[str], chosen: FieldMapping) -> MappingScreen:
@@ -681,7 +514,6 @@ def _render_chosen(headers: list[str], chosen: FieldMapping) -> MappingScreen:
         _summary(samples),
         suggest_mapping(headers),
         defaults=_DEFAULTS,
-        preview=lambda mapping: parse_csv_record(samples, mapping).record,
         chosen=chosen,
     )
 
@@ -762,61 +594,6 @@ def test_render_mapping_table__empty_label_inputs_fall_back_to_placeholders() ->
     }
 
 
-def test_render_mapping_table__result_shows_normalized_label_per_row() -> None:
-    screen = _render_samples({"included": "1", "Title": "x"})
-    screen.set_target("Title", "label")
-
-    assert _result(screen, "included") == "include (ft / screener 1)"
-    assert _result(screen, "Title") == "unknown (ft / screener 1)"
-
-
-def test_render_mapping_table__result_follows_typed_phase_and_screener() -> None:
-    screen = _render_samples({"included": "1"})
-
-    screen.set_option("included", "phase", "tiab")
-    screen.set_option("included", "screener", "Emily")
-
-    assert _result(screen, "included") == "include (tiab / Emily)"
-
-
-def test_render_mapping_table__result_shows_other_id_key_and_follows_it() -> None:
-    screen = _render_samples({"PMCID": "PMC1"})
-    assert _result(screen, "PMCID") == "pmcid: PMC1"
-
-    screen.set_option("PMCID", "key", "pmc")
-
-    assert _result(screen, "PMCID") == "pmc: PMC1"
-
-
-def test_render_mapping_table__result_shows_name_split_and_follows_it() -> None:
-    screen = _render_samples({"Authors": "Smith, John"})
-    assert _result(screen, "Authors") == "Smith, John"
-
-    screen.set_option("Authors", "role", "first_last")
-
-    assert _result(screen, "Authors") == "John, Smith"
-
-
-def test_render_mapping_table__result_shows_author_ids() -> None:
-    samples = {"Author": "Ann Lee", "Author IDs": "A1"}
-    screen = _render_samples(samples)
-    screen.set_target("Author", "authors")
-    screen.set_option("Author", "role", "full_name")
-    screen.set_target("Author IDs", "authors")
-    screen.set_option("Author IDs", "role", "ids")
-
-    screen.set_option("Author IDs", "id_key", "openalex")
-
-    assert _result(screen, "Author") == "Ann Lee (openalex A1)"
-
-
-def test_render_mapping_table__unknown_label_result_is_red() -> None:
-    screen = _render_samples({"included": "conflict", "decision": "yes"})
-
-    assert _result_color(screen, "included") == ["text-negative"]
-    assert _result_color(screen, "decision") == ["text-positive"]
-
-
 def test_render_mapping_table__chosen_label_prefills_readonly_inputs() -> None:
     chosen = mapping_of(
         {"included": Suggest("label", {"phase": "tiab", "screener": "Emily"})}
@@ -884,14 +661,6 @@ def test_render_mapping_table__ambiguous_example_date_makes_order_orange() -> No
 
     assert _option_color(screen, "Date", "order") == "orange-2"
     assert _option_color(screen, "Created", "order") == "green-2"
-
-
-def test_render_mapping_table__not_parsed_row_has_orange_options() -> None:
-    screen = _render_samples({"Pages": "x"})
-    screen.set_target("Pages", "date")
-
-    assert _result(screen, "Pages") == "not parsed"
-    assert _option_color(screen, "Pages", "part") == "orange-2"
 
 
 def test_render_mapping_table__empty_example_gives_no_orange() -> None:

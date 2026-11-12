@@ -1,11 +1,10 @@
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Literal
 
 from nicegui import ui
 from nicegui.element import Element
 
-from app.models.record import Author, PartialDate, Record
 from app.parsers.common import FileSummary
 from app.parsers.mapping import (
     AUTHORS_TARGET,
@@ -20,10 +19,6 @@ from app.parsers.mapping import (
     AuthorsRow,
     DateRow,
     FieldMapping,
-    IssnIsbnRow,
-    LabelRow,
-    OtherIdRow,
-    PagesRow,
     RowDefaults,
     RowMapping,
     default_row,
@@ -246,12 +241,6 @@ def _mapping_width_ch() -> int:
     return max(len(_option_label(key)) for key in _TARGET_KEYS) + _SELECT_CHROME_CH
 
 
-_LIST_SEPARATOR = " | "
-_NOT_PARSED = "not parsed"
-_RESULT_CLASSES = "w-48 truncate text-xs"
-_RESULT_TEXT_COLORS = {"green": "text-positive", "red": "text-negative"}
-
-
 def fill_color(filled: int, total: int) -> str:
     if 3 * filled >= 2 * total and total:
         return "green"
@@ -260,62 +249,10 @@ def fill_color(filled: int, total: int) -> str:
     return "red"
 
 
-def _result_status(text: str, sample: str, not_parsed: bool) -> Status | None:
-    if not_parsed:
-        return "red"
-    if not text or text == sample:
-        return None
-    return "green"
-
-
-def _author_text(author: Author) -> str:
-    details = [f"ORCID {author.orcid}"] if author.orcid else []
-    details += [f"{key} {value}" for key, value in author.other_ids.items()]
-    details += [
-        affiliation.name for affiliation in author.affiliations if affiliation.name
-    ]
-    if author.family_name and author.given_name:
-        name = f"{author.family_name}, {author.given_name}"
-    else:
-        name = author.full_name or ""
-    return f"{name} ({'; '.join(details)})" if details else name
-
-
-def _date_text(date: PartialDate | None) -> str:
-    if date is None:
-        return ""
-    parts = [
-        str(date.year) if date.year is not None else "",
-        f"{date.month:02}" if date.month is not None else "",
-        f"{date.day:02}" if date.day is not None else "",
-    ]
-    return "-".join(part for part in parts if part)
-
-
-def _result_text(row: RowMapping, record: Record) -> str:
-    if isinstance(row, DateRow):
-        return _date_text(record.publication_date)
-    if isinstance(row, PagesRow):
-        return record.pages or ""
-    if isinstance(row, IssnIsbnRow):
-        ids = (("ISSN", record.issn), ("ISBN", record.isbn))
-        return _LIST_SEPARATOR.join(f"{label} {value}" for label, value in ids if value)
-    if isinstance(row, OtherIdRow):
-        other_id = record.other_ids.get(row.key)
-        return f"{row.key}: {other_id}" if other_id else ""
-    if row.target == "authors":
-        return _LIST_SEPARATOR.join(map(_author_text, record.authors))
-    if row.target == "keywords":
-        return _LIST_SEPARATOR.join(record.keywords)
-    value: str | None = getattr(record, row.target)
-    return value or ""
-
-
 @dataclass
 class _Row:
     header: str
     sample: ui.label
-    result: ui.label
     count: ui.linear_progress
     select: ui.select
     options: ui.column
@@ -335,7 +272,6 @@ class _Row:
 
 @dataclass
 class MappingScreen:
-    preview: Callable[[FieldMapping], Record]
     defaults: RowDefaults
     # Read-only text boxes show the stored value itself rather than a placeholder.
     readonly: bool = False
@@ -381,6 +317,7 @@ class MappingScreen:
             row.inputs[option.name] = widget
             row.option_rows[option.name] = option_row
         self._refresh_option_visibility(row)
+        self._refresh_option_colors(row)
 
     def _refresh_option_visibility(self, row: _Row) -> None:
         mapped = self._row_mapping(row)
@@ -388,55 +325,26 @@ class MappingScreen:
             shown = mapped is not None and _shows_option(mapped, name)
             option_row.set_visibility(shown)
 
-    def refresh_results(self) -> None:
-        mapping = self.current_mapping()
-        record = self.preview(mapping)
-        label_headers = [key for key, _ in mapping.rows_of(LabelRow)]
-        for row in self.rows:
-            mapped = mapping.rows.get(row.header)
-            target = mapped.target if mapped is not None else None
-            text: str
-            unknown_label = False
-            if target == LABEL_TARGET:
-                label = record.labels[label_headers.index(row.header)]
-                text = f"{label.value} ({label.phase} / {label.screener})"
-                unknown_label = label.value == "unknown"
-            else:
-                text = _result_text(mapped, record) if mapped is not None else ""
-            not_parsed = bool(target and row.sample.text and not text)
-            row.result.set_text(_NOT_PARSED if not_parsed else text)
-            status = _result_status(text, row.sample.text, not_parsed)
-            if unknown_label:
-                status = "red"
-            color = _RESULT_TEXT_COLORS[status] if status else "text-grey-7"
-            row.result.classes(replace=f"{_RESULT_CLASSES} {color}")
-            row.result.clear()
-            if text:
-                with row.result:
-                    ui.tooltip(text)
-            if mapped is not None:
-                self._refresh_option_colors(row, mapped, failed=status == "red")
-
-    def _refresh_option_colors(
-        self, row: _Row, mapped: RowMapping, failed: bool
-    ) -> None:
+    def _refresh_option_colors(self, row: _Row) -> None:
+        mapped = self._row_mapping(row)
+        if mapped is None:
+            return
         assert row.base is not None
         for name, widget in row.inputs.items():
             status: str = "green"
             if getattr(mapped, name) != getattr(row.base, name):
                 status = _CHANGED
-            elif failed or _needs_a_look(mapped, name, row.sample.text):
+            elif _needs_a_look(mapped, name, row.sample.text):
                 status = "orange"
             widget.props(f"bg-color={_STATUS_COLORS[status]}")
 
     def on_target_change(self, row: _Row) -> None:
         self._build_options(row)
         self._refresh_colors()
-        self.refresh_results()
 
     def on_option_change(self, row: _Row) -> None:
         self._refresh_option_visibility(row)
-        self.refresh_results()
+        self._refresh_option_colors(row)
 
     def set_target(self, header: str, target: str) -> None:
         self._row_for(header).select.value = target
@@ -472,12 +380,9 @@ def render_mapping_table(
     suggestion: FieldMapping,
     *,
     defaults: RowDefaults,
-    preview: Callable[[FieldMapping], Record],
     chosen: FieldMapping | None = None,
 ) -> MappingScreen:
-    screen = MappingScreen(
-        preview=preview, defaults=defaults, readonly=chosen is not None
-    )
+    screen = MappingScreen(defaults=defaults, readonly=chosen is not None)
     samples = summary.samples
     headers = _sorted_headers(list(samples), suggestion)
     input_width = _input_width_ch(headers)
@@ -511,7 +416,6 @@ def render_mapping_table(
                 ui.label("Input").classes("text-xs font-bold").style(input_style)
                 ui.label("Mapping").classes("text-xs font-bold").style(mapping_style)
                 ui.label("Example").classes("w-48 text-xs font-bold text-center")
-                ui.label("Result").classes("w-48 text-xs font-bold text-center")
             for i, header in enumerate(headers):
                 status = _initial_status(header, suggestion)
                 row_classes = f"{row_base} py-0"
@@ -551,7 +455,6 @@ def render_mapping_table(
                     )
                     if samples[header]:
                         sample.tooltip(samples[header])
-                    result = ui.label().classes(_RESULT_CLASSES)
 
                 mapped = (chosen or suggestion).rows.get(header)
                 if chosen is not None:
@@ -560,7 +463,6 @@ def render_mapping_table(
                 row = _Row(
                     header=header,
                     sample=sample,
-                    result=result,
                     count=count,
                     select=select,
                     options=options,
@@ -573,5 +475,4 @@ def render_mapping_table(
                 select.on_value_change(lambda _e, row=row: screen.on_target_change(row))
 
     screen._refresh_colors()
-    screen.refresh_results()
     return screen

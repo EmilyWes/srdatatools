@@ -19,10 +19,17 @@ from app.export.columns import (
 )
 from app.export.options import ExportOptions
 from app.gui.format import format_count
+from app.gui.import_flow import (
+    BUTTON_PROPS,
+    FILE_LABEL_CLASSES,
+    GRID_CLASSES,
+    GRID_COLUMNS,
+    SELECT_CLASSES,
+    SELECT_PROPS,
+)
 from app.gui.mapping_table import ROW_FIELD_CSS, fill_color
 from app.gui.quirks_overview import (
     FIELD_CSS,
-    VIEW_MAPPING,
     render_box_frame,
     render_view_toggle,
 )
@@ -68,11 +75,10 @@ async def pick_save_path() -> Path | None:
     return Path(selected[0]) if selected else None
 
 
-def _records_line(count: int, selected: bool) -> str:
-    noun = "record" if count == 1 else "records"
+def _records_count(count: int, selected: bool) -> str:
     if selected:
-        return f"Exporting {format_count(count)} selected {noun}"
-    return f"Exporting all {format_count(count)} {noun}"
+        return f"{format_count(count)} (selected)"
+    return format_count(count)
 
 
 @dataclass
@@ -399,16 +405,22 @@ class ExportView:
         self.middle.clear()
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):
-                with ui.row().classes("items-center gap-2"):
-                    self.path_label = ui.label("No file chosen").classes("text-sm")
-                    ui.button("Save as…", on_click=self._choose_path).props("dense")
-                ui.select(
-                    _TYPE_OPTIONS, value=self.options.file_type, label="Type"
-                ).props("dense outlined").classes("w-48")
-                ui.label(_records_line(len(self.records), self.selected)).classes(
-                    "text-sm text-grey-7"
-                )
-                views = render_view_toggle(VIEW_MAPPING, parsing_label="Options")
+                with ui.grid(columns=GRID_COLUMNS).classes(GRID_CLASSES):
+                    ui.button("Save as…", on_click=self._choose_path).props(
+                        BUTTON_PROPS
+                    )
+                    self.path_label = ui.label("No file selected").classes(
+                        FILE_LABEL_CLASSES
+                    )
+                    ui.label("Select type:").classes("text-sm")
+                    ui.select(_TYPE_OPTIONS, value=self.options.file_type).props(
+                        SELECT_PROPS
+                    ).classes(SELECT_CLASSES)
+                    ui.label("Number of records:").classes("text-sm")
+                    ui.label(_records_count(len(self.records), self.selected)).classes(
+                        "text-sm"
+                    )
+                views = render_view_toggle(parsing_label="Options")
                 self.mapping = views.mapping
                 self._render_mapping()
                 self._render_option_boxes(views.parsing)

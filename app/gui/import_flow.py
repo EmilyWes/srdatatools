@@ -10,7 +10,7 @@ from app.db.activity_log import log_import
 from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
 from app.gui.busy import run_busy
-from app.gui.mapping_table import MappingScreen, render_mapping_table
+from app.gui.mapping_table import ROW_FIELD_CSS, MappingScreen, render_mapping_table
 from app.gui.quirks_overview import (
     VIEW_MAPPING,
     VIEW_PARSING,
@@ -19,10 +19,8 @@ from app.gui.quirks_overview import (
     render_quirks_overview,
     render_view_toggle,
 )
-from app.models.record import Record
 from app.parsers.bibtex import (
     parse_bibtex_file,
-    parse_bibtex_record,
     read_bibtex_fields,
     suggest_bibtex_mapping,
 )
@@ -30,14 +28,12 @@ from app.parsers.common import (
     UNKNOWN,
     FileSummary,
     FileType,
-    ParsedRow,
     ParseResult,
     is_file_type,
     merge_summaries,
 )
 from app.parsers.csv_ import (
     parse_csv_file,
-    parse_csv_record,
     read_csv_headers,
     suggest_mapping,
 )
@@ -47,10 +43,9 @@ from app.parsers.excel import (
     read_excel_headers,
     read_excel_sheets,
 )
-from app.parsers.mapping import FieldMapping, RowDefaults, TagLines
+from app.parsers.mapping import FieldMapping, RowDefaults
 from app.parsers.nbib import (
     parse_nbib_file,
-    parse_nbib_record,
     read_nbib_tags,
     suggest_nbib_mapping,
 )
@@ -58,7 +53,6 @@ from app.parsers.profiles import (
     PROFILES,
     FormatProfile,
     apply_profile,
-    fix_record,
     has_profile,
 )
 from app.parsers.profiles.overview import (
@@ -71,7 +65,6 @@ from app.parsers.profiles.overview import (
 from app.parsers.quirks import ParseSettings
 from app.parsers.ris import (
     parse_ris_file,
-    parse_ris_record,
     read_ris_tags,
     suggest_ris_mapping,
 )
@@ -98,6 +91,16 @@ _MIXED_WARNING = (
 )
 _EXCEL_SINGLE_FILE = "Excel import takes one file at a time"
 
+# The second column is fixed to the dropdown width (w-32) so a long file name
+# overflows to the right instead of moving the button and dropdowns.
+GRID_COLUMNS = "max-content 8rem"
+GRID_CLASSES = "items-center justify-items-start gap-x-1 gap-y-2"
+CELL_ROW_CLASSES = "items-center gap-2 no-wrap"
+FILE_LABEL_CLASSES = "text-sm whitespace-nowrap"
+SELECT_PROPS = "dense outlined options-dense popup-content-class=text-xs"
+BUTTON_PROPS = "dense size=11px"
+SELECT_CLASSES = "mapping-field text-xs w-32"
+
 
 async def pick_files() -> list[Path]:
     assert app.native.main_window is not None, "native window is not running"
@@ -111,7 +114,6 @@ class _TypeHandlers:
 
     read_keys: Callable[[Path, str | None, ParseSettings], FileSummary]
     suggest: Callable[[list[str], FormatProfile], FieldMapping]
-    parse_record: Callable[[TagLines, FieldMapping, ParseSettings], ParsedRow]
     parse_file: Callable[[Path, FieldMapping, str | None, ParseSettings], ParseResult]
     noun: str
 
@@ -122,17 +124,10 @@ def _suggest_columns(keys: list[str], profile: FormatProfile) -> FieldMapping:
     )
 
 
-def _parse_columns(
-    lines: TagLines, mapping: FieldMapping, settings: ParseSettings
-) -> ParsedRow:
-    return parse_csv_record(dict(lines), mapping, settings)
-
-
 def _delimited(delimiter: str | None) -> _TypeHandlers:
     return _TypeHandlers(
         read_keys=lambda path, _, settings: read_csv_headers(path, delimiter, settings),
         suggest=_suggest_columns,
-        parse_record=_parse_columns,
         parse_file=lambda path, mapping, _, settings: parse_csv_file(
             path, mapping, delimiter, settings
         ),
@@ -146,7 +141,6 @@ _TYPES: dict[FileType, _TypeHandlers] = {
     "excel": _TypeHandlers(
         read_keys=lambda path, sheet, _: read_excel_headers(path, sheet),
         suggest=_suggest_columns,
-        parse_record=_parse_columns,
         parse_file=parse_excel_file,
         noun="columns",
     ),
@@ -155,7 +149,6 @@ _TYPES: dict[FileType, _TypeHandlers] = {
         suggest=lambda keys, profile: suggest_ris_mapping(
             keys, profile.suggestions, profile.row_defaults
         ),
-        parse_record=parse_ris_record,
         parse_file=lambda path, mapping, _, settings: parse_ris_file(
             path, mapping, settings
         ),
@@ -166,7 +159,6 @@ _TYPES: dict[FileType, _TypeHandlers] = {
         suggest=lambda keys, profile: suggest_nbib_mapping(
             keys, profile.suggestions, profile.row_defaults
         ),
-        parse_record=parse_nbib_record,
         parse_file=lambda path, mapping, _, settings: parse_nbib_file(
             path, mapping, settings
         ),
@@ -177,7 +169,6 @@ _TYPES: dict[FileType, _TypeHandlers] = {
         suggest=lambda keys, profile: suggest_bibtex_mapping(
             keys, profile.suggestions, profile.row_defaults
         ),
-        parse_record=parse_bibtex_record,
         parse_file=lambda path, mapping, _, settings: parse_bibtex_file(
             path, mapping, settings
         ),
@@ -190,24 +181,6 @@ def _suggestion(file_type: FileType, source: str, summary: FileSummary) -> Field
     return _TYPES[file_type].suggest(
         list(summary.samples), profile_with(file_type, source)
     )
-
-
-def preview_for(
-    file_type: FileType,
-    source: str,
-    summary: FileSummary,
-    choices: Callable[[], ParsingChoices | None] = lambda: None,
-) -> Callable[[FieldMapping], Record]:
-    """`choices` is read on every preview, so the Result follows the Parsing view."""
-    handlers = _TYPES[file_type]
-
-    def preview(mapping: FieldMapping) -> Record:
-        profile = profile_with(file_type, source, choices())
-        lines = list(summary.samples.items())
-        row = handlers.parse_record(lines, mapping, profile.settings)
-        return fix_record(profile, row.raw_fields, row.record, mapping)
-
-    return preview
 
 
 def type_label(file_type: str) -> str:
@@ -246,7 +219,6 @@ def render_mapping(
     name: str,
     summary: FileSummary,
     source: str = UNKNOWN,
-    choices: Callable[[], ParsingChoices | None] = lambda: None,
 ) -> MappingScreen | None:
     if not summary.samples:
         with container:
@@ -258,7 +230,6 @@ def render_mapping(
         summary,
         _suggestion(file_type, source, summary),
         defaults=row_defaults_for(file_type, source),
-        preview=preview_for(file_type, source, summary, choices),
     )
 
 
@@ -319,7 +290,7 @@ class ImportView:
     summaries: list[FileSummary] = field(default_factory=list)
     sheets: list[str] = field(default_factory=list)
     sheet: str | None = None
-    view: str = VIEW_MAPPING
+    view: str | None = VIEW_MAPPING
     mapping_screen: MappingScreen | None = None
     quirks_screen: QuirksScreen | None = None
     views: MappingParsingViews | None = None
@@ -351,6 +322,8 @@ class ImportView:
                 f"Reading {self._name()}…", lambda: [_detect(path) for path in picked]
             )
             self.file_type, self.source = common_detection(self.detected)
+            detected = UNKNOWN not in (self.file_type, self.source)
+            self.view = None if detected else VIEW_MAPPING
             if self._mixed():
                 with self.middle:
                     ui.notify(_MIXED_WARNING, type="warning")
@@ -417,16 +390,15 @@ class ImportView:
             return FieldMapping()
         return self.mapping_screen.current_mapping()
 
-    def _on_view(self, view: str) -> None:
-        """Each view refreshes from the other's edits when it is shown."""
+    def _on_view(self, view: str | None) -> None:
+        """Parsing refreshes from the mapping's edits when it is shown."""
         self.view = view
-        if view == VIEW_MAPPING and self.mapping_screen is not None:
-            self.mapping_screen.refresh_results()
         if view == VIEW_PARSING and self.quirks_screen is not None:
             self.quirks_screen.refresh_ordering()
 
-    def _render_mapping_and_parsing(self, file_type: FileType) -> None:
-        views = render_view_toggle(self.view, on_change=self._on_view)
+    def _render_mapping_and_parsing(
+        self, views: MappingParsingViews, file_type: FileType
+    ) -> None:
         quirks_screen = render_quirks_overview(
             views.parsing,
             quirk_boxes(file_type, type_label(file_type)),
@@ -439,84 +411,106 @@ class ImportView:
             self._name(),
             merge_summaries(self.summaries),
             self.source,
-            quirks_screen.current_choices,
         )
         if mapping_screen is None:
-            views.toggle.delete()
-            views.parsing.delete()
+            views.parsing.clear()
             return
         self.mapping_screen, self.quirks_screen = mapping_screen, quirks_screen
         self.views = views
         self._on_view(self.view)
+
+    def _no_mapping_reason(self, type_known: bool) -> str:
+        if not self.paths:
+            return "select a file first"
+        if not type_known:
+            return "please select the type"
+        if self._too_many_for_excel():
+            return _EXCEL_SINGLE_FILE
+        return "file has no mapping available"
 
     def render(self) -> None:
         file_type = self.file_type if is_file_type(self.file_type) else None
         type_known = file_type is not None
         has_file = bool(self.paths)
 
+        ui.add_css(ROW_FIELD_CSS)
         self.middle.clear()
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):
-                with ui.row().classes("items-center gap-2"):
-                    if len(self.paths) > 1:
-                        files_label = ui.label(f"{len(self.paths)} files selected")
-                        files_label.tooltip(", ".join(path.name for path in self.paths))
-                    else:
-                        files_label = ui.label(
-                            self.paths[0].name if self.paths else "No file selected"
-                        )
-                    files_label.classes("text-sm")
-                    if self._mixed():
-                        ui.icon("warning", size="sm").classes("text-orange-7").tooltip(
-                            f"{_MIXED_WARNING} Detected: {self._mixed_details()}"
-                        )
+                with ui.grid(columns=GRID_COLUMNS).classes(GRID_CLASSES):
                     ui.button("Select files", on_click=self._select_files).props(
-                        "dense"
+                        BUTTON_PROPS
                     )
+                    with ui.row().classes(CELL_ROW_CLASSES):
+                        if len(self.paths) > 1:
+                            files_label = ui.label(f"{len(self.paths)} files selected")
+                            files_label.tooltip(
+                                ", ".join(path.name for path in self.paths)
+                            )
+                        else:
+                            files_label = ui.label(
+                                self.paths[0].name if self.paths else "No file selected"
+                            )
+                        files_label.classes(FILE_LABEL_CLASSES)
+                        if self._mixed():
+                            ui.icon("warning", size="sm").classes(
+                                "text-orange-7"
+                            ).tooltip(
+                                f"{_MIXED_WARNING} Detected: {self._mixed_details()}"
+                            )
 
-                if self.sheets:
-                    sheet_select = (
-                        ui.select(self.sheets, value=self.sheet, label="Sheet")
-                        .props("dense outlined")
-                        .classes("w-48")
-                    )
-                    sheet_select.on_value_change(lambda e: self._set_sheet(e.value))
-
-                with ui.row().classes("items-center gap-2"):
-                    # Mirrors the warning icon's slot so the dropdowns stay centred.
-                    ui.icon("warning", size="sm").classes("invisible")
+                    ui.label("Select source:").classes("text-sm")
                     source_select = (
-                        ui.select(_SOURCE_OPTIONS, value=self.source, label="Source")
-                        .props("dense outlined")
-                        .classes("w-48")
+                        ui.select(_SOURCE_OPTIONS, value=self.source)
+                        .props(SELECT_PROPS)
+                        .classes(SELECT_CLASSES)
                     )
                     source_select.on_value_change(lambda e: self._set_source(e.value))
 
-                    type_select = (
-                        ui.select(_TYPE_OPTIONS, value=self.file_type, label="Type")
-                        .props("dense outlined")
-                        .classes("w-48")
-                    )
-                    type_select.on_value_change(lambda e: self._set_type(e.value))
-
-                    notice = ui.icon("warning", size="sm").classes("text-orange-7")
-                    if (
-                        self.source != UNKNOWN
-                        and file_type is not None
-                        and not has_profile(self.source, file_type)
-                    ):
-                        notice.tooltip(
-                            "No profile for this source/type combination"
-                            " — using the default parser."
+                    ui.label("Select type:").classes("text-sm")
+                    with ui.row().classes(CELL_ROW_CLASSES):
+                        type_select = (
+                            ui.select(_TYPE_OPTIONS, value=self.file_type)
+                            .props(SELECT_PROPS)
+                            .classes(SELECT_CLASSES)
                         )
-                    else:
-                        notice.classes("invisible")
+                        type_select.on_value_change(lambda e: self._set_type(e.value))
+                        if (
+                            self.source != UNKNOWN
+                            and file_type is not None
+                            and not has_profile(self.source, file_type)
+                        ):
+                            ui.icon("warning", size="sm").classes(
+                                "text-orange-7"
+                            ).tooltip(
+                                "No profile for this source/type combination"
+                                " — using the default parser."
+                            )
+
+                    if self.sheets:
+                        ui.label("Select sheet:").classes("text-sm")
+                        sheet_select = (
+                            ui.select(self.sheets, value=self.sheet)
+                            .props(SELECT_PROPS)
+                            .classes(SELECT_CLASSES)
+                        )
+                        sheet_select.on_value_change(lambda e: self._set_sheet(e.value))
 
                 self.mapping_screen = self.quirks_screen = None
                 self.views = None
-                if self.paths and self.summaries and file_type is not None:
-                    self._render_mapping_and_parsing(file_type)
+                can_render = bool(self.paths and self.summaries) and type_known
+                has_samples = bool(merge_summaries(self.summaries).samples)
+                views = render_view_toggle(
+                    self.view if can_render and has_samples else None,
+                    on_change=self._on_view,
+                )
+                if can_render:
+                    assert file_type is not None
+                    self._render_mapping_and_parsing(views, file_type)
                 has_mapping = self.mapping_screen is not None
+                if not has_mapping:
+                    views.toggle.disable()
+                    views.toggle.tooltip(self._no_mapping_reason(type_known))
 
                 with ui.row().classes("items-center gap-2"):
                     self.import_button = ui.button(

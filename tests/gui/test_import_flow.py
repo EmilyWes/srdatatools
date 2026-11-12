@@ -570,9 +570,8 @@ def test_render_import_view__selecting_file_updates_label(
     assert view.paths == [txt_path]
     # type is not detected, so no mapping renders yet
     assert view.mapping_screen is None
-    outer_column = panes.middle.default_slot.children[0]
-    file_row = outer_column.default_slot.children[0]
-    assert file_row.default_slot.children[0].text == "export.txt"  # type: ignore[attr-defined]
+    label = _file_row_children(panes.middle)[0]
+    assert label.text == "export.txt"  # type: ignore[attr-defined]
 
 
 def test_render_import_view__mapping_renders_inline_and_enables_import_without_confirm(
@@ -869,63 +868,6 @@ def test_render_import_view__source_change_rerenders_mapping_and_is_passed_on(
     assert calls == ["pubmed"]
 
 
-def _result(screen: MappingScreen, header: str) -> str:
-    text: str = screen._row_for(header).result.text
-    return text
-
-
-def test_render_mapping__result_applies_pubmed_nbib_profile(tmp_path: Path) -> None:
-    nbib_path = tmp_path / "pubmed.nbib"
-    nbib_path.write_text(_PUBMED_NBIB_TEXT + "IS  - 1234-5678 (Print)\n")
-    panes = shell()
-
-    screen = _render_mapping(panes.middle, "nbib", nbib_path, "pubmed")
-
-    assert screen is not None
-    assert _result(screen, "PG") == "521-522"
-    assert _result(screen, "TI") == "Original."
-    assert _result(screen, "IS") == "ISSN 1234-5678"
-
-
-def test_render_mapping__result_without_source_skips_profile(tmp_path: Path) -> None:
-    csv_path = tmp_path / "scopus.csv"
-    csv_path.write_text('Authors,EID\n"Teng, Yu (60652739200)",2-s2.0-1\n')
-    panes = shell()
-
-    screen = _render_mapping(panes.middle, "csv", csv_path)
-
-    assert screen is not None
-    assert _result(screen, "Authors") == "Teng, Yu (60652739200)"
-
-
-def test_render_mapping__result_without_source_applies_type_defaults(
-    tmp_path: Path,
-) -> None:
-    nbib_path = tmp_path / "pubmed.nbib"
-    nbib_path.write_text(_PUBMED_NBIB_TEXT)
-    panes = shell()
-
-    screen = _render_mapping(panes.middle, "nbib", nbib_path)
-
-    assert screen is not None
-    assert _result(screen, "PG") == "521-522"
-
-
-def test_render_mapping__nbib_result_combines_fau_auid_and_ad(tmp_path: Path) -> None:
-    nbib_path = tmp_path / "authors.nbib"
-    nbib_path.write_text(
-        "PMID- 1\nFAU - Smith, John\nAUID- ORCID: 0000-0001-2345-6789\n"
-        "AD  - University X\n"
-    )
-    panes = shell()
-
-    screen = _render_mapping(panes.middle, "nbib", nbib_path)
-
-    assert screen is not None
-    expected = "Smith, John (ORCID 0000-0001-2345-6789; University X)"
-    assert [_result(screen, tag) for tag in ("FAU", "AUID", "AD")] == [expected] * 3
-
-
 def test_render_import_view__unknown_type_shows_select_type_tooltip() -> None:
     panes = shell()
 
@@ -990,8 +932,14 @@ _DETECTED_PUBMED_TEXT = "PMID- 1\nOWN - NLM\nTI  - A title\n"
 
 
 def _file_row_children(middle: Element) -> list[Element]:
-    outer_column = middle.default_slot.children[0]
-    return list(outer_column.default_slot.children[0].default_slot.children)
+    return list(_grid_cells(middle)[1].default_slot.children)
+
+
+def _grid_cells(middle: Element) -> list[Element]:
+    grid = middle.default_slot.children[0].default_slot.children[0]
+    return [
+        cell for cell in grid.default_slot.children if not isinstance(cell, Tooltip)
+    ]
 
 
 def _tooltips_for(middle: Element, element: Element) -> list[str]:
@@ -1187,8 +1135,9 @@ def test_render_mapping__excel_lists_columns_with_delimiter_box(
 
 
 def _sheet_select(middle: Element) -> Any:
-    outer_column = middle.default_slot.children[0]
-    return outer_column.default_slot.children[1]
+    label, select = _grid_cells(middle)[-2:]
+    assert label.text == "Select sheet:"  # type: ignore[attr-defined]
+    return select
 
 
 def test_render_import_view__xlsx_file_lists_sheets_and_enables_import(
@@ -1204,9 +1153,7 @@ def test_render_import_view__xlsx_file_lists_sheets_and_enables_import(
     assert view.file_type == "excel"
     assert view.sheets == ["Records", "Other"]
     assert view.sheet == "Records"
-    select = _sheet_select(panes.middle)
-    assert select.props["label"] == "Sheet"
-    assert select.value == "Records"
+    assert _sheet_select(panes.middle).value == "Records"
     assert view.mapping_screen is not None
     assert {row.header for row in view.mapping_screen.rows} == {"Title", "DOI"}
     assert view.import_button is not None
@@ -1364,6 +1311,34 @@ def test_render_import_view__starts_on_mapping_with_parsing_hidden(
     assert _shown(view.views.mapping) and not _shown(view.views.parsing)
 
 
+def test_render_import_view__detected_source_and_type_start_retracted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    panes = shell()
+    path = tmp_path / "pubmed.nbib"
+    path.write_text(_DETECTED_PUBMED_TEXT)
+    _pick(monkeypatch, path)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
+
+    run_in(view.middle, view._select_files())
+
+    assert (view.file_type, view.source) == ("nbib", "pubmed")
+    assert _toggle(panes.middle).value is None
+    assert view.views is not None
+    assert not _shown(view.views.mapping) and not _shown(view.views.parsing)
+
+
+def test_render_import_view__source_change_keeps_retracted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view, middle = _nbib_view(monkeypatch, tmp_path)
+    _toggle(middle).value = None
+
+    view._set_source("pubmed")
+
+    assert _toggle(middle).value is None
+
+
 def test_render_import_view__toggle_switches_to_parsing_and_keeps_edits(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -1389,20 +1364,6 @@ def test_render_import_view__source_change_keeps_the_selected_view(
 
     assert _toggle(middle).value == "parsing"
     assert view.views is not None and _shown(view.views.parsing)
-
-
-def test_render_import_view__result_follows_parsing_after_switching_back(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    view, middle = _nbib_view(monkeypatch, tmp_path)
-    assert view.mapping_screen is not None and view.quirks_screen is not None
-    assert _result(view.mapping_screen, "PG") == "521-522"
-    _toggle(middle).value = "parsing"
-
-    view.quirks_screen.set_value("pages_set", False)
-    _toggle(middle).value = "mapping"
-
-    assert _result(view.mapping_screen, "PG") == "521-2"
 
 
 def test_render_import_view__import_passes_parsing_choices(
@@ -1437,12 +1398,32 @@ def test_render_import_view__ordering_offers_keys_sharing_a_target(
     assert "PG" not in select.options
 
 
-def test_render_import_view__no_toggle_without_a_mapping() -> None:
+def test_render_import_view__toggle_disabled_before_a_file() -> None:
     panes = shell()
 
     render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
 
-    assert not [e for e in panes.middle.descendants() if isinstance(e, ui.toggle)]
+    toggle = _toggle(panes.middle)
+    assert not toggle.enabled
+    assert toggle.value is None
+    assert _tooltips_for(panes.middle, toggle) == ["select a file first"]
+
+
+def test_render_import_view__toggle_disabled_for_unknown_type(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    panes = shell()
+    path = tmp_path / "export.txt"
+    path.write_text("not a known format")
+    _pick(monkeypatch, path)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q: None)
+
+    run_in(view.middle, view._select_files())
+
+    toggle = _toggle(panes.middle)
+    assert not toggle.enabled
+    assert toggle.value is None
+    assert _tooltips_for(panes.middle, toggle) == ["please select the type"]
 
 
 def test_import_file__applies_parsing_choices(session: Session, tmp_path: Path) -> None:
