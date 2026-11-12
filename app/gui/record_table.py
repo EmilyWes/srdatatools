@@ -15,6 +15,7 @@ from nicegui.element import Element
 from nicegui.events import GenericEventArguments
 from sqlalchemy.orm import Session
 
+from app.cleaning.quality import ISSUE_JOINER, QUALITY_FIELDS, quality_issues
 from app.db.queries import (
     list_keyword_prefixes,
     list_label_columns,
@@ -85,7 +86,10 @@ COLUMNS: dict[str, str] = {
     "publisher": "Publisher",
     "url": "URL",
     "notes": "Notes",
+    "data_quality": "Data quality",
 }
+# Columns worked out from other fields rather than read from one.
+_DERIVED_COLUMNS = ("sources", "keywords", "publication_year", "data_quality")
 DEFAULT_COLUMNS = ["doi", "title", "author_names"]
 # Table settings boxes; keyword prefix and label columns get boxes of their own.
 _COLUMN_BOXES: dict[str, tuple[str, ...]] = {
@@ -96,6 +100,7 @@ _COLUMN_BOXES: dict[str, tuple[str, ...]] = {
         "language",
         "notes",
         "sources",
+        "data_quality",
     ),
     "Authors": ("author_names", "author_ids", "author_affiliations"),
     "Publication": (
@@ -209,19 +214,19 @@ def load_rows(
 ) -> list[dict[str, Any]]:
     label_columns = [key for key in columns if is_label_key(key)]
     keyword_columns = [key for key in columns if is_keyword_key(key)]
-    fields = [
-        key
-        for key in columns
-        if key in COLUMNS and key not in ("sources", "keywords", "publication_year")
-    ]
+    fields = [key for key in columns if key in COLUMNS and key not in _DERIVED_COLUMNS]
     if "keywords" in columns or keyword_columns:
         fields.append("keywords")
-    if "publication_year" in columns and "publication_date" not in fields:
+    if "publication_year" in columns:
         fields.append("publication_date")
+    if "data_quality" in columns:
+        fields.extend(QUALITY_FIELDS)
     rows = []
-    for record in list_record_rows(session, fields):
+    for record in list_record_rows(session, list(dict.fromkeys(fields))):
         keywords = [split_keyword(keyword) for keyword in record.pop("keywords", [])]
         row = row_for(record)
+        if "data_quality" in columns:
+            row["data_quality"] = ISSUE_JOINER.join(quality_issues(record))
         if "publication_year" in columns:
             row["publication_year"] = publication_year(row.get("publication_date"))
         if "keywords" in columns:
