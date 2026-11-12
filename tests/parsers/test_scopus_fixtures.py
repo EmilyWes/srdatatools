@@ -141,11 +141,19 @@ def test_scopus_small__formats_agree_on_ids_and_document_type(
             assert other.publication_type == record.publication_type, eid
 
 
+# Two big BibTeX entries have a field the BibTeX syntax can't read.
+_BIG_MALFORMED_COUNTS = {".bib": 2}
+
+
 @pytest.mark.big
-def test_scopus_big__every_file_parses_without_skips() -> None:
+def test_scopus_big__every_file_parses_with_only_the_known_skips() -> None:
     for path in vendor_files("scopus", "big"):
-        if path.suffix.lower() not in _FORMAT_BY_SUFFIX:
+        suffix = path.suffix.lower()
+        if suffix not in _FORMAT_BY_SUFFIX:
             continue
-        result = _parse(path, _FORMAT_BY_SUFFIX[path.suffix.lower()])
+        result = _parse(path, _FORMAT_BY_SUFFIX[suffix])
         assert result.rows, path.name
-        assert result.skipped == [], path.name
+        assert len(result.skipped) == _BIG_MALFORMED_COUNTS.get(suffix, 0), path.name
+        assert all(
+            row.reason.startswith("malformed field") for row in result.skipped
+        ), path.name
