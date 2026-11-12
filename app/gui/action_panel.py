@@ -10,6 +10,7 @@ from app.gui.format import format_count
 from app.gui.theme import UU_GREEN, UU_ORANGE
 
 _ACTIONS = {
+    "Cleaning": "cleaning_services",
     "Deduplicate": "join_full",
     "Enrich": "auto_awesome",
     "Snowball": "hub",

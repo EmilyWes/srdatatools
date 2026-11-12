@@ -53,12 +53,19 @@ def test_render_right_panel__action_buttons_in_order_only_export_enabled() -> No
 
     action_buttons = [buttons[0] for buttons in _row_buttons(panes.right)]
     assert [button.text for button in action_buttons] == [
+        "Cleaning",
         "Deduplicate",
         "Enrich",
         "Snowball",
         "Export",
     ]
-    assert [button.enabled for button in action_buttons] == [False, False, False, True]
+    assert [button.enabled for button in action_buttons] == [
+        False,
+        False,
+        False,
+        False,
+        True,
+    ]
 
 
 def test_render_right_panel__settings_gear_for_every_action_but_export() -> None:
@@ -67,8 +74,9 @@ def test_render_right_panel__settings_gear_for_every_action_but_export() -> None
     render_right_panel(panes.right, panes.middle)
 
     gears = [buttons[1] for buttons in _row_buttons(panes.right)]
-    assert [gear.props["icon"] for gear in gears] == ["settings"] * 4
+    assert [gear.props["icon"] for gear in gears] == ["settings"] * 5
     assert ["invisible" in gear.classes for gear in gears] == [
+        False,
         False,
         False,
         False,
@@ -83,7 +91,7 @@ def test_render_right_panel__gear_shows_settings_in_middle_and_calls_back() -> N
         panes.right, panes.middle, on_settings=lambda: calls.append(None)
     )
 
-    enrich_gear = _row_buttons(panes.right)[1][1]
+    enrich_gear = _row_buttons(panes.right)[2][1]
     _click(enrich_gear)
 
     assert calls == [None]
@@ -98,7 +106,7 @@ def test_render_right_panel__export_button_calls_back() -> None:
     calls: list[None] = []
     render_right_panel(panes.right, panes.middle, on_export=lambda: calls.append(None))
 
-    _click(_row_buttons(panes.right)[3][0])
+    _click(_row_buttons(panes.right)[4][0])
 
     assert calls == [None]
 
@@ -287,3 +295,14 @@ def test_render_right_panel__cancel_delete_library_does_not_call_back() -> None:
     _click(_button(_delete_dialog(panes.right), "Cancel"))
 
     assert deleted == []
+
+
+def test_render_right_panel__cleaning_gear_shows_placeholder_settings() -> None:
+    panes = shell()
+    render_right_panel(panes.right, panes.middle)
+
+    _click(_row_buttons(panes.right)[0][1])
+
+    labels = panes.middle.default_slot.children[0].default_slot.children
+    assert labels[0].text == "Cleaning settings"  # type: ignore[attr-defined]
+    assert labels[1].text == "Not available yet."  # type: ignore[attr-defined]
