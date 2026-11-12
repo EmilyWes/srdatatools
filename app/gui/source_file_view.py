@@ -60,9 +60,13 @@ def render_source_file_view(
                     ui.label(name).classes("text-sm text-grey-7")
                     ui.label(value).classes("text-sm")
             with ui.row().classes("items-center gap-6"):
-                with ui.column().classes("gap-0"):
-                    ui.label("Records in library").classes("text-sm text-grey-7")
-                    ui.label(format_count(records_in_library)).classes("text-3xl")
+                for name, count in (
+                    ("Records imported", source_file.row_count or 0),
+                    ("Records in library", records_in_library),
+                ):
+                    with ui.column().classes("gap-0"):
+                        ui.label(name).classes("text-sm text-grey-7")
+                        ui.label(format_count(count)).classes("text-3xl")
                 ui.button(
                     "Remove from library",
                     icon="delete",
