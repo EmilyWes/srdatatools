@@ -6,28 +6,13 @@ from pydantic import BaseModel, ValidationError
 
 from app.models.record import LabelValue
 from app.parsers.common import FileType
-from app.parsers.mapping import LINE_DELIMITER
 from app.parsers.profiles import FormatProfile, profile_for
-from app.parsers.profiles.pubmed import CITATION_PARTS
-from app.parsers.profiles.scopus import EMBEDDED_AUTHOR_IDS, RIS_NOTES, URL_EID
-from app.parsers.quirks import (
-    AffiliationLeadingName,
-    DropEtAl,
-    ExpandPageRange,
-    FirstValue,
-    RecordQuirk,
-    StripDoi,
-    StripLastAuthorTrailing,
-    StripPmid,
-)
 
 logger = logging.getLogger(__name__)
 
 Control = Literal["checkbox", "text", "number", "select", "note"]
 
 _FIELD_SIZE_TYPES: frozenset[FileType] = frozenset({"csv", "tsv"})
-_AUTHOR_COLUMN_TYPES: frozenset[FileType] = frozenset({"csv", "tsv", "excel", "bibtex"})
-_CITATION_TYPES: frozenset[FileType] = frozenset({"csv", "tsv", "excel"})
 _LABEL_VALUES_SEPARATOR = "|"
 _LABEL_KEYS: dict[str, LabelValue] = {
     "label_include": "include",
@@ -36,31 +21,14 @@ _LABEL_KEYS: dict[str, LabelValue] = {
     "label_unlabeled": "unlabeled",
 }
 
-_FIRST_PUBLICATION_TYPE = FirstValue("publication_type", LINE_DELIMITER)
-
 
 class ParsingChoices(BaseModel):
-    strip_extras: bool
-    only_one: bool
-    preferred_qualifier: str
-    drop_et_al: bool
-    drop_trailing: bool
-    id_from_name: bool
-    affiliation_start: str
     label_include: str
     label_exclude: str
     label_maybe: str
     label_unlabeled: str
-    empty_values: list[str]
     use_first: list[str]
-    strip_doi: bool
-    strip_pmid: bool
-    pages_set: bool
     field_size_limit: int
-    first_publication_type: bool
-    ris_notes: bool
-    eid_from_url: bool
-    citation_parts: bool
 
 
 @dataclass(frozen=True)
@@ -87,68 +55,6 @@ class QuirkBox:
     items: tuple[QuirkItem | QuirkList, ...]
 
 
-_ISSN_ISBN = QuirkBox(
-    "ISSN/ISBN",
-    (
-        QuirkItem(
-            "strip_extras",
-            "Strip extras",
-            "The input might have qualifiers like (electronic) or (ISSN);"
-            " strips everything away and keeps only the pure ISSN/ISBN.",
-            "checkbox",
-        ),
-        QuirkItem(
-            "only_one",
-            "Only parse one",
-            "Some inputs have several ISSN/ISBN values; keeps only one of them:"
-            " the first, unless the preferred qualifier picks another.",
-            "checkbox",
-        ),
-        QuirkItem(
-            "preferred_qualifier",
-            "Preferred qualifier",
-            "If a value is followed by a label in brackets, e.g."
-            ' "1234-5678 (electronic), 9123-4567 (print)", fill in electronic to'
-            " prefer the electronic value. Not case-sensitive.",
-            "text",
-            enabled_by="only_one",
-        ),
-    ),
-)
-_AUTHORS = QuirkBox(
-    "Authors",
-    (
-        QuirkItem(
-            "drop_et_al",
-            'Drop "et al."',
-            'Removes a trailing "et al." while parsing author names.',
-            "checkbox",
-        ),
-        QuirkItem(
-            "drop_trailing",
-            "Drop trailing",
-            "Removes non-name characters, like ... or ., from the end of the last"
-            " author's name.",
-            "checkbox",
-        ),
-        QuirkItem(
-            "id_from_name",
-            "ID from name",
-            "Scopus adds the author ID to the name (Doe, John (12345)); removes it"
-            " from the name and adds it to the author IDs as scopus_author_id.",
-            "checkbox",
-        ),
-        QuirkItem(
-            "affiliation_start",
-            "Affiliation start",
-            "Sometimes an affiliation starts with the author's name; strips"
-            " everything up to this delimiter. An affiliation without the"
-            " delimiter is only a name and is dropped. Leave empty to keep"
-            " affiliations as they are.",
-            "text",
-        ),
-    ),
-)
 _LABELING = QuirkBox(
     "Labeling",
     (
@@ -162,24 +68,6 @@ _LABELING = QuirkBox(
                 wide=True,
             )
             for key, decision in _LABEL_KEYS.items()
-        ),
-    ),
-)
-_EMPTY_VALUES = QuirkBox(
-    "Empty values",
-    (
-        QuirkList(
-            "empty_values",
-            (
-                QuirkItem(
-                    "value",
-                    "Ignore",
-                    "Values that count as empty in any text field, so the next"
-                    " column mapped to that field can fill it. Not case-sensitive.",
-                    "text",
-                    wide=True,
-                ),
-            ),
         ),
     ),
 )
@@ -200,74 +88,12 @@ _ORDERING = QuirkBox(
         ),
     ),
 )
-_IDENTIFIERS = QuirkBox(
-    "Identifiers",
-    (
-        QuirkItem(
-            "strip_doi",
-            "Strip DOI",
-            'Strips all extra text from a DOI, leaving e.g. "10.1038/nature12373".',
-            "checkbox",
-        ),
-        QuirkItem(
-            "strip_pmid",
-            "Strip PMID",
-            "Strips all extra text from PMIDs, keeping only the number.",
-            "checkbox",
-        ),
-    ),
-)
-_OTHER = QuirkBox(
-    "Other",
-    (
-        QuirkItem(
-            "pages_set",
-            "Pages set",
-            "Expands a page range like 512-4 to 512-514. Only acts if the second"
-            " value is lower than the first.",
-            "checkbox",
-        ),
-    ),
-)
-
 _FIELD_SIZE = QuirkItem(
     "field_size_limit",
     "Field-size limit",
     "Longest cell the CSV reader accepts, in characters; a longer cell stops"
     " the file from being read.",
     "number",
-)
-_AUTHOR_COLUMNS = QuirkItem(
-    "author_columns",
-    "Author matching",
-    "Author names and affiliations are kept as in the file. Author ID rows are"
-    " split on their author separator and matched by position: the first"
-    " non-empty ID row sets the authors. An ID row with a different number of"
-    " entries is ignored (logged for developers, not shown here).",
-    "note",
-)
-_FIRST_PUBLICATION_TYPE_ITEM = QuirkItem(
-    "first_publication_type",
-    "First pub. type",
-    "NBIB can have several rows for publication type; keeps only the first.",
-    "checkbox",
-)
-_RIS_NOTES_ITEM = QuirkItem(
-    "ris_notes",
-    "Values in RIS notes",
-    "Scopus packs labelled values into N1 note lines (EID: 2-s2.0-…); reads them"
-    " into their fields, even when N1 is set to ignore. A filled field is kept;"
-    " an other ID is always set.",
-    "checkbox",
-)
-_CITATION_PARTS_ITEM = QuirkItem(
-    "citation_parts",
-    "Values from Citation",
-    "PubMed CSV packs volume, issue and pages into its Citation column"
-    " (Nature. 2023 Aug;620(7974):589-594.); reads them into fields that are"
-    " still empty, even when Citation is set to ignore. Only that plain form is"
-    " read.",
-    "checkbox",
 )
 _RIS_AUTHOR_DETAILS = QuirkItem(
     "ris.author_details",
@@ -284,13 +110,6 @@ _RIS_OUTSIDE_TEXT = QuirkItem(
     " ASReview's record numbers (1., 2., …).",
     "note",
 )
-_EID_FROM_URL_ITEM = QuirkItem(
-    "eid_from_url",
-    "Scopus EID from URL",
-    "Scopus BibTeX has no EID field, but its url links the record; reads the EID"
-    " from it, even when url is set to ignore.",
-    "checkbox",
-)
 _KEY_CONTINUATION = QuirkItem(
     "bibtex.key_continuation",
     "Citation keys with commas",
@@ -304,30 +123,18 @@ def _type_items(file_type: FileType) -> tuple[QuirkItem, ...]:
     items: list[QuirkItem] = []
     if file_type in _FIELD_SIZE_TYPES:
         items.append(_FIELD_SIZE)
-    if file_type in _CITATION_TYPES:
-        items.append(_CITATION_PARTS_ITEM)
-    if file_type in _AUTHOR_COLUMN_TYPES:
-        items.append(_AUTHOR_COLUMNS)
-    if file_type == "nbib":
-        items.append(_FIRST_PUBLICATION_TYPE_ITEM)
     if file_type == "ris":
-        items += [_RIS_NOTES_ITEM, _RIS_AUTHOR_DETAILS, _RIS_OUTSIDE_TEXT]
+        items += [_RIS_AUTHOR_DETAILS, _RIS_OUTSIDE_TEXT]
     if file_type == "bibtex":
-        items += [_EID_FROM_URL_ITEM, _KEY_CONTINUATION]
+        items.append(_KEY_CONTINUATION)
     return tuple(items)
 
 
 def quirk_boxes(file_type: FileType, type_label: str) -> list[QuirkBox]:
-    return [
-        _ISSN_ISBN,
-        _AUTHORS,
-        _LABELING,
-        _EMPTY_VALUES,
-        _ORDERING,
-        _IDENTIFIERS,
-        _OTHER,
-        QuirkBox(type_label, _type_items(file_type)),
-    ]
+    """A Type with nothing of its own gets no box."""
+    type_items = _type_items(file_type)
+    type_box = [QuirkBox(type_label, type_items)] if type_items else []
+    return [_LABELING, _ORDERING, *type_box]
 
 
 def _profile(file_type: FileType, source: str) -> FormatProfile:
@@ -339,33 +146,16 @@ def _profile(file_type: FileType, source: str) -> FormatProfile:
 
 def default_choices(file_type: FileType, source: str) -> ParsingChoices:
     profile = _profile(file_type, source)
-    settings, quirks = profile.settings, profile.quirks
+    settings = profile.settings
     return ParsingChoices(
-        strip_extras=settings.issn_isbn_strip_extras,
-        only_one=settings.issn_isbn_only_one,
-        preferred_qualifier=settings.preferred_issn_qualifier or "",
-        drop_et_al=DropEtAl() in quirks,
-        drop_trailing=StripLastAuthorTrailing() in quirks,
-        id_from_name=EMBEDDED_AUTHOR_IDS in quirks,
-        affiliation_start=next(
-            (q.separator for q in quirks if isinstance(q, AffiliationLeadingName)), ""
-        ),
         **{
             key: _LABEL_VALUES_SEPARATOR.join(
                 value for value, label in settings.label_values if label == decision
             )
             for key, decision in _LABEL_KEYS.items()
         },
-        empty_values=list(settings.empty_values),
         use_first=list(settings.use_first),
-        strip_doi=StripDoi() in quirks,
-        strip_pmid=StripPmid() in quirks,
-        pages_set=ExpandPageRange() in quirks,
         field_size_limit=settings.csv_field_size_limit,
-        first_publication_type=_FIRST_PUBLICATION_TYPE in quirks,
-        ris_notes=RIS_NOTES in quirks,
-        eid_from_url=URL_EID in quirks,
-        citation_parts=CITATION_PARTS in quirks,
     )
 
 
@@ -378,28 +168,6 @@ def _label_values(choices: ParsingChoices) -> tuple[tuple[str, LabelValue], ...]
     return tuple(pairs)
 
 
-def _quirks(choices: ParsingChoices) -> tuple[RecordQuirk, ...]:
-    """ID from name runs before Drop trailing, which would leave its ")" alone;
-    Pages set runs last, so it also expands pages from Citation."""
-    candidates: list[tuple[bool, RecordQuirk]] = [
-        (choices.drop_et_al, DropEtAl()),
-        (choices.strip_doi, StripDoi()),
-        (choices.strip_pmid, StripPmid()),
-        (choices.first_publication_type, _FIRST_PUBLICATION_TYPE),
-        (choices.id_from_name, EMBEDDED_AUTHOR_IDS),
-        (
-            bool(choices.affiliation_start),
-            AffiliationLeadingName(choices.affiliation_start),
-        ),
-        (choices.drop_trailing, StripLastAuthorTrailing()),
-        (choices.ris_notes, RIS_NOTES),
-        (choices.eid_from_url, URL_EID),
-        (choices.citation_parts, CITATION_PARTS),
-        (choices.pages_set, ExpandPageRange()),
-    ]
-    return tuple(quirk for on, quirk in candidates if on)
-
-
 def profile_with(
     file_type: FileType, source: str, choices: ParsingChoices | None = None
 ) -> FormatProfile:
@@ -409,17 +177,11 @@ def profile_with(
         return profile
     settings = replace(
         profile.settings,
-        issn_isbn_strip_extras=choices.strip_extras,
-        issn_isbn_only_one=choices.only_one,
-        preferred_issn_qualifier=choices.preferred_qualifier.strip() or None,
         label_values=_label_values(choices),
         csv_field_size_limit=choices.field_size_limit,
-        empty_values=tuple(
-            value.strip() for value in choices.empty_values if value.strip()
-        ),
         use_first=tuple(choices.use_first),
     )
-    return replace(profile, settings=settings, quirks=_quirks(choices))
+    return replace(profile, settings=settings)
 
 
 def dump_choices(choices: ParsingChoices) -> dict[str, Any]:

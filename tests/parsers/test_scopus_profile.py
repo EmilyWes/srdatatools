@@ -1,13 +1,10 @@
 import csv
 from io import StringIO
 
-import pytest
-
 from app.models.record import Record
 from app.parsers.bibtex import parse_bibtex_text, suggest_bibtex_mapping
 from app.parsers.csv_ import parse_csv_text, suggest_mapping
 from app.parsers.mapping import AuthorsRow, FieldMapping, Suggest, make_row
-from app.parsers.profiles import apply_profile
 from app.parsers.profiles.scopus import SCOPUS
 from app.parsers.ris import parse_ris_text, suggest_ris_mapping
 from tests.mappings import mapping_of, targets_of
@@ -36,11 +33,7 @@ def _csv_text(row: dict[str, str]) -> str:
 
 def _parse_csv(row: dict[str, str], mapping: FieldMapping | None = None) -> Record:
     mapping = mapping or _suggest_csv(list(row))
-    result = apply_profile(
-        parse_csv_text(_csv_text(row), mapping, settings=_CSV_PROFILE.settings),
-        _CSV_PROFILE,
-        mapping,
-    )
+    result = parse_csv_text(_csv_text(row), mapping, settings=_CSV_PROFILE.settings)
     return result.rows[0].record
 
 
@@ -90,50 +83,12 @@ def test_scopus_csv__ignores_conference_details_and_publication_stage() -> None:
 _IDS = "scopus_author_id:60652739200|scopus_author_id:59534195400"
 
 
-def test_scopus_csv__cleans_author_columns() -> None:
-    record = _parse_csv(_AUTHOR_ROW)
-
-    assert record.author_names == "Teng, Yu; Han, Yiyong"
-    assert record.author_ids == _IDS
-    assert record.author_affiliations == (
-        "Guangxi Cartier Technology Ltd., Nanning, China;"
-        " Nanning University, Guangxi, China"
-    )
-
-
 def test_scopus_csv__abbreviated_names_mapped_by_hand() -> None:
     row = {"Authors": "Teng Y.; Han Y.", "Author(s) ID": "60652739200; 59534195400"}
 
     record = _parse_csv(row, _with_abbreviated_names(_suggest_csv(list(row))))
 
     assert (record.author_names, record.author_ids) == ("Teng Y.; Han Y.", _IDS)
-
-
-def test_scopus_csv__affiliation_that_is_only_a_name_is_dropped() -> None:
-    record = _parse_csv(
-        {
-            "Author full names": "Teng, Yu (60652739200); Han, Yiyong (59534195400)",
-            "Authors with affiliations": "Teng Y., Nanning University; Han Y.",
-        }
-    )
-
-    assert record.author_affiliations == "Nanning University"
-
-
-def test_scopus_csv__ids_in_names_for_other_author_count_are_ignored(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    row = {
-        "Author full names": "Teng, Yu (60652739200); Han, Yiyong (59534195400)",
-        "Author(s) ID": "60652739200",
-    }
-
-    with caplog.at_level("WARNING"):
-        record = _parse_csv(row)
-
-    assert record.author_names == "Teng, Yu; Han, Yiyong"
-    assert record.author_ids == "scopus_author_id:60652739200"
-    assert "author names" in caplog.text
 
 
 def _without(mapping: FieldMapping, *ignored: str) -> FieldMapping:
@@ -157,15 +112,6 @@ def test_scopus_csv__ignored_author_id_column_is_not_used() -> None:
     record = _parse_csv(row, mapping)
 
     assert (record.author_names, record.author_ids) == ("Teng Y.; Han Y.", None)
-
-
-def test_scopus_csv__ignored_affiliations_column_is_not_used() -> None:
-    mapping = _without(_suggest_csv(list(_AUTHOR_ROW)), "Authors with affiliations")
-
-    record = _parse_csv(_AUTHOR_ROW, mapping)
-
-    assert record.author_affiliations is None
-    assert record.author_names == "Teng, Yu; Han, Yiyong"
 
 
 def test_scopus_csv__ignored_full_names_still_give_ids() -> None:
@@ -236,11 +182,7 @@ def _parse_ris(body: str) -> Record:
     mapping = suggest_ris_mapping(
         tags, _RIS_PROFILE.suggestions, _RIS_PROFILE.row_defaults
     )
-    result = apply_profile(
-        parse_ris_text(text, mapping, settings=_RIS_PROFILE.settings),
-        _RIS_PROFILE,
-        mapping,
-    )
+    result = parse_ris_text(text, mapping, settings=_RIS_PROFILE.settings)
     return result.rows[0].record
 
 
@@ -255,50 +197,6 @@ def test_scopus_ris__document_type_and_pmid() -> None:
 
     assert record.publication_type == "Retracted"
     assert record.pmid == "32161388"
-
-
-def test_scopus_ris__takes_eid_and_conference_name_from_notes() -> None:
-    notes = (
-        "N1  - EID: 2-s2.0-105040180364\nN1  - Cited By: 0\n"
-        "N1  - Conference name: 5th Conference on Control Engineering\n"
-    )
-
-    record = _parse_ris(notes)
-
-    assert record.other_ids == {"eid": "2-s2.0-105040180364"}
-    assert record.conference_name == "5th Conference on Control Engineering"
-    assert record.notes == (
-        "EID: 2-s2.0-105040180364\nCited By: 0\n"
-        "Conference name: 5th Conference on Control Engineering"
-    )
-
-
-def test_scopus_ris__ignored_notes_still_give_eid_and_conference_name() -> None:
-    text = (
-        "TY  - JOUR\nN1  - EID: 2-s2.0-105040180364\n"
-        "N1  - Conference name: 5th Conference on Control Engineering\nER  - \n"
-    )
-    mapping = mapping_of({"TY": "publication_type"})
-
-    record = (
-        apply_profile(
-            parse_ris_text(text, mapping, settings=_RIS_PROFILE.settings),
-            _RIS_PROFILE,
-            mapping,
-        )
-        .rows[0]
-        .record
-    )
-
-    assert record.other_ids == {"eid": "2-s2.0-105040180364"}
-    assert record.conference_name == "5th Conference on Control Engineering"
-
-
-def test_scopus_ris__record_without_labelled_notes_is_unchanged() -> None:
-    record = _parse_ris("TI  - Some Paper\nN1  - Export Date: 22 October 2026\n")
-
-    assert record.other_ids == {}
-    assert record.conference_name is None
 
 
 def test_scopus_ris__matches_db_line() -> None:
@@ -320,11 +218,7 @@ def _parse_bibtex(fields: str, mapping: FieldMapping | None = None) -> Record:
         mapping = suggest_bibtex_mapping(
             keys, _BIBTEX_PROFILE.suggestions, _BIBTEX_PROFILE.row_defaults
         )
-    result = apply_profile(
-        parse_bibtex_text(text, mapping, settings=_BIBTEX_PROFILE.settings),
-        _BIBTEX_PROFILE,
-        mapping,
-    )
+    result = parse_bibtex_text(text, mapping, settings=_BIBTEX_PROFILE.settings)
     return result.rows[0].record
 
 
@@ -365,35 +259,12 @@ def test_scopus_bibtex__ignored_author_keywords_field_is_not_used() -> None:
     assert record.keywords == ["Thermal"]
 
 
-def test_scopus_bibtex__ignored_url_still_gives_eid() -> None:
-    url = "https://www.scopus.com/pages/publications/105040180364"
-
-    record = _parse_bibtex(
-        f"url = {{{url}}},\npmid = {{1}},\n", mapping_of({"pmid": "pmid"})
-    )
-
-    assert record.other_ids == {"eid": "2-s2.0-105040180364"}
-
-
 def test_scopus_bibtex__unmapped_keywords_stay_empty() -> None:
     record = _parse_bibtex(
         "author_keywords = {Asia},\nkeywords = {Thermal},\n", FieldMapping()
     )
 
     assert record.keywords == []
-
-
-@pytest.mark.parametrize(
-    "url",
-    [
-        "https://www.scopus.com/pages/publications/105040180364?origin=resultslist",
-        "https://www.scopus.com/inward/record.uri?eid=2-s2.0-105040180364&partnerID=40",
-    ],
-)
-def test_scopus_bibtex__eid_from_url(url: str) -> None:
-    record = _parse_bibtex(f"url = {{{url}}},\n")
-
-    assert record.other_ids == {"eid": "2-s2.0-105040180364"}
 
 
 def test_scopus_bibtex__non_scopus_url_gives_no_eid() -> None:

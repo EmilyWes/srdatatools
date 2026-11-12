@@ -69,7 +69,7 @@ async def pick_save_path() -> Path | None:
     return Path(selected[0]) if selected else None
 
 
-def _records_count(count: int, selected: bool) -> str:
+def records_count(count: int, selected: bool) -> str:
     if selected:
         return f"{format_count(count)} (selected)"
     return format_count(count)
@@ -400,7 +400,7 @@ class ExportView:
                         SELECT_PROPS
                     ).classes(SELECT_CLASSES)
                     ui.label("Number of records:").classes("text-sm")
-                    ui.label(_records_count(len(self.records), self.selected)).classes(
+                    ui.label(records_count(len(self.records), self.selected)).classes(
                         "text-sm"
                     )
                 views = render_view_toggle(parsing_label="Options")

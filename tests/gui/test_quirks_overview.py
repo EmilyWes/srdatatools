@@ -1,4 +1,3 @@
-import pytest
 from nicegui import ui
 from nicegui.element import Element
 
@@ -15,7 +14,6 @@ from app.parsers.profiles.overview import (
     default_choices,
     quirk_boxes,
 )
-from tests.gui.clicks import click_and_wait
 from tests.mappings import mapping_of
 
 
@@ -74,13 +72,8 @@ def test_render_quirks_overview__boxes_in_order_with_title_in_the_border() -> No
     legends = [box.default_slot.children[0] for box in boxes]
     assert all(legend.tag == "legend" for legend in legends)
     assert [_labels(legend) for legend in legends] == [
-        ["ISSN/ISBN"],
-        ["Authors"],
         ["Labeling"],
-        ["Empty values"],
         ["Ordering"],
-        ["Identifiers"],
-        ["Other"],
         ["RIS"],
     ]
     assert all("border" in box.classes for box in boxes)
@@ -102,26 +95,18 @@ def test_render_quirks_overview__label_hover_shows_the_explanation() -> None:
 
     _render(middle=middle)
 
-    assert _tooltip(_label(middle, "Pages set")).startswith("Expands a page range")
-
-
-def test_render_quirks_overview__checkbox_has_no_text_of_its_own() -> None:
-    screen = _render()
-
-    checkbox = screen.widgets["drop_et_al"]
-
-    assert isinstance(checkbox, ui.checkbox) and checkbox.text == ""
+    assert _tooltip(_label(middle, "Field-size limit")).startswith("Longest cell")
 
 
 def test_render_quirks_overview__note_is_grey_text_without_control() -> None:
     middle = shell().middle
 
-    screen = _render(middle=middle)
+    screen = _render("ris", middle=middle)
 
-    note = _label(middle, "Author matching")
+    note = _label(middle, "Author handling")
     assert "text-grey-6" in note.classes
-    assert _tooltip(note).startswith("Author names and affiliations")
-    assert "author_columns" not in screen.widgets
+    assert _tooltip(note).startswith("Author name and affiliation lines")
+    assert "ris.author_details" not in screen.widgets
 
 
 def test_render_quirks_overview__field_size_only_for_csv_and_tsv() -> None:
@@ -129,30 +114,18 @@ def test_render_quirks_overview__field_size_only_for_csv_and_tsv() -> None:
     assert "field_size_limit" not in _render("excel").widgets
 
 
-def test_render_quirks_overview__changed_checkbox_is_blue() -> None:
-    screen = _render()
-    checkbox = screen.widgets["drop_et_al"]
-    assert "color" not in checkbox.props
-
-    screen.set_value("drop_et_al", False)
-    assert checkbox.props["color"] == "blue"
-
-    screen.set_value("drop_et_al", True)
-    assert "color" not in checkbox.props
-
-
 def test_render_quirks_overview__text_box_is_prefilled_and_tinted_when_changed() -> (
     None
 ):
-    screen = _render(source="scopus")
-    widget = screen.widgets["affiliation_start"]
-    assert widget.value == ", "
+    screen = _render("ris", source="asreview")
+    widget = screen.widgets["label_include"]
+    assert widget.value == "asreview_relevant"
     assert "bg-color" not in widget.props
 
-    screen.set_value("affiliation_start", "")
+    screen.set_value("label_include", "")
 
     assert widget.props["bg-color"] == "blue-2"
-    assert screen.current_choices().affiliation_start == ""
+    assert screen.current_choices().label_include == ""
 
 
 def test_render_quirks_overview__labeling_box_has_a_text_box_per_decision() -> None:
@@ -174,67 +147,6 @@ def test_render_quirks_overview__field_size_limit_is_numeric() -> None:
     screen.set_value("field_size_limit", 500)
 
     assert screen.current_choices().field_size_limit == 500
-
-
-def test_render_quirks_overview__preferred_qualifier_greyed_out_without_only_one() -> (
-    None
-):
-    screen = _render()
-    preferred = screen.widgets["preferred_qualifier"]
-    assert preferred.enabled
-
-    screen.set_value("only_one", False)
-    assert not preferred.enabled
-
-    screen.set_value("only_one", True)
-    assert preferred.enabled
-
-
-def test_render_quirks_overview__empty_values_show_defaults_plus_a_blank_box() -> None:
-    screen = _render()
-
-    assert [text.value for text in screen.empty_rows] == ["[Not Available].", ""]
-
-
-def test_render_quirks_overview__typing_in_the_blank_box_adds_the_next() -> None:
-    middle = shell().middle
-    screen = _render(middle=middle)
-    blank = screen.empty_rows[1]
-
-    blank.value = "n"
-    blank.value = "none"
-
-    assert screen.empty_rows[1] is blank
-    assert [text.value for text in screen.empty_rows] == [
-        "[Not Available].",
-        "none",
-        "",
-    ]
-    assert len(_buttons(middle, "close")) == 2
-    assert screen.current_choices().empty_values == ["[Not Available].", "none"]
-
-
-def test_render_quirks_overview__cleared_box_stays_but_is_ignored() -> None:
-    screen = _render()
-
-    screen.empty_rows[0].value = " "
-
-    assert len(screen.empty_rows) == 2
-    assert screen.current_choices().empty_values == []
-
-
-def test_render_quirks_overview__red_remove_button_drops_a_value(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    middle = shell().middle
-    screen = _render(middle=middle)
-    [remove] = _buttons(middle, "close")
-    assert remove.props["color"] == "negative"
-
-    click_and_wait(remove, monkeypatch)
-
-    assert screen.current_choices().empty_values == []
-    assert len(screen.empty_rows) == 1
 
 
 def test_render_quirks_overview__ordering_offers_keys_sharing_a_target() -> None:
@@ -270,17 +182,14 @@ def test_render_quirks_overview__stale_ordering_pick_is_kept() -> None:
 
 def test_render_quirks_overview__restore_defaults_resets_every_choice() -> None:
     screen = _render(source="scopus", mapping=mapping_of({"A": "title", "B": "title"}))
-    screen.set_value("drop_et_al", False)
-    screen.set_value("affiliation_start", "; ")
+    screen.set_value("label_maybe", "?!")
     screen.set_value("field_size_limit", 500)
-    screen.empty_rows[1].value = "none"
     screen.order_rows[0].value = "B"
 
     screen.restore_defaults()
 
     assert screen.current_choices() == default_choices("csv", "scopus")
-    assert "color" not in screen.widgets["drop_et_al"].props
-    assert len(screen.empty_rows) == 2
+    assert "bg-color" not in screen.widgets["label_maybe"].props
     assert len(screen.order_rows) == 1
 
 
@@ -299,31 +208,22 @@ def test_render_quirks_overview__restore_defaults_button_only_when_editable() ->
 
 def test_render_quirks_overview__chosen_is_read_only_and_shows_stored_values() -> None:
     chosen = default_choices("csv", "unknown").model_copy(
-        update={
-            "drop_et_al": False,
-            "preferred_qualifier": "print",
-            "empty_values": ["none"],
-            "use_first": ["TT"],
-        }
+        update={"label_maybe": "?!", "use_first": ["TT"]}
     )
 
     screen = _render(chosen=chosen)
 
-    drop = screen.widgets["drop_et_al"]
-    preferred = screen.widgets["preferred_qualifier"]
-    assert drop.value is False and "disable" in drop.props
-    assert preferred.value == "print" and "readonly" in preferred.props
-    assert [text.value for text in screen.empty_rows] == ["none"]
+    maybe = screen.widgets["label_maybe"]
+    assert maybe.value == "?!" and "readonly" in maybe.props
     assert [select.value for select in screen.order_rows] == ["TT"]
     assert screen.current_choices() == chosen
 
 
-def test_render_quirks_overview__label_and_empty_value_boxes_are_wide() -> None:
+def test_render_quirks_overview__label_boxes_are_wide() -> None:
     screen = _render()
 
     assert "w-[7rem]" in screen.widgets["label_include"].classes
-    assert "w-[7rem]" in screen.empty_rows[0].classes
-    assert "w-[5.5rem]" in screen.widgets["preferred_qualifier"].classes
+    assert "w-[5.5rem]" in screen.widgets["field_size_limit"].classes
 
 
 def test_render_view_toggle__shows_one_view_and_reports_switches() -> None:

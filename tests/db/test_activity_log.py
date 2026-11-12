@@ -1,4 +1,5 @@
 import datetime
+from collections import Counter
 
 import pytest
 from sqlalchemy import create_engine
@@ -6,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.activity_log import (
     clear_activity_log,
+    log_cleaning,
     log_export,
     log_export_failed,
     log_import,
@@ -146,3 +148,29 @@ def test_log_export__cut_values_make_a_warning(session: Session) -> None:
     entry = session.query(ActivityLog).one()
     assert entry.message == "Exported to:\nlibrary.csv\nRecords: 10\nValues cut: 3"
     assert entry.status == "warning"
+
+
+def test_log_cleaning__lists_changes_per_step_most_first(session: Session) -> None:
+    per_step = Counter({"Pages set": 40, "Split authors": 300})
+
+    log_cleaning(session, 1000, 312, per_step)
+    session.commit()
+
+    entry = session.query(ActivityLog).one()
+    assert entry.action_type == "clean"
+    assert entry.status == "ok"
+    assert entry.message == (
+        "Cleaned 1.000 records: 312 changed (Split authors 300, Pages set 40)."
+    )
+
+
+def test_log_cleaning__nothing_changed(session: Session) -> None:
+    log_cleaning(session, 5, 0, Counter())
+
+    assert session.query(ActivityLog).one().message == ("Cleaned 5 records: 0 changed.")
+
+
+def test_log_cleaning__one_record_is_singular(session: Session) -> None:
+    log_cleaning(session, 1, 0, Counter())
+
+    assert session.query(ActivityLog).one().message == "Cleaned 1 record: 0 changed."

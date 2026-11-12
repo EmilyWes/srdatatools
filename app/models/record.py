@@ -58,6 +58,6 @@ class Record(BaseModel):
         value = value.strip()
         for prefix in ("https://doi.org/", "http://doi.org/", "doi:"):
             if value.lower().startswith(prefix):
-                value = value[len(prefix) :]
+                value = value[len(prefix) :].strip()
                 break
         return value.lower()

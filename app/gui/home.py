@@ -4,8 +4,12 @@ from typing import Any
 
 from nicegui import ui
 
+from app.cleaning.options import CleaningOptions
+from app.cleaning.options import load_options as load_cleaning_options
+from app.cleaning.options import save_options as save_cleaning_options
 from app.db.activity_log import (
     clear_activity_log,
+    log_cleaning,
     log_export,
     log_export_failed,
     log_import_failed,
@@ -29,7 +33,12 @@ from app.db.queries import (
     load_export_records,
 )
 from app.db.session import get_engine, session_scope
-from app.db.store import delete_library, delete_records, remove_source_file
+from app.db.store import (
+    clean_records,
+    delete_library,
+    delete_records,
+    remove_source_file,
+)
 from app.export.columns import ExportColumn, ExportRecord
 from app.export.csv_ import write_csv
 from app.export.options import (
@@ -41,6 +50,7 @@ from app.export.options import (
 from app.gui.about import render_about_view, render_help_view
 from app.gui.action_panel import render_right_panel
 from app.gui.busy import run_busy
+from app.gui.cleaning_flow import render_cleaning_view
 from app.gui.export_flow import render_export_view
 from app.gui.format import format_count
 from app.gui.import_flow import import_file, render_import_view
@@ -117,6 +127,7 @@ def home() -> None:
         count_library=count_library,
         on_delete_library=delete_all,
         on_export=lambda: start_export(),
+        on_cleaning=lambda: start_cleaning(),
     )
 
     def refresh_log() -> None:
@@ -360,6 +371,38 @@ def home() -> None:
             on_export=export,
             on_options_change=save_export_options,
             on_restore_options=restore_export_options,
+        )
+
+    async def start_cleaning() -> None:
+        clear_nav_selection()
+        ids = set(selection.ids) or None
+
+        def load() -> tuple[int, CleaningOptions]:
+            with session_scope(_engine) as session:
+                count = count_records(session) if ids is None else len(ids)
+                return count, load_cleaning_options(session)
+
+        async def clean(options: CleaningOptions) -> None:
+            def run() -> tuple[int, int]:
+                with session_scope(_engine) as session:
+                    save_cleaning_options(session, options)
+                    total, changed, per_step = clean_records(session, options, ids)
+                    log_cleaning(session, total, changed, per_step)
+                return total, changed
+
+            total, changed = await run_busy("Cleaning records…", run)
+            noun = "record" if total == 1 else "records"
+            with panes.middle:
+                ui.notify(
+                    f"Cleaned {format_count(total)} {noun}:"
+                    f" {format_count(changed)} changed",
+                    type="positive",
+                )
+            refresh_log()
+
+        count, options = await run_busy("Loading cleaning options…", load)
+        render_cleaning_view(
+            panes.middle, count, options, selected=ids is not None, on_clean=clean
         )
 
     def start_import() -> None:

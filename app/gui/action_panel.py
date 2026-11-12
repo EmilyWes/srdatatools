@@ -57,6 +57,7 @@ def render_right_panel(
     count_library: Callable[[], tuple[int, int]] | None = None,
     on_delete_library: Callable[[], Awaitable[None] | None] | None = None,
     on_export: Callable[[], Awaitable[None] | None] | None = None,
+    on_cleaning: Callable[[], Awaitable[None] | None] | None = None,
 ) -> ActionPanel:
     def show_settings(action: str) -> None:
         if on_settings is not None:
@@ -85,16 +86,17 @@ def render_right_panel(
     ui.add_css(_LOG_CSS)
     right.clear()
     with right:
+        # These actions' views hold their options.
+        opens_view = {"Cleaning": on_cleaning, "Export": on_export}
         with ui.column().classes("w-full gap-2 px-3 pt-5 pb-4"):
             for action, icon in _ACTIONS.items():
-                exports = action == "Export"
                 with ui.row().classes("w-full items-center gap-1 no-wrap"):
                     button = (
                         ui.button(
                             action,
                             icon=icon,
                             color=None,
-                            on_click=on_export if exports else None,
+                            on_click=opens_view.get(action),
                         )
                         .classes("tonal nav-item flex-grow")
                         .props("no-caps align=left")
@@ -105,9 +107,8 @@ def render_right_panel(
                         on_click=lambda action=action: show_settings(action),
                     ).props("flat dense round size=sm")
                     gear.classes("text-on-surface-variant")
-                    if exports:
-                        # Export's view holds its options; the hidden gear keeps
-                        # the button lined up with the others.
+                    if action in opens_view:
+                        # The hidden gear keeps the button lined up with the others.
                         gear.classes("invisible")
                     else:
                         button.disable()

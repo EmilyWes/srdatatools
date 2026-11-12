@@ -7,7 +7,6 @@ from app.parsers.authors import AUTHOR_JOINER, parse_author_ids
 from app.parsers.common import FileType, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
 from app.parsers.nbib import parse_nbib_file, read_nbib_tags, suggest_nbib_mapping
-from app.parsers.profiles import apply_profile
 from app.parsers.profiles.pubmed import PUBMED
 from tests.vendor_data import vendor_file, vendor_files
 
@@ -23,14 +22,10 @@ def _parse(path: Path, file_format: FileType) -> ParseResult:
     if file_format == "nbib":
         tags = list(read_nbib_tags(path).samples)
         mapping = suggest_nbib_mapping(tags, profile.suggestions, profile.row_defaults)
-        return apply_profile(
-            parse_nbib_file(path, mapping, settings=profile.settings), profile, mapping
-        )
+        return parse_nbib_file(path, mapping, settings=profile.settings)
     headers = list(read_csv_headers(path).samples)
     mapping = suggest_mapping(headers, profile.suggestions, profile.row_defaults)
-    return apply_profile(
-        parse_csv_file(path, mapping, settings=profile.settings), profile, mapping
-    )
+    return parse_csv_file(path, mapping, settings=profile.settings)
 
 
 def _records_by_pmid(suffix: str, file_format: FileType) -> dict[str, Record]:
@@ -55,18 +50,15 @@ def test_pubmed_small_nbib__parses_every_record(
     assert len(nbib_records) == 12
 
 
-def test_pubmed_small_nbib__applies_profile_fixes(
+def test_pubmed_small_nbib__keeps_values_as_in_the_file(
     nbib_records: dict[str, Record],
 ) -> None:
     assert nbib_records["41672119"].journal == "Journal of ethnopharmacology"
-    assert nbib_records["27869079"].title == (
-        "Clin d’œil du Dinosaure émérite - Quand les parents DMD montent au "
-        "créneau de la FDA…."
-    )
-    assert nbib_records["11523304"].pages == "521-522"
+    assert nbib_records["27869079"].title == "[Not Available]."
+    assert nbib_records["11523304"].pages == "521-2"
     assert nbib_records["11523304"].doi is None
-    assert nbib_records["28590685"].isbn == "978-3-319-28801-7"
-    assert nbib_records["28590685"].publication_type == "Review"
+    assert nbib_records["28590685"].isbn == "978-3-319-28801-7\n978-3-319-28802-4"
+    assert nbib_records["28590685"].publication_type == "Review\nBook Chapter"
 
 
 def test_pubmed_small_nbib__mesh_keywords_are_prefixed(
@@ -120,14 +112,15 @@ def test_pubmed_small_csv__parses_every_record(
     assert len(csv_records) == 12
 
 
-def test_pubmed_small_csv__applies_profile_fixes(
+def test_pubmed_small_csv__keeps_values_as_in_the_file(
     csv_records: dict[str, Record],
 ) -> None:
     nature = csv_records["37587301"]
-    assert (nature.volume, nature.issue, nature.pages) == ("620", "7974", "589-594")
-    assert csv_records["11523304"].pages == "521-522"
+    assert (nature.volume, nature.issue, nature.pages) == (None, None, None)
     assert nature.publication_date == PartialDate(year=2023)
-    assert (csv_records["30527956"].author_names or "").endswith(", Walsworth AK")
+    assert (csv_records["30527956"].author_names or "").endswith(
+        ", Walsworth AK, et al."
+    )
     assert csv_records["37886492"].other_ids["pmc"] == "PMC10602114"
 
 

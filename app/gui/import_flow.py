@@ -52,7 +52,6 @@ from app.parsers.nbib import (
 from app.parsers.profiles import (
     PROFILES,
     FormatProfile,
-    apply_profile,
     has_profile,
 )
 from app.parsers.profiles.overview import (
@@ -245,7 +244,6 @@ def import_file(
 ) -> SourceFile:
     profile = profile_with(file_type, source, choices)
     result = _TYPES[file_type].parse_file(path, mapping, sheet, profile.settings)
-    result = apply_profile(result, profile, mapping)
     source_file = store_parsed_rows(
         session,
         filename=path.name,
@@ -292,7 +290,7 @@ class ImportView:
     sheet: str | None = None
     view: str | None = VIEW_MAPPING
     mapping_screen: MappingScreen | None = None
-    quirks_screen: QuirksScreen | None = None
+    quirks_screen: QuirksScreen[ParsingChoices] | None = None
     views: MappingParsingViews | None = None
     import_button: ui.button | None = None
 

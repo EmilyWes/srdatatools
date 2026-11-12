@@ -13,7 +13,6 @@ from app.parsers.csv_ import (
 from app.parsers.detect import detect_source, detect_type
 from app.parsers.excel import parse_excel_file, read_excel_headers
 from app.parsers.mapping import FieldMapping
-from app.parsers.profiles import apply_profile
 from app.parsers.profiles.asreview import ASREVIEW
 from app.parsers.ris import parse_ris_file, parse_ris_text, suggest_ris_mapping
 
@@ -130,7 +129,7 @@ def _parse(path: Path, file_type: FileType) -> ParseResult:
         headers = list(read_csv_headers(path, delimiter).samples)
         mapping = _csv_mapping(headers, file_type)
         result = parse_csv_file(path, mapping, delimiter, profile.settings)
-    return apply_profile(result, profile, mapping)
+    return result
 
 
 _TYPES: dict[str, FileType] = {

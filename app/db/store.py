@@ -1,13 +1,21 @@
 import datetime
+from collections import Counter, defaultdict
 from collections.abc import Collection, Sequence
 from typing import Any, cast
 
 from sqlalchemy import CursorResult, delete, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
+from app.cleaning.options import CleaningOptions
+from app.cleaning.steps import CleaningContext, clean_record, file_separators
 from app.db.models import Label, Record, RecordSource, SourceFile
+from app.db.queries import record_schema
 from app.models.record import PartialDate
 from app.models.record import Record as RecordSchema
+from app.parsers.mapping import FieldMapping
+
+# Cleaning doesn't touch these, and they aren't plain columns.
+_NOT_CLEANED = {"publication_date", "labels"}
 
 
 def _build_record(schema: RecordSchema) -> Record:
@@ -97,3 +105,68 @@ def delete_records(session: Session, ids: Collection[int]) -> int:
         CursorResult[Any], session.execute(delete(Record).where(Record.id.in_(ids)))
     )
     return result.rowcount
+
+
+def _context(
+    source: RecordSource | None, separators: tuple[str | None, str | None]
+) -> CleaningContext:
+    if source is None:
+        return CleaningContext(
+            names_separator=separators[0], affiliations_separator=separators[1]
+        )
+    source_file = source.source_file
+    return CleaningContext(
+        raw_fields=source.raw_fields,
+        mapping=FieldMapping.model_validate(source_file.field_mapping),
+        use_first=tuple(source_file.quirk_choices.get("use_first", [])),
+        names_separator=separators[0],
+        affiliations_separator=separators[1],
+    )
+
+
+def clean_records(
+    session: Session, options: CleaningOptions, ids: Collection[int] | None = None
+) -> tuple[int, int, Counter[str]]:
+    """`ids` None cleans every record. A record is cleaned with its first source
+    file's raw fields and mapping, and author separators are sniffed per source
+    file. Returns the records cleaned, the records changed and the changes per
+    step."""
+    statement = (
+        select(Record)
+        .options(selectinload(Record.sources).selectinload(RecordSource.source_file))
+        .order_by(Record.id)
+    )
+    if ids is not None:
+        statement = statement.where(Record.id.in_(ids))
+    records = session.scalars(statement).all()
+
+    sources = {
+        record.id: min(record.sources, key=lambda s: s.id, default=None)
+        for record in records
+    }
+    schemas = {record.id: record_schema(record, []) for record in records}
+    per_file: dict[int | None, list[RecordSchema]] = defaultdict(list)
+    for record in records:
+        source = sources[record.id]
+        per_file[source.source_file_id if source else None].append(schemas[record.id])
+    separators = {
+        file_id: file_separators(file_schemas, options)
+        for file_id, file_schemas in per_file.items()
+    }
+
+    changed = 0
+    per_step: Counter[str] = Counter()
+    for record in records:
+        source = sources[record.id]
+        context = _context(
+            source, separators[source.source_file_id if source else None]
+        )
+        cleaned, steps = clean_record(schemas[record.id], context, options)
+        if not steps:
+            continue
+        changed += 1
+        per_step.update(steps)
+        for name, value in cleaned.model_dump(exclude=_NOT_CLEANED).items():
+            if getattr(record, name) != value:
+                setattr(record, name, value)
+    return len(records), changed, per_step

@@ -5,15 +5,8 @@ from io import StringIO
 from app.parsers.mapping import Suggest
 from app.parsers.profiles.base import FormatProfile, Profile
 from app.parsers.profiles.default import (
-    default_quirks,
     default_row_defaults,
     default_settings,
-)
-from app.parsers.quirks import (
-    AffiliationLeadingName,
-    EmbeddedAuthorIds,
-    IdFromUrl,
-    RisNotes,
 )
 
 _AUTHOR_KEYWORD_PREFIX = "Author"
@@ -24,17 +17,6 @@ _RIS_DB_LINE = re.compile(r"^DB  - Scopus\s*$", re.MULTILINE)
 _BIBTEX_SOURCE_FIELD = re.compile(
     r"^\s*source\s*=\s*\{Scopus\}", re.MULTILINE | re.IGNORECASE
 )
-# Current exports link .../pages/publications/<n>; older ones .../record.uri?eid=...
-_URL_EID = re.compile(
-    r"scopus\.com/(?:pages/publications/|inward/record\.uri\?.*?\beid=2-s2\.0-)(\d+)"
-)
-
-
-EMBEDDED_AUTHOR_IDS = EmbeddedAuthorIds(_AUTHOR_ID_KEY)
-RIS_NOTES = RisNotes(
-    "N1", {"EID: ": "other_ids.eid", "Conference name: ": "conference_name"}
-)
-URL_EID = IdFromUrl("url", _URL_EID, "eid", "2-s2.0-")
 
 
 def _matches_csv(text: str) -> bool:
@@ -71,7 +53,6 @@ SCOPUS = Profile(
             matches=_matches_csv,
             settings=default_settings("csv"),
             row_defaults=default_row_defaults("csv"),
-            quirks=default_quirks("csv", EMBEDDED_AUTHOR_IDS, AffiliationLeadingName()),
             # "Authors" abbreviates the given names in "Author full names".
             ignored_keys=frozenset(
                 {
@@ -91,7 +72,6 @@ SCOPUS = Profile(
             matches=_matches_ris,
             settings=default_settings("ris"),
             row_defaults=default_row_defaults("ris"),
-            quirks=default_quirks("ris", RIS_NOTES),
         ),
         "bibtex": FormatProfile(
             suggestions={
@@ -105,7 +85,6 @@ SCOPUS = Profile(
             matches=_matches_bibtex,
             settings=default_settings("bibtex"),
             row_defaults=default_row_defaults("bibtex"),
-            quirks=default_quirks("bibtex", URL_EID),
         ),
     },
 )

@@ -51,6 +51,8 @@ def test_record__full_valid_record_round_trips_all_fields() -> None:
         "https://doi.org/10.1000/ABC",
         "http://doi.org/10.1000/ABC",
         "doi:10.1000/ABC",
+        "doi: 10.1000/ABC",
+        "https://doi.org/ 10.1000/ABC",
         "10.1000/abc",
         "  10.1000/ABC  ",
     ],

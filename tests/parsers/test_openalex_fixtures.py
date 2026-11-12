@@ -13,7 +13,6 @@ from app.parsers.common import FileType, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
 from app.parsers.detect import detect_source
 from app.parsers.mapping import FieldMapping
-from app.parsers.profiles import apply_profile
 from app.parsers.profiles.openalex import OPENALEX
 from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
 from tests.vendor_data import vendor_file, vendor_files
@@ -51,7 +50,7 @@ def _parse(path: Path, file_format: FileType) -> ParseResult:
         result = parse_ris_file(path, mapping, profile.settings)
     else:
         result = parse_bibtex_file(path, mapping, profile.settings)
-    return apply_profile(result, profile, mapping)
+    return result
 
 
 def _records_by_doi(suffix: str) -> dict[str, Record]:
@@ -114,12 +113,12 @@ def test_openalex_small_csv__groups_author_ids_and_orcids(
     }
 
 
-def test_openalex_small_csv__applies_profile_fixes(
+def test_openalex_small_csv__keeps_values_as_in_the_file(
     csv_records: dict[str, Record],
 ) -> None:
     dinosaur = csv_records[_DINOSAUR_DOI]
-    assert dinosaur.pmid == "28332513"
-    assert dinosaur.issn == "0028-0836"
+    assert dinosaur.pmid == "https://pubmed.ncbi.nlm.nih.gov/28332513"
+    assert dinosaur.issn == "0028-0836|1476-4687"
     assert dinosaur.journal == "Nature"
     assert dinosaur.publication_type == "article"
     assert dinosaur.other_ids == {"openalex": "W2601753892"}
