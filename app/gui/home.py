@@ -400,6 +400,8 @@ def home() -> None:
                     f" {format_count(changed)} changed",
                     type="positive",
                 )
+            if nav is not None:
+                nav.select("library:dashboard")
             refresh_log()
 
         count, options = await run_busy("Loading cleaning options…", load)

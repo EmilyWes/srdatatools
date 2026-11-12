@@ -657,6 +657,25 @@ def test_home__cleaning_cleans_logs_and_notifies(
     assert notifications == ["Cleaned 1 record: 1 changed"]
 
 
+def test_home__cleaning_shows_the_dashboard_when_done(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_source_file_with_record(engine)
+    shells = _capture_shells(monkeypatch)
+    navs = _capture_navs(monkeypatch)
+    views = _capture_cleaning_views(monkeypatch)
+    home()
+    click_and_wait(_cleaning_button(shells[-1]), monkeypatch)
+    assert navs[-1].selected_key is None
+
+    click_and_wait(views[-1].run_button, monkeypatch)
+
+    assert navs[-1].selected_key == "library:dashboard"
+    assert "Field completeness" in [
+        e.text for e in shells[-1].middle.descendants() if isinstance(e, ui.label)
+    ]
+
+
 def test_home__cleaning_options_are_remembered_when_run(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
