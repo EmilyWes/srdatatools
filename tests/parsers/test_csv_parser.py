@@ -214,75 +214,38 @@ def test_parse_csv_text__empty_authors_column_gives_no_authors() -> None:
     assert result.rows[0].record.author_names is None
 
 
+def test_parse_csv_text__copies_date_column_as_it_is() -> None:
+    result = parse_csv_text("Date\n14/05/2020\n", mapping_of({"Date": "date"}))
+
+    assert result.rows[0].record.publication_date == "14/05/2020"
+
+
+_DATE_PARTS = mapping_of(
+    {
+        "Year": Suggest("date", {"part": "year"}),
+        "Month": Suggest("date", {"part": "month"}),
+        "Day": Suggest("date", {"part": "day"}),
+        "Created": "date",
+    }
+)
+
+
 @pytest.mark.parametrize(
-    ("date_value", "expected"),
+    ("row", "expected"),
     [
-        ("2020", (2020, None, None)),
-        ("2020-05", (2020, 5, None)),
-        ("2020-05-14", (2020, 5, 14)),
-        ("2020/05/14", (2020, 5, 14)),
+        ("2020,May,14,", "2020/May/14"),
+        ("2020,,,", "2020//"),
+        ("2019,3,7,2020-05-14", "2020-05-14"),
     ],
 )
-def test_parse_csv_text__parses_single_date_column(
-    date_value: str, expected: tuple[int, int | None, int | None]
+def test_parse_csv_text__date_column_or_joined_date_parts(
+    row: str, expected: str
 ) -> None:
-    text = f"Date\n{date_value}\n"
-    mapping = mapping_of({"Date": "date"})
+    text = f"Year,Month,Day,Created\n{row}\n"
 
-    result = parse_csv_text(text, mapping)
+    result = parse_csv_text(text, _DATE_PARTS)
 
-    date = result.rows[0].record.publication_date
-    assert date is not None
-    assert (date.year, date.month, date.day) == expected
-
-
-def test_parse_csv_text__parses_year_month_day_columns() -> None:
-    text = "Year,Month,Day\n2020,5,14\n"
-    mapping = mapping_of(
-        {
-            "Year": Suggest("date", {"part": "year"}),
-            "Month": Suggest("date", {"part": "month"}),
-            "Day": Suggest("date", {"part": "day"}),
-        }
-    )
-
-    result = parse_csv_text(text, mapping)
-
-    date = result.rows[0].record.publication_date
-    assert date is not None
-    assert (date.year, date.month, date.day) == (2020, 5, 14)
-
-
-def test_parse_csv_text__accepts_month_abbreviation() -> None:
-    text = "Year,Month\n2020,May\n"
-    mapping = mapping_of(
-        {
-            "Year": Suggest("date", {"part": "year"}),
-            "Month": Suggest("date", {"part": "month"}),
-        }
-    )
-
-    result = parse_csv_text(text, mapping)
-
-    date = result.rows[0].record.publication_date
-    assert date is not None
-    assert date.month == 5
-
-
-def test_parse_csv_text__drops_day_when_month_missing() -> None:
-    text = "Year,Day\n2020,14\n"
-    mapping = mapping_of(
-        {
-            "Year": Suggest("date", {"part": "year"}),
-            "Day": Suggest("date", {"part": "day"}),
-        }
-    )
-
-    result = parse_csv_text(text, mapping)
-
-    date = result.rows[0].record.publication_date
-    assert date is not None
-    assert (date.year, date.month, date.day) == (2020, None, None)
+    assert result.rows[0].record.publication_date == expected
 
 
 def test_parse_csv_text__routes_column_into_other_ids() -> None:
@@ -311,56 +274,6 @@ def test_parse_csv_text__routes_multiple_columns_into_other_ids() -> None:
         "eid": "2-s2.0-123",
         "scopus_author_id": "456",
     }
-
-
-def _ymd(text: str, mapping: FieldMapping) -> tuple[int | None, ...]:
-    date = parse_csv_text(text, mapping).rows[0].record.publication_date
-    assert date is not None
-    return (date.year, date.month, date.day)
-
-
-def test_parse_csv_text__ymd_overrides_date_on_conflict() -> None:
-    text = "Year,Month,Day,Created\n2019,3,7,2020-05-14\n"
-    mapping = mapping_of(
-        {
-            "Year": Suggest("date", {"part": "year"}),
-            "Month": Suggest("date", {"part": "month"}),
-            "Day": Suggest("date", {"part": "day"}),
-            "Created": "date",
-        }
-    )
-
-    assert _ymd(text, mapping) == (2019, 3, 7)
-
-
-def test_parse_csv_text__fills_missing_parts_from_date_column() -> None:
-    text = "Year,Created\n2020,2020-05-14\n"
-    mapping = mapping_of({"Year": Suggest("date", {"part": "year"}), "Created": "date"})
-
-    assert _ymd(text, mapping) == (2020, 5, 14)
-
-
-def test_parse_csv_text__falls_back_to_date_when_ymd_cells_blank() -> None:
-    text = "Year,Created\n,2020-05-14\n"
-    mapping = mapping_of({"Year": Suggest("date", {"part": "year"}), "Created": "date"})
-
-    assert _ymd(text, mapping) == (2020, 5, 14)
-
-
-def test_parse_csv_text__unparseable_date_column_keeps_ymd() -> None:
-    text = "Year,Created\n2020,sometime in May\n"
-    mapping = mapping_of({"Year": Suggest("date", {"part": "year"}), "Created": "date"})
-
-    assert _ymd(text, mapping) == (2020, None, None)
-
-
-def test_parse_csv_text__maps_publication_year_and_create_date_together() -> None:
-    text = "Publication Year,Create Date\n2018,2020-05-14\n"
-    mapping = mapping_of(
-        {"Publication Year": Suggest("date", {"part": "year"}), "Create Date": "date"}
-    )
-
-    assert _ymd(text, mapping) == (2018, 5, 14)
 
 
 def test_parse_csv_file__falls_back_to_cp1252_on_decode_error() -> None:
@@ -600,8 +513,7 @@ def test_parse_csv_file__tab_delimiter_maps_fields() -> None:
     assert record.author_names == "Smith, Jane; Doe, John"
     assert record.doi == "10.1000/abc123"
     assert record.keywords == ["keywords:[active learning; screening]"]
-    assert record.publication_date is not None
-    assert record.publication_date.year == 2021
+    assert record.publication_date == "2021//"
 
 
 def test_parse_csv_text__tab_delimiter_keeps_commas_in_cells() -> None:

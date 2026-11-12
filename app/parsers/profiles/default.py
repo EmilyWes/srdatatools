@@ -19,7 +19,8 @@ DEFAULT_PROFILES: dict[FileType, FormatProfile] = {
     file_type: FormatProfile(
         suggestions={},
         matches=never_matches,
-        settings=ParseSettings(),
+        # RIS DA usually holds more of the date than PY.
+        settings=ParseSettings(use_first=("DA",) if file_type == "ris" else ()),
         row_defaults=row_defaults,
     )
     for file_type, row_defaults in _ROW_DEFAULTS.items()

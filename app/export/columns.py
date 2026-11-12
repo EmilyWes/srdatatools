@@ -1,3 +1,4 @@
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal
@@ -8,6 +9,7 @@ from app.models.record import Record
 from app.parsers.mapping import split_keyword
 
 DatePart = Literal["full", "year", "month", "day"]
+_CLEANED_DATE = re.compile(r"(?P<year>\d{4})/(?P<month>\d{2})?/(?P<day>\d{2})?")
 ExtraKind = Literal["record_id", "sources", "source_files"]
 
 _JOINER = "; "
@@ -212,18 +214,14 @@ def _raw_keys(records: Sequence[ExportRecord], options: ExportOptions) -> list[s
 
 
 def _date_text(record: Record, part: DatePart) -> str:
-    date = record.publication_date
-    if date is None or date.year is None:
-        return ""
+    """A part is only read from a cleaned YYYY/MM/DD date."""
+    date = record.publication_date or ""
     if part == "full":
-        parts = [f"{date.year:04d}"]
-        if date.month is not None:
-            parts.append(f"{date.month:02d}")
-            if date.day is not None:
-                parts.append(f"{date.day:02d}")
-        return "-".join(parts)
-    value = getattr(date, part)
-    return "" if value is None else str(value)
+        return date
+    match = _CLEANED_DATE.fullmatch(date)
+    if match is None or not match[part]:
+        return ""
+    return str(int(match[part]))
 
 
 def _joined_distinct(values: Sequence[str]) -> str:

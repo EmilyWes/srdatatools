@@ -16,12 +16,10 @@ from app.parsers.mapping import (
     PAGES_TARGET,
     TARGETS,
     AuthorsRow,
-    DateRow,
     FieldMapping,
     RowDefaults,
     RowMapping,
     default_row,
-    is_ambiguous_date,
     row_with,
 )
 
@@ -77,12 +75,6 @@ _OPTIONS: dict[str, tuple[_Option, ...]] = {
             "Part",
             {"full": "Full date", "year": "Year", "month": "Month", "day": "Day"},
         ),
-        _Option(
-            "order",
-            "order",
-            "Ambiguous dates",
-            {"eu": "Day before month (EU)", "us": "Month before day (US)"},
-        ),
     ),
     PAGES_TARGET: (
         _Option(
@@ -128,19 +120,9 @@ _OPTIONS: dict[str, tuple[_Option, ...]] = {
 
 
 def _shows_option(row: RowMapping, name: str) -> bool:
-    if isinstance(row, DateRow) and name == "order":
-        return row.part == "full"
     if isinstance(row, AuthorsRow) and name == "id_key":
         return row.role == "ids"
     return True
-
-
-def _needs_a_look(row: RowMapping, name: str, sample: str) -> bool:
-    if not sample:
-        return False
-    if isinstance(row, DateRow) and name == "order":
-        return is_ambiguous_date(sample)
-    return False
 
 
 _FIELD_ORDER = (
@@ -309,11 +291,8 @@ class MappingScreen:
             return
         assert row.base is not None
         for name, widget in row.inputs.items():
-            status: str = "green"
-            if getattr(mapped, name) != getattr(row.base, name):
-                status = _CHANGED
-            elif _needs_a_look(mapped, name, row.sample.text):
-                status = "orange"
+            changed = getattr(mapped, name) != getattr(row.base, name)
+            status = _CHANGED if changed else "green"
             widget.props(f"bg-color={_STATUS_COLORS[status]}")
 
     def on_target_change(self, row: _Row) -> None:

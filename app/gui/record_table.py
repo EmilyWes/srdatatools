@@ -35,10 +35,11 @@ from app.gui.format import (
     label_text,
     source_label,
 )
+from app.models.record import publication_year
 from app.parsers.mapping import split_keyword
 
 _COLUMNS_KEY = "table_columns"
-_NUMBER_COLUMNS = {"publication_year", "publication_month", "publication_day"}
+_NUMBER_COLUMNS = {"publication_year"}
 _WIDE_COLUMNS = {"title", "abstract", "notes"}
 _SELECTION_TIMEOUT = 10.0
 _ROW_HEIGHT = 24
@@ -62,14 +63,13 @@ COLUMNS: dict[str, str] = {
     "doi": "DOI",
     "title": "Title",
     "author_names": "Authors",
+    "publication_date": "Publication date",
     "publication_year": "Publication year",
     "journal": "Journal",
     "sources": "Sources",
     "abstract": "Abstract",
     "author_ids": "Author IDs",
     "author_affiliations": "Affiliations",
-    "publication_month": "Publication month",
-    "publication_day": "Publication day",
     "conference_name": "Conference",
     "volume": "Volume",
     "issue": "Issue",
@@ -186,14 +186,20 @@ def load_rows(
     label_columns = [key for key in columns if is_label_key(key)]
     keyword_columns = [key for key in columns if is_keyword_key(key)]
     fields = [
-        key for key in columns if key in COLUMNS and key not in ("sources", "keywords")
+        key
+        for key in columns
+        if key in COLUMNS and key not in ("sources", "keywords", "publication_year")
     ]
     if "keywords" in columns or keyword_columns:
         fields.append("keywords")
+    if "publication_year" in columns and "publication_date" not in fields:
+        fields.append("publication_date")
     rows = []
     for record in list_record_rows(session, fields):
         keywords = [split_keyword(keyword) for keyword in record.pop("keywords", [])]
         row = row_for(record)
+        if "publication_year" in columns:
+            row["publication_year"] = publication_year(row.get("publication_date"))
         if "keywords" in columns:
             row["keywords"] = "; ".join(
                 text for prefix, text in keywords if prefix is None

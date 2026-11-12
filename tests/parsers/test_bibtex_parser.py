@@ -73,9 +73,7 @@ def test_parse_bibtex_text__reads_bare_values() -> None:
     record = parse_bibtex_text(text, _MAPPING).rows[0].record
 
     assert record.volume == "12"
-    assert record.publication_date is not None
-    assert record.publication_date.year == 2024
-    assert record.publication_date.month == 3
+    assert record.publication_date == "2024/mar/"
 
 
 def test_parse_bibtex_text__raw_fields_include_entry_type_and_key() -> None:
@@ -459,8 +457,7 @@ def test_parse_bibtex_file__default_mapping_on_realistic_export() -> None:
     assert first.author_names == "Smith, John A.|Müller, Hans|Barnes and Noble"
     assert first.issue == "3"
     assert first.doi == "10.1016/j.jbi.2024.101"
-    assert first.publication_date is not None
-    assert (first.publication_date.year, first.publication_date.month) == (2024, 3)
+    assert first.publication_date == "2024/mar/"
     assert second.journal == "Proceedings of the 5th Conference"
     assert second.author_names == "Jane Doe"
 

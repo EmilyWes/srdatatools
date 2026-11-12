@@ -120,10 +120,10 @@ def _source_file(
     )
 
 
-def _record(year: int | None, *source_files: SourceFile) -> Record:
+def _record(date: str | None, *source_files: SourceFile) -> Record:
     return Record(
         title="A title",
-        publication_year=year,
+        publication_date=date,
         sources=[RecordSource(source_file=source_file) for source_file in source_files],
     )
 
@@ -135,10 +135,10 @@ def library(session: Session) -> Session:
     unknown = _source_file("other.ris", None, datetime.datetime(2026, 1, 3))
     session.add_all(
         [
-            _record(2020, pubmed),
-            _record(2021, pubmed, scopus),
-            _record(None, scopus),
-            _record(2020, unknown),
+            _record("2020//", pubmed),
+            _record("2021 Mar 4", pubmed, scopus),
+            _record("n.d.", scopus),
+            _record("2020/05/01", unknown),
         ]
     )
     session.commit()
@@ -166,13 +166,13 @@ def test_count_records_per_year__ascending_with_unknown_last(
 
 
 def test_list_record_rows__requested_fields_ordered_by_id(library: Session) -> None:
-    rows = list_record_rows(library, ["publication_year"])
+    rows = list_record_rows(library, ["publication_date"])
 
     assert rows == [
-        {"id": 1, "publication_year": 2020},
-        {"id": 2, "publication_year": 2021},
-        {"id": 3, "publication_year": None},
-        {"id": 4, "publication_year": 2020},
+        {"id": 1, "publication_date": "2020//"},
+        {"id": 2, "publication_date": "2021 Mar 4"},
+        {"id": 3, "publication_date": "n.d."},
+        {"id": 4, "publication_date": "2020/05/01"},
     ]
 
 
@@ -263,17 +263,6 @@ def test_count_filled_fields__counts_non_empty_values(session: Session) -> None:
         ("author_names", 1),
         ("keywords", 1),
         ("other_ids", 0),
-    ]
-
-
-def test_count_filled_fields__counts_set_numbers(session: Session) -> None:
-    session.add_all(
-        [Record(publication_year=2020), Record(publication_year=0), Record()]
-    )
-    session.commit()
-
-    assert count_filled_fields(session, ["publication_year"]) == [
-        ("publication_year", 2)
     ]
 
 
@@ -369,8 +358,7 @@ def test_load_export_records__builds_record_sources_and_labels(
     record = Record(
         title="Deep learning",
         author_names="LeCun, Yann",
-        publication_year=2015,
-        publication_month=5,
+        publication_date="2015/05/",
         doi="10.1038/nature14539",
         keywords=["[MeSH] Humans"],
         other_ids={"eid": "2-s2.0-1"},
@@ -390,9 +378,7 @@ def test_load_export_records__builds_record_sources_and_labels(
     assert export.id == record.id
     assert export.record.title == "Deep learning"
     assert export.record.author_names == "LeCun, Yann"
-    date = export.record.publication_date
-    assert date is not None
-    assert (date.year, date.month, date.day) == (2015, 5, None)
+    assert export.record.publication_date == "2015/05/"
     assert export.record.keywords == ["[MeSH] Humans"]
     assert export.record.other_ids == {"eid": "2-s2.0-1"}
     assert [(lb.phase, lb.screener, lb.value) for lb in export.record.labels] == [

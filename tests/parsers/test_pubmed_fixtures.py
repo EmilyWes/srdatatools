@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from app.models.record import PartialDate, Record
+from app.models.record import Record
 from app.parsers.authors import AUTHOR_JOINER, parse_author_ids
 from app.parsers.common import FileType, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
@@ -117,7 +117,7 @@ def test_pubmed_small_csv__keeps_values_as_in_the_file(
 ) -> None:
     nature = csv_records["37587301"]
     assert (nature.volume, nature.issue, nature.pages) == (None, None, None)
-    assert nature.publication_date == PartialDate(year=2023)
+    assert nature.publication_date == "2023//"
     assert (csv_records["30527956"].author_names or "").endswith(
         ", Walsworth AK, et al."
     )

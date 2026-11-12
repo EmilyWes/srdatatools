@@ -55,7 +55,7 @@ COMPLETENESS_FIELDS = [
     "title",
     "author_names",
     "abstract",
-    "publication_year",
+    "publication_date",
     "journal",
     "doi",
     "pmid",

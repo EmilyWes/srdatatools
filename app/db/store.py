@@ -10,22 +10,15 @@ from app.cleaning.options import CleaningOptions
 from app.cleaning.steps import CleaningContext, clean_record, file_separators
 from app.db.models import Label, Record, RecordSource, SourceFile
 from app.db.queries import record_schema
-from app.models.record import PartialDate
 from app.models.record import Record as RecordSchema
 from app.parsers.mapping import FieldMapping
 
 # Cleaning doesn't touch these, and they aren't plain columns.
-_NOT_CLEANED = {"publication_date", "labels"}
+_NOT_CLEANED = {"labels"}
 
 
 def _build_record(schema: RecordSchema) -> Record:
-    date = schema.publication_date or PartialDate()
-    return Record(
-        **schema.model_dump(exclude={"publication_date", "labels"}),
-        publication_year=date.year,
-        publication_month=date.month,
-        publication_day=date.day,
-    )
+    return Record(**schema.model_dump(exclude={"labels"}))
 
 
 def store_parsed_rows(

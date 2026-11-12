@@ -208,13 +208,11 @@ def test_render_mapping_table__typed_prefix_loses_brackets_and_spaces() -> None:
     assert screen.current_mapping().rows["Keywords"].model_dump()["prefix"] == "Author"
 
 
-def test_render_mapping_table__date_order_only_shows_for_full_date() -> None:
+def test_render_mapping_table__date_rows_only_show_part() -> None:
     screen = _render(["Date", "Year"])
 
-    assert _visible_options(screen, "Date") == ["part", "order"]
+    assert _visible_options(screen, "Date") == ["part"]
     assert _visible_options(screen, "Year") == ["part"]
-    screen.set_option("Year", "part", "full")
-    assert _visible_options(screen, "Year") == ["part", "order"]
 
 
 def test_render_mapping_table__only_author_ids_show_id_key() -> None:
@@ -615,25 +613,3 @@ def test_render_mapping_table__typing_the_placeholder_is_not_a_change() -> None:
     screen.set_option("included", "phase", "ft")
 
     assert _option_color(screen, "included", "phase") == "green-2"
-
-
-def test_render_mapping_table__changed_option_beats_orange() -> None:
-    screen = _render_samples({"Date": "03/04/2020"})
-
-    screen.set_option("Date", "order", "us")
-
-    assert _option_color(screen, "Date", "order") == "blue-2"
-
-
-def test_render_mapping_table__ambiguous_example_date_makes_order_orange() -> None:
-    screen = _render_samples({"Date": "03/04/2020", "Created": "14/05/2020"})
-    screen.set_target("Created", "date")
-
-    assert _option_color(screen, "Date", "order") == "orange-2"
-    assert _option_color(screen, "Created", "order") == "green-2"
-
-
-def test_render_mapping_table__empty_example_gives_no_orange() -> None:
-    screen = _render(["Date"])
-
-    assert _option_color(screen, "Date", "order") == "green-2"

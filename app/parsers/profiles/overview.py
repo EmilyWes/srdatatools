@@ -39,6 +39,7 @@ class QuirkItem:
     control: Control
     enabled_by: str | None = None
     wide: bool = False
+    choices: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)

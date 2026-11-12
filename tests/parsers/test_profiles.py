@@ -30,9 +30,10 @@ def test_has_profile__only_for_a_source_that_exports_the_type() -> None:
     assert not has_profile("unknown", "nbib")
 
 
-def test_default_profiles__use_the_plain_parse_settings() -> None:
-    for profile in DEFAULT_PROFILES.values():
-        assert profile.settings == ParseSettings()
+def test_default_profiles__use_the_plain_parse_settings_ris_reads_da_first() -> None:
+    for file_type, profile in DEFAULT_PROFILES.items():
+        use_first = ("DA",) if file_type == "ris" else ()
+        assert profile.settings == ParseSettings(use_first=use_first)
 
 
 def test_default_settings__overrides_the_type_default() -> None:

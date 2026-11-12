@@ -47,6 +47,7 @@ def test_render_cleaning_view__boxes_in_order() -> None:
         ["ISSN/ISBN"],
         ["Authors"],
         ["Keywords"],
+        ["Dates"],
         ["Empty values"],
         ["Identifiers"],
         ["Other"],
@@ -109,6 +110,19 @@ def test_render_cleaning_view__checkbox_has_no_text_of_its_own() -> None:
     checkbox = _render().screen.widgets["drop_et_al"]
 
     assert isinstance(checkbox, ui.checkbox) and checkbox.text == ""
+
+
+def test_render_cleaning_view__date_order_is_a_dropdown_enabled_by_clean_dates() -> (
+    None
+):
+    screen = _render().screen
+    order = screen.widgets["date_order"]
+
+    assert isinstance(order, ui.select) and order.value == "eu"
+    screen.set_value("date_order", "us")
+    assert screen.current_choices().date_order == "us"
+    screen.set_value("clean_dates", False)
+    assert not order.enabled
 
 
 def test_render_cleaning_view__split_authors_enables_its_options() -> None:

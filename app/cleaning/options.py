@@ -2,6 +2,7 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from app.db.settings import delete_setting, get_setting, set_setting
+from app.parsers.mapping import DateOrder
 from app.parsers.profiles.overview import QuirkBox, QuirkItem, QuirkList
 
 _OPTIONS_KEY = "cleaning_options"
@@ -21,6 +22,8 @@ class CleaningOptions(BaseModel):
     author_strip_extras: bool = False
     affiliation_start: str = ""
     split_keywords: bool = True
+    clean_dates: bool = True
+    date_order: DateOrder = "eu"
     keywords_separator: str = ""
     empty_values: list[str] = ["[Not Available]."]
     refill_from_raw: bool = True
@@ -178,6 +181,28 @@ _KEYWORDS = QuirkBox(
         ),
     ),
 )
+_DATES = QuirkBox(
+    "Dates",
+    (
+        QuirkItem(
+            "clean_dates",
+            "Clean up dates",
+            "Reads the publication date and writes it as YYYY/MM/DD, an unknown"
+            " part left empty (1994//). A date that can't be read is kept as it"
+            " is.",
+            "checkbox",
+        ),
+        QuirkItem(
+            "date_order",
+            "Ambiguous dates",
+            "Which number is the month in a numeric date like 03/04/2020 where"
+            " both could be.",
+            "select",
+            enabled_by="clean_dates",
+            choices={"eu": "Day before month (EU)", "us": "Month before day (US)"},
+        ),
+    ),
+)
 _EMPTY_VALUES = QuirkBox(
     "Empty values",
     (
@@ -273,6 +298,7 @@ CLEANING_BOXES = [
     _ISSN_ISBN,
     _AUTHORS,
     _KEYWORDS,
+    _DATES,
     _EMPTY_VALUES,
     _IDENTIFIERS,
     _OTHER,

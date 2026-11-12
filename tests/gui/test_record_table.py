@@ -116,7 +116,7 @@ def test_reset_columns__restores_defaults(session: Session) -> None:
 def test_columns__cover_every_record_field_plus_sources() -> None:
     record_fields = {column.key for column in Record.__table__.columns} - {"id"}
 
-    assert set(COLUMNS) == record_fields | {"sources"}
+    assert set(COLUMNS) == record_fields | {"sources", "publication_year"}
 
 
 def test_row_for__formats_lists_and_dicts() -> None:
@@ -139,6 +139,16 @@ def test_row_for__formats_lists_and_dicts() -> None:
         "publication_year": 2020,
         "doi": None,
     }
+
+
+def test_load_rows__publication_year_from_the_date(session: Session) -> None:
+    session.add(Record(id=1, publication_date="2020 May"))
+    session.add(Record(id=2, publication_date="May 2020"))
+    session.commit()
+
+    rows = load_rows(session, ["publication_year"])
+
+    assert [row["publication_year"] for row in rows] == [2020, None]
 
 
 def test_load_rows__only_requested_columns(session: Session) -> None:

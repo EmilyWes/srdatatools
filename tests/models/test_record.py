@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.models.record import PartialDate, Record
+from app.models.record import PartialDate, Record, publication_year
 
 
 def test_record__empty_constructs_successfully() -> None:
@@ -18,7 +18,7 @@ def test_record__full_valid_record_round_trips_all_fields() -> None:
         author_ids="orcid:0000-0001-2345-6789, scopus_author_id:12345|",
         author_affiliations="University of Example; Example Hospital",
         abstract="An abstract.",
-        publication_date=PartialDate(year=2020, month=6, day=15),
+        publication_date="2020/06/15",
         journal="Journal of Examples",
         volume="12",
         issue="3",
@@ -40,7 +40,7 @@ def test_record__full_valid_record_round_trips_all_fields() -> None:
     assert record.author_names == "Smith, Jane; Doe, John"
     assert record.author_ids == "orcid:0000-0001-2345-6789, scopus_author_id:12345|"
     assert record.author_affiliations == "University of Example; Example Hospital"
-    assert record.publication_date == PartialDate(year=2020, month=6, day=15)
+    assert record.publication_date == "2020/06/15"
     assert record.other_ids == {"eid": "2-s2.0-12345"}
     assert record.keywords == ["testing", "examples"]
 
@@ -94,3 +94,15 @@ def test_partial_date__year_as_numeric_string_coerces_to_int() -> None:
 def test_partial_date__invalid_year_raises() -> None:
     with pytest.raises(ValidationError):
         PartialDate(year="not-a-year")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("date", "expected"),
+    [("2020/06/15", 2020), ("1994//", 1994), ("2020 May", 2020), ("May 2020", None)],
+)
+def test_publication_year__leading_four_digits(date: str, expected: int | None) -> None:
+    assert publication_year(date) == expected
+
+
+def test_publication_year__no_date_has_no_year() -> None:
+    assert publication_year(None) is None

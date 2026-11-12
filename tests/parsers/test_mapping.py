@@ -18,7 +18,6 @@ from app.parsers.mapping import (
     Suggest,
     apply_mapping,
     default_row,
-    is_ambiguous_date,
     make_row,
     normalize_label,
     override_aliases,
@@ -54,10 +53,10 @@ def test_field_mapping__round_trips_through_a_dump() -> None:
 
 
 def test_default_row__fills_each_targets_default_options() -> None:
-    defaults = RowDefaults(date_order="us")
+    defaults = RowDefaults()
 
     assert default_row("title", "TI", defaults) == ScalarRow(target="title")
-    assert default_row("date", "DA", defaults) == DateRow(part="full", order="us")
+    assert default_row("date", "DA", defaults) == DateRow(part="full")
     assert default_row("pages", "PG", defaults) == PagesRow(part="range")
     assert default_row("issn_isbn", "SN", defaults) == IssnIsbnRow(kind="auto")
     assert default_row("other_ids", "Work ID", defaults) == OtherIdRow(key="work_id")
@@ -262,62 +261,15 @@ def test_apply_mapping__fixed_kind_keeps_the_whole_value(kind: str) -> None:
     assert getattr(apply_mapping({"X": value}, mapping), kind) == value
 
 
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        ("2020///", (2020, None, None)),
-        ("2020/05//", (2020, 5, None)),
-        ("2020/05/14/", (2020, 5, 14)),
-        ("2020/05/14/Spring", (2020, 5, 14)),
-        ("2020///Spring", (2020, None, None)),
-    ],
-)
-def test_apply_mapping__parses_ris_style_date(
-    value: str, expected: tuple[int, int | None, int | None]
-) -> None:
-    date = apply_mapping({"DA": value}, mapping_of({"DA": "date"})).publication_date
-
-    assert date is not None
-    assert (date.year, date.month, date.day) == expected
-
-
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        ("2020 May 14", (2020, 5, 14)),
-        ("2020 May", (2020, 5, None)),
-        ("2020 Jan-Feb", (2020, 1, None)),
-        ("2020 Oct 3", (2020, 10, 3)),
-    ],
-)
-def test_apply_mapping__parses_nbib_style_date(
-    value: str, expected: tuple[int, int | None, int | None]
-) -> None:
-    date = apply_mapping({"DP": value}, mapping_of({"DP": "date"})).publication_date
-
-    assert date is not None
-    assert (date.year, date.month, date.day) == expected
-
-
-def test_apply_mapping__date_order_comes_from_the_row() -> None:
-    mapping = mapping_of({"Date": Suggest("date", {"order": "us"})})
-
-    date = apply_mapping({"Date": "03/04/2020"}, mapping).publication_date
-
-    assert date is not None
-    assert (date.month, date.day) == (3, 4)
-
-
-def test_apply_mapping__full_dates_combine_per_part_first_wins() -> None:
+def test_apply_mapping__first_full_date_is_copied_as_it_is() -> None:
     mapping = mapping_of({"PY": "date", "DA": "date"})
 
-    date = apply_mapping({"PY": "2020///", "DA": "2019/03/15/"}, mapping)
+    record = apply_mapping({"PY": " 2020/// ", "DA": "2019/03/15/"}, mapping)
 
-    assert date.publication_date is not None
-    assert date.publication_date.model_dump() == {"year": 2020, "month": 3, "day": 15}
+    assert record.publication_date == "2020///"
 
 
-def test_apply_mapping__date_part_rows_win_over_full_date() -> None:
+def test_apply_mapping__full_date_wins_over_date_parts() -> None:
     mapping = mapping_of(
         {
             "Date": "date",
@@ -330,20 +282,79 @@ def test_apply_mapping__date_part_rows_win_over_full_date() -> None:
         {"Date": "2019-01-05", "Year": "2020", "Month": "Mar"}, mapping
     )
 
-    assert record.publication_date is not None
-    assert record.publication_date.model_dump() == {"year": 2020, "month": 3, "day": 5}
+    assert record.publication_date == "2019-01-05"
 
 
-def test_apply_mapping__unparseable_year_part_is_skipped_and_warns(
-    caplog: pytest.LogCaptureFixture,
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ({"Date": "", "Year": "2020", "Month": "Mar", "Day": "5"}, "2020/Mar/5"),
+        ({"Year": "1994"}, "1994//"),
+        ({"Month": "03"}, "/03/"),
+        ({"Year": "n.d."}, "n.d.//"),
+    ],
+)
+def test_apply_mapping__date_parts_are_joined_as_they_are(
+    raw: dict[str, str], expected: str
 ) -> None:
-    mapping = mapping_of({"Year": Suggest("date", {"part": "year"})})
+    mapping = mapping_of(
+        {
+            "Date": "date",
+            "Year": Suggest("date", {"part": "year"}),
+            "Month": Suggest("date", {"part": "month"}),
+            "Day": Suggest("date", {"part": "day"}),
+        }
+    )
 
-    with caplog.at_level(logging.WARNING):
-        record = apply_mapping({"Year": "n.d."}, mapping)
+    assert apply_mapping(raw, mapping).publication_date == expected
 
-    assert record.publication_date is None
-    assert "n.d." in caplog.text
+
+def test_apply_mapping__no_date_values_leave_no_date() -> None:
+    mapping = mapping_of({"Date": "date", "Year": Suggest("date", {"part": "year"})})
+
+    assert apply_mapping({"Date": " ", "Year": ""}, mapping).publication_date is None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2020///", (2020, None, None)),
+        ("2020/05//", (2020, 5, None)),
+        ("2020/05/14/", (2020, 5, 14)),
+        ("2020/05/14/Spring", (2020, 5, 14)),
+        ("2020///Spring", (2020, None, None)),
+        ("2020 May 14", (2020, 5, 14)),
+        ("2020 May", (2020, 5, None)),
+        ("2020 Jan-Feb", (2020, 1, None)),
+        ("2020 Oct 3", (2020, 10, 3)),
+    ],
+)
+def test_parse_date_string__reads_ris_and_nbib_dates(
+    value: str, expected: tuple[int, int | None, int | None]
+) -> None:
+    date = parse_date_string(value)
+
+    assert date is not None
+    assert (date.year, date.month, date.day) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("1994//", (1994, None, None)),
+        ("1994/03/", (1994, 3, None)),
+        ("1994/Mar/", (1994, 3, None)),
+        ("1994/3/5", (1994, 3, 5)),
+        ("2020/03/04", (2020, 3, 4)),
+    ],
+)
+def test_parse_date_string__reads_joined_date_parts(
+    value: str, expected: tuple[int, int | None, int | None]
+) -> None:
+    date = parse_date_string(value, "us")
+
+    assert date is not None
+    assert (date.year, date.month, date.day) == expected
 
 
 @pytest.mark.parametrize(
@@ -398,23 +409,6 @@ def test_parse_date_string__rejects_impossible_or_mixed_numeric_date(
     value: str,
 ) -> None:
     assert parse_date_string(value) is None
-
-
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        ("03/04/2020", True),
-        (" 3.4.2020 ", True),
-        ("03/03/2020", False),
-        ("14/05/2020", False),
-        ("2020-03-04", False),
-        ("March 4, 2020", False),
-    ],
-)
-def test_is_ambiguous_date__only_when_order_changes_the_date(
-    value: str, expected: bool
-) -> None:
-    assert is_ambiguous_date(value) is expected
 
 
 def test_apply_mapping__keeps_each_keyword_column_unsplit_under_its_prefix() -> None:
@@ -640,11 +634,11 @@ def test_suggest_mapping__several_keys_may_share_a_target() -> None:
 
 
 def test_suggest_mapping__uses_row_defaults() -> None:
-    defaults = RowDefaults(date_order="us")
+    mapping = suggest_mapping(
+        ["DA"], {"da": Suggest("date", {"part": "year"})}, _DEFAULTS, lenient=False
+    )
 
-    mapping = suggest_mapping(["DA"], {"da": Suggest("date")}, defaults, lenient=False)
-
-    assert mapping.rows == {"DA": DateRow(order="us")}
+    assert mapping.rows == {"DA": DateRow(part="year")}
 
 
 def test_suggest_mapping__records_match_kind_per_key() -> None:

@@ -24,7 +24,6 @@ from app.db.store import (
     store_parsed_rows,
 )
 from app.models.record import Label as LabelSchema
-from app.models.record import PartialDate
 from app.models.record import Record as RecordSchema
 from app.parsers.mapping import FieldMapping
 from tests.mappings import mapping_of
@@ -164,13 +163,8 @@ def test_store_parsed_rows__preserves_raw_fields_on_record_source(
     assert source.source_file.filename == "scopus_export.csv"
 
 
-def test_store_parsed_rows__maps_publication_date_to_year_month_day(
-    session: Session,
-) -> None:
-    schema = RecordSchema(
-        title="Dated Paper",
-        publication_date=PartialDate(year=2024, month=3, day=15),
-    )
+def test_store_parsed_rows__stores_publication_date(session: Session) -> None:
+    schema = RecordSchema(title="Dated Paper", publication_date="2024 Mar 15")
 
     store_parsed_rows(
         session,
@@ -181,10 +175,7 @@ def test_store_parsed_rows__maps_publication_date_to_year_month_day(
     )
     session.commit()
 
-    record = session.query(Record).one()
-    assert record.publication_year == 2024
-    assert record.publication_month == 3
-    assert record.publication_day == 15
+    assert session.query(Record).one().publication_date == "2024 Mar 15"
 
 
 def test_store_parsed_rows__handles_multiple_rows_in_one_call(
@@ -581,14 +572,14 @@ def test_clean_records__refills_from_the_source_mapping_and_ordering(
     assert _titles(session) == ["Other"]
 
 
-def test_clean_records__keeps_labels_and_date(session: Session) -> None:
+def test_clean_records__keeps_labels_and_cleans_date(session: Session) -> None:
     _store(
         session,
         [
             (
                 RecordSchema(
                     pages="521-2",
-                    publication_date=PartialDate(year=2001, month=5),
+                    publication_date="May 2001",
                     labels=[LabelSchema(phase="ft", screener="a", value="include")],
                 ),
                 {},
@@ -600,7 +591,7 @@ def test_clean_records__keeps_labels_and_date(session: Session) -> None:
     session.commit()
 
     record = session.query(Record).one()
-    assert (record.publication_year, record.publication_month) == (2001, 5)
+    assert record.publication_date == "2001/05/"
     assert [label.value for label in record.labels] == ["include"]
 
 

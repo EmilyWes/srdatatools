@@ -81,6 +81,7 @@ def test_cleaning_boxes__titles_in_order() -> None:
         "ISSN/ISBN",
         "Authors",
         "Keywords",
+        "Dates",
         "Empty values",
         "Identifiers",
         "Other",

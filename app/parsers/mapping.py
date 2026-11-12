@@ -48,7 +48,10 @@ _DATE_PATTERNS = [
     re.compile(r"^(?P<year>\d{4})$"),
     re.compile(r"^(?P<year>\d{4})-(?P<month>\d{1,2})$"),
     re.compile(r"^(?P<year>\d{4})-(?P<month>\d{1,2})-(?P<day>\d{1,2})$"),
-    re.compile(r"^(?P<year>\d{4})/(?P<month>\d{1,2})/(?P<day>\d{1,2})$"),
+    # Also the stored YYYY/MM/DD, where any part after the year may be empty.
+    re.compile(
+        r"^(?P<year>\d{4})/(?P<month>\d{1,2}|[A-Za-z]{3,9})?/(?P<day>\d{1,2})?$"
+    ),
     # RIS: YYYY/MM/DD/other, where every part after the year may be empty
     re.compile(r"^(?P<year>\d{4})/(?P<month>\d{1,2})?/(?P<day>\d{1,2})?/.*$"),
     # NBIB: YYYY Mon, YYYY Mon DD, YYYY Mon-Mon (a month range keeps its first month)
@@ -110,7 +113,6 @@ class ScalarRow(BaseModel):
 class DateRow(BaseModel):
     target: Literal["date"] = "date"
     part: Literal["full", "year", "month", "day"] = "full"
-    order: DateOrder = "eu"
 
 
 class PagesRow(BaseModel):
@@ -216,7 +218,7 @@ class FieldMapping(BaseModel):
 
 @dataclass(frozen=True)
 class RowDefaults:
-    date_order: DateOrder = "eu"
+    pass
 
 
 @dataclass(frozen=True)
@@ -234,7 +236,7 @@ def default_other_id_key(header: str) -> str:
 
 def default_row(target: str, key: str, defaults: RowDefaults) -> RowMapping:
     if target == DATE_TARGET:
-        return DateRow(order=defaults.date_order)
+        return DateRow()
     if target == PAGES_TARGET:
         return PagesRow()
     if target == ISSN_ISBN_TARGET:
@@ -317,14 +319,6 @@ def _classify_issn_isbn(row: IssnIsbnRow, value: str) -> str:
     return "issn"
 
 
-def _parse_int_field(value: str, field_name: str) -> int | None:
-    try:
-        return int(value.strip())
-    except ValueError:
-        logger.warning("Could not parse %s value %r", field_name, value)
-        return None
-
-
 def _parse_month(value: str | None) -> int | None:
     if value is None or not value.strip():
         return None
@@ -363,15 +357,6 @@ def _parse_numeric_date(match: re.Match[str], order: DateOrder) -> PartialDate |
     return _build_partial_date(int(match["year"]), month, day)
 
 
-def is_ambiguous_date(value: str) -> bool:
-    """A numeric date whose day/month order changes what it means."""
-    match = _NUMERIC_DATE.match(value.strip())
-    if match is None:
-        return False
-    first, second = int(match["first"]), int(match["second"])
-    return first != second and first <= _MAX_MONTH and second <= _MAX_MONTH
-
-
 def parse_date_string(value: str, order: DateOrder = "eu") -> PartialDate | None:
     stripped = value.strip()
     numeric = _NUMERIC_DATE.match(stripped)
@@ -393,29 +378,20 @@ def parse_date_string(value: str, order: DateOrder = "eu") -> PartialDate | None
 
 def _parse_publication_date(
     raw_fields: dict[str, str], mapping: FieldMapping
-) -> PartialDate | None:
-    """Each part comes from the first row giving it; a year/month/day row beats a
-    full date."""
-    explicit: dict[str, int] = {}
-    from_full: dict[str, int] = {}
+) -> str | None:
+    """A full date is copied as it is; without one the year, month and day parts
+    are joined as YYYY/MM/DD, a missing part left empty. Each comes from the
+    first row giving it; cleaning reads the values."""
+    parts: dict[str, str] = {}
     for key, row in mapping.rows_of(DateRow):
         value = (raw_fields.get(key) or "").strip()
-        if not value:
-            continue
-        if row.part == "full":
-            date = parse_date_string(value, row.order)
-            for part in _DATE_PARTS if date is not None else ():
-                if (number := getattr(date, part)) is not None:
-                    from_full.setdefault(part, number)
-            continue
-        if row.part == "month":
-            number = _parse_month(value)
-        else:
-            number = _parse_int_field(value, row.part)
-        if number is not None:
-            explicit.setdefault(row.part, number)
-    parts = {**from_full, **explicit}
-    return _build_partial_date(parts.get("year"), parts.get("month"), parts.get("day"))
+        if value:
+            parts.setdefault(row.part, value)
+    if "full" in parts:
+        return parts["full"]
+    if not parts:
+        return None
+    return "/".join(parts.get(part, "") for part in _DATE_PARTS)
 
 
 def _parse_pages(raw_fields: dict[str, str], mapping: FieldMapping) -> str | None:

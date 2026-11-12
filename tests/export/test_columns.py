@@ -14,7 +14,7 @@ from app.export.columns import (
     fill_count,
 )
 from app.export.options import ExportOptions
-from app.models.record import Label, PartialDate, Record
+from app.models.record import Label, Record
 
 _OPTIONS = ExportOptions(empty_columns=True)
 
@@ -83,17 +83,17 @@ def test_export_columns__author_columns_follow_title() -> None:
 @pytest.mark.parametrize(
     ("date", "part", "expected"),
     [
-        (PartialDate(year=2021), "full", "2021"),
-        (PartialDate(year=2021, month=3), "full", "2021-03"),
-        (PartialDate(year=2021, month=3, day=7), "full", "2021-03-07"),
-        (PartialDate(year=2021, month=3, day=7), "year", "2021"),
-        (PartialDate(year=2021, month=3, day=7), "month", "3"),
-        (PartialDate(year=2021, month=3), "day", ""),
+        ("2021//", "full", "2021//"),
+        ("Mar 2021", "full", "Mar 2021"),
+        ("2021/03/07", "year", "2021"),
+        ("2021/03/07", "month", "3"),
+        ("2021/03/", "day", ""),
+        ("Mar 2021", "year", ""),
         (None, "full", ""),
     ],
 )
-def test_column_value__date_parts(
-    date: PartialDate | None, part: str, expected: str
+def test_column_value__date_parts_only_from_cleaned_date(
+    date: str | None, part: str, expected: str
 ) -> None:
     column = DateColumn(key="date", label="", name="", part=part)  # type: ignore[arg-type]
 

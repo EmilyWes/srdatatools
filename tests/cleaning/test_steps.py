@@ -4,6 +4,7 @@ from app.cleaning.options import CleaningOptions
 from app.cleaning.steps import (
     CleaningContext,
     citation_parts,
+    clean_date,
     clean_issn_isbn,
     clean_record,
     clear_empty_values,
@@ -298,6 +299,44 @@ def test_split_keywords__without_separator_the_value_is_one_keyword() -> None:
     cleaned = split_keywords(record, _NO_CONTEXT, _OPTIONS)
 
     assert cleaned.keywords == ["fossils; dinosaurs"]
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2020/05/14/", "2020/05/14"),
+        ("2020 Jan-Feb", "2020/01/"),
+        ("1994//", "1994//"),
+        ("1994/Mar/", "1994/03/"),
+        ("Fall 2013", "2013//"),
+        ("03/04/2020", "2020/04/03"),
+    ],
+)
+def test_clean_date__writes_yyyy_mm_dd(value: str, expected: str) -> None:
+    record = clean_date(Record(publication_date=value), _NO_CONTEXT, _OPTIONS)
+
+    assert record.publication_date == expected
+
+
+def test_clean_date__us_order_for_ambiguous_dates() -> None:
+    record = Record(publication_date="03/04/2020")
+
+    cleaned = clean_date(record, _NO_CONTEXT, _options(date_order="us"))
+
+    assert cleaned.publication_date == "2020/03/04"
+
+
+def test_clean_date__unreadable_date_is_kept(caplog: pytest.LogCaptureFixture) -> None:
+    record = Record(publication_date="Spring issue")
+
+    assert clean_date(record, _NO_CONTEXT, _OPTIONS) == record
+    assert "Spring issue" in caplog.text
+
+
+def test_clean_date__cleaning_again_changes_nothing() -> None:
+    once = clean_date(Record(publication_date="12 March 2020"), _NO_CONTEXT, _OPTIONS)
+
+    assert clean_date(once, _NO_CONTEXT, _OPTIONS) == once
 
 
 def test_id_from_name__moves_ids_out_of_names() -> None:

@@ -143,9 +143,7 @@ def test_parse_excel_file__reads_cached_formula_value(tmp_path: Path) -> None:
     result = parse_excel_file(path, mapping)
 
     assert result.rows[0].raw_fields == {"Year": "2020"}
-    publication_date = result.rows[0].record.publication_date
-    assert publication_date is not None
-    assert publication_date.year == 2020
+    assert result.rows[0].record.publication_date == "2020//"
 
 
 def test_parse_excel_file__pads_short_row_with_empty_cells(tmp_path: Path) -> None:

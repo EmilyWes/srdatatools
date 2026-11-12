@@ -337,15 +337,9 @@ def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
     assert first.doi == "10.1016/j.jbi.2020.1"
     assert first.other_ids == {"pmc": "PMC7000001"}
     assert first.issn == "1532-0480 (Electronic)"
-    assert first.publication_date is not None
-    assert (
-        first.publication_date.year,
-        first.publication_date.month,
-        first.publication_date.day,
-    ) == (2020, 5, 14)
+    assert first.publication_date == "2020 May 14"
     assert second.keywords == ["[MeSH] Humans", "[MeSH] Review Literature as Topic"]
-    assert second.publication_date is not None
-    assert (second.publication_date.year, second.publication_date.month) == (2019, 1)
+    assert second.publication_date == "2019 Jan-Feb"
 
 
 def test_read_nbib_tags__returns_distinct_tags_in_first_seen_order_with_doi() -> None:

@@ -1,3 +1,4 @@
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -13,6 +14,15 @@ class PartialDate(BaseModel):
         if self.day is not None and self.month is None:
             raise ValueError("day requires month to also be set")
         return self
+
+
+_LEADING_YEAR = re.compile(r"\d{4}")
+
+
+def publication_year(date: str | None) -> int | None:
+    """The year a date string starts with, if it starts with four digits."""
+    match = _LEADING_YEAR.match(date or "")
+    return int(match[0]) if match else None
 
 
 LabelValue = Literal["include", "exclude", "maybe", "unknown", "unlabeled"]
@@ -31,7 +41,8 @@ class Record(BaseModel):
     author_ids: str | None = None
     author_affiliations: str | None = None
     abstract: str | None = None
-    publication_date: PartialDate | None = None
+    # Cleaned to YYYY/MM/DD, unknown parts left empty: 1994//.
+    publication_date: str | None = None
     journal: str | None = None
     conference_name: str | None = None
     volume: str | None = None

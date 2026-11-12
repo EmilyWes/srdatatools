@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 
 from app.cleaning.options import CleaningOptions
-from app.models.record import Record
+from app.models.record import PartialDate, Record
 from app.parsers.authors import (
     AUTHOR_JOINER,
     AuthorIds,
@@ -24,6 +24,7 @@ from app.parsers.mapping import (
     FieldMapping,
     ScalarRow,
     ordered_mapping,
+    parse_date_string,
     parse_unsplit_keywords,
     tag_keyword,
 )
@@ -214,6 +215,26 @@ def split_keywords(
         pieces = value.split(separator) if separator else [value]
         keywords.extend(tag_keyword(prefix, p.strip()) for p in pieces if p.strip())
     return record.model_copy(update={"keywords": keywords})
+
+
+def _format_date(date: PartialDate) -> str:
+    parts = (
+        (date.year, 4),
+        (date.month, 2),
+        (date.day, 2),
+    )
+    return "/".join("" if n is None else f"{n:0{width}d}" for n, width in parts)
+
+
+def clean_date(
+    record: Record, context: CleaningContext, options: CleaningOptions
+) -> Record:
+    if not record.publication_date:
+        return record
+    date = parse_date_string(record.publication_date, options.date_order)
+    if date is None:
+        return record
+    return record.model_copy(update={"publication_date": _format_date(date)})
 
 
 def id_from_name(
@@ -445,6 +466,7 @@ def _steps(options: CleaningOptions) -> list[tuple[bool, str, Step]]:
         (options.drop_et_al, 'Drop "et al."', drop_et_al),
         (options.drop_trailing, "Drop trailing", drop_trailing),
         (options.split_keywords, "Split keywords", split_keywords),
+        (options.clean_dates, "Clean up dates", clean_date),
         (options.strip_doi, "Strip DOI", strip_doi),
         (options.strip_pmid, "Strip PMID", strip_pmid),
         (options.strip_extras or options.only_one, "ISSN/ISBN", clean_issn_isbn),
