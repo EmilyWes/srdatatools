@@ -792,7 +792,7 @@ def test_render_mapping__scopus_ris_uses_profile_aliases(tmp_path: Path) -> None
     assert "TY" not in targets
 
 
-def test_import_file__pubmed_applies_profile_and_stores_source(
+def test_import_file__pubmed_stores_source_and_values_as_in_the_file(
     session: Session, tmp_path: Path
 ) -> None:
     nbib_path = tmp_path / "pubmed.nbib"
@@ -806,8 +806,8 @@ def test_import_file__pubmed_applies_profile_and_stores_source(
 
     assert source_file.source == "pubmed"
     record = session.query(Record).one()
-    assert record.title == "Original."
-    assert record.pages == "521-522"
+    assert record.title == "[Not Available]."
+    assert record.pages == "521-2"
 
 
 def test_import_file__pubmed_ris_imports_generically_and_stores_source(
@@ -1368,13 +1368,13 @@ def test_render_import_view__import_passes_parsing_choices(
         monkeypatch, tmp_path, lambda f, t, m, s, sh, q: calls.append(q)
     )
     assert view.quirks_screen is not None
-    view.quirks_screen.set_value("pages_set", False)
+    view.quirks_screen.set_value("label_maybe", "?!")
 
     view._import()
 
     [choices] = calls
-    assert not choices.pages_set
-    assert choices.drop_et_al
+    assert choices.label_maybe == "?!"
+    assert choices.label_include == ""
 
 
 def test_render_import_view__ordering_offers_keys_sharing_a_target(

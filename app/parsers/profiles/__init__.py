@@ -1,6 +1,6 @@
 from app.parsers.common import FileType
 from app.parsers.profiles.asreview import ASREVIEW
-from app.parsers.profiles.base import FormatProfile, Profile, apply_profile, fix_record
+from app.parsers.profiles.base import FormatProfile, Profile
 from app.parsers.profiles.default import DEFAULT_PROFILES
 from app.parsers.profiles.openalex import OPENALEX
 from app.parsers.profiles.pubmed import PUBMED
@@ -10,8 +10,6 @@ __all__ = [
     "PROFILES",
     "FormatProfile",
     "Profile",
-    "apply_profile",
-    "fix_record",
     "has_profile",
     "profile_for",
 ]

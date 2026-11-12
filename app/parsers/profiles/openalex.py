@@ -4,7 +4,6 @@ from io import StringIO
 from app.parsers.mapping import Suggest
 from app.parsers.profiles.base import FormatProfile, Profile, never_matches
 from app.parsers.profiles.default import (
-    default_quirks,
     default_row_defaults,
     default_settings,
 )
@@ -40,7 +39,6 @@ OPENALEX = Profile(
             matches=_matches_csv,
             settings=default_settings("csv"),
             row_defaults=default_row_defaults("csv", delimiter=_LIST_DELIMITER),
-            quirks=default_quirks("csv"),
             ignored_keys=frozenset(
                 {
                     "concept ids",
@@ -67,14 +65,12 @@ OPENALEX = Profile(
             matches=never_matches,
             settings=default_settings("ris"),
             row_defaults=default_row_defaults("ris"),
-            quirks=default_quirks("ris"),
         ),
         "bibtex": FormatProfile(
             suggestions={},
             matches=never_matches,
             settings=default_settings("bibtex"),
             row_defaults=default_row_defaults("bibtex", delimiter=","),
-            quirks=default_quirks("bibtex"),
         ),
     },
 )

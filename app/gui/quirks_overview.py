@@ -117,12 +117,12 @@ class QuirksScreen:
 
     def current_choices(self) -> ParsingChoices:
         values = {key: self._value(key) for key in self.widgets}
+        lists = {
+            "empty_values": [v for v in self.empty_values if v.strip()],
+            "use_first": list(self.use_first),
+        }
         return self.defaults.model_copy(
-            update={
-                **values,
-                "empty_values": [v for v in self.empty_values if v.strip()],
-                "use_first": list(self.use_first),
-            }
+            update={**values, **{key: lists[key] for key in self.lists}}
         )
 
     def set_value(self, key: str, value: Any) -> None:
@@ -144,10 +144,13 @@ class QuirksScreen:
     def restore_defaults(self) -> None:
         for key, widget in self.widgets.items():
             widget.value = getattr(self.defaults, key)
-        self.empty_values = list(self.defaults.empty_values)
-        self.use_first = list(self.defaults.use_first)
-        self._render_empty_values()
-        self.refresh_ordering()
+        defaults = self.defaults.model_dump()
+        self.empty_values = list(defaults.get("empty_values", []))
+        self.use_first = list(defaults.get("use_first", []))
+        if "empty_values" in self.lists:
+            self._render_empty_values()
+        if "use_first" in self.lists:
+            self.refresh_ordering()
 
     def _field(self, widget: _W, wide: bool = False) -> _W:
         if isinstance(widget, ui.checkbox):
@@ -362,12 +365,13 @@ def render_quirks_overview(
 ) -> QuirksScreen:
     """`chosen` shows a stored import's choices read-only."""
     shown = chosen or defaults
+    lists = shown.model_dump()
     screen = QuirksScreen(
         readonly=chosen is not None,
         defaults=defaults,
         current_mapping=current_mapping,
-        empty_values=list(shown.empty_values),
-        use_first=list(shown.use_first),
+        empty_values=list(lists.get("empty_values", [])),
+        use_first=list(lists.get("use_first", [])),
     )
     ui.add_css(FIELD_CSS)
     container.clear()

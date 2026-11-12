@@ -34,25 +34,16 @@ _CITATION_PARTS = re.compile(
 
 @dataclass(frozen=True)
 class ParseSettings:
-    issn_isbn_strip_extras: bool = False
-    issn_isbn_only_one: bool = False
-    preferred_issn_qualifier: str | None = None
     # Lowercased value -> decision; overrides the built-in spellings.
     label_values: tuple[tuple[str, LabelValue], ...] = ()
     # Python's csv limit is process-wide, so the parser sets it before each parse.
     csv_field_size_limit: int = 1_000_000
-    # Count as empty in any text field, so the next key mapped to it is used.
-    empty_values: tuple[str, ...] = ()
     use_first: tuple[str, ...] = ()
 
     # Cached: the lookups run for every field of every record.
     @cached_property
     def label_lookup(self) -> dict[str, LabelValue]:
         return dict(self.label_values)
-
-    @cached_property
-    def empty_lookup(self) -> frozenset[str]:
-        return frozenset(value.lower() for value in self.empty_values)
 
 
 NO_QUIRKS = ParseSettings()

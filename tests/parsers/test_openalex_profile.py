@@ -7,7 +7,6 @@ from app.models.record import Record
 from app.parsers.bibtex import parse_bibtex_text, suggest_bibtex_mapping
 from app.parsers.csv_ import parse_csv_text, suggest_mapping
 from app.parsers.mapping import FieldMapping
-from app.parsers.profiles import apply_profile
 from app.parsers.profiles.openalex import OPENALEX
 from app.parsers.ris import parse_ris_text, suggest_ris_mapping
 from tests.mappings import targets_of
@@ -36,11 +35,7 @@ def _csv_text(row: dict[str, str]) -> str:
 
 def _parse_csv(row: dict[str, str], mapping: FieldMapping | None = None) -> Record:
     mapping = mapping or _suggest_csv(list(row))
-    result = apply_profile(
-        parse_csv_text(_csv_text(row), mapping, settings=_CSV_PROFILE.settings),
-        _CSV_PROFILE,
-        mapping,
-    )
+    result = parse_csv_text(_csv_text(row), mapping, settings=_CSV_PROFILE.settings)
     return result.rows[0].record
 
 
@@ -190,18 +185,6 @@ def test_openalex_csv__prefixes_concept_and_topic_keywords() -> None:
     ]
 
 
-def test_openalex_csv__keeps_first_issn() -> None:
-    record = _parse_csv({"ISSN": "0028-0836|1476-4687"})
-
-    assert record.issn == "0028-0836"
-
-
-def test_openalex_csv__strips_pubmed_url_from_pmid() -> None:
-    record = _parse_csv({"PMID": "https://pubmed.ncbi.nlm.nih.gov/28332513"})
-
-    assert record.pmid == "28332513"
-
-
 def test_openalex_csv__work_id_goes_to_other_ids() -> None:
     record = _parse_csv({"Work ID": "W2601753892"})
 
@@ -223,13 +206,7 @@ def test_openalex_ris__joins_au_and_c1_lines() -> None:
     )
 
     record = (
-        apply_profile(
-            parse_ris_text(text, mapping, settings=_RIS_PROFILE.settings),
-            _RIS_PROFILE,
-            mapping,
-        )
-        .rows[0]
-        .record
+        parse_ris_text(text, mapping, settings=_RIS_PROFILE.settings).rows[0].record
     )
 
     assert record.author_names == "Baron, Matthew|Norman, David"
@@ -248,11 +225,7 @@ def test_openalex_bibtex__splits_keywords_on_comma() -> None:
         ["keywords"], _BIBTEX_PROFILE.suggestions, _BIBTEX_PROFILE.row_defaults
     )
 
-    result = apply_profile(
-        parse_bibtex_text(text, mapping, settings=_BIBTEX_PROFILE.settings),
-        _BIBTEX_PROFILE,
-        mapping,
-    )
+    result = parse_bibtex_text(text, mapping, settings=_BIBTEX_PROFILE.settings)
 
     assert result.rows[0].record.keywords == ["dinosaur phylogeny", "Ornithischia"]
 

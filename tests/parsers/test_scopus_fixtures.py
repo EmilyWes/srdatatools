@@ -12,7 +12,6 @@ from app.parsers.bibtex import (
 from app.parsers.common import FileType, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
 from app.parsers.detect import detect_source
-from app.parsers.profiles import apply_profile
 from app.parsers.profiles.scopus import SCOPUS
 from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
 from tests.vendor_data import vendor_file, vendor_files
@@ -35,27 +34,28 @@ def _parse(path: Path, file_format: FileType) -> ParseResult:
         mapping = suggest_mapping(
             headers, profile.suggestions, profile.row_defaults, profile.ignored_keys
         )
-        return apply_profile(
-            parse_csv_file(path, mapping, settings=profile.settings), profile, mapping
-        )
+        return parse_csv_file(path, mapping, settings=profile.settings)
     if file_format == "ris":
         tags = list(read_ris_tags(path).samples)
         mapping = suggest_ris_mapping(tags, profile.suggestions, profile.row_defaults)
-        return apply_profile(
-            parse_ris_file(path, mapping, settings=profile.settings), profile, mapping
-        )
+        return parse_ris_file(path, mapping, settings=profile.settings)
     keys = list(read_bibtex_fields(path).samples)
     mapping = suggest_bibtex_mapping(keys, profile.suggestions, profile.row_defaults)
-    return apply_profile(
-        parse_bibtex_file(path, mapping, settings=profile.settings), profile, mapping
-    )
+    return parse_bibtex_file(path, mapping, settings=profile.settings)
 
 
-def _records_by_eid(suffix: str) -> dict[str, Record]:
+def _records(suffix: str) -> list[Record]:
     result = _parse(vendor_file("scopus", "small", suffix), _FORMAT_BY_SUFFIX[suffix])
     assert result.skipped == []
     assert len(result.rows) == 10
-    return {row.record.other_ids["eid"]: row.record for row in result.rows}
+    return [row.record for row in result.rows]
+
+
+def _records_by_eid(suffix: str) -> dict[str, Record]:
+    """Only the CSV has an EID column; the exports list the records in the same
+    order."""
+    eids = [record.other_ids["eid"] for record in _records(".csv")]
+    return dict(zip(eids, _records(suffix), strict=True))
 
 
 @pytest.fixture
@@ -80,19 +80,20 @@ def test_scopus_small__detects_scopus_source(suffix: str) -> None:
     assert detect_source(path, _FORMAT_BY_SUFFIX[suffix]) == "scopus"
 
 
-def test_scopus_small_csv__cleans_author_columns(
+def test_scopus_small_csv__keeps_author_columns_as_in_the_file(
     csv_records: dict[str, Record],
 ) -> None:
     record = csv_records[_NODOSAUR_EID]
     ids = parse_author_ids(record.author_ids)
 
-    assert (record.author_names or "").startswith("Oyabu, Shumpei; ")
+    assert (record.author_names or "").startswith("Oyabu, Shumpei (60900075400); ")
     assert ids[0] == ["scopus_author_id:60900075400"]
     assert all(ids)
     assert len(ids) == len((record.author_names or "").split(";"))
     assert (record.author_affiliations or "").startswith(
-        "Department of Natural History and Planetary Sciences, Hokkaido University, "
-        "Kita 10, Nishi 8, Kita-ku, Hokkaido, Sapporo, 060-0810, Japan;"
+        "Oyabu S., Department of Natural History and Planetary Sciences, "
+        "Hokkaido University, Kita 10, Nishi 8, Kita-ku, Hokkaido, Sapporo, "
+        "060-0810, Japan;"
     )
 
 
@@ -105,23 +106,20 @@ def test_scopus_small_csv__prefixes_author_keywords(
     assert "Balancing" in keywords
 
 
-def test_scopus_small_ris__applies_profile_fixes(
+def test_scopus_small_ris__keeps_values_as_in_the_file(
     ris_records: dict[str, Record],
 ) -> None:
     hummingbird = ris_records[_HUMMINGBIRD_EID]
     assert hummingbird.pmid == "32161388"
-    assert hummingbird.issn == "00280836"
+    assert hummingbird.issn == "00280836 (ISSN)"
     assert hummingbird.publication_type == "Retracted"
     conference = ris_records[_CONFERENCE_EID]
-    assert conference.isbn == "979-840072171-7"
+    assert conference.isbn == "979-840072171-7 (ISBN)"
     assert conference.issn is None
-    assert conference.conference_name == (
-        "5th International Conference on Computer, Artificial Intelligence and "
-        "Control Engineering, CAICE 2026"
-    )
+    assert conference.conference_name is None
 
 
-def test_scopus_small_bibtex__applies_profile_fixes(
+def test_scopus_small_bibtex__keeps_values_as_in_the_file(
     bibtex_records: dict[str, Record],
 ) -> None:
     hummingbird = bibtex_records[_HUMMINGBIRD_EID]

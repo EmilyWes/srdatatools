@@ -102,35 +102,6 @@ def test_apply_mapping__first_non_empty_value_wins_for_scalar() -> None:
     assert record.title == "First"
 
 
-def test_apply_mapping__empty_values_use_next_mapped_key() -> None:
-    mapping = mapping_of({"TI": "title", "TT": "title"})
-    settings = ParseSettings(empty_values=("[Not Available].",))
-    raw = {"TI": " [not available]. ", "TT": "Translated"}
-
-    assert apply_mapping(raw, mapping, settings).title == "Translated"
-    assert apply_mapping({"TI": "[Not Available]."}, mapping, settings).title is None
-
-
-def test_apply_mapping__empty_values_apply_to_every_text_field() -> None:
-    mapping = mapping_of({"TI": "title", "JO": "journal", "DO": "doi"})
-    settings = ParseSettings(empty_values=("n/a",))
-
-    record = apply_mapping(
-        {"TI": "N/A", "JO": "n/a", "DO": "10.1/x"}, mapping, settings
-    )
-
-    assert (record.title, record.journal, record.doi) == (None, None, "10.1/x")
-
-
-def test_apply_mapping__empty_values_match_the_whole_value() -> None:
-    mapping = mapping_of({"TI": "title"})
-    settings = ParseSettings(empty_values=("[Not Available].",))
-
-    record = apply_mapping({"TI": "[Not Available]. A title"}, mapping, settings)
-
-    assert record.title == "[Not Available]. A title"
-
-
 def test_apply_mapping__use_first_reads_chosen_keys_first_in_listed_order() -> None:
     mapping = mapping_of({"A": "title", "B": "title", "C": "title"})
     raw = {"A": "a", "B": "b", "C": "c"}
@@ -261,144 +232,42 @@ def test_apply_mapping__issn_isbn_routes_isbn(value: str) -> None:
     assert (record.issn, record.isbn) == (None, value)
 
 
-_ONLY_ONE = ParseSettings(issn_isbn_only_one=True)
-_STRIP = ParseSettings(issn_isbn_strip_extras=True)
-_BOTH = ParseSettings(issn_isbn_strip_extras=True, issn_isbn_only_one=True)
-
-
-def test_apply_mapping__issn_isbn_splits_issn_and_isbn() -> None:
-    record = apply_mapping({"SN": "1234-5678; 9783161484100"}, _SN, _BOTH)
-
-    assert (record.issn, record.isbn) == ("1234-5678", "9783161484100")
-
-
-@pytest.mark.parametrize(
-    "value", ["1234-5678 8765-4321", "1234-5678|8765-4321", "1234-5678\n8765-4321"]
-)
-def test_apply_mapping__issn_isbn_only_one_keeps_first_value(value: str) -> None:
-    assert apply_mapping({"SN": value}, _SN, _BOTH).issn == "1234-5678"
-
-
-def test_apply_mapping__issn_isbn_strip_extras_keeps_all_values_without_only_one() -> (
-    None
-):
-    value = "1234-5678 (electronic), 9123-4567 (print)"
-
-    record = apply_mapping({"SN": value}, _SN, _STRIP)
-
-    assert record.issn == "1234-5678; 9123-4567"
-
-
-def test_apply_mapping__issn_isbn_both_off_keeps_raw_value() -> None:
+def test_apply_mapping__issn_isbn_keeps_the_whole_value() -> None:
     value = "1234-5678 (electronic), 9123-4567 (print)"
 
     assert apply_mapping({"SN": value}, _SN).issn == value
 
 
-def test_apply_mapping__issn_isbn_only_one_without_strip_keeps_qualifier() -> None:
-    value = "1234-5678 (electronic), 9123-4567 (print)"
+def test_apply_mapping__issn_isbn_auto_goes_by_first_valid_number() -> None:
+    value = "12345 (x), 979-840072171-7 (ISBN); 1234-5678"
 
-    assert apply_mapping({"SN": value}, _SN, _ONLY_ONE).issn == (
-        "1234-5678 (electronic)"
-    )
+    record = apply_mapping({"SN": value}, _SN)
+
+    assert (record.issn, record.isbn) == (None, value)
 
 
 def test_apply_mapping__issn_isbn_unrecognised_value_goes_to_issn_and_warns(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     with caplog.at_level("WARNING"):
-        record = apply_mapping({"SN": "12345"}, _SN, _BOTH)
+        record = apply_mapping({"SN": "12345"}, _SN)
 
     assert (record.issn, record.isbn) == ("12345", None)
     assert "12345" in caplog.text
 
 
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        ("23330937 (ISSN)", ("23330937", None)),
-        ("979-840072171-7 (ISBN)", (None, "979-840072171-7")),
-        ("(Print) 1234-5678", ("1234-5678", None)),
-    ],
-)
-def test_apply_mapping__issn_isbn_strip_extras_drops_qualifier(
-    value: str,
-    expected: tuple[str | None, str | None],
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    with caplog.at_level("WARNING"):
-        record = apply_mapping({"SN": value}, _SN, _STRIP)
-
-    assert (record.issn, record.isbn) == expected
-    assert caplog.text == ""
-
-
-def test_apply_mapping__issn_isbn_both_off_routes_raw_value_by_its_first_id() -> None:
-    record = apply_mapping({"SN": "979-840072171-7 (ISBN)"}, _SN)
-
-    assert (record.issn, record.isbn) == (None, "979-840072171-7 (ISBN)")
-
-
 def test_apply_mapping__issn_isbn_empty_value_sets_nothing() -> None:
-    record = apply_mapping({"SN": "  "}, _SN, _BOTH)
+    record = apply_mapping({"SN": "  "}, _SN)
 
     assert (record.issn, record.isbn) == (None, None)
 
 
 @pytest.mark.parametrize("kind", ["issn", "isbn"])
-def test_apply_mapping__fixed_kind_takes_first_id_whatever_its_length(
-    kind: str,
-) -> None:
+def test_apply_mapping__fixed_kind_keeps_the_whole_value(kind: str) -> None:
     mapping = mapping_of({"X": Suggest("issn_isbn", {"kind": kind})})
+    value = "12345; 9783161484100; 1234-5678"
 
-    record = apply_mapping({"X": "12345; 9783161484100; 1234-5678"}, mapping, _BOTH)
-
-    assert getattr(record, kind) == "9783161484100"
-
-
-def test_apply_mapping__fixed_kind_unrecognised_value_is_kept() -> None:
-    mapping = mapping_of({"ISSN": Suggest("issn_isbn", {"kind": "issn"})})
-
-    assert apply_mapping({"ISSN": "12345"}, mapping, _BOTH).issn == "12345"
-
-
-_IS_LINES = "1234-5678 (Print)\n8765-4321 (Electronic)\n1234-5678 (Linking)"
-_IS = mapping_of({"IS": Suggest("issn_isbn", {"kind": "issn"})})
-
-
-@pytest.mark.parametrize("preferred", ["Electronic", "electronic", " ELECTRONIC "])
-def test_apply_mapping__preferred_qualifier_value_wins(preferred: str) -> None:
-    settings = ParseSettings(
-        issn_isbn_strip_extras=True,
-        issn_isbn_only_one=True,
-        preferred_issn_qualifier=preferred,
-    )
-
-    assert apply_mapping({"IS": _IS_LINES}, _IS, settings).issn == "8765-4321"
-
-
-def test_apply_mapping__without_preferred_qualifier_first_value_wins() -> None:
-    assert apply_mapping({"IS": _IS_LINES}, _IS, _BOTH).issn == "1234-5678"
-
-
-def test_apply_mapping__unmatched_preferred_qualifier_keeps_first_value() -> None:
-    settings = ParseSettings(
-        issn_isbn_strip_extras=True,
-        issn_isbn_only_one=True,
-        preferred_issn_qualifier="Online",
-    )
-
-    assert apply_mapping({"IS": _IS_LINES}, _IS, settings).issn == "1234-5678"
-
-
-def test_apply_mapping__preferred_qualifier_is_ignored_without_only_one() -> None:
-    settings = ParseSettings(
-        issn_isbn_strip_extras=True, preferred_issn_qualifier="Electronic"
-    )
-
-    assert apply_mapping({"IS": _IS_LINES}, _IS, settings).issn == (
-        "1234-5678; 8765-4321; 1234-5678"
-    )
+    assert getattr(apply_mapping({"X": value}, mapping), kind) == value
 
 
 @pytest.mark.parametrize(
@@ -636,15 +505,6 @@ def test_apply_mapping__first_non_empty_name_column_wins() -> None:
     record = apply_mapping({"Full": "", "Short": "Teng Y.; Han Y."}, mapping)
 
     assert record.author_names == "Teng Y.; Han Y."
-
-
-def test_apply_mapping__empty_values_apply_to_author_names() -> None:
-    mapping = mapping_of({"A": "authors", "B": "authors"})
-    settings = ParseSettings(empty_values=("n/a",))
-
-    record = apply_mapping({"A": "N/A", "B": "Doe J"}, mapping, settings)
-
-    assert record.author_names == "Doe J"
 
 
 def test_apply_mapping__unmapped_author_columns_are_not_read() -> None:
