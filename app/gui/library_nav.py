@@ -14,6 +14,7 @@ _TABLE_KEY = "library:table"
 _ABOUT_KEY = "about"
 _HELP_KEY = "help"
 _HEADING_CLASSES = "w-44 text-xs text-grey-6 pt-1 text-center"
+_FILE_LIST_CLASSES = "w-full items-center flex-grow min-h-0 overflow-y-auto no-wrap"
 
 
 @dataclass
@@ -116,19 +117,20 @@ def render_left_panel(
             ui.separator()
             ui.label("Imported files").classes(_HEADING_CLASSES)
 
-        for source_file in source_files:
-            key = f"source_file:{source_file.id}"
-            button = (
-                ui.button(source_file.filename, color=None)
-                .classes("w-44 text-xs source-file-btn")
-                .props("dense")
-            )
-            button.on_click(lambda key=key: nav.select(key))
-            nav.buttons[key] = button
-            if on_source_file is not None:
-                nav.views[key] = partial(on_source_file, source_file.id)
+        # Fills the space above About/Help and scrolls when the files don't fit.
+        with ui.column().classes(_FILE_LIST_CLASSES):
+            for source_file in source_files:
+                key = f"source_file:{source_file.id}"
+                button = (
+                    ui.button(source_file.filename, color=None)
+                    .classes("w-44 text-xs source-file-btn")
+                    .props("dense")
+                )
+                button.on_click(lambda key=key: nav.select(key))
+                nav.buttons[key] = button
+                if on_source_file is not None:
+                    nav.views[key] = partial(on_source_file, source_file.id)
 
-        ui.space()
         with ui.column().classes("items-center gap-2 pb-4"):
             for key, text in ((_ABOUT_KEY, "About"), (_HELP_KEY, "Help")):
                 button = (

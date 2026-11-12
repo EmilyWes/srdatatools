@@ -92,14 +92,12 @@ def render_right_panel(
                     else:
                         button.disable()
                         button.tooltip("Not implemented yet")
-        with ui.column().classes("w-full px-2 gap-1"):
+        # The log takes the height left over, so Delete library stays in view.
+        with ui.column().classes("w-full px-2 gap-1 flex-grow min-h-0 no-wrap"):
             ui.label("Activity log").classes("text-xs text-grey-7")
-            log = (
-                ui.column()
-                .classes(
-                    "w-full gap-2 p-2 text-xs no-wrap overflow-auto border rounded"
-                )
-                .style("height: 40vh")
+            log = ui.column().classes(
+                "w-full flex-grow min-h-0 gap-2 p-2 text-xs no-wrap overflow-auto"
+                " border rounded"
             )
             with ui.row().classes("w-full justify-end"):
                 ui.button("Clear log", color=None, on_click=on_clear_log).props(

@@ -55,8 +55,11 @@ def test_render_left_panel__adds_one_entry_per_source_file() -> None:
     nav = render_left_panel(panes.left, source_files)
 
     # Import, sep, "Library" label, Overview, Table row, sep, "Imported files" label,
-    # source_file:1, source_file:2, space, About/Help
-    assert len(panes.left.default_slot.children) == 11
+    # scrolling list with source_file:1 and source_file:2, About/Help
+    assert len(panes.left.default_slot.children) == 9
+    file_list = panes.left.default_slot.children[-2]
+    assert len(file_list.default_slot.children) == 2
+    assert {"flex-grow", "overflow-y-auto"} <= set(file_list.classes)
     assert list(nav.buttons) == [
         "import",
         "library:overview",
