@@ -34,9 +34,15 @@ def test_render_left_panel__adds_import_and_library_with_no_source_files() -> No
 
     nav = render_left_panel(panes.left, [])
 
-    # Import, separator, "Library" label, Overview, Table row
-    assert len(panes.left.default_slot.children) == 5
-    assert list(nav.buttons) == ["import", "library:overview", "library:table"]
+    # Import, separator, "Library" label, Overview, Table row, space, About/Help
+    assert len(panes.left.default_slot.children) == 7
+    assert list(nav.buttons) == [
+        "import",
+        "library:overview",
+        "library:table",
+        "about",
+        "help",
+    ]
 
 
 def test_render_left_panel__adds_one_entry_per_source_file() -> None:
@@ -49,14 +55,16 @@ def test_render_left_panel__adds_one_entry_per_source_file() -> None:
     nav = render_left_panel(panes.left, source_files)
 
     # Import, sep, "Library" label, Overview, Table row, sep, "Imported files" label,
-    # source_file:1, source_file:2
-    assert len(panes.left.default_slot.children) == 9
+    # source_file:1, source_file:2, space, About/Help
+    assert len(panes.left.default_slot.children) == 11
     assert list(nav.buttons) == [
         "import",
         "library:overview",
         "library:table",
         "source_file:1",
         "source_file:2",
+        "about",
+        "help",
     ]
 
 
@@ -252,3 +260,20 @@ def test_render_left_panel__overview_gear_opens_settings_and_highlights() -> Non
     assert nav.selected_key == "library:overview"
     assert _SELECTED_CLASS in nav.buttons["library:overview"].classes
     assert _SELECTED_CLASS not in nav.buttons["library:table"].classes
+
+
+@pytest.mark.parametrize("key", ["about", "help"])
+def test_render_left_panel__about_and_help_open_their_view(key: str) -> None:
+    panes = shell()
+    opened: list[str] = []
+    nav = render_left_panel(
+        panes.left,
+        [],
+        on_about=lambda: opened.append("about"),
+        on_help=lambda: opened.append("help"),
+    )
+
+    nav.select(key)
+
+    assert opened == [key]
+    assert _SELECTED_CLASS in nav.buttons[key].classes

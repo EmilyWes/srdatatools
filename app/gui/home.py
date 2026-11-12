@@ -38,6 +38,7 @@ from app.export.options import (
     reset_options,
     save_options,
 )
+from app.gui.about import render_about_view, render_help_view
 from app.gui.action_panel import render_right_panel
 from app.gui.busy import run_busy
 from app.gui.export_flow import render_export_view
@@ -248,6 +249,8 @@ def home() -> None:
                 on_table=show_table,
                 on_table_settings=show_table_settings,
                 on_source_file=show_source_file,
+                on_about=lambda: render_about_view(panes.middle),
+                on_help=lambda: render_help_view(panes.middle),
             )
         nav.select(select_key)
         refresh_log()

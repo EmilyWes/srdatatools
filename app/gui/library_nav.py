@@ -11,6 +11,8 @@ _SELECTED_CLASS = "bg-blue-100"
 _IMPORT_KEY = "import"
 _OVERVIEW_KEY = "library:overview"
 _TABLE_KEY = "library:table"
+_ABOUT_KEY = "about"
+_HELP_KEY = "help"
 _HEADING_CLASSES = "w-44 text-xs text-grey-6 pt-1 text-center"
 
 
@@ -45,6 +47,8 @@ def render_left_panel(
     on_table: Callable[[], Awaitable[None] | None] | None = None,
     on_table_settings: Callable[[], Awaitable[None] | None] | None = None,
     on_source_file: Callable[[int], Awaitable[None] | None] | None = None,
+    on_about: Callable[[], Awaitable[None] | None] | None = None,
+    on_help: Callable[[], Awaitable[None] | None] | None = None,
 ) -> LeftPanelNav:
     nav = LeftPanelNav()
     ui.add_css(
@@ -68,6 +72,10 @@ def render_left_panel(
         nav.views[_OVERVIEW_KEY] = on_overview
     if on_table is not None:
         nav.views[_TABLE_KEY] = on_table
+    if on_about is not None:
+        nav.views[_ABOUT_KEY] = on_about
+    if on_help is not None:
+        nav.views[_HELP_KEY] = on_help
 
     left.clear()
     with left:
@@ -119,5 +127,14 @@ def render_left_panel(
             nav.buttons[key] = button
             if on_source_file is not None:
                 nav.views[key] = partial(on_source_file, source_file.id)
+
+        ui.space()
+        with ui.column().classes("items-center gap-2 pb-4"):
+            for key, text in ((_ABOUT_KEY, "About"), (_HELP_KEY, "Help")):
+                button = (
+                    ui.button(text, color=None).classes("w-44 text-sm").props("dense")
+                )
+                button.on_click(lambda key=key: nav.select(key))
+                nav.buttons[key] = button
 
     return nav
