@@ -25,6 +25,9 @@ _SUGGESTION_CUTOFF = 0.7
 _ID_HEADER = re.compile(r"(?<![A-Za-z])[Ii][Dd](?![A-Za-z])|[A-Z]ID(?![A-Za-z])")
 
 _TAGGED_KEYWORD = re.compile(r"\[([^\]]+)\] (.*)", re.DOTALL)
+_UNSPLIT_KEYWORDS = re.compile(r"(?P<key>[^:\[\]]+):\[(?P<value>.*)\]", re.DOTALL)
+# The key of unsplit keywords without a prefix.
+UNPREFIXED_KEYWORDS_KEY = "keywords"
 
 _MONTH_ABBREVIATIONS = {
     "jan": 1,
@@ -136,7 +139,6 @@ class KeywordsRow(BaseModel):
     split the prefix off again."""
 
     target: Literal["keywords"] = "keywords"
-    delimiter: str
     prefix: str = ""
 
     @field_validator("prefix")
@@ -144,13 +146,29 @@ class KeywordsRow(BaseModel):
     def strip_brackets(cls, value: str) -> str:
         return value.strip().removeprefix("[").removesuffix("]").strip()
 
-    def tagged(self, keyword: str) -> str:
-        return f"[{self.prefix}] {keyword}" if self.prefix else keyword
+
+def tag_keyword(prefix: str, keyword: str) -> str:
+    return f"[{prefix}] {keyword}" if prefix else keyword
 
 
 def split_keyword(keyword: str) -> tuple[str | None, str]:
     match = _TAGGED_KEYWORD.fullmatch(keyword)
     return (match[1], match[2]) if match else (None, keyword)
+
+
+def unsplit_keywords(prefix: str, value: str) -> str:
+    """A column holding all of a record's keywords, stored as "prefix:[value]"
+    until cleaning splits it."""
+    return f"{prefix or UNPREFIXED_KEYWORDS_KEY}:[{value}]"
+
+
+def parse_unsplit_keywords(keyword: str) -> tuple[str, str] | None:
+    """The prefix ("" for none) and the unsplit value."""
+    match = _UNSPLIT_KEYWORDS.fullmatch(keyword)
+    if match is None:
+        return None
+    key = match["key"]
+    return ("" if key == UNPREFIXED_KEYWORDS_KEY else key), match["value"]
 
 
 class LabelRow(BaseModel):
@@ -198,7 +216,6 @@ class FieldMapping(BaseModel):
 
 @dataclass(frozen=True)
 class RowDefaults:
-    delimiter: str = ";"
     date_order: DateOrder = "eu"
 
 
@@ -227,7 +244,7 @@ def default_row(target: str, key: str, defaults: RowDefaults) -> RowMapping:
     if target == AUTHORS_TARGET:
         return AuthorsRow(id_key=default_other_id_key(key))
     if target == KEYWORDS_TARGET:
-        return KeywordsRow(delimiter=defaults.delimiter)
+        return KeywordsRow()
     if target == LABEL_TARGET:
         return LabelRow()
     if target in SCALAR_FIELDS:
@@ -298,10 +315,6 @@ def _classify_issn_isbn(row: IssnIsbnRow, value: str) -> str:
             return "isbn"
     logger.warning("Value %r is neither an ISSN nor an ISBN", value)
     return "issn"
-
-
-def _split_list(value: str, delimiter: str) -> list[str]:
-    return [piece.strip() for piece in value.split(delimiter) if piece.strip()]
 
 
 def _parse_int_field(value: str, field_name: str) -> int | None:
@@ -458,9 +471,7 @@ def apply_mapping(
         elif isinstance(row, OtherIdRow):
             other_ids[row.key] = value
         elif isinstance(row, KeywordsRow):
-            keywords.extend(
-                row.tagged(keyword) for keyword in _split_list(value, row.delimiter)
-            )
+            keywords.append(unsplit_keywords(row.prefix, value))
         elif isinstance(row, AuthorsRow):
             if row.role == "ids":
                 author_ids.append(unsplit_author_ids(row.id_key, value))
@@ -502,7 +513,7 @@ def apply_line_mapping(
 ) -> Record:
     """The kept name and affiliation lines are joined with AUTHOR_JOINER; the ids
     come from the lines in order, so each stays with its author line rather than
-    being matched by position."""
+    being matched by position. Each keyword line is a keyword."""
     author_rows = dict(mapping.rows_of(AuthorsRow))
     kept, author_ids = author_lines(lines, author_rows)
     joined = {
@@ -510,17 +521,26 @@ def apply_line_mapping(
         for tag, row in author_rows.items()
         if row.role != "ids"
     }
-    without_ids = {
+    keywords = [
+        tag_keyword(row.prefix, line.strip())
+        for key, row in mapping.rows_of(KeywordsRow)
+        for line in (raw_fields.get(key) or "").splitlines()
+        if line.strip()
+    ]
+    rest = {
         key: row
         for key, row in mapping.rows.items()
-        if not (isinstance(row, AuthorsRow) and row.role == "ids")
+        if not isinstance(row, KeywordsRow)
+        and not (isinstance(row, AuthorsRow) and row.role == "ids")
     }
     record = apply_mapping(
         {**raw_fields, **joined},
-        mapping.model_copy(update={"rows": without_ids}),
+        mapping.model_copy(update={"rows": rest}),
         settings,
     )
-    return record.model_copy(update={"author_ids": format_author_ids(author_ids)})
+    return record.model_copy(
+        update={"author_ids": format_author_ids(author_ids), "keywords": keywords}
+    )
 
 
 def override_aliases(

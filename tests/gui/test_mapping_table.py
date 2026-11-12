@@ -15,7 +15,6 @@ from app.parsers.mapping import (
     AuthorsRow,
     DateRow,
     FieldMapping,
-    KeywordsRow,
     LabelRow,
     OtherIdRow,
     PagesRow,
@@ -193,20 +192,12 @@ def test_render_mapping_table__other_id_key_defaults_to_slug_and_is_editable() -
 
 
 def test_render_mapping_table__empty_text_box_uses_placeholder() -> None:
-    screen = _render(["Keywords"])
+    screen = _render(["included"])
 
-    screen.set_option("Keywords", "delimiter", "|")
-    screen.set_option("Keywords", "delimiter", "")
+    screen.set_option("included", "phase", "tiab")
+    screen.set_option("included", "phase", "")
 
-    assert screen.current_mapping().rows == {"Keywords": KeywordsRow(delimiter=";")}
-
-
-def test_render_mapping_table__delimiter_keeps_spaces() -> None:
-    screen = _render(["Keywords"])
-
-    screen.set_option("Keywords", "delimiter", " ")
-
-    assert screen.current_mapping().rows == {"Keywords": KeywordsRow(delimiter=" ")}
+    assert screen.current_mapping().rows == {"included": LabelRow()}
 
 
 def test_render_mapping_table__typed_prefix_loses_brackets_and_spaces() -> None:
@@ -234,14 +225,6 @@ def test_render_mapping_table__only_author_ids_show_id_key() -> None:
     assert _visible_options(screen, "Authors") == ["role", "id_key"]
     screen.set_option("Authors", "role", "affiliations")
     assert _visible_options(screen, "Authors") == ["role"]
-
-
-def test_render_mapping_table__one_value_per_line_hides_delimiter() -> None:
-    screen = _render_ris(["AU", "KW"])
-
-    assert _visible_options(screen, "AU") == ["role"]
-    assert _visible_options(screen, "KW") == ["prefix"]
-    assert screen.current_mapping().rows["KW"] == KeywordsRow(delimiter="\n")
 
 
 def test_render_mapping_table__switching_target_back_restores_suggested_options() -> (
@@ -540,16 +523,19 @@ def test_render_mapping_table__chosen_options_are_kept() -> None:
 
 def test_render_mapping_table__chosen_mapping_is_readonly_and_shows_values() -> None:
     chosen = mapping_of(
-        {"Date": Suggest("date", {"part": "year"}), "Keywords": "keywords"}
+        {
+            "Date": Suggest("date", {"part": "year"}),
+            "Keywords": Suggest("keywords", {"prefix": "MeSH"}),
+        }
     )
 
     screen = _render_chosen(["Date", "Keywords"], chosen)
 
     assert "readonly" in screen._row_for("Date").select.props
     assert "readonly" in screen._row_for("Date").inputs["part"].props
-    delimiter = _input(screen, "Keywords", "delimiter")
-    assert "readonly" in delimiter.props
-    assert delimiter.value == ";"
+    prefix = _input(screen, "Keywords", "prefix")
+    assert "readonly" in prefix.props
+    assert prefix.value == "MeSH"
 
 
 def test_render_mapping_table__label_rows_show_phase_and_screener() -> None:
@@ -624,26 +610,19 @@ def test_render_mapping_table__changed_option_turns_blue_and_back() -> None:
 
 
 def test_render_mapping_table__typing_the_placeholder_is_not_a_change() -> None:
-    screen = _render_samples({"Keywords": "a; b"})
+    screen = _render_samples({"included": "yes"})
 
-    screen.set_option("Keywords", "delimiter", ";")
+    screen.set_option("included", "phase", "ft")
 
-    assert _option_color(screen, "Keywords", "delimiter") == "green-2"
-
-
-def test_render_mapping_table__separators_missing_from_example_are_orange() -> None:
-    screen = _render_samples({"Keywords": "a, b"})
-
-    assert _option_color(screen, "Keywords", "delimiter") == "orange-2"
-    assert _option_color(screen, "Keywords", "prefix") == "green-2"
+    assert _option_color(screen, "included", "phase") == "green-2"
 
 
 def test_render_mapping_table__changed_option_beats_orange() -> None:
-    screen = _render_samples({"Keywords": "a, b"})
+    screen = _render_samples({"Date": "03/04/2020"})
 
-    screen.set_option("Keywords", "delimiter", ",")
+    screen.set_option("Date", "order", "us")
 
-    assert _option_color(screen, "Keywords", "delimiter") == "blue-2"
+    assert _option_color(screen, "Date", "order") == "blue-2"
 
 
 def test_render_mapping_table__ambiguous_example_date_makes_order_orange() -> None:
@@ -655,6 +634,6 @@ def test_render_mapping_table__ambiguous_example_date_makes_order_orange() -> No
 
 
 def test_render_mapping_table__empty_example_gives_no_orange() -> None:
-    screen = _render(["Keywords"])
+    screen = _render(["Date"])
 
-    assert _option_color(screen, "Keywords", "delimiter") == "green-2"
+    assert _option_color(screen, "Date", "order") == "green-2"

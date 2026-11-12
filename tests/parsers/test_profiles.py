@@ -2,7 +2,6 @@ from app.parsers.mapping import RowDefaults
 from app.parsers.profiles import has_profile, profile_for
 from app.parsers.profiles.default import (
     DEFAULT_PROFILES,
-    default_row_defaults,
     default_settings,
 )
 from app.parsers.profiles.pubmed import PUBMED
@@ -44,12 +43,6 @@ def test_default_settings__overrides_the_type_default() -> None:
 
 def test_default_profiles__use_each_types_row_defaults() -> None:
     assert DEFAULT_PROFILES["csv"].row_defaults == RowDefaults()
-    assert DEFAULT_PROFILES["ris"].row_defaults == RowDefaults(delimiter="\n")
-    assert DEFAULT_PROFILES["nbib"].row_defaults == RowDefaults(delimiter="\n")
+    assert DEFAULT_PROFILES["ris"].row_defaults == RowDefaults()
+    assert DEFAULT_PROFILES["nbib"].row_defaults == RowDefaults()
     assert DEFAULT_PROFILES["bibtex"].row_defaults == RowDefaults()
-
-
-def test_default_row_defaults__overrides_the_type_default() -> None:
-    defaults = default_row_defaults("ris", delimiter=",")
-
-    assert defaults == RowDefaults(delimiter=",")

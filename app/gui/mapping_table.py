@@ -12,7 +12,6 @@ from app.parsers.mapping import (
     ISSN_ISBN_TARGET,
     KEYWORDS_TARGET,
     LABEL_TARGET,
-    LINE_DELIMITER,
     OTHER_IDS_TARGET,
     PAGES_TARGET,
     TARGETS,
@@ -64,8 +63,6 @@ class _Option:
     short: str
     label: str
     choices: dict[str, str] | None = None
-    # Delimiters and separators may be or end in a space.
-    strip: bool = True
 
 
 _OPTION_ROW_CLASSES = "w-full no-wrap items-center gap-1"
@@ -122,10 +119,7 @@ _OPTIONS: dict[str, tuple[_Option, ...]] = {
         ),
         _Option("id_key", "key", "ID key"),
     ),
-    KEYWORDS_TARGET: (
-        _Option("delimiter", "sep", "Delimiter", strip=False),
-        _Option("prefix", "pre", "Prefix"),
-    ),
+    KEYWORDS_TARGET: (_Option("prefix", "pre", "Prefix"),),
     LABEL_TARGET: (
         _Option("phase", "phase", "Phase"),
         _Option("screener", "scr", "Screener"),
@@ -138,18 +132,12 @@ def _shows_option(row: RowMapping, name: str) -> bool:
         return row.part == "full"
     if isinstance(row, AuthorsRow) and name == "id_key":
         return row.role == "ids"
-    if name == "delimiter":
-        delimiter: str = getattr(row, name)
-        return delimiter != LINE_DELIMITER
     return True
 
 
 def _needs_a_look(row: RowMapping, name: str, sample: str) -> bool:
     if not sample:
         return False
-    if name == "delimiter":
-        delimiter: str = getattr(row, name)
-        return delimiter not in sample
     if isinstance(row, DateRow) and name == "order":
         return is_ambiguous_date(sample)
     return False
@@ -346,7 +334,7 @@ class MappingScreen:
         if row.base is None:
             return None
         options = {
-            option.name: _option_value(option, row.inputs[option.name].value)
+            option.name: row.inputs[option.name].value.strip()
             for option in _OPTIONS.get(row.base.target, ())
             if option.name in row.inputs
         }
@@ -358,10 +346,6 @@ class MappingScreen:
         return FieldMapping(
             rows={header: row for header, row in rows.items() if row is not None}
         )
-
-
-def _option_value(option: _Option, value: str) -> str:
-    return value.strip() if option.strip else value
 
 
 def render_mapping_table(

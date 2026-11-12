@@ -15,7 +15,6 @@ from app.parsers.common import (
     parse_or_skip,
 )
 from app.parsers.mapping import (
-    LINE_DELIMITER,
     AuthorsRow,
     FieldMapping,
     RowDefaults,
@@ -60,7 +59,7 @@ _SUGGESTIONS: dict[str, Suggest] = {
     "y1": Suggest("date"),
     "an": Suggest("other_ids"),
 }
-ROW_DEFAULTS = RowDefaults(delimiter=LINE_DELIMITER)
+ROW_DEFAULTS = RowDefaults()
 
 _TAG_LINE = re.compile(r"^(?P<tag>[A-Z][A-Z0-9])  -(?: (?P<value>.*))?$")
 _END_TAG = "ER"

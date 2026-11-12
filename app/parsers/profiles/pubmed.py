@@ -47,7 +47,7 @@ PUBMED = Profile(
             },
             matches=_matches_csv,
             settings=default_settings("csv"),
-            row_defaults=default_row_defaults("csv", delimiter=","),
+            row_defaults=default_row_defaults("csv"),
         ),
     },
 )

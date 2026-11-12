@@ -142,7 +142,7 @@ def test_openalex_csv__ignored_concept_column_adds_no_concepts() -> None:
 
     record = _parse_csv(row, mapping)
 
-    assert record.keywords == ["dinosaurs", "[Topic] Paleontology"]
+    assert record.keywords == ["keywords:[dinosaurs]", "Topic:[Paleontology]"]
 
 
 def test_openalex_csv__prefixes_concept_and_topic_keywords() -> None:
@@ -155,11 +155,9 @@ def test_openalex_csv__prefixes_concept_and_topic_keywords() -> None:
     )
 
     assert record.keywords == [
-        "dinosaurs",
-        "dinosaur paleontology",
-        "[Concept] Biology",
-        "[Concept] Geology",
-        "[Topic] Paleontology and Evolutionary Biology",
+        "keywords:[dinosaurs|dinosaur paleontology]",
+        "Concept:[Biology|Geology]",
+        "Topic:[Paleontology and Evolutionary Biology]",
     ]
 
 
@@ -197,7 +195,7 @@ def test_openalex_ris__never_matches() -> None:
     assert not _RIS_PROFILE.matches("TY  - JOUR\nTI  - A\nER  - \n")
 
 
-def test_openalex_bibtex__splits_keywords_on_comma() -> None:
+def test_openalex_bibtex__keeps_keywords_unsplit() -> None:
     text = "@article{baron2017new,\n  keywords = {dinosaur phylogeny, Ornithischia}\n}"
     mapping = suggest_bibtex_mapping(
         ["keywords"], _BIBTEX_PROFILE.suggestions, _BIBTEX_PROFILE.row_defaults
@@ -205,7 +203,9 @@ def test_openalex_bibtex__splits_keywords_on_comma() -> None:
 
     result = parse_bibtex_text(text, mapping, settings=_BIBTEX_PROFILE.settings)
 
-    assert result.rows[0].record.keywords == ["dinosaur phylogeny", "Ornithischia"]
+    assert result.rows[0].record.keywords == [
+        "keywords:[dinosaur phylogeny, Ornithischia]"
+    ]
 
 
 def test_openalex_bibtex__never_matches() -> None:

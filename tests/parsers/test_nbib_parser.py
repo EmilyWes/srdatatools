@@ -242,14 +242,14 @@ def test_suggest_nbib_mapping__maps_common_tags() -> None:
     }
 
 
-def test_suggest_nbib_mapping__uses_newline_delimiter_and_row_options() -> None:
+def test_suggest_nbib_mapping__uses_row_options() -> None:
     suggestions = suggest_nbib_mapping(["FAU", "AUID", "AD", "MH"])
 
     assert suggestions.rows == {
         "FAU": AuthorsRow(id_key="fau"),
         "AUID": AuthorsRow(role="ids", id_key="auid"),
         "AD": AuthorsRow(role="affiliations", id_key="ad"),
-        "MH": KeywordsRow(delimiter="\n", prefix="MeSH"),
+        "MH": KeywordsRow(prefix="MeSH"),
     }
 
 

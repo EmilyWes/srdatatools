@@ -18,6 +18,7 @@ from app.cleaning.steps import (
     ris_notes,
     sniff_separator,
     split_authors,
+    split_keywords,
     strip_affiliation_start,
     strip_author_extras,
     strip_doi,
@@ -38,6 +39,7 @@ def _context(
     names: str | None = None,
     affiliations: str | None = None,
     ids: str | None = None,
+    keywords: str | None = None,
 ) -> CleaningContext:
     return CleaningContext(
         raw_fields=raw_fields or {},
@@ -46,6 +48,7 @@ def _context(
         names_separator=names,
         affiliations_separator=affiliations,
         ids_separator=ids,
+        keywords_separator=keywords,
     )
 
 
@@ -176,7 +179,7 @@ def test_drop_trailing__without_authors_leaves_record_unchanged() -> None:
         (["Romano M, Novacek MJ"], None),
         ([None, ""], None),
         (["A; B|C", "D|E"], "|"),
-        (["A; B|C"], ";"),
+        (["A; B|C"], "|"),
     ],
 )
 def test_sniff_separator__picks_the_candidate_in_most_values(
@@ -191,6 +194,7 @@ def test_file_separators__chosen_separator_wins_over_sniffing() -> None:
             author_names="A; B",
             author_affiliations="X; Y",
             author_ids="scopus_author_id:[1|2]",
+            keywords=["Author:[a; b]", "[MeSH] c|d"],
         )
     ]
 
@@ -198,6 +202,7 @@ def test_file_separators__chosen_separator_wins_over_sniffing() -> None:
         ",",
         ";",
         "|",
+        ";",
     )
 
 
@@ -271,6 +276,28 @@ def test_split_authors__ids_already_split_are_left_alone() -> None:
     record = Record(author_ids="scopus_author_id:601|scopus_author_id:602")
 
     assert split_authors(record, _context(ids=";"), _OPTIONS) == record
+
+
+def test_split_keywords__splits_unsplit_values_keeping_the_prefix() -> None:
+    record = Record(keywords=["Author:[fossils; dinosaurs ;]", "keywords:[Humans]"])
+
+    cleaned = split_keywords(record, _context(keywords=";"), _OPTIONS)
+
+    assert cleaned.keywords == ["[Author] fossils", "[Author] dinosaurs", "Humans"]
+
+
+def test_split_keywords__split_keywords_are_left_alone() -> None:
+    record = Record(keywords=["[MeSH] Humans", "fossils; dinosaurs"])
+
+    assert split_keywords(record, _context(keywords=";"), _OPTIONS) == record
+
+
+def test_split_keywords__without_separator_the_value_is_one_keyword() -> None:
+    record = Record(keywords=["keywords:[fossils; dinosaurs]"])
+
+    cleaned = split_keywords(record, _NO_CONTEXT, _OPTIONS)
+
+    assert cleaned.keywords == ["fossils; dinosaurs"]
 
 
 def test_id_from_name__moves_ids_out_of_names() -> None:

@@ -8,7 +8,6 @@ from app.parsers.profiles.default import (
     default_settings,
 )
 
-_LIST_DELIMITER = "|"
 _CSV_MARKER_HEADERS = frozenset({"work id", "concept ids"})
 
 
@@ -38,7 +37,7 @@ OPENALEX = Profile(
             },
             matches=_matches_csv,
             settings=default_settings("csv"),
-            row_defaults=default_row_defaults("csv", delimiter=_LIST_DELIMITER),
+            row_defaults=default_row_defaults("csv"),
             ignored_keys=frozenset(
                 {
                     "concept ids",
@@ -70,7 +69,7 @@ OPENALEX = Profile(
             suggestions={},
             matches=never_matches,
             settings=default_settings("bibtex"),
-            row_defaults=default_row_defaults("bibtex", delimiter=","),
+            row_defaults=default_row_defaults("bibtex"),
         ),
     },
 )

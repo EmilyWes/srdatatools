@@ -321,12 +321,12 @@ def test_parse_bibtex_text__normalizes_page_ranges() -> None:
     assert [record.pages for record in records] == ["101-115", "19-65", "e1234"]
 
 
-def test_parse_bibtex_text__splits_keywords_on_row_delimiter() -> None:
+def test_parse_bibtex_text__keeps_keywords_unsplit() -> None:
     text = "@article{key1, keywords = {machine learning; systematic review}}"
 
     record = parse_bibtex_text(text, _MAPPING).rows[0].record
 
-    assert record.keywords == ["machine learning", "systematic review"]
+    assert record.keywords == ["keywords:[machine learning; systematic review]"]
 
 
 def test_parse_bibtex_file__reads_realistic_export() -> None:
@@ -339,7 +339,7 @@ def test_parse_bibtex_file__reads_realistic_export() -> None:
     assert first.journal == "Journal of Biomedical Informatics"
     assert first.abstract == ("We evaluate neural classifiers for citation screening.")
     assert first.pages == "101-115"
-    assert first.keywords == ["machine learning", "systematic review"]
+    assert first.keywords == ["keywords:[machine learning; systematic review]"]
     assert second.publication_type == "inproceedings"
     assert second.title == "R&D in Café Networks"
     assert second.pages == "7-9"

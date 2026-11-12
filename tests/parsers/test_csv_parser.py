@@ -165,13 +165,13 @@ def test_parse_csv_text__keeps_authors_as_in_the_file() -> None:
     assert result.rows[0].record.author_names == "Jane Smith; John Doe"
 
 
-def test_parse_csv_text__splits_keywords_on_delimiter() -> None:
+def test_parse_csv_text__keeps_keywords_unsplit() -> None:
     text = "Keywords\nmachine learning; nlp\n"
     mapping = mapping_of({"Keywords": "keywords"})
 
     result = parse_csv_text(text, mapping)
 
-    assert result.rows[0].record.keywords == ["machine learning", "nlp"]
+    assert result.rows[0].record.keywords == ["keywords:[machine learning; nlp]"]
 
 
 def test_parse_csv_text__keeps_author_id_column_unsplit() -> None:
@@ -198,7 +198,10 @@ def test_parse_csv_text__combines_multiple_keyword_columns_in_order() -> None:
 
     result = parse_csv_text(text, mapping)
 
-    assert result.rows[0].record.keywords == ["machine learning", "nlp", "llms"]
+    assert result.rows[0].record.keywords == [
+        "keywords:[machine learning]",
+        "keywords:[nlp; llms]",
+    ]
 
 
 def test_parse_csv_text__empty_authors_column_gives_no_authors() -> None:
@@ -447,7 +450,7 @@ def test_read_csv_headers__decodes_cp1252_file() -> None:
         ("Article Title", ScalarRow(target="title")),
         ("Source title", ScalarRow(target="journal")),
         ("Author full names", AuthorsRow(id_key="author_full_names")),
-        ("Author Keywords", KeywordsRow(delimiter=";")),
+        ("Author Keywords", KeywordsRow()),
         ("DOI", ScalarRow(target="doi")),
         ("Document Type", ScalarRow(target="publication_type")),
         ("Year", DateRow(part="year")),
@@ -596,7 +599,7 @@ def test_parse_csv_file__tab_delimiter_maps_fields() -> None:
     assert record.title == "Deep learning for screening, a review"
     assert record.author_names == "Smith, Jane; Doe, John"
     assert record.doi == "10.1000/abc123"
-    assert record.keywords == ["active learning", "screening"]
+    assert record.keywords == ["keywords:[active learning; screening]"]
     assert record.publication_date is not None
     assert record.publication_date.year == 2021
 

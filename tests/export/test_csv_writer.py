@@ -102,7 +102,7 @@ def test_write_csv__round_trips_through_the_csv_importer(tmp_path: Path) -> None
     assert first.author_names == "LeCun, Yann; Bengio, Yoshua"
     assert first.doi == "10.1038/nature14539"
     assert first.publication_date == PartialDate(year=2015, month=5)
-    assert "deep learning" in first.keywords
+    assert "keywords:[deep learning]" in first.keywords
     assert result.rows[1].record.publication_date == PartialDate(year=1998)
 
 

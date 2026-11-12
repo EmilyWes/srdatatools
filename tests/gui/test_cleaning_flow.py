@@ -46,6 +46,7 @@ def test_render_cleaning_view__boxes_in_order() -> None:
     assert titles == [
         ["ISSN/ISBN"],
         ["Authors"],
+        ["Keywords"],
         ["Empty values"],
         ["Identifiers"],
         ["Other"],

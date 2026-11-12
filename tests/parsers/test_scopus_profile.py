@@ -126,7 +126,7 @@ def test_scopus_csv__ignored_index_keywords_column_is_not_used() -> None:
 
     record = _parse_csv(row, mapping)
 
-    assert record.keywords == ["[Author] Asia"]
+    assert record.keywords == ["Author:[Asia]"]
 
 
 def test_scopus_csv__unmapped_authors_stay_empty() -> None:
@@ -144,10 +144,8 @@ def test_scopus_csv__prefixes_author_keywords_only() -> None:
     )
 
     assert record.keywords == [
-        "[Author] ANSYS Simulation",
-        "[Author] Battery Thermal Management",
-        "Bionics",
-        "Thermal",
+        "Author:[ANSYS Simulation; Battery Thermal Management]",
+        "keywords:[Bionics; Thermal]",
     ]
 
 
@@ -245,7 +243,7 @@ def test_scopus_bibtex__prefixes_cleaned_author_keywords_only() -> None:
         'author_keywords = {Gr{\\"o}nland; Asia},\nkeywords = {R\\&D; Thermal},\n'
     )
 
-    assert record.keywords == ["[Author] Grönland", "[Author] Asia", "R&D", "Thermal"]
+    assert record.keywords == ["Author:[Grönland; Asia]", "keywords:[R&D; Thermal]"]
 
 
 def test_scopus_bibtex__ignored_author_keywords_field_is_not_used() -> None:
@@ -254,7 +252,7 @@ def test_scopus_bibtex__ignored_author_keywords_field_is_not_used() -> None:
         mapping_of({"keywords": "keywords"}),
     )
 
-    assert record.keywords == ["Thermal"]
+    assert record.keywords == ["keywords:[Thermal]"]
 
 
 def test_scopus_bibtex__unmapped_keywords_stay_empty() -> None:

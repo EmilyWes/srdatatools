@@ -20,6 +20,8 @@ class CleaningOptions(BaseModel):
     id_from_name: bool = True
     author_strip_extras: bool = False
     affiliation_start: str = ""
+    split_keywords: bool = True
+    keywords_separator: str = ""
     empty_values: list[str] = ["[Not Available]."]
     refill_from_raw: bool = True
     strip_doi: bool = True
@@ -105,7 +107,7 @@ _AUTHORS = QuirkBox(
             "names_separator",
             "Names separator",
             "What separates the author names in the imported value. Leave empty"
-            " to detect it per imported file (;, |, a line break or ' and ';"
+            " to detect it per imported file (|, ;, a line break or ' and ';"
             " never a comma, which also separates last and first names).",
             "text",
             enabled_by="split_authors",
@@ -153,6 +155,26 @@ _AUTHORS = QuirkBox(
             " affiliations as they are.",
             "text",
             enabled_by="split_authors",
+        ),
+    ),
+)
+_KEYWORDS = QuirkBox(
+    "Keywords",
+    (
+        QuirkItem(
+            "split_keywords",
+            "Split keywords",
+            "Splits each imported keywords value into separate keywords, keeping"
+            " its prefix.",
+            "checkbox",
+        ),
+        QuirkItem(
+            "keywords_separator",
+            "Keywords separator",
+            "What separates the keywords in the imported value. Leave empty to"
+            " detect it per imported file, as for the author names.",
+            "text",
+            enabled_by="split_keywords",
         ),
     ),
 )
@@ -247,4 +269,12 @@ _FROM_FILE = QuirkBox(
     ),
 )
 
-CLEANING_BOXES = [_ISSN_ISBN, _AUTHORS, _EMPTY_VALUES, _IDENTIFIERS, _OTHER, _FROM_FILE]
+CLEANING_BOXES = [
+    _ISSN_ISBN,
+    _AUTHORS,
+    _KEYWORDS,
+    _EMPTY_VALUES,
+    _IDENTIFIERS,
+    _OTHER,
+    _FROM_FILE,
+]

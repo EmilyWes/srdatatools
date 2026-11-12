@@ -56,7 +56,7 @@ def _cleaned(
     else:
         result = parse_bibtex_file(path, mapping, settings)
     records = [row.record for row in result.rows]
-    names, affiliations, ids = file_separators(records, options)
+    names, affiliations, ids, keywords = file_separators(records, options)
     return [
         clean_record(
             row.record,
@@ -66,6 +66,7 @@ def _cleaned(
                 names_separator=names,
                 affiliations_separator=affiliations,
                 ids_separator=ids,
+                keywords_separator=keywords,
             ),
             options,
         )[0]
@@ -95,6 +96,16 @@ def test_cleaned_scopus_csv__splits_authors_and_moves_ids_out_of_names() -> None
         "Department of Natural History and Planetary Sciences, Hokkaido University,"
         " Kita 10, Nishi 8, Kita-ku, Hokkaido, Sapporo, 060-0810, Japan|"
     )
+
+
+def test_cleaned_scopus_csv__splits_keywords_keeping_the_author_prefix() -> None:
+    keywords = _by(_cleaned("scopus", ".csv", "csv"), "eid")[
+        "2-s2.0-105040180364"
+    ].keywords
+
+    assert "[Author] ANSYS Simulation" in keywords
+    assert "Balancing" in keywords
+    assert not any(":[" in keyword for keyword in keywords)
 
 
 def test_cleaned_scopus_ris__reads_eid_and_conference_name_from_notes() -> None:

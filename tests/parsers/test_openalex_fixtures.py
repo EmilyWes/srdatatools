@@ -113,9 +113,10 @@ def test_openalex_small_csv__keeps_values_as_in_the_file(
     assert dinosaur.journal == "Nature"
     assert dinosaur.publication_type == "article"
     assert dinosaur.other_ids == {"openalex": "W2601753892"}
-    assert "dinosaur phylogeny" in dinosaur.keywords
-    assert "[Concept] Theropoda" in dinosaur.keywords
-    assert "[Topic] Paleontology and Evolutionary Biology" in dinosaur.keywords
+    keywords = dinosaur.keywords
+    assert any(k.startswith("keywords:[dinosaur phylogeny|") for k in keywords)
+    assert any(k.startswith("Concept:[Theropoda|") for k in keywords)
+    assert "Topic:[Paleontology and Evolutionary Biology]" in keywords
 
 
 def test_openalex_small_ris__joins_au_and_c1_lines(
@@ -131,13 +132,11 @@ def test_openalex_small_ris__joins_au_and_c1_lines(
     assert ris_records[_CHICKEN_DOI].author_affiliations
 
 
-def test_openalex_small_bibtex__splits_keywords_on_comma(
+def test_openalex_small_bibtex__keeps_keywords_unsplit(
     bibtex_records: dict[str, Record],
 ) -> None:
-    assert bibtex_records[_DINOSAUR_DOI].keywords[:2] == [
-        "dinosaur phylogeny",
-        "Ornithischia",
-    ]
+    [keywords] = bibtex_records[_DINOSAUR_DOI].keywords
+    assert keywords.startswith("keywords:[dinosaur phylogeny, Ornithischia, ")
 
 
 def test_openalex_small__formats_agree_on_ids_and_titles(

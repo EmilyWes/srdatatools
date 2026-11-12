@@ -317,13 +317,13 @@ def test_suggest_ris_mapping__maps_common_tags() -> None:
     }
 
 
-def test_suggest_ris_mapping__uses_newline_delimiter_and_row_options() -> None:
+def test_suggest_ris_mapping__uses_row_options() -> None:
     suggestions = suggest_ris_mapping(["AU", "AD", "KW", "SP", "EP"])
 
     assert suggestions.rows == {
         "AU": AuthorsRow(id_key="au"),
         "AD": AuthorsRow(role="affiliations", id_key="ad"),
-        "KW": KeywordsRow(delimiter="\n"),
+        "KW": KeywordsRow(),
         "SP": PagesRow(part="start"),
         "EP": PagesRow(part="end"),
     }

@@ -30,5 +30,5 @@ def default_settings(file_type: FileType, **overrides: Any) -> ParseSettings:
     return replace(DEFAULT_PROFILES[file_type].settings, **overrides)
 
 
-def default_row_defaults(file_type: FileType, **overrides: Any) -> RowDefaults:
-    return replace(DEFAULT_PROFILES[file_type].row_defaults, **overrides)
+def default_row_defaults(file_type: FileType) -> RowDefaults:
+    return DEFAULT_PROFILES[file_type].row_defaults

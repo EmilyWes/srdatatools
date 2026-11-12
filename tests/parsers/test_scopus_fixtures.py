@@ -93,13 +93,13 @@ def test_scopus_small_csv__keeps_author_columns_as_in_the_file(
     )
 
 
-def test_scopus_small_csv__prefixes_author_keywords(
+def test_scopus_small_csv__keys_author_keywords_by_prefix(
     csv_records: dict[str, Record],
 ) -> None:
     keywords = csv_records[_CONFERENCE_EID].keywords
 
-    assert "[Author] ANSYS Simulation" in keywords
-    assert "Balancing" in keywords
+    assert keywords[0].startswith("Author:[ANSYS Simulation; ")
+    assert keywords[1].startswith("keywords:[")
 
 
 def test_scopus_small_ris__keeps_values_as_in_the_file(
@@ -121,7 +121,11 @@ def test_scopus_small_bibtex__keeps_values_as_in_the_file(
     hummingbird = bibtex_records[_HUMMINGBIRD_EID]
     assert hummingbird.pmid == "32161388"
     assert hummingbird.publication_type == "Retracted"
-    assert "[Author] ANSYS Simulation" in bibtex_records[_CONFERENCE_EID].keywords
+    assert (
+        bibtex_records[_CONFERENCE_EID]
+        .keywords[0]
+        .startswith("Author:[ANSYS Simulation; ")
+    )
 
 
 def test_scopus_small__formats_agree_on_ids_and_document_type(

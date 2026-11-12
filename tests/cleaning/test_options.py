@@ -80,6 +80,7 @@ def test_cleaning_boxes__titles_in_order() -> None:
     assert [box.title for box in CLEANING_BOXES] == [
         "ISSN/ISBN",
         "Authors",
+        "Keywords",
         "Empty values",
         "Identifiers",
         "Other",

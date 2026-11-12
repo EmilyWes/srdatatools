@@ -23,8 +23,11 @@ from app.parsers.mapping import (
     normalize_label,
     override_aliases,
     parse_date_string,
+    parse_unsplit_keywords,
     split_keyword,
     suggest_mapping,
+    tag_keyword,
+    unsplit_keywords,
 )
 from app.parsers.quirks import ParseSettings
 from tests.mappings import mapping_of
@@ -51,7 +54,7 @@ def test_field_mapping__round_trips_through_a_dump() -> None:
 
 
 def test_default_row__fills_each_targets_default_options() -> None:
-    defaults = RowDefaults(delimiter="|", date_order="us")
+    defaults = RowDefaults(date_order="us")
 
     assert default_row("title", "TI", defaults) == ScalarRow(target="title")
     assert default_row("date", "DA", defaults) == DateRow(part="full", order="us")
@@ -61,7 +64,7 @@ def test_default_row__fills_each_targets_default_options() -> None:
     assert default_row("authors", "Author IDs", defaults) == AuthorsRow(
         role="names", id_key="author_ids"
     )
-    assert default_row("keywords", "KW", defaults) == KeywordsRow(delimiter="|")
+    assert default_row("keywords", "KW", defaults) == KeywordsRow()
     assert default_row("label", "L", defaults) == LabelRow(
         phase="ft", screener="screener 1"
     )
@@ -414,27 +417,28 @@ def test_is_ambiguous_date__only_when_order_changes_the_date(
     assert is_ambiguous_date(value) is expected
 
 
-def test_apply_mapping__keywords_use_row_delimiter_and_prefix() -> None:
-    mapping = mapping_of(
-        {
-            "A": Suggest("keywords", {"prefix": "A"}),
-            "B": Suggest("keywords", {"delimiter": "|"}),
-        }
-    )
+def test_apply_mapping__keeps_each_keyword_column_unsplit_under_its_prefix() -> None:
+    mapping = mapping_of({"A": Suggest("keywords", {"prefix": "A"}), "B": "keywords"})
 
     record = apply_mapping({"A": "x; y", "B": "z|w"}, mapping)
 
-    assert record.keywords == ["[A] x", "[A] y", "z", "w"]
+    assert record.keywords == ["A:[x; y]", "keywords:[z|w]"]
+
+
+def test_parse_unsplit_keywords__gives_prefix_and_value() -> None:
+    assert parse_unsplit_keywords(unsplit_keywords("A", "x; y")) == ("A", "x; y")
+    assert parse_unsplit_keywords(unsplit_keywords("", "z")) == ("", "z")
+    assert parse_unsplit_keywords("[A] x") is None
 
 
 @pytest.mark.parametrize("typed", ["Author", " Author ", "[Author]", "[Author] "])
 def test_keywords_row__prefix_is_stored_without_brackets(typed: str) -> None:
-    assert KeywordsRow(delimiter=";", prefix=typed).prefix == "Author"
+    assert KeywordsRow(prefix=typed).prefix == "Author"
 
 
-def test_keywords_row__tags_keyword_only_with_a_prefix() -> None:
-    assert KeywordsRow(delimiter=";", prefix="MeSH").tagged("Humans") == "[MeSH] Humans"
-    assert KeywordsRow(delimiter=";").tagged("Humans") == "Humans"
+def test_tag_keyword__tags_keyword_only_with_a_prefix() -> None:
+    assert tag_keyword("MeSH", "Humans") == "[MeSH] Humans"
+    assert tag_keyword("", "Humans") == "Humans"
 
 
 _PARALLEL = {
@@ -636,13 +640,11 @@ def test_suggest_mapping__several_keys_may_share_a_target() -> None:
 
 
 def test_suggest_mapping__uses_row_defaults() -> None:
-    defaults = RowDefaults(delimiter="\n")
+    defaults = RowDefaults(date_order="us")
 
-    mapping = suggest_mapping(
-        ["KW"], {"kw": Suggest("keywords")}, defaults, lenient=False
-    )
+    mapping = suggest_mapping(["DA"], {"da": Suggest("date")}, defaults, lenient=False)
 
-    assert mapping.rows == {"KW": KeywordsRow(delimiter="\n")}
+    assert mapping.rows == {"DA": DateRow(order="us")}
 
 
 def test_suggest_mapping__records_match_kind_per_key() -> None:
@@ -700,5 +702,4 @@ def test_split_keyword__unprefixed_keyword() -> None:
 
 
 def test_split_keyword__round_trips_tagged() -> None:
-    row = KeywordsRow(delimiter=";", prefix="Author")
-    assert split_keyword(row.tagged("[a] b")) == ("Author", "[a] b")
+    assert split_keyword(tag_keyword("Author", "[a] b")) == ("Author", "[a] b")

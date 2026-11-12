@@ -24,11 +24,13 @@ from app.parsers.mapping import (
     FieldMapping,
     ScalarRow,
     ordered_mapping,
+    parse_unsplit_keywords,
+    tag_keyword,
 )
 
 SCOPUS_AUTHOR_ID_KEY = "scopus_author_id"
 # Comma is left out: it also separates last and first names.
-SEPARATOR_CANDIDATES = (";", AUTHOR_JOINER, "\n", " and ")
+SEPARATOR_CANDIDATES = (AUTHOR_JOINER, ";", "\n", " and ")
 
 _PAGE_RANGE = re.compile(r"^(?P<start>\d+)-(?P<end>\d+)$")
 _TRAILING_ET_AL = re.compile(r"[\s,;|]*\bet al\.$")
@@ -67,6 +69,7 @@ class CleaningContext:
     names_separator: str | None = None
     affiliations_separator: str | None = None
     ids_separator: str | None = None
+    keywords_separator: str | None = None
 
 
 Step = Callable[[Record, CleaningContext, CleaningOptions], Record]
@@ -85,9 +88,9 @@ def sniff_separator(values: Iterable[str | None]) -> str | None:
 
 def file_separators(
     records: Sequence[Record], options: CleaningOptions
-) -> tuple[str | None, str | None, str | None]:
-    """The names, affiliations and ids separators for one source file's records:
-    the chosen ones, else sniffed from the records."""
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """The names, affiliations, ids and keywords separators for one source file's
+    records: the chosen ones, else sniffed from the records."""
     names = options.names_separator or sniff_separator(
         record.author_names for record in records
     )
@@ -99,7 +102,13 @@ def file_separators(
         for record in records
         for _, value in parse_unsplit_author_ids(record.author_ids)
     )
-    return names, affiliations, ids
+    keywords = options.keywords_separator or sniff_separator(
+        unsplit[1]
+        for record in records
+        for keyword in record.keywords
+        if (unsplit := parse_unsplit_keywords(keyword)) is not None
+    )
+    return names, affiliations, ids, keywords
 
 
 def expand_page_range(pages: str) -> str:
@@ -188,6 +197,23 @@ def split_authors(
             "author_ids": _split_ids(record.author_ids, context.ids_separator),
         }
     )
+
+
+def split_keywords(
+    record: Record, context: CleaningContext, options: CleaningOptions
+) -> Record:
+    """Without a separator an unsplit value is one keyword."""
+    separator = context.keywords_separator
+    keywords: list[str] = []
+    for keyword in record.keywords:
+        unsplit = parse_unsplit_keywords(keyword)
+        if unsplit is None:
+            keywords.append(keyword)
+            continue
+        prefix, value = unsplit
+        pieces = value.split(separator) if separator else [value]
+        keywords.extend(tag_keyword(prefix, p.strip()) for p in pieces if p.strip())
+    return record.model_copy(update={"keywords": keywords})
 
 
 def id_from_name(
@@ -418,6 +444,7 @@ def _steps(options: CleaningOptions) -> list[tuple[bool, str, Step]]:
         ),
         (options.drop_et_al, 'Drop "et al."', drop_et_al),
         (options.drop_trailing, "Drop trailing", drop_trailing),
+        (options.split_keywords, "Split keywords", split_keywords),
         (options.strip_doi, "Strip DOI", strip_doi),
         (options.strip_pmid, "Strip PMID", strip_pmid),
         (options.strip_extras or options.only_one, "ISSN/ISBN", clean_issn_isbn),
