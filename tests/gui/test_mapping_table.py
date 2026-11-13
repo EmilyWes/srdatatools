@@ -1,3 +1,5 @@
+from typing import Literal
+
 import pytest
 from nicegui import ui
 from nicegui.elements.label import Label
@@ -15,9 +17,11 @@ from app.parsers.mapping import (
     AuthorsRow,
     DateRow,
     FieldMapping,
+    IssnIsbnRow,
     LabelRow,
     OtherIdRow,
     PagesRow,
+    RowMapping,
     ScalarRow,
     Suggest,
 )
@@ -301,14 +305,41 @@ def test_render_mapping_table__fuzzy_and_id_fallback_are_orange() -> None:
     assert {status for _, status in _statuses(screen)} == {"orange"}
 
 
-def test_render_mapping_table__several_keys_on_same_target_are_orange() -> None:
-    screen = _render(["Author Keywords", "Index Keywords", "DOI"])
+def test_render_mapping_table__keys_competing_for_one_value_are_orange() -> None:
+    screen = _render(["Article Title", "Document Title", "DOI", "Year", "Month"])
 
     assert dict(_statuses(screen)) == {
         "DOI": "green",
-        "Author Keywords": "orange",
-        "Index Keywords": "orange",
+        "Article Title": "orange",
+        "Document Title": "orange",
+        "Year": "green",
+        "Month": "green",
     }
+
+
+def test_render_mapping_table__keys_whose_values_are_all_kept_stay_green() -> None:
+    screen = _render(["Author Keywords", "Index Keywords", "Author(s) ID", "ORCIDs"])
+
+    assert {status for _, status in _statuses(screen)} == {"green"}
+
+
+@pytest.mark.parametrize(
+    ("second_kind", "status"),
+    [("isbn", "green"), ("issn", "orange"), ("auto", "orange")],
+)
+def test_render_mapping_table__issn_isbn_rows_compete_unless_issn_and_isbn(
+    second_kind: Literal["auto", "issn", "isbn"], status: str
+) -> None:
+    rows: dict[str, RowMapping] = {
+        "A": IssnIsbnRow(kind="issn"),
+        "B": IssnIsbnRow(kind=second_kind),
+    }
+    suggestion = FieldMapping(rows=rows, match_kinds=dict.fromkeys(rows, "exact"))
+    screen = render_mapping_table(
+        shell().middle, _summary(dict.fromkeys(rows, "")), suggestion
+    )
+
+    assert {s for _, s in _statuses(screen)} == {status}
 
 
 def test_render_mapping_table__ignored_is_red() -> None:

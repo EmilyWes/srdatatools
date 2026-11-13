@@ -49,6 +49,7 @@ _SCALARS = {
     "publisher": "publisher",
     "link": "url",
     "url": "url",
+    "urls": "url",
     "notes": "notes",
 }
 _SUGGESTIONS: dict[str, Suggest] = {

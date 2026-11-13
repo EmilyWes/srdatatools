@@ -305,7 +305,7 @@ Nothing found combines all of this project's pieces (multi-format import + a per
 - [x] Generic TSV reader (column-mapping logic)
 - [x] Generic Excel reader (column-mapping logic)
 - [x] Field-mapping UI, embedded inline in the import view (live table below Source/Type, no separate screen/confirm step)
-- [x] Field-mapping UI: visual indicators (different colors) per row for columns that are mapped directly (exact alias), mapped via fuzzy match or the ID fallback, or mapped multiple times to the same target
+- [x] Field-mapping UI: visual indicators (different colors) per row for columns that are mapped directly (exact alias), mapped via fuzzy match or the ID fallback, or competing with another column for the same value (same target and part/role/key/phase + screener, or two ISSN/ISBN columns unless one is ISSN and the other ISBN; keywords and author IDs never compete, as all their columns are kept)
 - [x] Field-mapping UI: show the first value of each column/tag next to its row so the user can see what it contains
 - [x] Field-mapping UI: "ISSN/ISBN" target that routes a single input (e.g. RIS `SN`) to `issn` or `isbn` by value length; NBIB `ISBN` tag mapped to `isbn`
 - [x] Field-mapping UI: per-column bar (`#` column) showing filled rows / total rows, colored green (≥ 2/3 filled), orange (≥ 1/3) or red (< 1/3), with `value of total` on hover

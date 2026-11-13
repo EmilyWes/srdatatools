@@ -16,7 +16,13 @@ from app.parsers.mapping import (
     PAGES_TARGET,
     TARGETS,
     AuthorsRow,
+    DateRow,
     FieldMapping,
+    IssnIsbnRow,
+    KeywordsRow,
+    LabelRow,
+    OtherIdRow,
+    PagesRow,
     RowMapping,
     default_row,
     row_with,
@@ -158,11 +164,38 @@ _STATUS_COLORS = {
 }
 
 
+def _value_slot(row: RowMapping) -> tuple[str, ...] | None:
+    """Where the row's value goes; None for rows whose values are all kept."""
+    if isinstance(row, KeywordsRow) or (
+        isinstance(row, AuthorsRow) and row.role == "ids"
+    ):
+        return None
+    if isinstance(row, DateRow | PagesRow):
+        return row.target, row.part
+    if isinstance(row, AuthorsRow):
+        return row.target, row.role
+    if isinstance(row, OtherIdRow):
+        return row.target, row.key
+    if isinstance(row, LabelRow):
+        return row.target, row.phase, row.screener
+    return (row.target,)
+
+
+def _clashes(a: RowMapping, b: RowMapping) -> bool:
+    """Whether two rows compete for one value, so only the first filled one wins."""
+    if isinstance(a, IssnIsbnRow) and isinstance(b, IssnIsbnRow):
+        return a.kind == b.kind or "auto" in (a.kind, b.kind)
+    slot = _value_slot(a)
+    return slot is not None and slot == _value_slot(b)
+
+
 def _initial_status(header: str, suggestion: FieldMapping) -> Status:
     row = suggestion.rows.get(header)
     if row is None:
         return "red"
-    shared = sum(r.target == row.target for r in suggestion.rows.values()) > 1
+    shared = any(
+        _clashes(row, other) for key, other in suggestion.rows.items() if key != header
+    )
     if shared or suggestion.match_kinds.get(header) != "exact":
         return "orange"
     return "green"
