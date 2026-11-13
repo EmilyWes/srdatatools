@@ -33,20 +33,6 @@ OPENALEX = Profile(
             },
             matches=_matches_csv,
             settings=default_settings("csv"),
-            ignored_keys=frozenset(
-                {
-                    "concept ids",
-                    "keyword ids",
-                    "topic ids",
-                    "source ids",
-                    "volume ids",
-                    "oa source",
-                    "source ojs",
-                    "oa published",
-                    "has abstract",
-                    "pubmed",
-                }
-            ),
         ),
         "ris": FormatProfile(
             suggestions={

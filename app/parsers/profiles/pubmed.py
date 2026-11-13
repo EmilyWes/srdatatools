@@ -40,7 +40,6 @@ PUBMED = Profile(
         ),
         "csv": FormatProfile(
             suggestions={
-                "pmcid": Suggest("other_ids", {"key": "pmc"}),
                 "nihms id": Suggest("other_ids", {"key": "mid"}),
             },
             matches=_matches_csv,

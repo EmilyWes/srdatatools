@@ -19,17 +19,8 @@ _TABULAR_SUGGESTIONS: dict[str, Suggest] = {
     "asreview_note": Suggest("notes"),
     "number": Suggest("issue"),
 }
-# The unnamed first column is ASReview's record id; asreview_note is the notes.
-_TABULAR_IGNORED = frozenset(
-    {
-        "",
-        "asreview_group_id",
-        "asreview_time",
-        "secondary_title",
-        "author_address",
-        "notes",
-    }
-)
+# asreview_note holds the notes.
+_TABULAR_IGNORED = frozenset({"asreview_group_id", "notes"})
 # In the Parsing view's include/exclude/maybe/unlabeled order, so it round-trips.
 _RIS_LABEL_VALUES: tuple[tuple[str, LabelValue], ...] = (
     ("asreview_relevant", "include"),

@@ -277,7 +277,7 @@ def test_suggest_nbib_mapping__routes_pmc_and_mid_to_other_ids() -> None:
     suggestions = suggest_nbib_mapping(["PMC", "MID"])
 
     assert suggestions.rows == {
-        "PMC": OtherIdRow(key="pmc"),
+        "PMC": OtherIdRow(key="pmcid"),
         "MID": OtherIdRow(key="mid"),
     }
 
@@ -335,7 +335,7 @@ def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
     assert first.author_names == "Smith, John A|Doe, Jane"
     assert first.pages == "100-110"
     assert first.doi == "10.1016/j.jbi.2020.1"
-    assert first.other_ids == {"pmc": "PMC7000001"}
+    assert first.other_ids == {"pmcid": "PMC7000001"}
     assert first.issn == "1532-0480 (Electronic)"
     assert first.publication_date == "2020 May 14"
     assert second.keywords == ["[MeSH] Humans", "[MeSH] Review Literature as Topic"]

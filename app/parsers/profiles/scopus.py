@@ -52,14 +52,7 @@ SCOPUS = Profile(
             matches=_matches_csv,
             settings=default_settings("csv"),
             # "Authors" abbreviates the given names in "Author full names".
-            ignored_keys=frozenset(
-                {
-                    "authors",
-                    "conference location",
-                    "conference code",
-                    "publication stage",
-                }
-            ),
+            ignored_keys=frozenset({"authors"}),
         ),
         "ris": FormatProfile(
             suggestions={

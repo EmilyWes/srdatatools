@@ -121,7 +121,7 @@ def test_pubmed_small_csv__keeps_values_as_in_the_file(
     assert (csv_records["30527956"].author_names or "").endswith(
         ", Walsworth AK, et al."
     )
-    assert csv_records["37886492"].other_ids["pmc"] == "PMC10602114"
+    assert csv_records["37886492"].other_ids["pmcid"] == "PMC10602114"
 
 
 def test_pubmed_small__nbib_and_csv_agree_on_ids(

@@ -54,7 +54,7 @@ _SUGGESTIONS: dict[str, Suggest] = {
     "dp": Suggest("date"),
     "is": Suggest("issn_isbn", {"kind": "issn"}),
     "isbn": Suggest("issn_isbn", {"kind": "isbn"}),
-    "pmc": Suggest("other_ids"),
+    "pmc": Suggest("other_ids", {"key": "pmcid"}),
     "mid": Suggest("other_ids"),
 }
 _AU_TAG = "AU"

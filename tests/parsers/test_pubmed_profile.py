@@ -79,7 +79,7 @@ def test_pubmed_csv__suggests_exact_journal_and_nbib_id_keys() -> None:
 
     assert mapping.rows == {
         "Journal/Book": ScalarRow(target="journal"),
-        "PMCID": OtherIdRow(key="pmc"),
+        "PMCID": OtherIdRow(key="pmcid"),
         "NIHMS ID": OtherIdRow(key="mid"),
     }
     assert mapping.match_kinds["Journal/Book"] == "exact"
