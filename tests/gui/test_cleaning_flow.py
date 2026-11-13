@@ -45,13 +45,13 @@ def test_render_cleaning_view__boxes_in_order() -> None:
     titles = [_labels(box.default_slot.children[0]) for box in boxes]
     assert titles == [
         ["ISSN/ISBN"],
-        ["Authors"],
         ["Keywords"],
         ["Dates"],
-        ["Empty values"],
         ["Identifiers"],
         ["Other"],
         ["From raw fields"],
+        ["Authors"],
+        ["Empty values"],
     ]
 
 
