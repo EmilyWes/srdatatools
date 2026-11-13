@@ -29,9 +29,14 @@ _SCALARS = {
     "article title": "title",
     "document title": "title",
     "title": "title",
+    "primary_title": "title",
     "abstract": "abstract",
+    "notes_abstract": "abstract",
     "source title": "journal",
     "journal": "journal",
+    "journal_name": "journal",
+    "alternate_title3": "journal",
+    "secondary_title": "journal",
     "journal/book": "journal",
     "publication title": "journal",
     "conference name": "conference_name",
@@ -63,8 +68,10 @@ _SUGGESTIONS: dict[str, Suggest] = {
     "issn": Suggest("issn_isbn", {"kind": "issn"}),
     "isbn": Suggest("issn_isbn", {"kind": "isbn"}),
     **dict.fromkeys(
-        ("author", "authors", "author full names", "author(s)"), Suggest("authors")
+        ("author", "authors", "author full names", "author(s)", "first_authors"),
+        Suggest("authors"),
     ),
+    "author_address": Suggest("authors", {"role": "affiliations"}),
     **dict.fromkeys(
         ("author ids", "author(s) id", "orcid", "orcids"),
         Suggest("authors", {"role": "ids"}),
@@ -75,10 +82,13 @@ _SUGGESTIONS: dict[str, Suggest] = {
     ),
     "year": Suggest("date", {"part": "year"}),
     "publication year": Suggest("date", {"part": "year"}),
+    "publication_year": Suggest("date"),
     "month": Suggest("date", {"part": "month"}),
     "day": Suggest("date", {"part": "day"}),
     **dict.fromkeys(("date", "publication date", "coverdate"), Suggest("date")),
-    **dict.fromkeys(("eid", "pmcid", "pmc id"), Suggest("other_ids")),
+    **dict.fromkeys(
+        ("eid", "pmcid", "pmc id", "accession_number"), Suggest("other_ids")
+    ),
     **dict.fromkeys(
         ("included", "label_included", "label", "decision", "inclusion"),
         Suggest("label"),

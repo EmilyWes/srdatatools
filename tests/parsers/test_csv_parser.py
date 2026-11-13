@@ -418,6 +418,28 @@ def test_suggest_mapping__matches_known_vendor_headers(
 
 
 @pytest.mark.parametrize(
+    ("header", "expected_row"),
+    [
+        ("primary_title", ScalarRow(target="title")),
+        ("notes_abstract", ScalarRow(target="abstract")),
+        ("journal_name", ScalarRow(target="journal")),
+        ("alternate_title3", ScalarRow(target="journal")),
+        ("secondary_title", ScalarRow(target="journal")),
+        ("first_authors", AuthorsRow(id_key="first_authors")),
+        ("author_address", AuthorsRow(role="affiliations", id_key="author_address")),
+        ("publication_year", DateRow()),
+        ("accession_number", OtherIdRow(key="accession_number")),
+    ],
+)
+def test_suggest_mapping__matches_rispy_headers(
+    header: str, expected_row: RowMapping
+) -> None:
+    suggestions = suggest_mapping([header])
+
+    assert suggestions.rows == {header: expected_row}
+
+
+@pytest.mark.parametrize(
     ("header", "expected_key"),
     [
         ("Scopus Author ID", "scopus_author_id"),

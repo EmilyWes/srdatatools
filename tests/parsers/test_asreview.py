@@ -66,6 +66,8 @@ def test_asreview_csv__suggests_label_and_rispy_columns() -> None:
 
     assert targets == {
         "title": "title",
+        "secondary_title": "journal",
+        "author_address": "authors",
         "start_page": "pages",
         "end_page": "pages",
         "number": "issue",
