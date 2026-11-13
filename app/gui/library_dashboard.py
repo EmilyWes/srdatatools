@@ -6,7 +6,7 @@ from nicegui import ui
 from nicegui.element import Element
 from sqlalchemy.orm import Session
 
-from app.cleaning.quality import problem_columns
+from app.cleaning.quality import CHECKS, problem_columns
 from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.format import format_count, keyword_key, label_key
 from app.gui.mapping_table import fill_color
@@ -253,6 +253,7 @@ def _count_table(
     name_label: str,
     counts: Sequence[tuple[str, int]],
     zero_is_good: bool = False,
+    hovers: Mapping[str, str] | None = None,
 ) -> Element:
     with ui.column().classes(_FRAME_CLASSES) as frame:
         ui.label(title).classes(_TITLE_CLASSES)
@@ -271,6 +272,7 @@ def _count_table(
                     {
                         "name": name,
                         "count": format_count(count),
+                        "hover": (hovers or {}).get(name, name),
                         **({"red": count > 0} if zero_is_good else {}),
                     }
                     for name, count in counts
@@ -282,7 +284,7 @@ def _count_table(
         )
         table.add_slot(
             "body-cell-name",
-            '<q-td :props="props" :title="props.value"'
+            '<q-td :props="props" :title="props.row.hover"'
             ' class="ellipsis" style="max-width: 10rem">{{ props.value }}</q-td>',
         )
         if zero_is_good:
@@ -299,7 +301,10 @@ def _quality_table(
     quality: Sequence[tuple[str, int]],
     on_show: Callable[[list[str]], Awaitable[None] | None] | None,
 ) -> None:
-    frame = _count_table("Data quality", "Check", quality, zero_is_good=True)
+    hovers = {name: check.hover for name, check in CHECKS.items() if check.hover}
+    frame = _count_table(
+        "Data quality", "Check", quality, zero_is_good=True, hovers=hovers
+    )
     columns = problem_columns(dict(quality))
     with frame:
         button = ui.button(

@@ -126,11 +126,29 @@ def test_render_library_dashboard__data_quality_table_second() -> None:
     )
     table = _tables(panes.middle)[0]
     assert table.rows == [
-        {"name": "Unparsed dates", "count": "2", "red": True},
-        {"name": "Misaligned authors", "count": "0", "red": False},
+        {
+            "name": "Unparsed dates",
+            "count": "2",
+            "hover": "Unparsed dates",
+            "red": True,
+        },
+        {
+            "name": "Misaligned authors",
+            "count": "0",
+            "hover": "Misaligned authors",
+            "red": False,
+        },
     ]
     template = table.slots["body-cell-count"].template or ""
     assert "props.row.red ? 'text-red' : 'text-green'" in template
+
+
+def test_render_library_dashboard__data_quality_hover_shows_full_name() -> None:
+    middle = _render_quality([("Unmapped pub. types", 1)], [])
+
+    table = _tables(middle)[0]
+    assert table.rows[0]["hover"] == "Unmapped publication types"
+    assert 'title="props.row.hover"' in (table.slots["body-cell-name"].template or "")
 
 
 def _render_quality(quality: list[tuple[str, int]], shown: list[list[str]]) -> Element:
@@ -305,10 +323,10 @@ def test_render_library_dashboard__one_keyword_table_per_prefix() -> None:
 
     _, default, mesh = (table.rows for table in _tables(panes.middle))
     assert default == [
-        {"name": "Cancer", "count": "2"},
-        {"name": "Diet", "count": "1"},
+        {"name": "Cancer", "count": "2", "hover": "Cancer"},
+        {"name": "Diet", "count": "1", "hover": "Diet"},
     ]
-    assert mesh == [{"name": "Humans", "count": "3"}]
+    assert mesh == [{"name": "Humans", "count": "3", "hover": "Humans"}]
     labels = _labels(panes.middle)
     assert "Keywords" in labels
     assert "Keywords: MeSH" in labels

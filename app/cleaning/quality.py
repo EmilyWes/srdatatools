@@ -48,12 +48,18 @@ class Check:
     test: Callable[[Fields], bool]
     # The record table columns that show the problem.
     columns: tuple[str, ...]
+    # The full name, when the check's name is shortened to fit.
+    hover: str = ""
 
 
 CHECKS: dict[str, Check] = {
     "Unparsed dates": Check(_unparsed_date, ("publication_date",)),
     "Misaligned authors": Check(_misaligned_authors, ("author_names", "author_ids")),
-    "Unmapped pub. types": Check(_unmapped_publication_type, ("publication_type",)),
+    "Unmapped pub. types": Check(
+        _unmapped_publication_type,
+        ("publication_type",),
+        hover="Unmapped publication types",
+    ),
 }
 
 
