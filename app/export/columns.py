@@ -4,7 +4,7 @@ from typing import Literal
 
 from app.export.options import ExportOptions
 from app.gui.format import label_text, source_label
-from app.models.record import Record
+from app.models.record import CLEANED_DATE, Record
 from app.parsers.mapping import split_keyword
 
 DatePart = Literal["full", "year", "month", "day"]
@@ -43,7 +43,7 @@ _EXTRA_LABELS: dict[ExtraKind, str] = {
 
 @dataclass(frozen=True)
 class ExportSource:
-    vendor: str | None
+    vendors: tuple[str, ...]
     filename: str
     raw_fields: dict[str, str]
     ignored_keys: frozenset[str]
@@ -212,18 +212,14 @@ def _raw_keys(records: Sequence[ExportRecord], options: ExportOptions) -> list[s
 
 
 def _date_text(record: Record, part: DatePart) -> str:
-    date = record.publication_date
-    if date is None or date.year is None:
-        return ""
+    """A part is only read from a cleaned YYYY/MM/DD date."""
+    date = record.publication_date or ""
     if part == "full":
-        parts = [f"{date.year:04d}"]
-        if date.month is not None:
-            parts.append(f"{date.month:02d}")
-            if date.day is not None:
-                parts.append(f"{date.day:02d}")
-        return "-".join(parts)
-    value = getattr(date, part)
-    return "" if value is None else str(value)
+        return date
+    match = CLEANED_DATE.fullmatch(date)
+    if match is None or not match[part]:
+        return ""
+    return str(int(match[part]))
 
 
 def _joined_distinct(values: Sequence[str]) -> str:
@@ -258,7 +254,11 @@ def column_value(
             return str(export.id)
         if column.kind == "sources":
             return ", ".join(
-                dict.fromkeys(source_label(source.vendor) for source in export.sources)
+                dict.fromkeys(
+                    source_label(vendor)
+                    for source in export.sources
+                    for vendor in source.vendors or (None,)
+                )
             )
         return _joined_distinct([source.filename for source in export.sources])
     if isinstance(column, RawColumn):

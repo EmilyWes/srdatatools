@@ -181,6 +181,8 @@ class QuirksScreen(Generic[_M]):
             widget = ui.checkbox(value=value)
         elif item.control == "number":
             widget = ui.number(value=value, min=1, precision=0)
+        elif item.control == "select":
+            widget = ui.select(item.choices or {}, value=value)
         else:
             widget = ui.input(value=value)
         self.widgets[item.key] = self._field(widget, item.wide)

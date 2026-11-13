@@ -17,6 +17,7 @@ from app.gui.home import home
 from app.gui.layout import ShellPanes
 from app.gui.library_dashboard import save_hidden
 from app.gui.library_nav import LeftPanelNav
+from app.gui.record_table import load_columns
 from app.parsers.common import FileSummary
 from app.parsers.profiles.overview import default_choices
 from tests.gui.clicks import click_and_wait
@@ -255,9 +256,10 @@ def test_home__import_stores_given_summary_and_selects_new_file(
                 [(csv_path, summary)],
                 "csv",
                 mapping_of({"Title": "title"}),
-                "unknown",
+                (),
                 None,
-                default_choices("csv", "unknown"),
+                default_choices("csv", ()),
+                False,
             )
 
     asyncio.run(confirm())
@@ -266,6 +268,51 @@ def test_home__import_stores_given_summary_and_selects_new_file(
         source_file = session.query(SourceFile).one()
         assert source_file.file_summary == asdict(summary)
         assert session.query(Record).one().title == "A title"
+    assert navs[-1].selected_key == f"source_file:{source_file.id}"
+
+
+def test_home__import_and_clean_cleans_only_the_imported_records(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    with Session(engine) as session:
+        session.add(Record(pages="521-2"))
+        session.commit()
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text("Pages\n612-4\n")
+    summary = FileSummary({"Pages": "612-4"}, {"Pages": 1}, 1)
+    navs = _capture_navs(monkeypatch)
+    shells = _capture_shells(monkeypatch)
+    on_imports: list[Any] = []
+    monkeypatch.setattr(
+        home_module,
+        "render_import_view",
+        lambda middle, on_import: on_imports.append(on_import),
+    )
+
+    home()
+    click_and_wait(navs[-1].buttons["import"], monkeypatch)
+    middle = shells[-1].middle
+
+    async def confirm() -> None:
+        with middle:
+            await on_imports[-1](
+                [(csv_path, summary)],
+                "csv",
+                mapping_of({"Pages": "pages"}),
+                (),
+                None,
+                default_choices("csv", ()),
+                True,
+            )
+
+    asyncio.run(confirm())
+
+    with Session(engine) as session:
+        pages = [r.pages for r in session.query(Record).order_by(Record.id)]
+        assert pages == ["521-2", "612-614"]
+        cleaning = session.query(ActivityLog).filter_by(action_type="clean").one()
+        assert (cleaning.message or "").startswith("Cleaned 1 record: 1 changed")
+        source_file = session.query(SourceFile).one()
     assert navs[-1].selected_key == f"source_file:{source_file.id}"
 
 
@@ -297,9 +344,10 @@ def test_home__multi_file_import_stores_each_file_and_selects_dashboard(
                 [(first_path, first_summary), (second_path, second_summary)],
                 "csv",
                 mapping_of({"Title": "title"}),
-                "unknown",
+                (),
                 None,
-                default_choices("csv", "unknown"),
+                default_choices("csv", ()),
+                False,
             )
 
     asyncio.run(confirm())
@@ -334,6 +382,36 @@ def test_home__clicking_table_shows_records_in_grid(
         if isinstance(element, ui.aggrid)
     )
     assert [row["title"] for row in grid.options["rowData"]] == ["A title"]
+
+
+def test_home__show_in_table_opens_problem_records(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_source_file_with_record(engine)
+    with Session(engine) as session:
+        session.query(Record).one().publication_date = "May 2020"
+        session.commit()
+    navs = _capture_navs(monkeypatch)
+    shells = _capture_shells(monkeypatch)
+    home()
+    show = next(
+        e
+        for e in shells[-1].middle.descendants()
+        if isinstance(e, ui.button) and e.text == "Show in table"
+    )
+
+    click_and_wait(show, monkeypatch)
+
+    assert navs[-1].selected_key == "library:table"
+    grid = next(e for e in shells[-1].middle.descendants() if isinstance(e, ui.aggrid))
+    assert [c["field"] for c in grid.options["columnDefs"]] == [
+        "publication_date",
+        "data_quality",
+    ]
+    assert grid.options["rowData"][0]["data_quality"] == "Unparsed dates"
+    assert "filter" in grid.options["initialState"]
+    with Session(engine) as session:
+        assert load_columns(session) == ["publication_date", "data_quality"]
 
 
 def test_home__selecting_source_file_shows_detail_view(
@@ -483,9 +561,10 @@ def test_home__failing_file_is_logged_and_notified_without_undoing_others(
                 [(moved_path, summary), (good_path, summary)],
                 "csv",
                 mapping_of({"Title": "title"}),
-                "unknown",
+                (),
                 None,
-                default_choices("csv", "unknown"),
+                default_choices("csv", ()),
+                False,
             )
 
     asyncio.run(confirm())
@@ -653,8 +732,27 @@ def test_home__cleaning_cleans_logs_and_notifies(
     with Session(engine) as session:
         assert session.query(Record).one().pages == "521-522"
         entry = session.query(ActivityLog).one()
-        assert entry.message == "Cleaned 1 record: 1 changed (Pages set 1)."
+        assert entry.message == "Cleaned 1 record: 1 changed\nPages set: 1"
     assert notifications == ["Cleaned 1 record: 1 changed"]
+
+
+def test_home__cleaning_shows_the_dashboard_when_done(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_source_file_with_record(engine)
+    shells = _capture_shells(monkeypatch)
+    navs = _capture_navs(monkeypatch)
+    views = _capture_cleaning_views(monkeypatch)
+    home()
+    click_and_wait(_cleaning_button(shells[-1]), monkeypatch)
+    assert navs[-1].selected_key is None
+
+    click_and_wait(views[-1].run_button, monkeypatch)
+
+    assert navs[-1].selected_key == "library:dashboard"
+    assert "Field completeness" in [
+        e.text for e in shells[-1].middle.descendants() if isinstance(e, ui.label)
+    ]
 
 
 def test_home__cleaning_options_are_remembered_when_run(

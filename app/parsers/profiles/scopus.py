@@ -5,7 +5,6 @@ from io import StringIO
 from app.parsers.mapping import Suggest
 from app.parsers.profiles.base import FormatProfile, Profile
 from app.parsers.profiles.default import (
-    default_row_defaults,
     default_settings,
 )
 
@@ -52,17 +51,8 @@ SCOPUS = Profile(
             },
             matches=_matches_csv,
             settings=default_settings("csv"),
-            row_defaults=default_row_defaults("csv"),
             # "Authors" abbreviates the given names in "Author full names".
-            ignored_keys=frozenset(
-                {
-                    "authors",
-                    "conference date",
-                    "conference location",
-                    "conference code",
-                    "publication stage",
-                }
-            ),
+            ignored_keys=frozenset({"authors"}),
         ),
         "ris": FormatProfile(
             suggestions={
@@ -71,20 +61,20 @@ SCOPUS = Profile(
             },
             matches=_matches_ris,
             settings=default_settings("ris"),
-            row_defaults=default_row_defaults("ris"),
+            # TY is only the RIS reference type (JOUR); M3 holds Scopus's own.
+            ignored_keys=frozenset({"ty"}),
         ),
         "bibtex": FormatProfile(
             suggestions={
                 "type": Suggest("publication_type"),
-                "pmid": Suggest("pmid"),
                 "author_keywords": Suggest(
                     "keywords", {"prefix": _AUTHOR_KEYWORD_PREFIX}
                 ),
-                "keywords": Suggest("keywords"),
             },
             matches=_matches_bibtex,
             settings=default_settings("bibtex"),
-            row_defaults=default_row_defaults("bibtex"),
+            # The entry type (@article) is less precise than Scopus's own type.
+            ignored_keys=frozenset({"@type"}),
         ),
     },
 )

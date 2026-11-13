@@ -16,7 +16,6 @@ from app.parsers.common import (
 )
 from app.parsers.mapping import (
     FieldMapping,
-    RowDefaults,
     Suggest,
     apply_mapping,
     override_aliases,
@@ -30,9 +29,15 @@ _SCALARS = {
     "article title": "title",
     "document title": "title",
     "title": "title",
+    "primary_title": "title",
     "abstract": "abstract",
+    "notes_abstract": "abstract",
     "source title": "journal",
     "journal": "journal",
+    "journal_name": "journal",
+    "alternate_title3": "journal",
+    "secondary_title": "journal",
+    "journal/book": "journal",
     "publication title": "journal",
     "conference name": "conference_name",
     "proceedings title": "conference_name",
@@ -43,11 +48,13 @@ _SCALARS = {
     "pmid": "pmid",
     "document type": "publication_type",
     "publication type": "publication_type",
+    "type_of_reference": "publication_type",
     "language of original document": "language",
     "language": "language",
     "publisher": "publisher",
     "link": "url",
     "url": "url",
+    "urls": "url",
     "notes": "notes",
 }
 _SUGGESTIONS: dict[str, Suggest] = {
@@ -56,34 +63,76 @@ _SUGGESTIONS: dict[str, Suggest] = {
     "page range": Suggest("pages"),
     "page start": Suggest("pages", {"part": "start"}),
     "page end": Suggest("pages", {"part": "end"}),
+    "start_page": Suggest("pages", {"part": "start"}),
+    "end_page": Suggest("pages", {"part": "end"}),
     "issn": Suggest("issn_isbn", {"kind": "issn"}),
     "isbn": Suggest("issn_isbn", {"kind": "isbn"}),
-    **dict.fromkeys(("authors", "author full names", "author(s)"), Suggest("authors")),
     **dict.fromkeys(
-        ("author keywords", "index keywords", "keywords"), Suggest("keywords")
+        ("author", "authors", "author full names", "author(s)", "first_authors"),
+        Suggest("authors"),
+    ),
+    "author_address": Suggest("authors", {"role": "affiliations"}),
+    **dict.fromkeys(
+        ("author ids", "author(s) id", "orcid", "orcids"),
+        Suggest("authors", {"role": "ids"}),
+    ),
+    **dict.fromkeys(
+        ("author keywords", "index keywords", "keyword", "keywords"),
+        Suggest("keywords"),
     ),
     "year": Suggest("date", {"part": "year"}),
     "publication year": Suggest("date", {"part": "year"}),
+    "publication_year": Suggest("date"),
     "month": Suggest("date", {"part": "month"}),
     "day": Suggest("date", {"part": "day"}),
     **dict.fromkeys(("date", "publication date", "coverdate"), Suggest("date")),
-    **dict.fromkeys(("eid", "pmcid", "pmc id"), Suggest("other_ids")),
+    **dict.fromkeys(
+        ("eid", "pmcid", "pmc id", "accession_number"), Suggest("other_ids")
+    ),
     **dict.fromkeys(
         ("included", "label_included", "label", "decision", "inclusion"),
         Suggest("label"),
     ),
 }
-ROW_DEFAULTS = RowDefaults()
+# Headers that would otherwise be fuzzy-matched or caught by the ID fallback.
+_IGNORED = frozenset({"conference date", "has orcid", "has pmcid", "ror id"})
 
 _EXTRA_FIELDS_KEY = "__extra__"
 _SNIFF_SAMPLE_SIZE = 2048
+_DELIMITERS = ",;\t"
+_CONSISTENT_ROWS = 5
+
+
+def _row_lengths(text: str, delimiter: str) -> set[int]:
+    reader = csv.reader(StringIO(text), delimiter=delimiter)
+    try:
+        rows = [row for _, row in zip(range(_CONSISTENT_ROWS), reader, strict=False)]
+    except csv.Error:
+        return set()
+    return {len(row) for row in rows if row} if len(rows) > 1 else set()
+
+
+def _consistent_delimiter(text: str) -> str | None:
+    """The delimiter giving the first rows one same column count above one; the
+    most columns wins."""
+    best, best_columns = None, 1
+    for delimiter in _DELIMITERS:
+        lengths = _row_lengths(text, delimiter)
+        if len(lengths) == 1 and (columns := lengths.pop()) > best_columns:
+            best, best_columns = delimiter, columns
+    return best
 
 
 def sniff_dialect(text: str) -> type[csv.Dialect] | None:
+    """The sniffer gives up when its sample cuts through long quoted cells; the
+    reader then tries each delimiter on the first rows."""
     try:
-        dialect = csv.Sniffer().sniff(text[:_SNIFF_SAMPLE_SIZE], delimiters=",;	")
+        dialect = csv.Sniffer().sniff(text[:_SNIFF_SAMPLE_SIZE], delimiters=_DELIMITERS)
     except csv.Error:
-        return None
+        delimiter = _consistent_delimiter(text)
+        if delimiter is None:
+            return None
+        return type("ConsistentDialect", (csv.excel,), {"delimiter": delimiter})
     # The sniffer guesses doublequote=False when its sample has no "" escape.
     dialect.doublequote = True
     return dialect
@@ -196,9 +245,9 @@ def read_csv_headers(
 def suggest_mapping(
     headers: list[str],
     overrides: Mapping[str, Suggest] | None = None,
-    defaults: RowDefaults = ROW_DEFAULTS,
     ignored_keys: frozenset[str] = frozenset(),
 ) -> FieldMapping:
     suggestions = override_aliases(_SUGGESTIONS, overrides or {})
-    kept = [h for h in headers if h.strip().lower() not in ignored_keys]
-    return _suggest_mapping(kept, suggestions, defaults, lenient=True)
+    return _suggest_mapping(
+        headers, suggestions, lenient=True, ignored_keys=_IGNORED | ignored_keys
+    )

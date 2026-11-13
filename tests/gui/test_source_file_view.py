@@ -21,7 +21,7 @@ def _source_file(
         filename="pubmed.nbib",
         path="/imports/pubmed.nbib",
         format="nbib",
-        source="pubmed",
+        sources=["pubmed"],
         imported_at=datetime.datetime(2026, 1, 1, 9, 5),
         row_count=3,
         skipped_rows=skipped_rows,
@@ -99,6 +99,25 @@ def test_render_source_file_view__shows_metadata_and_record_count() -> None:
         "3",
     ]:
         assert text in labels
+
+
+def test_render_source_file_view__imported_count_next_to_library_count() -> None:
+    panes = shell()
+    render_source_file_view(
+        panes.middle,
+        _source_file([], {}),
+        records_in_library=2,
+        on_remove=lambda: None,
+    )
+
+    labels = _labels(panes.middle)
+    start = labels.index("Records imported")
+    assert labels[start : start + 4] == [
+        "Records imported",
+        "3",
+        "Records in library",
+        "2",
+    ]
 
 
 def test_render_source_file_view__shows_sheet_after_format() -> None:

@@ -7,6 +7,8 @@ from app.gui.cleaning_flow import CleaningView, render_cleaning_view
 from app.gui.layout import shell
 from tests.gui.clicks import click_and_wait
 
+_ONE_EMPTY = CleaningOptions(empty_values=["[Not Available]."])
+
 
 def _render(
     options: CleaningOptions | None = None,
@@ -44,12 +46,14 @@ def test_render_cleaning_view__boxes_in_order() -> None:
     boxes = [e for e in middle.descendants() if e.tag == "fieldset"]
     titles = [_labels(box.default_slot.children[0]) for box in boxes]
     assert titles == [
+        ["Identifiers"],
+        ["Dates"],
+        ["Keywords"],
         ["ISSN/ISBN"],
+        ["From raw fields"],
+        ["Other"],
         ["Authors"],
         ["Empty values"],
-        ["Identifiers"],
-        ["Other"],
-        ["From raw fields"],
     ]
 
 
@@ -84,14 +88,14 @@ def test_render_cleaning_view__no_records_disables_run() -> None:
 
 
 def test_render_cleaning_view__opens_on_saved_options_tinted_as_changed() -> None:
-    view = _render(CleaningOptions(drop_et_al=False, affiliation_start=", "))
+    view = _render(CleaningOptions(drop_et_al=False, affiliation_start="; "))
 
     drop = view.screen.widgets["drop_et_al"]
     start = view.screen.widgets["affiliation_start"]
     assert drop.value is False and drop.props["color"] == "blue"
-    assert start.value == ", " and start.props["bg-color"] == "blue-2"
+    assert start.value == "; " and start.props["bg-color"] == "blue-2"
     assert view.screen.current_choices() == CleaningOptions(
-        drop_et_al=False, affiliation_start=", "
+        drop_et_al=False, affiliation_start="; "
     )
 
 
@@ -108,6 +112,19 @@ def test_render_cleaning_view__checkbox_has_no_text_of_its_own() -> None:
     checkbox = _render().screen.widgets["drop_et_al"]
 
     assert isinstance(checkbox, ui.checkbox) and checkbox.text == ""
+
+
+def test_render_cleaning_view__date_order_is_a_dropdown_enabled_by_clean_dates() -> (
+    None
+):
+    screen = _render().screen
+    order = screen.widgets["date_order"]
+
+    assert isinstance(order, ui.select) and order.value == "eu"
+    screen.set_value("date_order", "us")
+    assert screen.current_choices().date_order == "us"
+    screen.set_value("clean_dates", False)
+    assert not order.enabled
 
 
 def test_render_cleaning_view__split_authors_enables_its_options() -> None:
@@ -145,7 +162,7 @@ def test_render_cleaning_view__preferred_qualifier_greyed_out_without_only_one()
 
 
 def test_render_cleaning_view__empty_values_show_saved_plus_a_blank_box() -> None:
-    screen = _render().screen
+    screen = _render(_ONE_EMPTY).screen
 
     assert [text.value for text in screen.empty_rows] == ["[Not Available].", ""]
     assert "w-[7rem]" in screen.empty_rows[0].classes
@@ -153,7 +170,7 @@ def test_render_cleaning_view__empty_values_show_saved_plus_a_blank_box() -> Non
 
 def test_render_cleaning_view__typing_in_the_blank_box_adds_the_next() -> None:
     middle = shell().middle
-    screen = _render(middle=middle).screen
+    screen = _render(_ONE_EMPTY, middle=middle).screen
     blank = screen.empty_rows[1]
 
     blank.value = "n"
@@ -170,7 +187,7 @@ def test_render_cleaning_view__typing_in_the_blank_box_adds_the_next() -> None:
 
 
 def test_render_cleaning_view__cleared_box_stays_but_is_ignored() -> None:
-    screen = _render().screen
+    screen = _render(_ONE_EMPTY).screen
 
     screen.empty_rows[0].value = " "
 
@@ -182,7 +199,7 @@ def test_render_cleaning_view__red_remove_button_drops_a_value(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     middle = shell().middle
-    screen = _render(middle=middle).screen
+    screen = _render(_ONE_EMPTY, middle=middle).screen
     [remove] = _buttons(middle, "close")
     assert remove.props["color"] == "negative"
 

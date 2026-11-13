@@ -5,11 +5,11 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import SourceFile
-from app.gui.format import format_count, source_label
-from app.gui.import_flow import row_defaults_for, type_label
+from app.gui.format import format_count, sources_label
+from app.gui.import_flow import type_label
 from app.gui.mapping_table import render_mapping_table
 from app.gui.quirks_overview import render_quirks_overview, render_view_toggle
-from app.parsers.common import UNKNOWN, FileSummary, FileType
+from app.parsers.common import FileSummary, FileType
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import (
     default_choices,
@@ -49,7 +49,7 @@ def render_source_file_view(
             ui.label(source_file.filename).classes("text-2xl")
             with ui.grid(columns="max-content auto").classes("gap-x-4 gap-y-1"):
                 details = [
-                    ("Source", source_label(source_file.source)),
+                    ("Sources", sources_label(source_file.sources)),
                     ("Format", source_file.format),
                     ("Imported at", f"{source_file.imported_at:%Y-%m-%d %H:%M}"),
                     ("Path", source_file.path or ""),
@@ -60,9 +60,13 @@ def render_source_file_view(
                     ui.label(name).classes("text-sm text-grey-7")
                     ui.label(value).classes("text-sm")
             with ui.row().classes("items-center gap-6"):
-                with ui.column().classes("gap-0"):
-                    ui.label("Records in library").classes("text-sm text-grey-7")
-                    ui.label(format_count(records_in_library)).classes("text-3xl")
+                for name, count in (
+                    ("Records imported", source_file.row_count or 0),
+                    ("Records in library", records_in_library),
+                ):
+                    with ui.column().classes("gap-0"):
+                        ui.label(name).classes("text-sm text-grey-7")
+                        ui.label(format_count(count)).classes("text-3xl")
                 ui.button(
                     "Remove from library",
                     icon="delete",
@@ -92,18 +96,17 @@ def render_source_file_view(
             with ui.column().classes("gap-1"):
                 views = render_view_toggle()
                 summary = FileSummary(**source_file.file_summary)
-                source = source_file.source or UNKNOWN
-                choices = load_choices(source_file.quirk_choices, file_type, source)
+                sources = source_file.sources
+                choices = load_choices(source_file.quirk_choices, file_type, sources)
                 render_mapping_table(
                     views.mapping,
                     summary,
                     FieldMapping.model_validate(source_file.suggested_mapping),
-                    defaults=row_defaults_for(file_type, source),
                     chosen=FieldMapping.model_validate(source_file.field_mapping),
                 )
                 render_quirks_overview(
                     views.parsing,
                     quirk_boxes(file_type, type_label(file_type)),
-                    default_choices(file_type, source),
+                    default_choices(file_type, sources),
                     chosen=choices,
                 )

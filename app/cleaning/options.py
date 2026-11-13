@@ -2,6 +2,7 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from app.db.settings import delete_setting, get_setting, set_setting
+from app.parsers.mapping import DateOrder
 from app.parsers.profiles.overview import QuirkBox, QuirkItem, QuirkList
 
 _OPTIONS_KEY = "cleaning_options"
@@ -12,19 +13,25 @@ class CleaningOptions(BaseModel):
     only_one: bool = True
     preferred_qualifier: str = "Electronic"
     drop_et_al: bool = True
-    drop_trailing: bool = False
+    drop_trailing: bool = True
     split_authors: bool = True
     names_separator: str = ""
     affiliations_separator: str = ""
+    ids_separator: str = ""
     id_from_name: bool = True
-    author_strip_extras: bool = False
-    affiliation_start: str = ""
-    empty_values: list[str] = ["[Not Available]."]
+    author_strip_extras: bool = True
+    affiliation_start: str = ", "
+    split_keywords: bool = True
+    clean_dates: bool = True
+    date_order: DateOrder = "eu"
+    keywords_separator: str = ""
+    empty_values: list[str] = ["[Not Available].", "none", "unknown"]
     refill_from_raw: bool = True
     strip_doi: bool = True
     strip_pmid: bool = True
     pages_set: bool = True
     first_publication_type: bool = True
+    standardize_publication_type: bool = True
     ris_notes: bool = True
     eid_from_url: bool = True
     citation_parts: bool = True
@@ -89,22 +96,23 @@ _AUTHORS = QuirkBox(
         QuirkItem(
             "drop_trailing",
             "Drop trailing",
-            "Removes non-name characters, like ... or ., from the end of the last"
-            " author's name.",
+            "Removes non-name characters, like ... or ;, from the end of the last"
+            " author's name. A full stop is only removed after a word of three or"
+            " more letters, so initials like J. are kept.",
             "checkbox",
         ),
         QuirkItem(
             "split_authors",
             "Split authors",
-            "Separates the author names and affiliations with |, so each author"
-            " can be told apart. Needed for the options below.",
+            "Separates the author names, affiliations and IDs with |, so each"
+            " author can be told apart. Needed for the options below.",
             "checkbox",
         ),
         QuirkItem(
             "names_separator",
             "Names separator",
             "What separates the author names in the imported value. Leave empty"
-            " to detect it per imported file (;, |, a line break or ' and ';"
+            " to detect it per imported file (|, ;, a line break or ' and ';"
             " never a comma, which also separates last and first names).",
             "text",
             enabled_by="split_authors",
@@ -114,6 +122,15 @@ _AUTHORS = QuirkBox(
             "Affiliations separator",
             "What separates the affiliations in the imported value. Leave empty"
             " to detect it per imported file, as for the names.",
+            "text",
+            enabled_by="split_authors",
+        ),
+        QuirkItem(
+            "ids_separator",
+            "IDs separator",
+            "What separates the author IDs in an imported column, e.g. Scopus's"
+            " Author(s) ID. Leave empty to detect it per imported file, as for"
+            " the names.",
             "text",
             enabled_by="split_authors",
         ),
@@ -137,12 +154,54 @@ _AUTHORS = QuirkBox(
             "affiliation_start",
             "Affiliation start",
             "Sometimes an affiliation starts with the author's name; strips"
-            " everything up to this delimiter, if the text before it starts"
-            " with that author's last name. Such an affiliation without the"
+            " everything up to this delimiter, if the text before it is that"
+            " author's last name plus initials. Such an affiliation without the"
             " delimiter is only a name and is dropped. Leave empty to keep"
             " affiliations as they are.",
             "text",
             enabled_by="split_authors",
+        ),
+    ),
+)
+_KEYWORDS = QuirkBox(
+    "Keywords",
+    (
+        QuirkItem(
+            "split_keywords",
+            "Split keywords",
+            "Splits each imported keywords value into separate keywords, keeping"
+            " its prefix.",
+            "checkbox",
+        ),
+        QuirkItem(
+            "keywords_separator",
+            "Keywords separator",
+            "What separates the keywords in the imported value. Leave empty to"
+            " detect it per imported file, as for the author names.",
+            "text",
+            enabled_by="split_keywords",
+        ),
+    ),
+)
+_DATES = QuirkBox(
+    "Dates",
+    (
+        QuirkItem(
+            "clean_dates",
+            "Clean up dates",
+            "Reads the publication date and writes it as YYYY/MM/DD, an unknown"
+            " part left empty (1994//). A date that can't be read is kept as it"
+            " is.",
+            "checkbox",
+        ),
+        QuirkItem(
+            "date_order",
+            "Ambiguous dates",
+            "Which number is the month in a numeric date like 03/04/2020 where"
+            " both could be.",
+            "select",
+            enabled_by="clean_dates",
+            choices={"eu": "Day before month (EU)", "us": "Month before day (US)"},
         ),
     ),
 )
@@ -205,6 +264,14 @@ _OTHER = QuirkBox(
             " first.",
             "checkbox",
         ),
+        QuirkItem(
+            "standardize_publication_type",
+            "Standardize pub. type",
+            "Maps vendor publication types to one list, e.g. JOUR, article and"
+            " Journal Article become Journal article. Not case-sensitive. A type"
+            " that isn't on the list keeps its text.",
+            "checkbox",
+        ),
     ),
 )
 _FROM_FILE = QuirkBox(
@@ -237,4 +304,13 @@ _FROM_FILE = QuirkBox(
     ),
 )
 
-CLEANING_BOXES = [_ISSN_ISBN, _AUTHORS, _EMPTY_VALUES, _IDENTIFIERS, _OTHER, _FROM_FILE]
+CLEANING_BOXES = [
+    _IDENTIFIERS,
+    _DATES,
+    _KEYWORDS,
+    _ISSN_ISBN,
+    _FROM_FILE,
+    _OTHER,
+    _AUTHORS,
+    _EMPTY_VALUES,
+]

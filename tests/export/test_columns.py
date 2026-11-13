@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from app.export.columns import (
@@ -14,14 +16,14 @@ from app.export.columns import (
     fill_count,
 )
 from app.export.options import ExportOptions
-from app.models.record import Label, PartialDate, Record
+from app.models.record import Label, Record
 
 _OPTIONS = ExportOptions(empty_columns=True)
 
 
 def _pubmed_source(**raw_fields: str) -> ExportSource:
     return ExportSource(
-        vendor="pubmed",
+        vendors=("pubmed",),
         filename="pubmed-deeplearni-set.nbib",
         raw_fields=raw_fields,
         ignored_keys=frozenset({"OWN", "STAT"}) & raw_fields.keys(),
@@ -30,7 +32,7 @@ def _pubmed_source(**raw_fields: str) -> ExportSource:
 
 def _scopus_source(**raw_fields: str) -> ExportSource:
     return ExportSource(
-        vendor="scopus",
+        vendors=("scopus",),
         filename="scopus.csv",
         raw_fields=raw_fields,
         ignored_keys=frozenset({"Link", "Source"}) & raw_fields.keys(),
@@ -83,17 +85,17 @@ def test_export_columns__author_columns_follow_title() -> None:
 @pytest.mark.parametrize(
     ("date", "part", "expected"),
     [
-        (PartialDate(year=2021), "full", "2021"),
-        (PartialDate(year=2021, month=3), "full", "2021-03"),
-        (PartialDate(year=2021, month=3, day=7), "full", "2021-03-07"),
-        (PartialDate(year=2021, month=3, day=7), "year", "2021"),
-        (PartialDate(year=2021, month=3, day=7), "month", "3"),
-        (PartialDate(year=2021, month=3), "day", ""),
+        ("2021//", "full", "2021//"),
+        ("Mar 2021", "full", "Mar 2021"),
+        ("2021/03/07", "year", "2021"),
+        ("2021/03/07", "month", "3"),
+        ("2021/03/", "day", ""),
+        ("Mar 2021", "year", ""),
         (None, "full", ""),
     ],
 )
-def test_column_value__date_parts(
-    date: PartialDate | None, part: str, expected: str
+def test_column_value__date_parts_only_from_cleaned_date(
+    date: str | None, part: str, expected: str
 ) -> None:
     column = DateColumn(key="date", label="", name="", part=part)  # type: ignore[arg-type]
 
@@ -165,6 +167,18 @@ def test_column_value__extras() -> None:
     assert _value(record, "record_id") == "42"
     assert _value(record, "sources") == "PubMed, Scopus"
     assert _value(record, "source_files") == ("pubmed-deeplearni-set.nbib; scopus.csv")
+
+
+def test_column_value__sources_lists_each_of_a_files_sources() -> None:
+    source = replace(_pubmed_source(TI="A"), vendors=("pubmed", "asreview"))
+
+    assert _value(_record(sources=[source]), "sources") == "PubMed, ASReview"
+
+
+def test_column_value__file_without_sources_is_unknown() -> None:
+    source = replace(_pubmed_source(TI="A"), vendors=())
+
+    assert _value(_record(sources=[source]), "sources") == "Unknown"
 
 
 def test_export_columns__no_raw_rows_by_default() -> None:

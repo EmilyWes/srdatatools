@@ -1,16 +1,18 @@
 import json
-from collections.abc import Callable, Collection, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from typing import Any
 
 from nicegui import ui
 from nicegui.element import Element
 from sqlalchemy.orm import Session
 
+from app.cleaning.quality import CHECKS, problem_columns
 from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.format import format_count, keyword_key, label_key
 from app.gui.mapping_table import fill_color
 from app.gui.theme import (
     CHART_COLORS,
+    COMPLETE_COLOR,
     MULTIPLE_COLOR,
     OTHER_COLOR,
     UNKNOWN_COLOR,
@@ -23,6 +25,7 @@ from app.gui.theme import (
 _UNKNOWN = "Unknown"
 _HIDDEN_KEY = "dashboard_hidden"
 _COMPLETENESS = "completeness"
+_DATA_QUALITY = "data_quality"
 _PER_YEAR = "per_year"
 _PUBLICATION_TYPE = "publication_type"
 _SOURCE_FILES = "source_files"
@@ -44,10 +47,10 @@ _FRAME_CLASSES = (
 _TOP_KEYWORDS = 10
 _TOP_TYPES = 7
 _MIN_SLICE_ANGLE = 5
-_KEYWORD_TABLE_CLASS = "dashboard-keywords"
-_KEYWORD_TABLE_CSS = (
-    f".{_KEYWORD_TABLE_CLASS} tr, .{_KEYWORD_TABLE_CLASS} th,"
-    f" .{_KEYWORD_TABLE_CLASS} td"
+_COUNT_TABLE_CLASS = "dashboard-counts"
+_COUNT_TABLE_CSS = (
+    f".{_COUNT_TABLE_CLASS} tr, .{_COUNT_TABLE_CLASS} th,"
+    f" .{_COUNT_TABLE_CLASS} td"
     " { height: 18px !important; line-height: 18px; padding-top: 0 !important;"
     " padding-bottom: 0 !important; font-size: 12px; }"
 )
@@ -55,7 +58,7 @@ COMPLETENESS_FIELDS = [
     "title",
     "author_names",
     "abstract",
-    "publication_year",
+    "publication_date",
     "journal",
     "doi",
     "pmid",
@@ -72,6 +75,7 @@ def dashboard_items(
 ) -> list[tuple[str, str]]:
     return [
         (_COMPLETENESS, "Field completeness"),
+        (_DATA_QUALITY, "Data quality"),
         (_PER_YEAR, "Publication year"),
         (_PUBLICATION_TYPE, "Publication type"),
         (_SOURCE_FILES, "Source files"),
@@ -94,6 +98,12 @@ def save_hidden(session: Session, hidden: Collection[str]) -> None:
 
 def reset_hidden(session: Session) -> None:
     delete_setting(session, _HIDDEN_KEY)
+
+
+def _fill_color(count: int, total: int) -> str:
+    if total and count == total:
+        return COMPLETE_COLOR
+    return _FILL_COLORS[fill_color(count, total)]
 
 
 def _completeness_chart(total: int, filled: Sequence[tuple[str, int]]) -> None:
@@ -127,9 +137,7 @@ def _completeness_chart(total: int, filled: Sequence[tuple[str, int]]) -> None:
                                     round(100 * count / total, 1) if total else 0
                                 ),
                                 "count": format_count(count),
-                                "itemStyle": {
-                                    "color": _FILL_COLORS[fill_color(count, total)]
-                                },
+                                "itemStyle": {"color": _fill_color(count, total)},
                             }
                             for _, count in filled
                         ],
@@ -240,46 +248,90 @@ def _source_file_pie(per_file: Sequence[tuple[str, int]], multiple: int) -> None
     )
 
 
-def _keyword_table(prefix: str | None, counts: Sequence[tuple[str, int]]) -> None:
-    with ui.column().classes(_FRAME_CLASSES):
-        ui.label(_keyword_title(prefix)).classes(_TITLE_CLASSES)
+def _count_table(
+    title: str,
+    name_label: str,
+    counts: Sequence[tuple[str, int]],
+    zero_is_good: bool = False,
+    hovers: Mapping[str, str] | None = None,
+) -> Element:
+    with ui.column().classes(_FRAME_CLASSES) as frame:
+        ui.label(title).classes(_TITLE_CLASSES)
         table = (
             ui.table(
                 columns=[
                     {
-                        "name": "keyword",
-                        "label": "Keyword",
-                        "field": "keyword",
+                        "name": "name",
+                        "label": name_label,
+                        "field": "name",
                         "align": "left",
                     },
                     {"name": "count", "label": "Records", "field": "count"},
                 ],
                 rows=[
-                    {"keyword": keyword, "count": format_count(count)}
-                    for keyword, count in counts[:_TOP_KEYWORDS]
+                    {
+                        "name": name,
+                        "count": format_count(count),
+                        "hover": (hovers or {}).get(name, name),
+                        **({"red": count > 0} if zero_is_good else {}),
+                    }
+                    for name, count in counts
                 ],
                 pagination=0,
             )
             .props("dense flat bordered hide-bottom")
-            .classes(f"w-full {_KEYWORD_TABLE_CLASS}")
+            .classes(f"w-full {_COUNT_TABLE_CLASS}")
         )
         table.add_slot(
-            "body-cell-keyword",
-            '<q-td :props="props" :title="props.value"'
+            "body-cell-name",
+            '<q-td :props="props" :title="props.row.hover"'
             ' class="ellipsis" style="max-width: 10rem">{{ props.value }}</q-td>',
         )
+        if zero_is_good:
+            table.add_slot(
+                "body-cell-count",
+                '<q-td :props="props"'
+                " :class=\"props.row.red ? 'text-red' : 'text-green'\">"
+                "{{ props.value }}</q-td>",
+            )
+    return frame
+
+
+def _quality_table(
+    quality: Sequence[tuple[str, int]],
+    on_show: Callable[[list[str]], Awaitable[None] | None] | None,
+) -> None:
+    hovers = {name: check.hover for name, check in CHECKS.items() if check.hover}
+    frame = _count_table(
+        "Data quality", "Check", quality, zero_is_good=True, hovers=hovers
+    )
+    columns = problem_columns(dict(quality))
+    with frame:
+        button = ui.button(
+            "Show in table",
+            color=None,
+            on_click=lambda: on_show(columns) if on_show is not None else None,
+        ).props("outline no-caps dense")
+        button.classes("mt-auto self-center text-sm px-2")
+        button.set_enabled(any(count for _, count in quality))
+
+
+def _keyword_table(prefix: str | None, counts: Sequence[tuple[str, int]]) -> None:
+    _count_table(_keyword_title(prefix), "Keyword", counts[:_TOP_KEYWORDS])
 
 
 def render_library_dashboard(
     middle: Element,
     total: int,
     filled: Sequence[tuple[str, int]],
+    quality: Sequence[tuple[str, int]],
     per_year: Sequence[tuple[int | None, int]],
     publication_types: Sequence[tuple[str | None, int]],
     per_file: tuple[Sequence[tuple[str, int]], int],
     label_counts: Mapping[tuple[str, str], Mapping[str, int]],
     keyword_counts: Mapping[str | None, Sequence[tuple[str, int]]],
     hidden: Collection[str],
+    on_show_quality: Callable[[list[str]], Awaitable[None] | None] | None = None,
 ) -> None:
     pies = {
         pair: counts
@@ -296,6 +348,7 @@ def render_library_dashboard(
         with ui.column().classes("w-full p-6 gap-4"):
             if (
                 _COMPLETENESS in hidden
+                and _DATA_QUALITY in hidden
                 and _PER_YEAR in hidden
                 and _PUBLICATION_TYPE in hidden
                 and _SOURCE_FILES in hidden
@@ -310,6 +363,8 @@ def render_library_dashboard(
             ):
                 if _COMPLETENESS not in hidden:
                     _completeness_chart(total, filled)
+                if _DATA_QUALITY not in hidden:
+                    _quality_table(quality, on_show_quality)
                 if _PER_YEAR not in hidden:
                     _year_chart(per_year)
                 if _PUBLICATION_TYPE not in hidden:
@@ -320,7 +375,7 @@ def render_library_dashboard(
                     _label_pie(phase, screener, counts)
                 for prefix, keyword_rows in keyword_tables.items():
                     _keyword_table(prefix, keyword_rows)
-        ui.add_css(_KEYWORD_TABLE_CSS)
+        ui.add_css(_COUNT_TABLE_CSS)
 
 
 def render_dashboard_settings(

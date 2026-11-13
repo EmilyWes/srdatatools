@@ -1,3 +1,5 @@
+from typing import Literal
+
 import pytest
 from nicegui import ui
 from nicegui.elements.label import Label
@@ -15,19 +17,16 @@ from app.parsers.mapping import (
     AuthorsRow,
     DateRow,
     FieldMapping,
-    KeywordsRow,
+    IssnIsbnRow,
     LabelRow,
     OtherIdRow,
     PagesRow,
-    RowDefaults,
+    RowMapping,
     ScalarRow,
     Suggest,
 )
-from app.parsers.ris import ROW_DEFAULTS as RIS_DEFAULTS
 from app.parsers.ris import suggest_ris_mapping
 from tests.mappings import mapping_of, targets_of
-
-_DEFAULTS = RowDefaults()
 
 
 def _summary(samples: dict[str, str]) -> FileSummary:
@@ -40,7 +39,6 @@ def _render_samples(samples: dict[str, str]) -> MappingScreen:
         panes.middle,
         _summary(samples),
         suggest_mapping(list(samples)),
-        defaults=_DEFAULTS,
     )
 
 
@@ -50,7 +48,6 @@ def _render_ris_samples(samples: dict[str, str]) -> MappingScreen:
         panes.middle,
         _summary(samples),
         suggest_ris_mapping(list(samples)),
-        defaults=RIS_DEFAULTS,
     )
 
 
@@ -142,7 +139,6 @@ def test_render_mapping_table__renders_only_the_table() -> None:
         panes.middle,
         _summary({"Title": ""}),
         suggest_mapping(["Title"]),
-        defaults=_DEFAULTS,
     )
 
     assert len(panes.middle.default_slot.children) == 1
@@ -174,9 +170,8 @@ def test_render_mapping_table__picking_a_target_shows_its_default_options() -> N
     screen.set_target("Scopus Author ID", "authors")
 
     assert screen._row_for("Scopus Author ID").inputs["role"].value == "names"
-    assert _input(screen, "Scopus Author ID", "delimiter").props["placeholder"] == ";"
     assert screen.current_mapping().rows == {
-        "Scopus Author ID": AuthorsRow(delimiter=";", id_key="scopus_author_id")
+        "Scopus Author ID": AuthorsRow(id_key="scopus_author_id")
     }
 
 
@@ -194,20 +189,12 @@ def test_render_mapping_table__other_id_key_defaults_to_slug_and_is_editable() -
 
 
 def test_render_mapping_table__empty_text_box_uses_placeholder() -> None:
-    screen = _render(["Keywords"])
+    screen = _render(["included"])
 
-    screen.set_option("Keywords", "delimiter", "|")
-    screen.set_option("Keywords", "delimiter", "")
+    screen.set_option("included", "phase", "tiab")
+    screen.set_option("included", "phase", "")
 
-    assert screen.current_mapping().rows == {"Keywords": KeywordsRow(delimiter=";")}
-
-
-def test_render_mapping_table__delimiter_keeps_spaces() -> None:
-    screen = _render(["Keywords"])
-
-    screen.set_option("Keywords", "delimiter", " ")
-
-    assert screen.current_mapping().rows == {"Keywords": KeywordsRow(delimiter=" ")}
+    assert screen.current_mapping().rows == {"included": LabelRow()}
 
 
 def test_render_mapping_table__typed_prefix_loses_brackets_and_spaces() -> None:
@@ -218,31 +205,21 @@ def test_render_mapping_table__typed_prefix_loses_brackets_and_spaces() -> None:
     assert screen.current_mapping().rows["Keywords"].model_dump()["prefix"] == "Author"
 
 
-def test_render_mapping_table__date_order_only_shows_for_full_date() -> None:
+def test_render_mapping_table__date_rows_only_show_part() -> None:
     screen = _render(["Date", "Year"])
 
-    assert _visible_options(screen, "Date") == ["part", "order"]
+    assert _visible_options(screen, "Date") == ["part"]
     assert _visible_options(screen, "Year") == ["part"]
-    screen.set_option("Year", "part", "full")
-    assert _visible_options(screen, "Year") == ["part", "order"]
 
 
 def test_render_mapping_table__only_author_ids_show_id_key() -> None:
     screen = _render(["Authors"])
 
-    assert _visible_options(screen, "Authors") == ["role", "delimiter"]
+    assert _visible_options(screen, "Authors") == ["role"]
     screen.set_option("Authors", "role", "ids")
-    assert _visible_options(screen, "Authors") == ["role", "delimiter", "id_key"]
+    assert _visible_options(screen, "Authors") == ["role", "id_key"]
     screen.set_option("Authors", "role", "affiliations")
-    assert _visible_options(screen, "Authors") == ["role", "delimiter"]
-
-
-def test_render_mapping_table__one_value_per_line_hides_delimiter() -> None:
-    screen = _render_ris(["AU", "KW"])
-
-    assert _visible_options(screen, "AU") == ["role"]
-    assert _visible_options(screen, "KW") == ["prefix"]
-    assert screen.current_mapping().rows["KW"] == KeywordsRow(delimiter="\n")
+    assert _visible_options(screen, "Authors") == ["role"]
 
 
 def test_render_mapping_table__switching_target_back_restores_suggested_options() -> (
@@ -274,12 +251,10 @@ def test_render_mapping_table__options_have_short_labels_with_full_tooltips() ->
     }
     assert {name: label.text for name, label in labels.items()} == {
         "role": "role:",
-        "delimiter": "aut:",
         "id_key": "key:",
     }
     assert tooltips == {
         "role": ["Role"],
-        "delimiter": ["Author separator"],
         "id_key": ["ID key"],
     }
 
@@ -301,7 +276,6 @@ def test_render_mapping_table__sample_has_full_value_tooltip_only_when_non_empty
         panes.middle,
         _summary(samples),
         suggest_mapping(list(samples)),
-        defaults=_DEFAULTS,
     )
 
     targets = {
@@ -331,14 +305,41 @@ def test_render_mapping_table__fuzzy_and_id_fallback_are_orange() -> None:
     assert {status for _, status in _statuses(screen)} == {"orange"}
 
 
-def test_render_mapping_table__several_keys_on_same_target_are_orange() -> None:
-    screen = _render(["Author Keywords", "Index Keywords", "DOI"])
+def test_render_mapping_table__keys_competing_for_one_value_are_orange() -> None:
+    screen = _render(["Article Title", "Document Title", "DOI", "Year", "Month"])
 
     assert dict(_statuses(screen)) == {
         "DOI": "green",
-        "Author Keywords": "orange",
-        "Index Keywords": "orange",
+        "Article Title": "orange",
+        "Document Title": "orange",
+        "Year": "green",
+        "Month": "green",
     }
+
+
+def test_render_mapping_table__keys_whose_values_are_all_kept_stay_green() -> None:
+    screen = _render(["Author Keywords", "Index Keywords", "Author(s) ID", "ORCIDs"])
+
+    assert {status for _, status in _statuses(screen)} == {"green"}
+
+
+@pytest.mark.parametrize(
+    ("second_kind", "status"),
+    [("isbn", "green"), ("issn", "orange"), ("auto", "orange")],
+)
+def test_render_mapping_table__issn_isbn_rows_compete_unless_issn_and_isbn(
+    second_kind: Literal["auto", "issn", "isbn"], status: str
+) -> None:
+    rows: dict[str, RowMapping] = {
+        "A": IssnIsbnRow(kind="issn"),
+        "B": IssnIsbnRow(kind=second_kind),
+    }
+    suggestion = FieldMapping(rows=rows, match_kinds=dict.fromkeys(rows, "exact"))
+    screen = render_mapping_table(
+        shell().middle, _summary(dict.fromkeys(rows, "")), suggestion
+    )
+
+    assert {s for _, s in _statuses(screen)} == {status}
 
 
 def test_render_mapping_table__ignored_is_red() -> None:
@@ -437,7 +438,6 @@ def test_render_mapping_table__truncated_input_header_has_full_value_tooltip() -
         panes.middle,
         _summary({long_header: "", "Title": ""}),
         suggest_mapping([long_header, "Title"]),
-        defaults=_DEFAULTS,
     )
 
     tooltips = [t.text for t in panes.middle.descendants() if isinstance(t, Tooltip)]
@@ -454,7 +454,6 @@ def test_render_mapping_table__shows_filled_bar_per_row_with_count_tooltip() -> 
         panes.middle,
         summary,
         suggest_mapping(list(samples)),
-        defaults=_DEFAULTS,
     )
 
     title, notes, year = (screen._row_for(h).count for h in samples)
@@ -484,7 +483,6 @@ def test_render_mapping_table__filled_bar_color_by_thirds(
         panes.middle,
         summary,
         suggest_mapping(["Title"]),
-        defaults=_DEFAULTS,
     )
 
     assert screen._row_for("Title").count.props["color"] == color
@@ -498,7 +496,6 @@ def test_render_mapping_table__empty_file_bar_is_empty() -> None:
         panes.middle,
         summary,
         suggest_mapping(["Title"]),
-        defaults=_DEFAULTS,
     )
 
     assert screen._row_for("Title").count.value == 0.0
@@ -511,7 +508,6 @@ def _render_chosen(headers: list[str], chosen: FieldMapping) -> MappingScreen:
         panes.middle,
         _summary(samples),
         suggest_mapping(headers),
-        defaults=_DEFAULTS,
         chosen=chosen,
     )
 
@@ -532,7 +528,7 @@ def test_render_mapping_table__chosen_options_are_kept() -> None:
     chosen = mapping_of(
         {
             "PMCID": Suggest("other_ids", {"key": "pmc"}),
-            "Authors": Suggest("authors", {"role": "affiliations", "delimiter": "|"}),
+            "Authors": Suggest("authors", {"role": "affiliations"}),
         }
     )
 
@@ -543,16 +539,19 @@ def test_render_mapping_table__chosen_options_are_kept() -> None:
 
 def test_render_mapping_table__chosen_mapping_is_readonly_and_shows_values() -> None:
     chosen = mapping_of(
-        {"Date": Suggest("date", {"part": "year"}), "Keywords": "keywords"}
+        {
+            "Date": Suggest("date", {"part": "year"}),
+            "Keywords": Suggest("keywords", {"prefix": "MeSH"}),
+        }
     )
 
     screen = _render_chosen(["Date", "Keywords"], chosen)
 
     assert "readonly" in screen._row_for("Date").select.props
     assert "readonly" in screen._row_for("Date").inputs["part"].props
-    delimiter = _input(screen, "Keywords", "delimiter")
-    assert "readonly" in delimiter.props
-    assert delimiter.value == ";"
+    prefix = _input(screen, "Keywords", "prefix")
+    assert "readonly" in prefix.props
+    assert prefix.value == "MeSH"
 
 
 def test_render_mapping_table__label_rows_show_phase_and_screener() -> None:
@@ -613,7 +612,6 @@ def test_render_mapping_table__options_fitting_the_example_are_green() -> None:
     screen = _render_samples({"Authors": "Smith, J; Doe, J", "Year": "2020"})
 
     assert _option_color(screen, "Authors", "role") == "green-2"
-    assert _option_color(screen, "Authors", "delimiter") == "green-2"
     assert _option_color(screen, "Year", "part") == "green-2"
 
 
@@ -628,38 +626,8 @@ def test_render_mapping_table__changed_option_turns_blue_and_back() -> None:
 
 
 def test_render_mapping_table__typing_the_placeholder_is_not_a_change() -> None:
-    screen = _render_samples({"Keywords": "a; b"})
+    screen = _render_samples({"included": "yes"})
 
-    screen.set_option("Keywords", "delimiter", ";")
+    screen.set_option("included", "phase", "ft")
 
-    assert _option_color(screen, "Keywords", "delimiter") == "green-2"
-
-
-def test_render_mapping_table__separators_missing_from_example_are_orange() -> None:
-    screen = _render_samples({"Authors": "Smith J, Doe J", "Keywords": "a, b"})
-
-    assert _option_color(screen, "Authors", "delimiter") == "orange-2"
-    assert _option_color(screen, "Keywords", "delimiter") == "orange-2"
-    assert _option_color(screen, "Keywords", "prefix") == "green-2"
-
-
-def test_render_mapping_table__changed_option_beats_orange() -> None:
-    screen = _render_samples({"Keywords": "a, b"})
-
-    screen.set_option("Keywords", "delimiter", ",")
-
-    assert _option_color(screen, "Keywords", "delimiter") == "blue-2"
-
-
-def test_render_mapping_table__ambiguous_example_date_makes_order_orange() -> None:
-    screen = _render_samples({"Date": "03/04/2020", "Created": "14/05/2020"})
-    screen.set_target("Created", "date")
-
-    assert _option_color(screen, "Date", "order") == "orange-2"
-    assert _option_color(screen, "Created", "order") == "green-2"
-
-
-def test_render_mapping_table__empty_example_gives_no_orange() -> None:
-    screen = _render(["Authors"])
-
-    assert _option_color(screen, "Authors", "delimiter") == "green-2"
+    assert _option_color(screen, "included", "phase") == "green-2"

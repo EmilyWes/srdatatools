@@ -78,12 +78,14 @@ def test_cleaning_boxes__every_control_key_is_an_option() -> None:
 
 def test_cleaning_boxes__titles_in_order() -> None:
     assert [box.title for box in CLEANING_BOXES] == [
+        "Identifiers",
+        "Dates",
+        "Keywords",
         "ISSN/ISBN",
+        "From raw fields",
+        "Other",
         "Authors",
         "Empty values",
-        "Identifiers",
-        "Other",
-        "From raw fields",
     ]
 
 
@@ -99,6 +101,7 @@ def test_cleaning_boxes__split_authors_enables_its_dependants() -> None:
     assert enabled_by_split == [
         "names_separator",
         "affiliations_separator",
+        "ids_separator",
         "id_from_name",
         "author_strip_extras",
         "affiliation_start",

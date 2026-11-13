@@ -4,6 +4,7 @@ from app.cleaning.options import CleaningOptions
 from app.cleaning.steps import (
     CleaningContext,
     citation_parts,
+    clean_date,
     clean_issn_isbn,
     clean_record,
     clear_empty_values,
@@ -18,13 +19,15 @@ from app.cleaning.steps import (
     ris_notes,
     sniff_separator,
     split_authors,
+    split_keywords,
+    standardize_publication_type,
     strip_affiliation_start,
     strip_author_extras,
     strip_doi,
     strip_pmid,
 )
 from app.models.record import Record
-from app.parsers.mapping import FieldMapping, Suggest
+from app.parsers.mapping import FieldMapping
 from tests.mappings import mapping_of
 
 _OPTIONS = CleaningOptions()
@@ -37,6 +40,8 @@ def _context(
     use_first: tuple[str, ...] = (),
     names: str | None = None,
     affiliations: str | None = None,
+    ids: str | None = None,
+    keywords: str | None = None,
 ) -> CleaningContext:
     return CleaningContext(
         raw_fields=raw_fields or {},
@@ -44,6 +49,8 @@ def _context(
         use_first=use_first,
         names_separator=names,
         affiliations_separator=affiliations,
+        ids_separator=ids,
+        keywords_separator=keywords,
     )
 
 
@@ -87,6 +94,36 @@ def test_first_publication_type__keeps_first_line() -> None:
     cleaned = first_publication_type(record, _NO_CONTEXT, _OPTIONS)
 
     assert cleaned.publication_type == "Journal Article"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("JOUR", "Journal article"),
+        (" Journal Article ", "Journal article"),
+        ("incollection", "Book chapter"),
+        ("label.ris.referenceType.BOOK_CHAPTER", "Book chapter"),
+        ("Short survey", "Review"),
+        ("GEN", "GEN"),
+        ("Journal Article\nReview", "Journal Article\nReview"),
+    ],
+)
+def test_standardize_publication_type__maps_known_values(
+    value: str, expected: str
+) -> None:
+    record = Record(publication_type=value)
+
+    cleaned = standardize_publication_type(record, _NO_CONTEXT, _OPTIONS)
+
+    assert cleaned.publication_type == expected
+
+
+def test_standardize_publication_type__runs_after_first_publication_type() -> None:
+    record = Record(publication_type="Journal Article\nReview")
+
+    cleaned, _ = clean_record(record, _NO_CONTEXT, _OPTIONS)
+
+    assert cleaned.publication_type == "Journal article"
 
 
 @pytest.mark.parametrize(
@@ -144,15 +181,34 @@ def test_drop_et_al__keeps_names_without_et_al() -> None:
 @pytest.mark.parametrize(
     ("names", "expected"),
     [
-        ("Smith J.|Doe A.", "Smith J.|Doe A"),
+        ("Brown, Barnum.", "Brown, Barnum"),
+        ("Owen,", "Owen"),
         ("Doe ...", "Doe"),
-        ("Doe A.;, ", "Doe A"),
+        ("Doe A;, ", "Doe A"),
         ("Doe…", "Doe"),
-        ("Doe (1).", "Doe (1)"),
-        ("Romano M, Novacek MJ.", "Romano M, Novacek MJ"),
+        ("Illinois State Museum;", "Illinois State Museum"),
     ],
 )
 def test_drop_trailing__strips_punctuation_and_spaces(
+    names: str, expected: str
+) -> None:
+    record = drop_trailing(Record(author_names=names), _NO_CONTEXT, _OPTIONS)
+
+    assert record.author_names == expected
+
+
+@pytest.mark.parametrize(
+    ("names", "expected"),
+    [
+        ("Smith J.|Doe A.", "Smith J.|Doe A."),
+        ("Galton, P.M.", "Galton, P.M."),
+        ("Bolotsky, I. Yu.", "Bolotsky, I. Yu."),
+        ("Doe A.;, ", "Doe A."),
+        ("Doe (1).", "Doe (1)."),
+        ("Romano M, Novacek MJ.", "Romano M, Novacek MJ."),
+    ],
+)
+def test_drop_trailing__keeps_full_stop_after_short_word(
     names: str, expected: str
 ) -> None:
     record = drop_trailing(Record(author_names=names), _NO_CONTEXT, _OPTIONS)
@@ -174,7 +230,7 @@ def test_drop_trailing__without_authors_leaves_record_unchanged() -> None:
         (["Romano M, Novacek MJ"], None),
         ([None, ""], None),
         (["A; B|C", "D|E"], "|"),
-        (["A; B|C"], ";"),
+        (["A; B|C"], "|"),
     ],
 )
 def test_sniff_separator__picks_the_candidate_in_most_values(
@@ -184,9 +240,21 @@ def test_sniff_separator__picks_the_candidate_in_most_values(
 
 
 def test_file_separators__chosen_separator_wins_over_sniffing() -> None:
-    records = [Record(author_names="A; B", author_affiliations="X; Y")]
+    records = [
+        Record(
+            author_names="A; B",
+            author_affiliations="X; Y",
+            author_ids="scopus_author_id:[1|2]",
+            keywords=["Author:[a; b]", "[MeSH] c|d"],
+        )
+    ]
 
-    assert file_separators(records, _options(names_separator=",")) == (",", ";")
+    assert file_separators(records, _options(names_separator=",")) == (
+        ",",
+        ";",
+        "|",
+        ";",
+    )
 
 
 def test_split_authors__joins_names_and_affiliations_with_bar() -> None:
@@ -211,6 +279,114 @@ def test_split_authors__without_separator_leaves_record_unchanged() -> None:
     record = Record(author_names="Teng, Yu; Han, Li")
 
     assert split_authors(record, _NO_CONTEXT, _OPTIONS) == record
+
+
+def test_split_authors__splits_id_column_per_author() -> None:
+    record = Record(author_ids="scopus_author_id:[601; 602;603]")
+
+    cleaned = split_authors(record, _context(ids=";"), _OPTIONS)
+
+    assert cleaned.author_ids == (
+        "scopus_author_id:601|scopus_author_id:602|scopus_author_id:603"
+    )
+
+
+def test_split_authors__merges_id_columns_by_position() -> None:
+    record = Record(
+        author_ids="openalex_author_id:[A1|A2|A3], orcid:[https://orcid.org/0-1||0-3]"
+    )
+
+    cleaned = split_authors(record, _context(ids="|"), _OPTIONS)
+
+    assert cleaned.author_ids == (
+        "openalex_author_id:A1, orcid:0-1|openalex_author_id:A2"
+        "|openalex_author_id:A3, orcid:0-3"
+    )
+
+
+def test_split_authors__id_column_with_other_author_count_is_ignored(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    record = Record(author_ids="openalex_author_id:[A1|A2], orcid:[0-1]")
+
+    cleaned = split_authors(record, _context(ids="|"), _OPTIONS)
+
+    assert cleaned.author_ids == "openalex_author_id:A1|openalex_author_id:A2"
+    assert "orcid" in caplog.text
+
+
+def test_split_authors__without_ids_separator_the_column_is_one_author() -> None:
+    record = Record(author_ids="scopus_author_id:[601]")
+
+    cleaned = split_authors(record, _NO_CONTEXT, _OPTIONS)
+
+    assert cleaned.author_ids == "scopus_author_id:601"
+
+
+def test_split_authors__ids_already_split_are_left_alone() -> None:
+    record = Record(author_ids="scopus_author_id:601|scopus_author_id:602")
+
+    assert split_authors(record, _context(ids=";"), _OPTIONS) == record
+
+
+def test_split_keywords__splits_unsplit_values_keeping_the_prefix() -> None:
+    record = Record(keywords=["Author:[fossils; dinosaurs ;]", "keywords:[Humans]"])
+
+    cleaned = split_keywords(record, _context(keywords=";"), _OPTIONS)
+
+    assert cleaned.keywords == ["[Author] fossils", "[Author] dinosaurs", "Humans"]
+
+
+def test_split_keywords__split_keywords_are_left_alone() -> None:
+    record = Record(keywords=["[MeSH] Humans", "fossils; dinosaurs"])
+
+    assert split_keywords(record, _context(keywords=";"), _OPTIONS) == record
+
+
+def test_split_keywords__without_separator_the_value_is_one_keyword() -> None:
+    record = Record(keywords=["keywords:[fossils; dinosaurs]"])
+
+    cleaned = split_keywords(record, _NO_CONTEXT, _OPTIONS)
+
+    assert cleaned.keywords == ["fossils; dinosaurs"]
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2020/05/14/", "2020/05/14"),
+        ("2020 Jan-Feb", "2020/01/"),
+        ("1994//", "1994//"),
+        ("1994/Mar/", "1994/03/"),
+        ("Fall 2013", "2013//"),
+        ("03/04/2020", "2020/04/03"),
+    ],
+)
+def test_clean_date__writes_yyyy_mm_dd(value: str, expected: str) -> None:
+    record = clean_date(Record(publication_date=value), _NO_CONTEXT, _OPTIONS)
+
+    assert record.publication_date == expected
+
+
+def test_clean_date__us_order_for_ambiguous_dates() -> None:
+    record = Record(publication_date="03/04/2020")
+
+    cleaned = clean_date(record, _NO_CONTEXT, _options(date_order="us"))
+
+    assert cleaned.publication_date == "2020/03/04"
+
+
+def test_clean_date__unreadable_date_is_kept(caplog: pytest.LogCaptureFixture) -> None:
+    record = Record(publication_date="Spring issue")
+
+    assert clean_date(record, _NO_CONTEXT, _OPTIONS) == record
+    assert "Spring issue" in caplog.text
+
+
+def test_clean_date__cleaning_again_changes_nothing() -> None:
+    once = clean_date(Record(publication_date="12 March 2020"), _NO_CONTEXT, _OPTIONS)
+
+    assert clean_date(once, _NO_CONTEXT, _OPTIONS) == once
 
 
 def test_id_from_name__moves_ids_out_of_names() -> None:
@@ -324,6 +500,32 @@ def test_strip_affiliation_start__keeps_affiliation_not_starting_with_the_name()
     )
 
     assert cleaned == record
+
+
+def test_strip_affiliation_start__keeps_name_followed_by_more_than_initials() -> None:
+    record = Record(
+        author_names="Stein, Koen|Lauer, R.",
+        author_affiliations="Steinmann Institut, Bonn|Lauer Foundation, Wheaton",
+    )
+
+    cleaned = strip_affiliation_start(
+        record, _NO_CONTEXT, _options(affiliation_start=", ")
+    )
+
+    assert cleaned == record
+
+
+def test_strip_affiliation_start__name_without_initials() -> None:
+    record = Record(
+        author_names="Qinggele|Broderick, Timothy J.",
+        author_affiliations="Qinggele, Inner Mongolia Museum|Broderick T.J., Harare",
+    )
+
+    cleaned = strip_affiliation_start(
+        record, _NO_CONTEXT, _options(affiliation_start=", ")
+    )
+
+    assert cleaned.author_affiliations == "Inner Mongolia Museum|Harare"
 
 
 def test_strip_affiliation_start__without_names_leaves_record_unchanged() -> None:
@@ -480,13 +682,8 @@ def test_clear_empty_values__match_the_whole_value() -> None:
     assert clear_empty_values(record, _NO_CONTEXT, _OPTIONS) == record
 
 
-def test_clear_empty_values__refill_author_names_from_line_tags() -> None:
-    mapping = mapping_of(
-        {
-            "AU": Suggest("authors", {"delimiter": "\n"}),
-            "A2": Suggest("authors", {"delimiter": "\n"}),
-        }
-    )
+def test_clear_empty_values__refill_author_names_joins_lines_with_bar() -> None:
+    mapping = mapping_of({"AU": "authors", "A2": "authors"})
     raw = {"AU": "n/a", "A2": "Doe, J\nRoe, K"}
     options = _options(empty_values=["n/a"])
 

@@ -150,27 +150,27 @@ def test_log_export__cut_values_make_a_warning(session: Session) -> None:
     assert entry.status == "warning"
 
 
-def test_log_cleaning__lists_changes_per_step_most_first(session: Session) -> None:
-    per_step = Counter({"Pages set": 40, "Split authors": 300})
+def test_log_cleaning__one_line_per_step_in_given_order(session: Session) -> None:
+    per_step = Counter({"Split authors": 300, "Pages set": 4000})
 
-    log_cleaning(session, 1000, 312, per_step)
+    log_cleaning(session, 10000, 4012, per_step)
     session.commit()
 
     entry = session.query(ActivityLog).one()
     assert entry.action_type == "clean"
     assert entry.status == "ok"
     assert entry.message == (
-        "Cleaned 1.000 records: 312 changed (Split authors 300, Pages set 40)."
+        "Cleaned 10.000 records: 4.012 changed\nSplit authors: 300\nPages set: 4.000"
     )
 
 
 def test_log_cleaning__nothing_changed(session: Session) -> None:
     log_cleaning(session, 5, 0, Counter())
 
-    assert session.query(ActivityLog).one().message == ("Cleaned 5 records: 0 changed.")
+    assert session.query(ActivityLog).one().message == "Cleaned 5 records: 0 changed"
 
 
 def test_log_cleaning__one_record_is_singular(session: Session) -> None:
     log_cleaning(session, 1, 0, Counter())
 
-    assert session.query(ActivityLog).one().message == "Cleaned 1 record: 0 changed."
+    assert session.query(ActivityLog).one().message == "Cleaned 1 record: 0 changed"

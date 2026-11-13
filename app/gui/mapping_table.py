@@ -12,17 +12,19 @@ from app.parsers.mapping import (
     ISSN_ISBN_TARGET,
     KEYWORDS_TARGET,
     LABEL_TARGET,
-    LINE_DELIMITER,
     OTHER_IDS_TARGET,
     PAGES_TARGET,
     TARGETS,
     AuthorsRow,
     DateRow,
     FieldMapping,
-    RowDefaults,
+    IssnIsbnRow,
+    KeywordsRow,
+    LabelRow,
+    OtherIdRow,
+    PagesRow,
     RowMapping,
     default_row,
-    is_ambiguous_date,
     row_with,
 )
 
@@ -64,8 +66,6 @@ class _Option:
     short: str
     label: str
     choices: dict[str, str] | None = None
-    # Delimiters and separators may be or end in a space.
-    strip: bool = True
 
 
 _OPTION_ROW_CLASSES = "w-full no-wrap items-center gap-1"
@@ -79,12 +79,6 @@ _OPTIONS: dict[str, tuple[_Option, ...]] = {
             "part",
             "Part",
             {"full": "Full date", "year": "Year", "month": "Month", "day": "Day"},
-        ),
-        _Option(
-            "order",
-            "order",
-            "Ambiguous dates",
-            {"eu": "Day before month (EU)", "us": "Month before day (US)"},
         ),
     ),
     PAGES_TARGET: (
@@ -120,13 +114,9 @@ _OPTIONS: dict[str, tuple[_Option, ...]] = {
                 "affiliations": "Affiliations",
             },
         ),
-        _Option("delimiter", "aut", "Author separator", strip=False),
         _Option("id_key", "key", "ID key"),
     ),
-    KEYWORDS_TARGET: (
-        _Option("delimiter", "sep", "Delimiter", strip=False),
-        _Option("prefix", "pre", "Prefix"),
-    ),
+    KEYWORDS_TARGET: (_Option("prefix", "pre", "Prefix"),),
     LABEL_TARGET: (
         _Option("phase", "phase", "Phase"),
         _Option("screener", "scr", "Screener"),
@@ -135,25 +125,9 @@ _OPTIONS: dict[str, tuple[_Option, ...]] = {
 
 
 def _shows_option(row: RowMapping, name: str) -> bool:
-    if isinstance(row, DateRow) and name == "order":
-        return row.part == "full"
     if isinstance(row, AuthorsRow) and name == "id_key":
         return row.role == "ids"
-    if name == "delimiter":
-        delimiter: str = getattr(row, name)
-        return delimiter != LINE_DELIMITER
     return True
-
-
-def _needs_a_look(row: RowMapping, name: str, sample: str) -> bool:
-    if not sample:
-        return False
-    if name == "delimiter":
-        delimiter: str = getattr(row, name)
-        return delimiter not in sample
-    if isinstance(row, DateRow) and name == "order":
-        return is_ambiguous_date(sample)
-    return False
 
 
 _FIELD_ORDER = (
@@ -190,11 +164,38 @@ _STATUS_COLORS = {
 }
 
 
+def _value_slot(row: RowMapping) -> tuple[str, ...] | None:
+    """Where the row's value goes; None for rows whose values are all kept."""
+    if isinstance(row, KeywordsRow) or (
+        isinstance(row, AuthorsRow) and row.role == "ids"
+    ):
+        return None
+    if isinstance(row, DateRow | PagesRow):
+        return row.target, row.part
+    if isinstance(row, AuthorsRow):
+        return row.target, row.role
+    if isinstance(row, OtherIdRow):
+        return row.target, row.key
+    if isinstance(row, LabelRow):
+        return row.target, row.phase, row.screener
+    return (row.target,)
+
+
+def _clashes(a: RowMapping, b: RowMapping) -> bool:
+    """Whether two rows compete for one value, so only the first filled one wins."""
+    if isinstance(a, IssnIsbnRow) and isinstance(b, IssnIsbnRow):
+        return a.kind == b.kind or "auto" in (a.kind, b.kind)
+    slot = _value_slot(a)
+    return slot is not None and slot == _value_slot(b)
+
+
 def _initial_status(header: str, suggestion: FieldMapping) -> Status:
     row = suggestion.rows.get(header)
     if row is None:
         return "red"
-    shared = sum(r.target == row.target for r in suggestion.rows.values()) > 1
+    shared = any(
+        _clashes(row, other) for key, other in suggestion.rows.items() if key != header
+    )
     if shared or suggestion.match_kinds.get(header) != "exact":
         return "orange"
     return "green"
@@ -263,7 +264,6 @@ class _Row:
 
 @dataclass
 class MappingScreen:
-    defaults: RowDefaults
     # Read-only text boxes show the stored value itself rather than a placeholder.
     readonly: bool = False
     rows: list[_Row] = field(default_factory=list)
@@ -282,7 +282,7 @@ class MappingScreen:
         elif row.mapped is not None and row.mapped.target == target:
             row.base = row.mapped
         else:
-            row.base = default_row(target, row.header, self.defaults)
+            row.base = default_row(target, row.header)
         row.inputs = {}
         row.options.clear()
         base = row.base.model_dump() if row.base is not None else {}
@@ -322,11 +322,8 @@ class MappingScreen:
             return
         assert row.base is not None
         for name, widget in row.inputs.items():
-            status: str = "green"
-            if getattr(mapped, name) != getattr(row.base, name):
-                status = _CHANGED
-            elif _needs_a_look(mapped, name, row.sample.text):
-                status = "orange"
+            changed = getattr(mapped, name) != getattr(row.base, name)
+            status = _CHANGED if changed else "green"
             widget.props(f"bg-color={_STATUS_COLORS[status]}")
 
     def on_target_change(self, row: _Row) -> None:
@@ -347,7 +344,7 @@ class MappingScreen:
         if row.base is None:
             return None
         options = {
-            option.name: _option_value(option, row.inputs[option.name].value)
+            option.name: row.inputs[option.name].value.strip()
             for option in _OPTIONS.get(row.base.target, ())
             if option.name in row.inputs
         }
@@ -361,19 +358,14 @@ class MappingScreen:
         )
 
 
-def _option_value(option: _Option, value: str) -> str:
-    return value.strip() if option.strip else value
-
-
 def render_mapping_table(
     middle: Element,
     summary: FileSummary,
     suggestion: FieldMapping,
     *,
-    defaults: RowDefaults,
     chosen: FieldMapping | None = None,
 ) -> MappingScreen:
-    screen = MappingScreen(defaults=defaults, readonly=chosen is not None)
+    screen = MappingScreen(readonly=chosen is not None)
     samples = summary.samples
     headers = _sorted_headers(list(samples), suggestion)
     input_width = _input_width_ch(headers)

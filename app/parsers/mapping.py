@@ -10,21 +10,24 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_valid
 from app.models.record import Label, LabelValue, PartialDate, Record
 from app.parsers.authors import (
     AUTHOR_JOINER,
+    ID_JOINER,
     AuthorIds,
-    author_id,
     format_author_ids,
-    merge_author_ids,
+    unsplit_author_ids,
 )
 from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
-_SUGGESTION_CUTOFF = 0.7
+_SUGGESTION_CUTOFF = 0.85
 
 # Case-sensitive on purpose: "PMCID" is an ID header, "Valid" is not.
 _ID_HEADER = re.compile(r"(?<![A-Za-z])[Ii][Dd](?![A-Za-z])|[A-Z]ID(?![A-Za-z])")
 
 _TAGGED_KEYWORD = re.compile(r"\[([^\]]+)\] (.*)", re.DOTALL)
+_UNSPLIT_KEYWORDS = re.compile(r"(?P<key>[^:\[\]]+):\[(?P<value>.*)\]", re.DOTALL)
+# The key of unsplit keywords without a prefix.
+UNPREFIXED_KEYWORDS_KEY = "keywords"
 
 _MONTH_ABBREVIATIONS = {
     "jan": 1,
@@ -45,7 +48,10 @@ _DATE_PATTERNS = [
     re.compile(r"^(?P<year>\d{4})$"),
     re.compile(r"^(?P<year>\d{4})-(?P<month>\d{1,2})$"),
     re.compile(r"^(?P<year>\d{4})-(?P<month>\d{1,2})-(?P<day>\d{1,2})$"),
-    re.compile(r"^(?P<year>\d{4})/(?P<month>\d{1,2})/(?P<day>\d{1,2})$"),
+    # Also the stored YYYY/MM/DD, where any part after the year may be empty.
+    re.compile(
+        r"^(?P<year>\d{4})/(?P<month>\d{1,2}|[A-Za-z]{3,9})?/(?P<day>\d{1,2})?$"
+    ),
     # RIS: YYYY/MM/DD/other, where every part after the year may be empty
     re.compile(r"^(?P<year>\d{4})/(?P<month>\d{1,2})?/(?P<day>\d{1,2})?/.*$"),
     # NBIB: YYYY Mon, YYYY Mon DD, YYYY Mon-Mon (a month range keeps its first month)
@@ -93,7 +99,7 @@ KEYWORDS_TARGET = "keywords"
 LABEL_TARGET = "label"
 DEFAULT_PHASE = "ft"
 DEFAULT_SCREENER = "screener 1"
-# RIS and NBIB repeat a tag per value, and BibTeX authors are split before mapping.
+# RIS and NBIB repeat a tag per value.
 LINE_DELIMITER = "\n"
 
 AuthorRole = Literal["names", "ids", "affiliations"]
@@ -107,7 +113,6 @@ class ScalarRow(BaseModel):
 class DateRow(BaseModel):
     target: Literal["date"] = "date"
     part: Literal["full", "year", "month", "day"] = "full"
-    order: DateOrder = "eu"
 
 
 class PagesRow(BaseModel):
@@ -128,7 +133,6 @@ class OtherIdRow(BaseModel):
 class AuthorsRow(BaseModel):
     target: Literal["authors"] = "authors"
     role: AuthorRole = "names"
-    delimiter: str
     id_key: str = Field(min_length=1)
 
 
@@ -137,7 +141,6 @@ class KeywordsRow(BaseModel):
     split the prefix off again."""
 
     target: Literal["keywords"] = "keywords"
-    delimiter: str
     prefix: str = ""
 
     @field_validator("prefix")
@@ -145,13 +148,29 @@ class KeywordsRow(BaseModel):
     def strip_brackets(cls, value: str) -> str:
         return value.strip().removeprefix("[").removesuffix("]").strip()
 
-    def tagged(self, keyword: str) -> str:
-        return f"[{self.prefix}] {keyword}" if self.prefix else keyword
+
+def tag_keyword(prefix: str, keyword: str) -> str:
+    return f"[{prefix}] {keyword}" if prefix else keyword
 
 
 def split_keyword(keyword: str) -> tuple[str | None, str]:
     match = _TAGGED_KEYWORD.fullmatch(keyword)
     return (match[1], match[2]) if match else (None, keyword)
+
+
+def unsplit_keywords(prefix: str, value: str) -> str:
+    """A column holding all of a record's keywords, stored as "prefix:[value]"
+    until cleaning splits it."""
+    return f"{prefix or UNPREFIXED_KEYWORDS_KEY}:[{value}]"
+
+
+def parse_unsplit_keywords(keyword: str) -> tuple[str, str] | None:
+    """The prefix ("" for none) and the unsplit value."""
+    match = _UNSPLIT_KEYWORDS.fullmatch(keyword)
+    if match is None:
+        return None
+    key = match["key"]
+    return ("" if key == UNPREFIXED_KEYWORDS_KEY else key), match["value"]
 
 
 class LabelRow(BaseModel):
@@ -196,23 +215,6 @@ class FieldMapping(BaseModel):
     def rows_of(self, row_type: type[_Row]) -> list[tuple[str, _Row]]:
         return [(k, row) for k, row in self.rows.items() if isinstance(row, row_type)]
 
-    def author_separator(self, role: AuthorRole) -> str | None:
-        """What separates the authors in the stored value: the first row of that
-        role's delimiter; values that come one per line are joined with
-        AUTHOR_JOINER."""
-        rows = (row for _, row in self.rows_of(AuthorsRow) if row.role == role)
-        row = next(rows, None)
-        if row is None:
-            return None
-        return AUTHOR_JOINER if row.delimiter == LINE_DELIMITER else row.delimiter
-
-
-@dataclass(frozen=True)
-class RowDefaults:
-    delimiter: str = ";"
-    author_delimiter: str | None = None
-    date_order: DateOrder = "eu"
-
 
 @dataclass(frozen=True)
 class Suggest:
@@ -227,9 +229,9 @@ def default_other_id_key(header: str) -> str:
     return slug or "id"
 
 
-def default_row(target: str, key: str, defaults: RowDefaults) -> RowMapping:
+def default_row(target: str, key: str) -> RowMapping:
     if target == DATE_TARGET:
-        return DateRow(order=defaults.date_order)
+        return DateRow()
     if target == PAGES_TARGET:
         return PagesRow()
     if target == ISSN_ISBN_TARGET:
@@ -237,10 +239,9 @@ def default_row(target: str, key: str, defaults: RowDefaults) -> RowMapping:
     if target == OTHER_IDS_TARGET:
         return OtherIdRow(key=default_other_id_key(key))
     if target == AUTHORS_TARGET:
-        delimiter = defaults.author_delimiter or defaults.delimiter
-        return AuthorsRow(delimiter=delimiter, id_key=default_other_id_key(key))
+        return AuthorsRow(id_key=default_other_id_key(key))
     if target == KEYWORDS_TARGET:
-        return KeywordsRow(delimiter=defaults.delimiter)
+        return KeywordsRow()
     if target == LABEL_TARGET:
         return LabelRow()
     if target in SCALAR_FIELDS:
@@ -252,8 +253,8 @@ def row_with(row: RowMapping, options: Mapping[str, str]) -> RowMapping:
     return _ROW_ADAPTER.validate_python({**row.model_dump(), **options})
 
 
-def make_row(suggest: Suggest, key: str, defaults: RowDefaults) -> RowMapping:
-    return row_with(default_row(suggest.target, key, defaults), suggest.options)
+def make_row(suggest: Suggest, key: str) -> RowMapping:
+    return row_with(default_row(suggest.target, key), suggest.options)
 
 
 _LABEL_SPELLINGS: dict[str, LabelValue] = {
@@ -313,18 +314,6 @@ def _classify_issn_isbn(row: IssnIsbnRow, value: str) -> str:
     return "issn"
 
 
-def _split_list(value: str, delimiter: str) -> list[str]:
-    return [piece.strip() for piece in value.split(delimiter) if piece.strip()]
-
-
-def _parse_int_field(value: str, field_name: str) -> int | None:
-    try:
-        return int(value.strip())
-    except ValueError:
-        logger.warning("Could not parse %s value %r", field_name, value)
-        return None
-
-
 def _parse_month(value: str | None) -> int | None:
     if value is None or not value.strip():
         return None
@@ -363,15 +352,6 @@ def _parse_numeric_date(match: re.Match[str], order: DateOrder) -> PartialDate |
     return _build_partial_date(int(match["year"]), month, day)
 
 
-def is_ambiguous_date(value: str) -> bool:
-    """A numeric date whose day/month order changes what it means."""
-    match = _NUMERIC_DATE.match(value.strip())
-    if match is None:
-        return False
-    first, second = int(match["first"]), int(match["second"])
-    return first != second and first <= _MAX_MONTH and second <= _MAX_MONTH
-
-
 def parse_date_string(value: str, order: DateOrder = "eu") -> PartialDate | None:
     stripped = value.strip()
     numeric = _NUMERIC_DATE.match(stripped)
@@ -393,29 +373,20 @@ def parse_date_string(value: str, order: DateOrder = "eu") -> PartialDate | None
 
 def _parse_publication_date(
     raw_fields: dict[str, str], mapping: FieldMapping
-) -> PartialDate | None:
-    """Each part comes from the first row giving it; a year/month/day row beats a
-    full date."""
-    explicit: dict[str, int] = {}
-    from_full: dict[str, int] = {}
+) -> str | None:
+    """A full date is copied as it is; without one the year, month and day parts
+    are joined as YYYY/MM/DD, a missing part left empty. Each comes from the
+    first row giving it; cleaning reads the values."""
+    parts: dict[str, str] = {}
     for key, row in mapping.rows_of(DateRow):
         value = (raw_fields.get(key) or "").strip()
-        if not value:
-            continue
-        if row.part == "full":
-            date = parse_date_string(value, row.order)
-            for part in _DATE_PARTS if date is not None else ():
-                if (number := getattr(date, part)) is not None:
-                    from_full.setdefault(part, number)
-            continue
-        if row.part == "month":
-            number = _parse_month(value)
-        else:
-            number = _parse_int_field(value, row.part)
-        if number is not None:
-            explicit.setdefault(row.part, number)
-    parts = {**from_full, **explicit}
-    return _build_partial_date(parts.get("year"), parts.get("month"), parts.get("day"))
+        if value:
+            parts.setdefault(row.part, value)
+    if "full" in parts:
+        return parts["full"]
+    if not parts:
+        return None
+    return "/".join(parts.get(part, "") for part in _DATE_PARTS)
 
 
 def _parse_pages(raw_fields: dict[str, str], mapping: FieldMapping) -> str | None:
@@ -440,20 +411,6 @@ def ordered_mapping(mapping: FieldMapping, use_first: tuple[str, ...]) -> FieldM
     return mapping.model_copy(update={"rows": {**first, **mapping.rows}})
 
 
-def _split_positions(value: str | None, delimiter: str) -> list[str]:
-    """Keeps empty pieces so positions line up across the columns."""
-    if not value or not value.strip():
-        return []
-    return [piece.strip() for piece in value.split(delimiter)]
-
-
-def _id_slots(row: AuthorsRow, value: str) -> AuthorIds:
-    return [
-        [author_id(row.id_key, piece)] if piece else []
-        for piece in _split_positions(value, row.delimiter)
-    ]
-
-
 def apply_mapping(
     raw_fields: dict[str, str],
     mapping: FieldMapping,
@@ -464,7 +421,7 @@ def apply_mapping(
     other_ids: dict[str, str] = {}
     keywords: list[str] = []
     labels: list[Label] = []
-    author_ids: AuthorIds = []
+    author_ids: list[str] = []
     for key, row in mapping.rows.items():
         value = (raw_fields.get(key) or "").strip()
         if isinstance(row, LabelRow):
@@ -485,12 +442,10 @@ def apply_mapping(
         elif isinstance(row, OtherIdRow):
             other_ids[row.key] = value
         elif isinstance(row, KeywordsRow):
-            keywords.extend(
-                row.tagged(keyword) for keyword in _split_list(value, row.delimiter)
-            )
+            keywords.append(unsplit_keywords(row.prefix, value))
         elif isinstance(row, AuthorsRow):
             if row.role == "ids":
-                author_ids = merge_author_ids(author_ids, _id_slots(row, value), key)
+                author_ids.append(unsplit_author_ids(row.id_key, value))
             else:
                 values.setdefault(_AUTHOR_FIELDS[row.role], value)
 
@@ -498,7 +453,7 @@ def apply_mapping(
         **values,
         pages=_parse_pages(raw_fields, mapping),
         other_ids=other_ids,
-        author_ids=format_author_ids(author_ids),
+        author_ids=ID_JOINER.join(author_ids) or None,
         keywords=keywords,
         labels=labels,
         publication_date=_parse_publication_date(raw_fields, mapping),
@@ -529,7 +484,7 @@ def apply_line_mapping(
 ) -> Record:
     """The kept name and affiliation lines are joined with AUTHOR_JOINER; the ids
     come from the lines in order, so each stays with its author line rather than
-    being matched by position."""
+    being matched by position. Each keyword line is a keyword."""
     author_rows = dict(mapping.rows_of(AuthorsRow))
     kept, author_ids = author_lines(lines, author_rows)
     joined = {
@@ -537,40 +492,50 @@ def apply_line_mapping(
         for tag, row in author_rows.items()
         if row.role != "ids"
     }
-    without_ids = {
+    keywords = [
+        tag_keyword(row.prefix, line.strip())
+        for key, row in mapping.rows_of(KeywordsRow)
+        for line in (raw_fields.get(key) or "").splitlines()
+        if line.strip()
+    ]
+    rest = {
         key: row
         for key, row in mapping.rows.items()
-        if not (isinstance(row, AuthorsRow) and row.role == "ids")
+        if not isinstance(row, KeywordsRow)
+        and not (isinstance(row, AuthorsRow) and row.role == "ids")
     }
     record = apply_mapping(
         {**raw_fields, **joined},
-        mapping.model_copy(update={"rows": without_ids}),
+        mapping.model_copy(update={"rows": rest}),
         settings,
     )
-    return record.model_copy(update={"author_ids": format_author_ids(author_ids)})
+    return record.model_copy(
+        update={"author_ids": format_author_ids(author_ids), "keywords": keywords}
+    )
 
 
 def override_aliases(
     base: Mapping[str, Suggest], overrides: Mapping[str, Suggest]
 ) -> dict[str, Suggest]:
-    """A target the overrides suggest for drops every base alias of that target."""
-    replaced = {suggest.target for suggest in overrides.values()}
-    kept = {a: s for a, s in base.items() if s.target not in replaced}
-    return {**kept, **overrides}
+    """An override only replaces the base alias of the same name; a base alias a
+    profile doesn't want is left out through its ignored keys."""
+    return {**base, **overrides}
 
 
 def suggest_mapping(
     keys: list[str],
     suggestions: Mapping[str, Suggest],
-    defaults: RowDefaults,
     *,
     lenient: bool,
+    ignored_keys: frozenset[str] = frozenset(),
 ) -> FieldMapping:
     """lenient adds fuzzy matching and an ID-header fallback, for free-text headers."""
     rows: dict[str, RowMapping] = {}
     match_kinds: dict[str, MatchKind] = {}
     for key in keys:
         normalized = key.strip().lower()
+        if normalized in ignored_keys:
+            continue
         kind: MatchKind = "exact"
         alias = normalized if normalized in suggestions else None
         if alias is None and lenient:
@@ -585,6 +550,6 @@ def suggest_mapping(
             suggest, kind = Suggest(OTHER_IDS_TARGET), "id_fallback"
         else:
             continue
-        rows[key] = make_row(suggest, key, defaults)
+        rows[key] = make_row(suggest, key)
         match_kinds[key] = kind
     return FieldMapping(rows=rows, match_kinds=match_kinds)

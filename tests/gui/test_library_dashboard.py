@@ -22,6 +22,7 @@ from app.gui.library_dashboard import (
 )
 from app.gui.theme import (
     CHART_COLORS,
+    COMPLETE_COLOR,
     MULTIPLE_COLOR,
     OTHER_COLOR,
     UNKNOWN_COLOR,
@@ -83,6 +84,7 @@ def _render(middle: Element, hidden: set[str] | None = None) -> None:
         middle,
         total=4,
         filled=[("Title", 4), ("DOI", 3), ("Abstract", 0)],
+        quality=[("Unparsed dates", 2), ("Misaligned authors", 0)],
         per_year=[(2018, 1), (2020, 2), (None, 1)],
         publication_types=[("JOUR", 3), (None, 1)],
         per_file=([("pubmed.nbib", 3)], 1),
@@ -106,10 +108,83 @@ def test_render_library_dashboard__completeness_as_percent_with_counts() -> None
     chart = _charts(panes.middle)[0]
     assert chart.options["xAxis"]["data"] == ["Title", "DOI", "Abstract"]
     assert _series_data(chart) == [
-        {"value": 100.0, "count": "4", "itemStyle": {"color": UU_GREEN}},
+        {"value": 100.0, "count": "4", "itemStyle": {"color": COMPLETE_COLOR}},
         {"value": 75.0, "count": "3", "itemStyle": {"color": UU_GREEN}},
         {"value": 0.0, "count": "0", "itemStyle": {"color": UU_RED}},
     ]
+
+
+def test_render_library_dashboard__data_quality_table_second() -> None:
+    panes = shell()
+
+    _render(panes.middle)
+
+    labels = _labels(panes.middle)
+    assert labels.index("Field completeness") + 1 == labels.index("Data quality")
+    assert labels.index("Data quality") + 1 == next(
+        i for i, label in enumerate(labels) if label.startswith("Publication year")
+    )
+    table = _tables(panes.middle)[0]
+    assert table.rows == [
+        {
+            "name": "Unparsed dates",
+            "count": "2",
+            "hover": "Unparsed dates",
+            "red": True,
+        },
+        {
+            "name": "Misaligned authors",
+            "count": "0",
+            "hover": "Misaligned authors",
+            "red": False,
+        },
+    ]
+    template = table.slots["body-cell-count"].template or ""
+    assert "props.row.red ? 'text-red' : 'text-green'" in template
+
+
+def test_render_library_dashboard__data_quality_hover_shows_full_name() -> None:
+    middle = _render_quality([("Unmapped pub. types", 1)], [])
+
+    table = _tables(middle)[0]
+    assert table.rows[0]["hover"] == "Unmapped publication types"
+    assert 'title="props.row.hover"' in (table.slots["body-cell-name"].template or "")
+
+
+def _render_quality(quality: list[tuple[str, int]], shown: list[list[str]]) -> Element:
+    panes = shell()
+    render_library_dashboard(
+        panes.middle,
+        1,
+        [],
+        quality,
+        [],
+        [],
+        ([], 0),
+        {},
+        {},
+        {"completeness", "per_year", "publication_type", "source_files"},
+        on_show_quality=shown.append,
+    )
+    return panes.middle
+
+
+def test_render_library_dashboard__show_in_table_passes_problem_columns() -> None:
+    shown: list[list[str]] = []
+    middle = _render_quality([("Unparsed dates", 2), ("Misaligned authors", 0)], shown)
+    button = _button(middle, "Show in table")
+
+    _click(button)
+
+    assert button.enabled
+    assert shown == [["data_quality", "publication_date"]]
+    assert {"mt-auto", "self-center"} <= set(button.classes)
+
+
+def test_render_library_dashboard__show_in_table_disabled_without_problems() -> None:
+    middle = _render_quality([("Unparsed dates", 0), ("Misaligned authors", 0)], [])
+
+    assert not _button(middle, "Show in table").enabled
 
 
 def test_render_library_dashboard__completeness_with_zero_records() -> None:
@@ -119,6 +194,7 @@ def test_render_library_dashboard__completeness_with_zero_records() -> None:
         panes.middle,
         0,
         [("Title", 0)],
+        [],
         [],
         [],
         ([], 0),
@@ -171,6 +247,7 @@ def test_render_library_dashboard__publication_type_top_seven_then_other() -> No
         200,
         [],
         [],
+        [],
         types,
         ([], 0),
         {},
@@ -209,6 +286,7 @@ def test_render_library_dashboard__source_file_pie_top_seven_then_other() -> Non
         [],
         [],
         [],
+        [],
         (files, 0),
         {},
         {},
@@ -243,12 +321,12 @@ def test_render_library_dashboard__one_keyword_table_per_prefix() -> None:
 
     _render(panes.middle)
 
-    default, mesh = (table.rows for table in _tables(panes.middle))
+    _, default, mesh = (table.rows for table in _tables(panes.middle))
     assert default == [
-        {"keyword": "Cancer", "count": "2"},
-        {"keyword": "Diet", "count": "1"},
+        {"name": "Cancer", "count": "2", "hover": "Cancer"},
+        {"name": "Diet", "count": "1", "hover": "Diet"},
     ]
-    assert mesh == [{"keyword": "Humans", "count": "3"}]
+    assert mesh == [{"name": "Humans", "count": "3", "hover": "Humans"}]
     labels = _labels(panes.middle)
     assert "Keywords" in labels
     assert "Keywords: MeSH" in labels
@@ -264,14 +342,21 @@ def test_render_library_dashboard__keyword_table_shows_top_ten_records() -> None
         [],
         [],
         [],
+        [],
         ([], 0),
         {},
         {None: counts},
-        {"completeness", "per_year", "publication_type", "source_files"},
+        {
+            "completeness",
+            "data_quality",
+            "per_year",
+            "publication_type",
+            "source_files",
+        },
     )
 
     table = _tables(panes.middle)[0]
-    assert [row["keyword"] for row in table.rows] == [f"keyword {n}" for n in range(10)]
+    assert [row["name"] for row in table.rows] == [f"keyword {n}" for n in range(10)]
     assert [column["label"] for column in table.columns] == ["Keyword", "Records"]
 
 
@@ -288,7 +373,7 @@ def test_render_library_dashboard__skips_hidden_items() -> None:
     assert "Labels: tiab / Emily" not in labels
     assert "Keywords" not in labels
     assert len(_charts(panes.middle)) == 4
-    assert len(_tables(panes.middle)) == 1
+    assert len(_tables(panes.middle)) == 2
 
 
 def test_render_library_dashboard__hint_when_everything_hidden() -> None:
@@ -300,10 +385,17 @@ def test_render_library_dashboard__hint_when_everything_hidden() -> None:
         [],
         [],
         [],
+        [],
         ([], 0),
         {},
         {},
-        {"completeness", "per_year", "publication_type", "source_files"},
+        {
+            "completeness",
+            "data_quality",
+            "per_year",
+            "publication_type",
+            "source_files",
+        },
     )
 
     assert _charts(panes.middle) == []
@@ -323,6 +415,7 @@ def test_render_library_dashboard__replaces_previous_middle_content() -> None:
 def test_dashboard_items__fixed_items_then_labels_then_keywords() -> None:
     assert dashboard_items([("ft", "screener 1")], [None, "MeSH"]) == [
         ("completeness", "Field completeness"),
+        ("data_quality", "Data quality"),
         ("per_year", "Publication year"),
         ("publication_type", "Publication type"),
         ("source_files", "Source files"),
@@ -372,6 +465,7 @@ def test_render_dashboard_settings__checkboxes_reflect_hidden() -> None:
     }
     assert checkboxes == {
         "Field completeness": True,
+        "Data quality": True,
         "Publication year": False,
         "Publication type": True,
         "Source files": True,
@@ -450,5 +544,5 @@ def test_render_library_dashboard__boxes_in_evenly_spaced_grid_with_frames() -> 
     assert grid.style["grid-template-columns"] == "repeat(auto-fill, 17rem)"
     assert "justify-evenly" in grid.classes
     frames = grid.default_slot.children
-    assert len(frames) == 8
+    assert len(frames) == 9
     assert all({"border", "items-center"} <= set(frame.classes) for frame in frames)

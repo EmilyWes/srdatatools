@@ -14,9 +14,9 @@ from app.parsers.mapping import (
     PagesRow,
     Suggest,
 )
+from app.parsers.profiles.default import DEFAULT_PROFILES
 from app.parsers.quirks import ParseSettings
 from app.parsers.ris import (
-    ROW_DEFAULTS,
     parse_ris_file,
     parse_ris_record,
     parse_ris_text,
@@ -39,7 +39,6 @@ _MAPPING = mapping_of(
         "N1": "notes",
         "T2": "journal",
     },
-    defaults=ROW_DEFAULTS,
 )
 
 
@@ -76,7 +75,6 @@ def test_parse_ris_text__repeated_author_tags_become_separate_authors() -> None:
 
 _AFFILIATION_MAPPING = mapping_of(
     {"TI": "title", "AU": "authors", "AD": _AFFILIATIONS, "C1": _AFFILIATIONS},
-    defaults=ROW_DEFAULTS,
 )
 
 
@@ -118,7 +116,6 @@ _ID_MAPPING = mapping_of(
         "AD": _AFFILIATIONS,
         "ID": Suggest("authors", {"role": "ids", "id_key": "orcid"}),
     },
-    defaults=ROW_DEFAULTS,
 )
 
 
@@ -317,13 +314,13 @@ def test_suggest_ris_mapping__maps_common_tags() -> None:
     }
 
 
-def test_suggest_ris_mapping__uses_newline_delimiter_and_row_options() -> None:
+def test_suggest_ris_mapping__uses_row_options() -> None:
     suggestions = suggest_ris_mapping(["AU", "AD", "KW", "SP", "EP"])
 
     assert suggestions.rows == {
-        "AU": AuthorsRow(delimiter="\n", id_key="au"),
-        "AD": AuthorsRow(role="affiliations", delimiter="\n", id_key="ad"),
-        "KW": KeywordsRow(delimiter="\n"),
+        "AU": AuthorsRow(id_key="au"),
+        "AD": AuthorsRow(role="affiliations", id_key="ad"),
+        "KW": KeywordsRow(),
         "SP": PagesRow(part="start"),
         "EP": PagesRow(part="end"),
     }
@@ -335,14 +332,13 @@ def test_suggest_ris_mapping__maps_every_date_tag() -> None:
     assert targets_of(suggestions) == {"PY": "date", "DA": "date", "Y1": "date"}
 
 
-def test_parse_ris_text__py_and_da_combine_into_one_date() -> None:
+def test_parse_ris_text__default_settings_read_da_before_py() -> None:
     text = "TY  - JOUR\nPY  - 2020\nDA  - 2020/03/15/\nER  - \n"
+    mapping = suggest_ris_mapping(["PY", "DA"])
 
-    result = parse_ris_text(text, suggest_ris_mapping(["PY", "DA"]))
+    result = parse_ris_text(text, mapping, DEFAULT_PROFILES["ris"].settings)
 
-    date = result.rows[0].record.publication_date
-    assert date is not None
-    assert (date.year, date.month, date.day) == (2020, 3, 15)
+    assert result.rows[0].record.publication_date == "2020/03/15/"
 
 
 def test_parse_ris_text__keeps_names_as_in_the_file() -> None:
@@ -381,7 +377,9 @@ def test_suggest_ris_mapping__maps_sn_to_issn_isbn() -> None:
 
 def test_suggest_ris_mapping__applies_alias_overrides() -> None:
     mapping = suggest_ris_mapping(
-        ["TY", "M3"], overrides={"m3": Suggest("publication_type")}
+        ["TY", "M3"],
+        overrides={"m3": Suggest("publication_type")},
+        ignored_keys=frozenset({"ty"}),
     )
 
     assert targets_of(mapping) == {"M3": "publication_type"}
@@ -415,12 +413,7 @@ def test_parse_ris_file__default_mapping_on_realistic_export() -> None:
     assert first.author_names == "Smith, John A.|Doe, Jane"
     assert first.pages == "100-110"
     assert first.doi == "10.1016/j.jbi.2020.1"
-    assert first.publication_date is not None
-    assert (
-        first.publication_date.year,
-        first.publication_date.month,
-        first.publication_date.day,
-    ) == (2020, 5, 14)
+    assert first.publication_date == "2020///"
 
 
 def test_read_ris_tags__returns_distinct_tags_in_first_seen_order_without_er() -> None:

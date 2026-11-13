@@ -5,7 +5,6 @@ from app.parsers.common import FileType
 from app.parsers.mapping import Suggest
 from app.parsers.profiles.base import FormatProfile, Profile
 from app.parsers.profiles.default import (
-    default_row_defaults,
     default_settings,
 )
 
@@ -18,15 +17,10 @@ _RIS_LABEL_LINE = re.compile(r"^N1  - ASReview_", re.MULTILINE)
 _TABULAR_SUGGESTIONS: dict[str, Suggest] = {
     _LABEL_HEADER: Suggest("label"),
     "asreview_note": Suggest("notes"),
-    "start_page": Suggest("pages", {"part": "start"}),
-    "end_page": Suggest("pages", {"part": "end"}),
     "number": Suggest("issue"),
-    "type_of_reference": Suggest("publication_type"),
 }
-# The unnamed first column is ASReview's record id.
-_TABULAR_IGNORED = frozenset(
-    {"", "asreview_group_id", "asreview_time", "secondary_title", "author_address"}
-)
+# asreview_note holds the notes.
+_TABULAR_IGNORED = frozenset({"asreview_group_id", "notes"})
 # In the Parsing view's include/exclude/maybe/unlabeled order, so it round-trips.
 _RIS_LABEL_VALUES: tuple[tuple[str, LabelValue], ...] = (
     ("asreview_relevant", "include"),
@@ -52,7 +46,6 @@ def _tabular(file_type: FileType) -> FormatProfile:
         suggestions=_TABULAR_SUGGESTIONS,
         matches=_matches_tabular,
         settings=default_settings(file_type),
-        row_defaults=default_row_defaults(file_type),
         ignored_keys=_TABULAR_IGNORED,
     )
 
@@ -68,7 +61,6 @@ ASREVIEW = Profile(
             suggestions={"n1": Suggest("label")},
             matches=_matches_ris,
             settings=default_settings("ris", label_values=_RIS_LABEL_VALUES),
-            row_defaults=default_row_defaults("ris"),
         ),
     },
 )

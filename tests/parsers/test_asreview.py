@@ -10,7 +10,7 @@ from app.parsers.csv_ import (
     read_csv_headers,
     suggest_mapping,
 )
-from app.parsers.detect import detect_source, detect_type
+from app.parsers.detect import detect_sources, detect_type
 from app.parsers.excel import parse_excel_file, read_excel_headers
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.asreview import ASREVIEW
@@ -43,9 +43,7 @@ ER  -
 
 def _csv_mapping(headers: list[str], file_type: FileType = "csv") -> FieldMapping:
     profile = ASREVIEW.formats[file_type]
-    return suggest_mapping(
-        headers, profile.suggestions, profile.row_defaults, profile.ignored_keys
-    )
+    return suggest_mapping(headers, profile.suggestions, profile.ignored_keys)
 
 
 def test_asreview_csv__suggests_label_and_rispy_columns() -> None:
@@ -68,6 +66,8 @@ def test_asreview_csv__suggests_label_and_rispy_columns() -> None:
 
     assert targets == {
         "title": "title",
+        "secondary_title": "journal",
+        "author_address": "authors",
         "start_page": "pages",
         "end_page": "pages",
         "number": "issue",
@@ -118,7 +118,6 @@ def _parse(path: Path, file_type: FileType) -> ParseResult:
         mapping = suggest_ris_mapping(
             ["TY", "N1", "TI", "SP", "EP", "IS"],
             profile.suggestions,
-            profile.row_defaults,
         )
         result = parse_ris_file(path, mapping, profile.settings)
     elif file_type == "excel":
@@ -151,6 +150,8 @@ _FIXTURES = [
     ("scopus", ".xlsx"),
     ("scopus", ".ris"),
 ]
+# Only these keep the vendor's own marker after ASReview writes them back.
+_VENDOR_DETECTED = {("pubmed", ".csv"), ("scopus", ".ris")}
 _LABEL_COUNTS = {
     "openalex": {"include": 3, "exclude": 3, "unlabeled": 6},
     "pubmed": {"include": 2, "exclude": 2, "unlabeled": 8},
@@ -165,7 +166,8 @@ def test_asreview_fixture__detected_as_asreview(vendor: str, ext: str) -> None:
     file_type = detect_type(path)
 
     assert file_type == _TYPES[ext]
-    assert detect_source(path, file_type) == "asreview"
+    vendor_sources = (vendor,) if (vendor, ext) in _VENDOR_DETECTED else ()
+    assert detect_sources(path, file_type) == (*vendor_sources, "asreview")
 
 
 @pytest.mark.parametrize(("vendor", "ext"), _FIXTURES)

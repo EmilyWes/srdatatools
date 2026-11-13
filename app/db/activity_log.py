@@ -99,17 +99,16 @@ def log_export_failed(session: Session, filename: str, reason: str) -> ActivityL
 def log_cleaning(
     session: Session, records: int, changed: int, per_step: Counter[str]
 ) -> ActivityLog:
+    """One line per step that changed records, in per_step's order."""
     noun = "record" if records == 1 else "records"
-    message = f"Cleaned {format_count(records)} {noun}: {format_count(changed)} changed"
-    if per_step:
-        steps = ", ".join(
-            f"{step} {format_count(count)}" for step, count in per_step.most_common()
-        )
-        message += f" ({steps})"
+    lines = [
+        f"Cleaned {format_count(records)} {noun}: {format_count(changed)} changed",
+        *(f"{step}: {format_count(count)}" for step, count in per_step.items()),
+    ]
     entry = ActivityLog(
         timestamp=datetime.datetime.now(),
         action_type="clean",
-        message=message + ".",
+        message="\n".join(lines),
     )
     session.add(entry)
     return entry

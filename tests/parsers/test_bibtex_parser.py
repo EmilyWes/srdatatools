@@ -5,7 +5,6 @@ import pytest
 from app.models.record import Record
 from app.parsers import bibtex
 from app.parsers.bibtex import (
-    ROW_DEFAULTS,
     parse_bibtex_file,
     parse_bibtex_record,
     parse_bibtex_text,
@@ -33,8 +32,7 @@ _MAPPING = mapping_of(
         "month": Suggest("date", {"part": "month"}),
         "note": "notes",
         "author": "authors",
-    },
-    ROW_DEFAULTS,
+    }
 )
 
 
@@ -73,9 +71,7 @@ def test_parse_bibtex_text__reads_bare_values() -> None:
     record = parse_bibtex_text(text, _MAPPING).rows[0].record
 
     assert record.volume == "12"
-    assert record.publication_date is not None
-    assert record.publication_date.year == 2024
-    assert record.publication_date.month == 3
+    assert record.publication_date == "2024/mar/"
 
 
 def test_parse_bibtex_text__raw_fields_include_entry_type_and_key() -> None:
@@ -321,12 +317,12 @@ def test_parse_bibtex_text__normalizes_page_ranges() -> None:
     assert [record.pages for record in records] == ["101-115", "19-65", "e1234"]
 
 
-def test_parse_bibtex_text__splits_keywords_on_row_delimiter() -> None:
+def test_parse_bibtex_text__keeps_keywords_unsplit() -> None:
     text = "@article{key1, keywords = {machine learning; systematic review}}"
 
     record = parse_bibtex_text(text, _MAPPING).rows[0].record
 
-    assert record.keywords == ["machine learning", "systematic review"]
+    assert record.keywords == ["keywords:[machine learning; systematic review]"]
 
 
 def test_parse_bibtex_file__reads_realistic_export() -> None:
@@ -339,7 +335,7 @@ def test_parse_bibtex_file__reads_realistic_export() -> None:
     assert first.journal == "Journal of Biomedical Informatics"
     assert first.abstract == ("We evaluate neural classifiers for citation screening.")
     assert first.pages == "101-115"
-    assert first.keywords == ["machine learning", "systematic review"]
+    assert first.keywords == ["keywords:[machine learning; systematic review]"]
     assert second.publication_type == "inproceedings"
     assert second.title == "R&D in Café Networks"
     assert second.pages == "7-9"
@@ -432,7 +428,7 @@ def test_suggest_bibtex_mapping__maps_common_fields() -> None:
         "month": "date",
         "number": "issue",
     }
-    assert mapping.rows["author"] == AuthorsRow(delimiter="\n", id_key="author")
+    assert mapping.rows["author"] == AuthorsRow(id_key="author")
     assert mapping.rows["year"] == DateRow(part="year")
 
 
@@ -442,9 +438,15 @@ def test_suggest_bibtex_mapping__booktitle_maps_to_journal() -> None:
     assert targets_of(mapping) == {"booktitle": "journal"}
 
 
+def test_suggest_bibtex_mapping__maps_pmid() -> None:
+    assert targets_of(suggest_bibtex_mapping(["pmid"])) == {"pmid": "pmid"}
+
+
 def test_suggest_bibtex_mapping__applies_alias_overrides() -> None:
     mapping = suggest_bibtex_mapping(
-        ["type", "@type"], overrides={"type": Suggest("publication_type")}
+        ["type", "@type"],
+        overrides={"type": Suggest("publication_type")},
+        ignored_keys=frozenset({"@type"}),
     )
 
     assert targets_of(mapping) == {"type": "publication_type"}
@@ -459,8 +461,7 @@ def test_parse_bibtex_file__default_mapping_on_realistic_export() -> None:
     assert first.author_names == "Smith, John A.|Müller, Hans|Barnes and Noble"
     assert first.issue == "3"
     assert first.doi == "10.1016/j.jbi.2024.101"
-    assert first.publication_date is not None
-    assert (first.publication_date.year, first.publication_date.month) == (2024, 3)
+    assert first.publication_date == "2024/mar/"
     assert second.journal == "Proceedings of the 5th Conference"
     assert second.author_names == "Jane Doe"
 

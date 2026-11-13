@@ -1,8 +1,6 @@
 import csv
 from io import StringIO
 
-import pytest
-
 from app.models.record import Record
 from app.parsers.bibtex import parse_bibtex_text, suggest_bibtex_mapping
 from app.parsers.csv_ import parse_csv_text, suggest_mapping
@@ -20,7 +18,6 @@ def _suggest_csv(headers: list[str]) -> FieldMapping:
     return suggest_mapping(
         headers,
         _CSV_PROFILE.suggestions,
-        _CSV_PROFILE.row_defaults,
         _CSV_PROFILE.ignored_keys,
     )
 
@@ -96,34 +93,18 @@ def test_openalex_csv__suggests_only_exact_columns() -> None:
     }
 
 
+_OPENALEX_IDS = "openalex_author_id:[A5091833725|A5085682707|A5053220301]"
 _IDS = (
-    "openalex_author_id:A5091833725, orcid:0000-0001-9069-7638"
-    "|openalex_author_id:A5085682707"
-    "|openalex_author_id:A5053220301, orcid:0000-0003-0412-3000"
+    f"{_OPENALEX_IDS}, orcid:[https://orcid.org/0000-0001-9069-7638"
+    "||https://orcid.org/0000-0003-0412-3000]"
 )
 
 
-def test_openalex_csv__keeps_names_and_groups_ids_per_author() -> None:
+def test_openalex_csv__keeps_names_and_id_columns_unsplit() -> None:
     record = _parse_csv(_AUTHOR_ROW)
 
     assert record.author_names == "Matthew G. Baron|DAVID B. NORMAN|Paul M. Barrett"
     assert record.author_ids == _IDS
-
-
-def test_openalex_csv__mismatched_column_is_ignored_with_warning(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    row = {**_AUTHOR_ROW, "ORCID": "https://orcid.org/0000-0001-9069-7638"}
-
-    with caplog.at_level("WARNING"):
-        record = _parse_csv(row)
-
-    assert record.author_ids == (
-        "openalex_author_id:A5091833725"
-        "|openalex_author_id:A5085682707"
-        "|openalex_author_id:A5053220301"
-    )
-    assert "ORCID" in caplog.text
 
 
 def test_openalex_csv__empty_id_columns_leave_no_ids() -> None:
@@ -143,11 +124,7 @@ def test_openalex_csv__ignored_orcid_column_is_not_used() -> None:
 
     record = _parse_csv(_AUTHOR_ROW, mapping)
 
-    assert record.author_ids == (
-        "openalex_author_id:A5091833725"
-        "|openalex_author_id:A5085682707"
-        "|openalex_author_id:A5053220301"
-    )
+    assert record.author_ids == _OPENALEX_IDS
 
 
 def test_openalex_csv__ignored_names_still_give_ids() -> None:
@@ -164,7 +141,7 @@ def test_openalex_csv__ignored_concept_column_adds_no_concepts() -> None:
 
     record = _parse_csv(row, mapping)
 
-    assert record.keywords == ["dinosaurs", "[Topic] Paleontology"]
+    assert record.keywords == ["keywords:[dinosaurs]", "Topic:[Paleontology]"]
 
 
 def test_openalex_csv__prefixes_concept_and_topic_keywords() -> None:
@@ -177,11 +154,9 @@ def test_openalex_csv__prefixes_concept_and_topic_keywords() -> None:
     )
 
     assert record.keywords == [
-        "dinosaurs",
-        "dinosaur paleontology",
-        "[Concept] Biology",
-        "[Concept] Geology",
-        "[Topic] Paleontology and Evolutionary Biology",
+        "keywords:[dinosaurs|dinosaur paleontology]",
+        "Concept:[Biology|Geology]",
+        "Topic:[Paleontology and Evolutionary Biology]",
     ]
 
 
@@ -202,7 +177,7 @@ def test_openalex_ris__joins_au_and_c1_lines() -> None:
         "AU  - Norman, David\nC1  - University of Cambridge\nER  - \n"
     )
     mapping = suggest_ris_mapping(
-        ["TY", "AU", "C1"], _RIS_PROFILE.suggestions, _RIS_PROFILE.row_defaults
+        ["TY", "AU", "C1"], _RIS_PROFILE.suggestions, _RIS_PROFILE.ignored_keys
     )
 
     record = (
@@ -219,15 +194,17 @@ def test_openalex_ris__never_matches() -> None:
     assert not _RIS_PROFILE.matches("TY  - JOUR\nTI  - A\nER  - \n")
 
 
-def test_openalex_bibtex__splits_keywords_on_comma() -> None:
+def test_openalex_bibtex__keeps_keywords_unsplit() -> None:
     text = "@article{baron2017new,\n  keywords = {dinosaur phylogeny, Ornithischia}\n}"
     mapping = suggest_bibtex_mapping(
-        ["keywords"], _BIBTEX_PROFILE.suggestions, _BIBTEX_PROFILE.row_defaults
+        ["keywords"], _BIBTEX_PROFILE.suggestions, _BIBTEX_PROFILE.ignored_keys
     )
 
     result = parse_bibtex_text(text, mapping, settings=_BIBTEX_PROFILE.settings)
 
-    assert result.rows[0].record.keywords == ["dinosaur phylogeny", "Ornithischia"]
+    assert result.rows[0].record.keywords == [
+        "keywords:[dinosaur phylogeny, Ornithischia]"
+    ]
 
 
 def test_openalex_bibtex__never_matches() -> None:

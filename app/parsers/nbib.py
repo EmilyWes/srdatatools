@@ -15,10 +15,8 @@ from app.parsers.common import (
     parse_or_skip,
 )
 from app.parsers.mapping import (
-    LINE_DELIMITER,
     AuthorsRow,
     FieldMapping,
-    RowDefaults,
     Suggest,
     apply_line_mapping,
     join_tag_lines,
@@ -31,9 +29,9 @@ logger = logging.getLogger(__name__)
 
 _SCALARS = {
     "ti": "title",
+    "tt": "title",
     "ab": "abstract",
     "jt": "journal",
-    "ta": "journal",
     "bti": "journal",
     "vi": "volume",
     "ip": "issue",
@@ -56,10 +54,9 @@ _SUGGESTIONS: dict[str, Suggest] = {
     "dp": Suggest("date"),
     "is": Suggest("issn_isbn", {"kind": "issn"}),
     "isbn": Suggest("issn_isbn", {"kind": "isbn"}),
-    "pmc": Suggest("other_ids"),
+    "pmc": Suggest("other_ids", {"key": "pmcid"}),
     "mid": Suggest("other_ids"),
 }
-ROW_DEFAULTS = RowDefaults(delimiter=LINE_DELIMITER)
 _AU_TAG = "AU"
 _FAU_TAG = "FAU"
 
@@ -213,9 +210,9 @@ def read_nbib_tags(path: Path) -> FileSummary:
 def suggest_nbib_mapping(
     tags: list[str],
     overrides: Mapping[str, Suggest] | None = None,
-    defaults: RowDefaults = ROW_DEFAULTS,
+    ignored_keys: frozenset[str] = frozenset(),
 ) -> FieldMapping:
     suggestions = override_aliases(_SUGGESTIONS, overrides or {})
     if _FAU_TAG not in tags:
         suggestions[_AU_TAG.lower()] = Suggest("authors")
-    return _suggest_mapping(tags, suggestions, defaults, lenient=False)
+    return _suggest_mapping(tags, suggestions, lenient=False, ignored_keys=ignored_keys)

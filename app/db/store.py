@@ -7,25 +7,23 @@ from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.cleaning.options import CleaningOptions
-from app.cleaning.steps import CleaningContext, clean_record, file_separators
+from app.cleaning.steps import (
+    STEP_NAMES,
+    CleaningContext,
+    clean_record,
+    file_separators,
+)
 from app.db.models import Label, Record, RecordSource, SourceFile
 from app.db.queries import record_schema
-from app.models.record import PartialDate
 from app.models.record import Record as RecordSchema
 from app.parsers.mapping import FieldMapping
 
 # Cleaning doesn't touch these, and they aren't plain columns.
-_NOT_CLEANED = {"publication_date", "labels"}
+_NOT_CLEANED = {"labels"}
 
 
 def _build_record(schema: RecordSchema) -> Record:
-    date = schema.publication_date or PartialDate()
-    return Record(
-        **schema.model_dump(exclude={"publication_date", "labels"}),
-        publication_year=date.year,
-        publication_month=date.month,
-        publication_day=date.day,
-    )
+    return Record(**schema.model_dump(exclude={"labels"}))
 
 
 def store_parsed_rows(
@@ -34,7 +32,7 @@ def store_parsed_rows(
     filename: str,
     path: str | None,
     format: str,
-    source: str | None = None,
+    sources: Sequence[str] = (),
     sheet: str | None = None,
     parsed_rows: Sequence[tuple[RecordSchema, dict[str, str]]],
     skipped_rows: Sequence[tuple[int, str]] = (),
@@ -44,7 +42,7 @@ def store_parsed_rows(
         filename=filename,
         path=path,
         format=format,
-        source=source,
+        sources=list(sources),
         sheet=sheet,
         imported_at=imported_at or datetime.datetime.now(),
         row_count=len(parsed_rows),
@@ -108,11 +106,15 @@ def delete_records(session: Session, ids: Collection[int]) -> int:
 
 
 def _context(
-    source: RecordSource | None, separators: tuple[str | None, str | None]
+    source: RecordSource | None,
+    separators: tuple[str | None, str | None, str | None, str | None],
 ) -> CleaningContext:
     if source is None:
         return CleaningContext(
-            names_separator=separators[0], affiliations_separator=separators[1]
+            names_separator=separators[0],
+            affiliations_separator=separators[1],
+            ids_separator=separators[2],
+            keywords_separator=separators[3],
         )
     source_file = source.source_file
     return CleaningContext(
@@ -121,6 +123,8 @@ def _context(
         use_first=tuple(source_file.quirk_choices.get("use_first", [])),
         names_separator=separators[0],
         affiliations_separator=separators[1],
+        ids_separator=separators[2],
+        keywords_separator=separators[3],
     )
 
 
@@ -130,7 +134,7 @@ def clean_records(
     """`ids` None cleans every record. A record is cleaned with its first source
     file's raw fields and mapping, and author separators are sniffed per source
     file. Returns the records cleaned, the records changed and the changes per
-    step."""
+    step, in the order the steps run."""
     statement = (
         select(Record)
         .options(selectinload(Record.sources).selectinload(RecordSource.source_file))
@@ -169,4 +173,7 @@ def clean_records(
         for name, value in cleaned.model_dump(exclude=_NOT_CLEANED).items():
             if getattr(record, name) != value:
                 setattr(record, name, value)
-    return len(records), changed, per_step
+    in_order = Counter(
+        {name: per_step[name] for name in STEP_NAMES if name in per_step}
+    )
+    return len(records), changed, in_order

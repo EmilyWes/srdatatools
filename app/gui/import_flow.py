@@ -1,4 +1,4 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -10,6 +10,7 @@ from app.db.activity_log import log_import
 from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
 from app.gui.busy import run_busy
+from app.gui.format import source_label, sources_label
 from app.gui.mapping_table import ROW_FIELD_CSS, MappingScreen, render_mapping_table
 from app.gui.quirks_overview import (
     VIEW_MAPPING,
@@ -37,23 +38,19 @@ from app.parsers.csv_ import (
     read_csv_headers,
     suggest_mapping,
 )
-from app.parsers.detect import detect_source, detect_type
+from app.parsers.detect import detect_sources, detect_type
 from app.parsers.excel import (
     parse_excel_file,
     read_excel_headers,
     read_excel_sheets,
 )
-from app.parsers.mapping import FieldMapping, RowDefaults
+from app.parsers.mapping import FieldMapping
 from app.parsers.nbib import (
     parse_nbib_file,
     read_nbib_tags,
     suggest_nbib_mapping,
 )
-from app.parsers.profiles import (
-    PROFILES,
-    FormatProfile,
-    has_profile,
-)
+from app.parsers.profiles import FormatProfile
 from app.parsers.profiles.overview import (
     ParsingChoices,
     default_choices,
@@ -78,11 +75,6 @@ _TYPE_OPTIONS = {
     "bibtex": "BibTeX",
 }
 _TSV_DELIMITER = "\t"
-
-_SOURCE_OPTIONS = {
-    UNKNOWN: "Unknown",
-    **{key: profile.label for key, profile in PROFILES.items()},
-}
 
 _MIXED_WARNING = (
     "The selected files look like they come from different sources or types."
@@ -118,9 +110,7 @@ class _TypeHandlers:
 
 
 def _suggest_columns(keys: list[str], profile: FormatProfile) -> FieldMapping:
-    return suggest_mapping(
-        keys, profile.suggestions, profile.row_defaults, profile.ignored_keys
-    )
+    return suggest_mapping(keys, profile.suggestions, profile.ignored_keys)
 
 
 def _delimited(delimiter: str | None) -> _TypeHandlers:
@@ -146,7 +136,7 @@ _TYPES: dict[FileType, _TypeHandlers] = {
     "ris": _TypeHandlers(
         read_keys=lambda path, _, __: read_ris_tags(path),
         suggest=lambda keys, profile: suggest_ris_mapping(
-            keys, profile.suggestions, profile.row_defaults
+            keys, profile.suggestions, profile.ignored_keys
         ),
         parse_file=lambda path, mapping, _, settings: parse_ris_file(
             path, mapping, settings
@@ -156,7 +146,7 @@ _TYPES: dict[FileType, _TypeHandlers] = {
     "nbib": _TypeHandlers(
         read_keys=lambda path, _, __: read_nbib_tags(path),
         suggest=lambda keys, profile: suggest_nbib_mapping(
-            keys, profile.suggestions, profile.row_defaults
+            keys, profile.suggestions, profile.ignored_keys
         ),
         parse_file=lambda path, mapping, _, settings: parse_nbib_file(
             path, mapping, settings
@@ -166,7 +156,7 @@ _TYPES: dict[FileType, _TypeHandlers] = {
     "bibtex": _TypeHandlers(
         read_keys=lambda path, _, __: read_bibtex_fields(path),
         suggest=lambda keys, profile: suggest_bibtex_mapping(
-            keys, profile.suggestions, profile.row_defaults
+            keys, profile.suggestions, profile.ignored_keys
         ),
         parse_file=lambda path, mapping, _, settings: parse_bibtex_file(
             path, mapping, settings
@@ -176,9 +166,11 @@ _TYPES: dict[FileType, _TypeHandlers] = {
 }
 
 
-def _suggestion(file_type: FileType, source: str, summary: FileSummary) -> FieldMapping:
+def _suggestion(
+    file_type: FileType, sources: Collection[str], summary: FileSummary
+) -> FieldMapping:
     return _TYPES[file_type].suggest(
-        list(summary.samples), profile_with(file_type, source)
+        list(summary.samples), profile_with(file_type, sources)
     )
 
 
@@ -186,29 +178,30 @@ def type_label(file_type: str) -> str:
     return _TYPE_OPTIONS[file_type]
 
 
-def row_defaults_for(file_type: FileType, source: str) -> RowDefaults:
-    return profile_with(file_type, source).row_defaults
-
-
-def _detect(path: Path) -> tuple[str, str]:
+def _detect(path: Path) -> tuple[str, tuple[str, ...]]:
     file_type = detect_type(path)
     if file_type is None:
-        return UNKNOWN, UNKNOWN
-    return file_type, detect_source(path, file_type) or UNKNOWN
+        return UNKNOWN, ()
+    return file_type, detect_sources(path, file_type)
 
 
-def common_detection(detected: list[tuple[str, str]]) -> tuple[str, str]:
+def _common_sources(per_file: list[tuple[str, ...]]) -> tuple[str, ...]:
+    distinct = set(per_file)
+    return distinct.pop() if len(distinct) == 1 else ()
+
+
+def common_detection(
+    detected: list[tuple[str, tuple[str, ...]]],
+) -> tuple[str, tuple[str, ...]]:
     types = {file_type for file_type, _ in detected}
-    sources = {source for _, source in detected}
     file_type = types.pop() if len(types) == 1 else UNKNOWN
-    source = sources.pop() if len(sources) == 1 else UNKNOWN
-    return file_type, source
+    return file_type, _common_sources([sources for _, sources in detected])
 
 
 def read_summary(
     file_type: FileType, path: Path, sheet: str | None = None
 ) -> FileSummary:
-    settings = profile_with(file_type, UNKNOWN).settings
+    settings = profile_with(file_type, ()).settings
     return _TYPES[file_type].read_keys(path, sheet, settings)
 
 
@@ -217,7 +210,7 @@ def render_mapping(
     file_type: FileType,
     name: str,
     summary: FileSummary,
-    source: str = UNKNOWN,
+    sources: Collection[str] = (),
 ) -> MappingScreen | None:
     if not summary.samples:
         with container:
@@ -225,10 +218,7 @@ def render_mapping(
         return None
 
     return render_mapping_table(
-        container,
-        summary,
-        _suggestion(file_type, source, summary),
-        defaults=row_defaults_for(file_type, source),
+        container, summary, _suggestion(file_type, sources, summary)
     )
 
 
@@ -238,27 +228,29 @@ def import_file(
     file_type: FileType,
     mapping: FieldMapping,
     summary: FileSummary,
-    source: str = UNKNOWN,
+    sources: Collection[str] = (),
     sheet: str | None = None,
     choices: ParsingChoices | None = None,
 ) -> SourceFile:
-    profile = profile_with(file_type, source, choices)
+    profile = profile_with(file_type, sources, choices)
     result = _TYPES[file_type].parse_file(path, mapping, sheet, profile.settings)
     source_file = store_parsed_rows(
         session,
         filename=path.name,
         path=str(path),
         format=file_type,
-        source=source if source != UNKNOWN else None,
+        sources=list(sources),
         sheet=sheet,
         parsed_rows=[(row.record, row.raw_fields) for row in result.rows],
         skipped_rows=[(row.row_number, row.reason) for row in result.skipped],
     )
     source_file.field_mapping = mapping.model_dump()
-    source_file.suggested_mapping = _suggestion(file_type, source, summary).model_dump()
+    source_file.suggested_mapping = _suggestion(
+        file_type, sources, summary
+    ).model_dump()
     source_file.file_summary = asdict(summary)
     source_file.quirk_choices = dump_choices(
-        choices or default_choices(file_type, source)
+        choices or default_choices(file_type, sources)
     )
     log_import(session, source_file)
     return source_file
@@ -269,9 +261,10 @@ OnImport = Callable[
         list[tuple[Path, FileSummary]],
         FileType,
         FieldMapping,
-        str,
+        tuple[str, ...],
         str | None,
         ParsingChoices,
+        bool,
     ],
     Awaitable[None] | None,
 ]
@@ -282,9 +275,9 @@ class ImportView:
     middle: Element
     on_import: OnImport
     paths: list[Path] = field(default_factory=list)
-    detected: list[tuple[str, str]] = field(default_factory=list)
+    detected: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
     file_type: str = UNKNOWN
-    source: str = UNKNOWN
+    sources: tuple[str, ...] = ()
     summaries: list[FileSummary] = field(default_factory=list)
     sheets: list[str] = field(default_factory=list)
     sheet: str | None = None
@@ -293,6 +286,7 @@ class ImportView:
     quirks_screen: QuirksScreen[ParsingChoices] | None = None
     views: MappingParsingViews | None = None
     import_button: ui.button | None = None
+    import_clean_button: ui.button | None = None
 
     def _name(self) -> str:
         if len(self.paths) == 1:
@@ -307,8 +301,10 @@ class ImportView:
 
     def _mixed_details(self) -> str:
         return "; ".join(
-            f"{path.name}: {_TYPE_OPTIONS[file_type]}, {_SOURCE_OPTIONS[source]}"
-            for path, (file_type, source) in zip(self.paths, self.detected, strict=True)
+            f"{path.name}: {_TYPE_OPTIONS[file_type]}, {sources_label(sources)}"
+            for path, (file_type, sources) in zip(
+                self.paths, self.detected, strict=True
+            )
         )
 
     async def _select_files(self) -> None:
@@ -319,8 +315,8 @@ class ImportView:
             self.detected = await run_busy(
                 f"Reading {self._name()}…", lambda: [_detect(path) for path in picked]
             )
-            self.file_type, self.source = common_detection(self.detected)
-            detected = UNKNOWN not in (self.file_type, self.source)
+            self.file_type, self.sources = common_detection(self.detected)
+            detected = self.file_type != UNKNOWN and bool(self.sources)
             self.view = None if detected else VIEW_MAPPING
             if self._mixed():
                 with self.middle:
@@ -328,7 +324,15 @@ class ImportView:
             await self._read_files()
 
     async def _set_type(self, file_type: str) -> None:
+        """Sources are detected per Type, so they are detected again."""
         self.file_type = file_type
+        self.sources = ()
+        paths = self.paths
+        if is_file_type(file_type) and paths:
+            self.sources = await run_busy(
+                f"Reading {self._name()}…",
+                lambda: _common_sources([detect_sources(p, file_type) for p in paths]),
+            )
         await self._read_files()
 
     async def _set_sheet(self, sheet: str) -> None:
@@ -364,11 +368,7 @@ class ImportView:
                     ui.notify(str(exc), type="negative")
         self.render()
 
-    def _set_source(self, source: str) -> None:
-        self.source = source
-        self.render()
-
-    def _import(self) -> Awaitable[None] | None:
+    def _import(self, clean: bool = False) -> Awaitable[None] | None:
         assert self.paths
         assert self.mapping_screen is not None
         assert self.quirks_screen is not None
@@ -377,9 +377,10 @@ class ImportView:
             list(zip(self.paths, self.summaries, strict=True)),
             self.file_type,
             self.mapping_screen.current_mapping(),
-            self.source,
+            self.sources,
             self.sheet,
             self.quirks_screen.current_choices(),
+            clean,
         )
 
     def _current_mapping(self) -> FieldMapping:
@@ -400,7 +401,7 @@ class ImportView:
         quirks_screen = render_quirks_overview(
             views.parsing,
             quirk_boxes(file_type, type_label(file_type)),
-            default_choices(file_type, self.source),
+            default_choices(file_type, self.sources),
             current_mapping=self._current_mapping,
         )
         mapping_screen = render_mapping(
@@ -408,7 +409,7 @@ class ImportView:
             file_type,
             self._name(),
             merge_summaries(self.summaries),
-            self.source,
+            self.sources,
         )
         if mapping_screen is None:
             views.parsing.clear()
@@ -457,13 +458,14 @@ class ImportView:
                                 f"{_MIXED_WARNING} Detected: {self._mixed_details()}"
                             )
 
-                    ui.label("Select source:").classes("text-sm")
-                    source_select = (
-                        ui.select(_SOURCE_OPTIONS, value=self.source)
-                        .props(SELECT_PROPS)
-                        .classes(SELECT_CLASSES)
-                    )
-                    source_select.on_value_change(lambda e: self._set_source(e.value))
+                    ui.label("Detected sources:").classes("text-sm")
+                    with ui.row().classes(CELL_ROW_CLASSES):
+                        for source in self.sources:
+                            ui.chip(source_label(source)).props("dense square").classes(
+                                "text-xs"
+                            )
+                        if not self.sources:
+                            ui.label(source_label(None)).classes(FILE_LABEL_CLASSES)
 
                     ui.label("Select type:").classes("text-sm")
                     with ui.row().classes(CELL_ROW_CLASSES):
@@ -473,17 +475,6 @@ class ImportView:
                             .classes(SELECT_CLASSES)
                         )
                         type_select.on_value_change(lambda e: self._set_type(e.value))
-                        if (
-                            self.source != UNKNOWN
-                            and file_type is not None
-                            and not has_profile(self.source, file_type)
-                        ):
-                            ui.icon("warning", size="sm").classes(
-                                "text-orange-7"
-                            ).tooltip(
-                                "No profile for this source/type combination"
-                                " — using the default parser."
-                            )
 
                     if self.sheets:
                         ui.label("Select sheet:").classes("text-sm")
@@ -510,19 +501,24 @@ class ImportView:
                     views.toggle.disable()
                     views.toggle.tooltip(self._no_mapping_reason(type_known))
 
-                with ui.row().classes("items-center gap-2"):
+                with ui.column().classes("items-center gap-2"):
                     self.import_button = ui.button(
-                        "Import", on_click=self._import
+                        "Import", icon="upload_file", on_click=lambda: self._import()
                     ).props("dense")
-                    self.import_button.set_enabled(
-                        has_file and type_known and has_mapping
-                    )
-                    if not type_known:
-                        self.import_button.tooltip("please select the type")
-                    elif self._too_many_for_excel():
-                        self.import_button.tooltip(_EXCEL_SINGLE_FILE)
-                    elif not has_mapping:
-                        self.import_button.tooltip("file has no mapping available")
+                    self.import_clean_button = ui.button(
+                        "Import and clean",
+                        icon="upload_file",
+                        on_click=lambda: self._import(clean=True),
+                    ).props("dense icon-right=cleaning_services")
+                    for button in (self.import_button, self.import_clean_button):
+                        button.classes("w-52 px-4").props("no-wrap")
+                        button.set_enabled(has_file and type_known and has_mapping)
+                        if not type_known:
+                            button.tooltip("please select the type")
+                        elif self._too_many_for_excel():
+                            button.tooltip(_EXCEL_SINGLE_FILE)
+                        elif not has_mapping:
+                            button.tooltip("file has no mapping available")
 
 
 def render_import_view(middle: Element, on_import: OnImport) -> ImportView:

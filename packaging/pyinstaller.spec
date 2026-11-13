@@ -12,7 +12,8 @@ pywebview bundles its own PyInstaller hook, so it needs no extra data here.
 The About view reads LICENSE, THIRD_PARTY_LICENSES.txt and
 THIRD_PARTY_SUMMARY.txt (regenerate both with
 packaging/third_party_licenses.py before building) and srdatatools' own
-package metadata, so those are bundled too.
+package metadata, so those are bundled too. The window/taskbar icon is read
+at startup (app.main), so the exe's icon file is bundled as data as well.
 """
 
 from pathlib import Path
@@ -22,6 +23,7 @@ from PyInstaller.utils.hooks import copy_metadata
 
 REPO_ROOT = Path(SPECPATH).resolve().parent  # noqa: F821  (injected by PyInstaller)
 NICEGUI_ROOT = Path(nicegui.__file__).parent
+ICON = REPO_ROOT / "app" / "assets" / "srdatatools.ico"
 
 a = Analysis(  # noqa: F821  (injected by PyInstaller)
     [str(REPO_ROOT / "app" / "main.py")],
@@ -30,6 +32,7 @@ a = Analysis(  # noqa: F821  (injected by PyInstaller)
         (str(NICEGUI_ROOT), "nicegui"),
         (str(REPO_ROOT / "alembic.ini"), "."),
         (str(REPO_ROOT / "app" / "db" / "migrations"), "app/db/migrations"),
+        (str(ICON), "app/assets"),
         (str(REPO_ROOT / "LICENSE"), "."),
         (str(REPO_ROOT / "THIRD_PARTY_LICENSES.txt"), "."),
         (str(REPO_ROOT / "THIRD_PARTY_SUMMARY.txt"), "."),
@@ -45,5 +48,6 @@ exe = EXE(  # noqa: F821  (injected by PyInstaller)
     a.datas,
     [],
     name="srdatatools",
+    icon=str(ICON),
     console=False,
 )

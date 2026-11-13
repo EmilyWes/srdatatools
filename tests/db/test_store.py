@@ -24,7 +24,6 @@ from app.db.store import (
     store_parsed_rows,
 )
 from app.models.record import Label as LabelSchema
-from app.models.record import PartialDate
 from app.models.record import Record as RecordSchema
 from app.parsers.mapping import FieldMapping
 from tests.mappings import mapping_of
@@ -71,27 +70,27 @@ def test_store_parsed_rows__creates_source_file_with_row_count(
     assert source_file.imported_at == datetime.datetime(2026, 1, 1)
 
 
-def test_store_parsed_rows__stores_source(session: Session) -> None:
+def test_store_parsed_rows__stores_sources(session: Session) -> None:
     store_parsed_rows(
         session,
-        filename="pubmed_export.nbib",
+        filename="pubmed_export.csv",
         path=None,
-        format="nbib",
-        source="pubmed",
+        format="csv",
+        sources=("pubmed", "asreview"),
         parsed_rows=[],
     )
     session.commit()
 
-    assert session.query(SourceFile).one().source == "pubmed"
+    assert session.query(SourceFile).one().sources == ["pubmed", "asreview"]
 
 
-def test_store_parsed_rows__source_defaults_to_none(session: Session) -> None:
+def test_store_parsed_rows__sources_default_to_empty(session: Session) -> None:
     store_parsed_rows(
         session, filename="export.ris", path=None, format="ris", parsed_rows=[]
     )
     session.commit()
 
-    assert session.query(SourceFile).one().source is None
+    assert session.query(SourceFile).one().sources == []
 
 
 def test_store_parsed_rows__stores_sheet(session: Session) -> None:
@@ -164,13 +163,8 @@ def test_store_parsed_rows__preserves_raw_fields_on_record_source(
     assert source.source_file.filename == "scopus_export.csv"
 
 
-def test_store_parsed_rows__maps_publication_date_to_year_month_day(
-    session: Session,
-) -> None:
-    schema = RecordSchema(
-        title="Dated Paper",
-        publication_date=PartialDate(year=2024, month=3, day=15),
-    )
+def test_store_parsed_rows__stores_publication_date(session: Session) -> None:
+    schema = RecordSchema(title="Dated Paper", publication_date="2024 Mar 15")
 
     store_parsed_rows(
         session,
@@ -181,10 +175,7 @@ def test_store_parsed_rows__maps_publication_date_to_year_month_day(
     )
     session.commit()
 
-    record = session.query(Record).one()
-    assert record.publication_year == 2024
-    assert record.publication_month == 3
-    assert record.publication_day == 15
+    assert session.query(Record).one().publication_date == "2024 Mar 15"
 
 
 def test_store_parsed_rows__handles_multiple_rows_in_one_call(
@@ -512,7 +503,11 @@ def test_clean_records__writes_back_and_counts_per_step(session: Session) -> Non
     assert (first.volume, first.issue, first.pages) == ("620", "7974", "521-522")
     assert second.doi == "10.1038/x"
     assert (total, changed) == (3, 2)
-    assert per_step == {"Values from Citation": 1, "Pages set": 1, "Strip DOI": 1}
+    assert list(per_step.items()) == [
+        ("Strip DOI", 1),
+        ("Values from Citation", 1),
+        ("Pages set", 1),
+    ]
 
 
 def test_clean_records__only_the_given_ids(session: Session) -> None:
@@ -553,10 +548,10 @@ def test_clean_records__chosen_separator_is_used_for_every_file(
 ) -> None:
     _store(session, [(RecordSchema(author_names="Romano M, Novacek MJ."), {})])
 
-    clean_records(session, CleaningOptions(names_separator=",", drop_trailing=True))
+    clean_records(session, CleaningOptions(names_separator=","))
     session.commit()
 
-    assert session.query(Record).one().author_names == "Romano M|Novacek MJ"
+    assert session.query(Record).one().author_names == "Romano M|Novacek MJ."
 
 
 def test_clean_records__refills_from_the_source_mapping_and_ordering(
@@ -581,14 +576,14 @@ def test_clean_records__refills_from_the_source_mapping_and_ordering(
     assert _titles(session) == ["Other"]
 
 
-def test_clean_records__keeps_labels_and_date(session: Session) -> None:
+def test_clean_records__keeps_labels_and_cleans_date(session: Session) -> None:
     _store(
         session,
         [
             (
                 RecordSchema(
                     pages="521-2",
-                    publication_date=PartialDate(year=2001, month=5),
+                    publication_date="May 2001",
                     labels=[LabelSchema(phase="ft", screener="a", value="include")],
                 ),
                 {},
@@ -600,7 +595,7 @@ def test_clean_records__keeps_labels_and_date(session: Session) -> None:
     session.commit()
 
     record = session.query(Record).one()
-    assert (record.publication_year, record.publication_month) == (2001, 5)
+    assert record.publication_date == "2001/05/"
     assert [label.value for label in record.labels] == ["include"]
 
 

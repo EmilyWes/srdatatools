@@ -18,7 +18,6 @@ def _suggest_csv(headers: list[str]) -> FieldMapping:
     return suggest_mapping(
         headers,
         _CSV_PROFILE.suggestions,
-        _CSV_PROFILE.row_defaults,
         _CSV_PROFILE.ignored_keys,
     )
 
@@ -52,12 +51,10 @@ def test_scopus_csv__suggests_author_columns_but_not_abbreviated_names() -> None
     mapping = _suggest_csv(list(_AUTHOR_ROW))
 
     assert mapping.rows == {
-        "Author full names": AuthorsRow(delimiter=";", id_key="author_full_names"),
-        "Author(s) ID": AuthorsRow(
-            role="ids", delimiter=";", id_key="scopus_author_id"
-        ),
+        "Author full names": AuthorsRow(id_key="author_full_names"),
+        "Author(s) ID": AuthorsRow(role="ids", id_key="scopus_author_id"),
         "Authors with affiliations": AuthorsRow(
-            role="affiliations", delimiter=";", id_key="authors_with_affiliations"
+            role="affiliations", id_key="authors_with_affiliations"
         ),
     }
 
@@ -80,7 +77,7 @@ def test_scopus_csv__ignores_conference_details_and_publication_stage() -> None:
     }
 
 
-_IDS = "scopus_author_id:60652739200|scopus_author_id:59534195400"
+_IDS = "scopus_author_id:[60652739200; 59534195400]"
 
 
 def test_scopus_csv__abbreviated_names_mapped_by_hand() -> None:
@@ -98,7 +95,7 @@ def _without(mapping: FieldMapping, *ignored: str) -> FieldMapping:
 
 
 def _with_abbreviated_names(mapping: FieldMapping) -> FieldMapping:
-    row = make_row(Suggest("authors"), "Authors", _CSV_PROFILE.row_defaults)
+    row = make_row(Suggest("authors"), "Authors")
     return FieldMapping(rows={"Authors": row, **mapping.rows})
 
 
@@ -128,7 +125,7 @@ def test_scopus_csv__ignored_index_keywords_column_is_not_used() -> None:
 
     record = _parse_csv(row, mapping)
 
-    assert record.keywords == ["[Author] Asia"]
+    assert record.keywords == ["Author:[Asia]"]
 
 
 def test_scopus_csv__unmapped_authors_stay_empty() -> None:
@@ -146,10 +143,8 @@ def test_scopus_csv__prefixes_author_keywords_only() -> None:
     )
 
     assert record.keywords == [
-        "[Author] ANSYS Simulation",
-        "[Author] Battery Thermal Management",
-        "Bionics",
-        "Thermal",
+        "Author:[ANSYS Simulation; Battery Thermal Management]",
+        "keywords:[Bionics; Thermal]",
     ]
 
 
@@ -180,14 +175,16 @@ def _parse_ris(body: str) -> Record:
     text = f"TY  - JOUR\n{body}ER  - \n"
     tags = list(dict.fromkeys(line[:2] for line in text.splitlines()))
     mapping = suggest_ris_mapping(
-        tags, _RIS_PROFILE.suggestions, _RIS_PROFILE.row_defaults
+        tags, _RIS_PROFILE.suggestions, _RIS_PROFILE.ignored_keys
     )
     result = parse_ris_text(text, mapping, settings=_RIS_PROFILE.settings)
     return result.rows[0].record
 
 
 def test_scopus_ris__publication_type_from_m3_not_ty() -> None:
-    mapping = suggest_ris_mapping(["TY", "M3"], _RIS_PROFILE.suggestions)
+    mapping = suggest_ris_mapping(
+        ["TY", "M3"], _RIS_PROFILE.suggestions, _RIS_PROFILE.ignored_keys
+    )
 
     assert targets_of(mapping) == {"M3": "publication_type"}
 
@@ -216,7 +213,7 @@ def _parse_bibtex(fields: str, mapping: FieldMapping | None = None) -> Record:
             *(line.split("=")[0].strip() for line in fields.splitlines()),
         ]
         mapping = suggest_bibtex_mapping(
-            keys, _BIBTEX_PROFILE.suggestions, _BIBTEX_PROFILE.row_defaults
+            keys, _BIBTEX_PROFILE.suggestions, _BIBTEX_PROFILE.ignored_keys
         )
     result = parse_bibtex_text(text, mapping, settings=_BIBTEX_PROFILE.settings)
     return result.rows[0].record
@@ -225,7 +222,9 @@ def _parse_bibtex(fields: str, mapping: FieldMapping | None = None) -> Record:
 def test_scopus_bibtex__suggests_scopus_fields() -> None:
     keys = ["@type", "type", "pmid", "author_keywords", "keywords"]
 
-    mapping = suggest_bibtex_mapping(keys, _BIBTEX_PROFILE.suggestions)
+    mapping = suggest_bibtex_mapping(
+        keys, _BIBTEX_PROFILE.suggestions, _BIBTEX_PROFILE.ignored_keys
+    )
 
     assert targets_of(mapping) == {
         "type": "publication_type",
@@ -247,7 +246,7 @@ def test_scopus_bibtex__prefixes_cleaned_author_keywords_only() -> None:
         'author_keywords = {Gr{\\"o}nland; Asia},\nkeywords = {R\\&D; Thermal},\n'
     )
 
-    assert record.keywords == ["[Author] Grönland", "[Author] Asia", "R&D", "Thermal"]
+    assert record.keywords == ["Author:[Grönland; Asia]", "keywords:[R&D; Thermal]"]
 
 
 def test_scopus_bibtex__ignored_author_keywords_field_is_not_used() -> None:
@@ -256,7 +255,7 @@ def test_scopus_bibtex__ignored_author_keywords_field_is_not_used() -> None:
         mapping_of({"keywords": "keywords"}),
     )
 
-    assert record.keywords == ["Thermal"]
+    assert record.keywords == ["keywords:[Thermal]"]
 
 
 def test_scopus_bibtex__unmapped_keywords_stay_empty() -> None:

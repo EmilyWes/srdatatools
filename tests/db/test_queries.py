@@ -14,6 +14,7 @@ from app.db.models import (
     SourceFile,
 )
 from app.db.queries import (
+    count_data_quality,
     count_filled_fields,
     count_keywords,
     count_label_values,
@@ -114,16 +115,16 @@ def _source_file(
         filename=filename,
         path=None,
         format="ris",
-        source=source,
+        sources=[source] if source is not None else [],
         imported_at=imported_at,
         row_count=None,
     )
 
 
-def _record(year: int | None, *source_files: SourceFile) -> Record:
+def _record(date: str | None, *source_files: SourceFile) -> Record:
     return Record(
         title="A title",
-        publication_year=year,
+        publication_date=date,
         sources=[RecordSource(source_file=source_file) for source_file in source_files],
     )
 
@@ -135,10 +136,10 @@ def library(session: Session) -> Session:
     unknown = _source_file("other.ris", None, datetime.datetime(2026, 1, 3))
     session.add_all(
         [
-            _record(2020, pubmed),
-            _record(2021, pubmed, scopus),
-            _record(None, scopus),
-            _record(2020, unknown),
+            _record("2020//", pubmed),
+            _record("2021 Mar 4", pubmed, scopus),
+            _record("n.d.", scopus),
+            _record("2020/05/01", unknown),
         ]
     )
     session.commit()
@@ -166,13 +167,13 @@ def test_count_records_per_year__ascending_with_unknown_last(
 
 
 def test_list_record_rows__requested_fields_ordered_by_id(library: Session) -> None:
-    rows = list_record_rows(library, ["publication_year"])
+    rows = list_record_rows(library, ["publication_date"])
 
     assert rows == [
-        {"id": 1, "publication_year": 2020},
-        {"id": 2, "publication_year": 2021},
-        {"id": 3, "publication_year": None},
-        {"id": 4, "publication_year": 2020},
+        {"id": 1, "publication_date": "2020//"},
+        {"id": 2, "publication_date": "2021 Mar 4"},
+        {"id": 3, "publication_date": "n.d."},
+        {"id": 4, "publication_date": "2020/05/01"},
     ]
 
 
@@ -185,6 +186,17 @@ def test_list_record_sources__sources_per_record_in_import_order(
         3: ["scopus"],
         4: [None],
     }
+
+
+def test_list_record_sources__file_with_several_sources_lists_each(
+    session: Session,
+) -> None:
+    source_file = _source_file("a.csv", None, datetime.datetime(2026, 1, 1))
+    source_file.sources = ["pubmed", "asreview"]
+    session.add(_record(None, source_file))
+    session.commit()
+
+    assert list(list_record_sources(session).values()) == [["pubmed", "asreview"]]
 
 
 @pytest.fixture
@@ -245,6 +257,61 @@ def test_count_label_values__empty_without_labels(session: Session) -> None:
     assert count_label_values(session) == {}
 
 
+def test_count_data_quality__unparsed_dates(session: Session) -> None:
+    dates = ["2020/05/01", "1994//", "2020/05/", "2020 May", "14/05/2020", "/03/", None]
+    session.add_all([Record(publication_date=date) for date in dates])
+    session.commit()
+
+    assert dict(count_data_quality(session))["Unparsed dates"] == 3
+
+
+@pytest.mark.parametrize(
+    ("names", "ids", "misaligned"),
+    [
+        ("A|B", "x:1|x:2", False),
+        ("A|B", "x:1", False),
+        ("A|B", "x:1|x:2|x:3", True),
+        (None, "x:1", True),
+        ("A|B", "x:[1;2]", True),
+        ("A|B", None, False),
+    ],
+)
+def test_count_data_quality__misaligned_authors(
+    session: Session, names: str | None, ids: str | None, misaligned: bool
+) -> None:
+    session.add(Record(author_names=names, author_ids=ids))
+    session.commit()
+
+    assert dict(count_data_quality(session))["Misaligned authors"] == misaligned
+
+
+def test_count_data_quality__rows_in_order(session: Session) -> None:
+    assert count_data_quality(session) == [
+        ("Unparsed dates", 0),
+        ("Misaligned authors", 0),
+        ("Unmapped pub. types", 0),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("publication_type", "unmapped"),
+    [
+        ("Journal article", False),
+        ("JOUR", True),
+        ("GEN", True),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_count_data_quality__unmapped_publication_types(
+    session: Session, publication_type: str | None, unmapped: bool
+) -> None:
+    session.add(Record(publication_type=publication_type))
+    session.commit()
+
+    assert dict(count_data_quality(session))["Unmapped pub. types"] == unmapped
+
+
 def test_count_filled_fields__counts_non_empty_values(session: Session) -> None:
     session.add_all(
         [
@@ -263,17 +330,6 @@ def test_count_filled_fields__counts_non_empty_values(session: Session) -> None:
         ("author_names", 1),
         ("keywords", 1),
         ("other_ids", 0),
-    ]
-
-
-def test_count_filled_fields__counts_set_numbers(session: Session) -> None:
-    session.add_all(
-        [Record(publication_year=2020), Record(publication_year=0), Record()]
-    )
-    session.commit()
-
-    assert count_filled_fields(session, ["publication_year"]) == [
-        ("publication_year", 2)
     ]
 
 
@@ -369,8 +425,7 @@ def test_load_export_records__builds_record_sources_and_labels(
     record = Record(
         title="Deep learning",
         author_names="LeCun, Yann",
-        publication_year=2015,
-        publication_month=5,
+        publication_date="2015/05/",
         doi="10.1038/nature14539",
         keywords=["[MeSH] Humans"],
         other_ids={"eid": "2-s2.0-1"},
@@ -390,16 +445,14 @@ def test_load_export_records__builds_record_sources_and_labels(
     assert export.id == record.id
     assert export.record.title == "Deep learning"
     assert export.record.author_names == "LeCun, Yann"
-    date = export.record.publication_date
-    assert date is not None
-    assert (date.year, date.month, date.day) == (2015, 5, None)
+    assert export.record.publication_date == "2015/05/"
     assert export.record.keywords == ["[MeSH] Humans"]
     assert export.record.other_ids == {"eid": "2-s2.0-1"}
     assert [(lb.phase, lb.screener, lb.value) for lb in export.record.labels] == [
         ("ft", "s1", "include")
     ]
     [source] = export.sources
-    assert (source.vendor, source.filename) == ("scopus", "scopus.csv")
+    assert (source.vendors, source.filename) == (("scopus",), "scopus.csv")
     assert source.raw_fields == {"Title": "Deep learning", "Link": "https://x"}
     assert source.ignored_keys == {"Link"}
 

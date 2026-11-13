@@ -15,6 +15,7 @@ from nicegui.element import Element
 from nicegui.events import GenericEventArguments
 from sqlalchemy.orm import Session
 
+from app.cleaning.quality import ISSUE_JOINER, QUALITY_FIELDS, quality_issues
 from app.db.queries import (
     list_keyword_prefixes,
     list_label_columns,
@@ -35,18 +36,26 @@ from app.gui.format import (
     label_text,
     source_label,
 )
+from app.gui.quirks_overview import render_box_frame
+from app.models.record import publication_year
 from app.parsers.mapping import split_keyword
 
 _COLUMNS_KEY = "table_columns"
-_NUMBER_COLUMNS = {"publication_year", "publication_month", "publication_day"}
+_NUMBER_COLUMNS = {"publication_year"}
 _WIDE_COLUMNS = {"title", "abstract", "notes"}
 _SELECTION_TIMEOUT = 10.0
 _ROW_HEIGHT = 24
+_TOOLTIP_DELAY_MS = 500
 _TABLE_CLASS = "record-table"
 _HEADER_CSS = (
     f".{_TABLE_CLASS} .ag-header-cell {{ cursor: pointer; }}"
     f" .{_TABLE_CLASS} .ag-header-cell:hover"
     " { background-color: rgba(0, 0, 0, 0.06); }"
+)
+# Author IDs have hardly any spaces, so without these a tooltip runs off screen.
+_TOOLTIP_CSS = (
+    ".ag-tooltip { max-width: 50vw; max-height: 60vh; overflow: hidden;"
+    " overflow-wrap: anywhere; }"
 )
 _LABEL_FORMAT_KEY = "table_label_format"
 
@@ -56,14 +65,13 @@ COLUMNS: dict[str, str] = {
     "doi": "DOI",
     "title": "Title",
     "author_names": "Authors",
+    "publication_date": "Publication date",
     "publication_year": "Publication year",
     "journal": "Journal",
     "sources": "Sources",
     "abstract": "Abstract",
     "author_ids": "Author IDs",
     "author_affiliations": "Affiliations",
-    "publication_month": "Publication month",
-    "publication_day": "Publication day",
     "conference_name": "Conference",
     "volume": "Volume",
     "issue": "Issue",
@@ -78,8 +86,41 @@ COLUMNS: dict[str, str] = {
     "publisher": "Publisher",
     "url": "URL",
     "notes": "Notes",
+    "data_quality": "Data quality",
 }
+# Columns worked out from other fields rather than read from one.
+_DERIVED_COLUMNS = ("sources", "keywords", "publication_year", "data_quality")
 DEFAULT_COLUMNS = ["doi", "title", "author_names"]
+_QUALITY_FILTER_STATE: dict[str, Any] = {
+    "filter": {
+        "filterModel": {"data_quality": {"filterType": "text", "type": "notBlank"}}
+    },
+    "sort": {"sortModel": [{"colId": "data_quality", "sort": "asc"}]},
+}
+# Table settings boxes; keyword prefix and label columns get boxes of their own.
+_COLUMN_BOXES: dict[str, tuple[str, ...]] = {
+    "General": (
+        "title",
+        "abstract",
+        "publication_type",
+        "language",
+        "notes",
+        "sources",
+        "data_quality",
+    ),
+    "Authors": ("author_names", "author_ids", "author_affiliations"),
+    "Publication": (
+        "publication_date",
+        "publication_year",
+        "journal",
+        "conference_name",
+        "publisher",
+        "volume",
+        "issue",
+        "pages",
+    ),
+    "Identifiers": ("doi", "pmid", "issn", "isbn", "other_ids", "url"),
+}
 
 
 @dataclass
@@ -179,15 +220,21 @@ def load_rows(
 ) -> list[dict[str, Any]]:
     label_columns = [key for key in columns if is_label_key(key)]
     keyword_columns = [key for key in columns if is_keyword_key(key)]
-    fields = [
-        key for key in columns if key in COLUMNS and key not in ("sources", "keywords")
-    ]
+    fields = [key for key in columns if key in COLUMNS and key not in _DERIVED_COLUMNS]
     if "keywords" in columns or keyword_columns:
         fields.append("keywords")
+    if "publication_year" in columns:
+        fields.append("publication_date")
+    if "data_quality" in columns:
+        fields.extend(QUALITY_FIELDS)
     rows = []
-    for record in list_record_rows(session, fields):
+    for record in list_record_rows(session, list(dict.fromkeys(fields))):
         keywords = [split_keyword(keyword) for keyword in record.pop("keywords", [])]
         row = row_for(record)
+        if "data_quality" in columns:
+            row["data_quality"] = ISSUE_JOINER.join(quality_issues(record))
+        if "publication_year" in columns:
+            row["publication_year"] = publication_year(row.get("publication_date"))
         if "keywords" in columns:
             row["keywords"] = "; ".join(
                 text for prefix, text in keywords if prefix is None
@@ -218,6 +265,10 @@ def _column_def(key: str) -> dict[str, Any]:
         "field": column_field(key),
         "headerName": _header(key),
         "headerTooltip": _header(key),
+        "tooltipField": column_field(key),
+        # Without it AG Grid infers the type from the first row, and e.g. a date
+        # column inferred from 2017-03-21 renders a later 2023// as empty.
+        "cellDataType": "number" if key in _NUMBER_COLUMNS else "text",
         "width": 400 if key in _WIDE_COLUMNS else 160,
         "filter": (
             "agNumberColumnFilter" if key in _NUMBER_COLUMNS else "agTextColumnFilter"
@@ -231,8 +282,12 @@ def render_record_table(
     columns: Sequence[str],
     selection: RecordSelection,
     on_delete: Callable[[set[int]], Awaitable[None] | None] | None = None,
+    quality_filter: bool = False,
 ) -> None:
+    """quality_filter opens the table on the records with a data quality problem,
+    sorted by their problems."""
     selection.ids &= {row["id"] for row in rows}
+    shown = [row for row in rows if row.get("data_quality")] if quality_filter else rows
 
     def open_delete_dialog() -> None:
         count = format_count(len(selection.ids))
@@ -256,7 +311,7 @@ def render_record_table(
                 count_line("Total number of rows", len(rows))
                 ui.element("div")
                 ui.element("div")
-                filter_count = count_line("Rows in filter", len(rows))
+                filter_count = count_line("Rows in filter", len(shown))
                 clear_filters = ui.button("Clear all filters", color=None).props(
                     "outline"
                 )
@@ -278,6 +333,8 @@ def render_record_table(
                         "cellStyle": {"fontSize": "12px"},
                     },
                     "rowHeight": _ROW_HEIGHT,
+                    "tooltipShowMode": "whenTruncated",
+                    "tooltipShowDelay": _TOOLTIP_DELAY_MS,
                     ":getRowId": "(params) => String(params.data.id)",
                     "rowSelection": {
                         "mode": "multiRow",
@@ -288,7 +345,8 @@ def render_record_table(
                         "enableSelectionWithoutKeys": True,
                     },
                     "initialState": {
-                        "rowSelection": [str(id_) for id_ in sorted(selection.ids)]
+                        "rowSelection": [str(id_) for id_ in sorted(selection.ids)],
+                        **(_QUALITY_FILTER_STATE if quality_filter else {}),
                     },
                 },
                 auto_size_columns=False,
@@ -300,7 +358,7 @@ def render_record_table(
                         "flat no-caps"
                     )
                     ui.button("Delete", color="negative", on_click=delete)
-        ui.add_css(_HEADER_CSS)
+        ui.add_css(_HEADER_CSS + _TOOLTIP_CSS)
 
     delete_selected.set_enabled(bool(selection.ids))
     for button in (clear_filters, clear_selection, delete_selected):
@@ -348,24 +406,34 @@ def render_table_settings(
             selected.discard(key)
         on_change(_in_display_order(selected, extra_columns))
 
+    def checkboxes(keys: Iterable[str]) -> None:
+        with ui.column().classes("col-span-2 gap-0"):
+            for key in keys:
+                ui.checkbox(
+                    _header(key),
+                    value=key in selected,
+                    on_change=lambda e, key=key: toggle(key, e.value),
+                ).props("dense")
+
     middle.clear()
     with middle:
         with ui.column().classes("w-full p-6 gap-2"):
             ui.label("Table settings").classes("text-2xl")
             ui.label("Columns").classes("title-small pt-2")
-            with ui.column().classes("gap-0"):
-                for key in [*COLUMNS, *extra_columns]:
-                    ui.checkbox(
-                        _header(key),
-                        value=key in selected,
-                        on_change=lambda e, key=key: toggle(key, e.value),
-                    ).props("dense")
-            ui.label("Label values").classes("title-small pt-3")
-            ui.radio(
-                dict(_LABEL_FORMATS),
-                value=label_format,
-                on_change=lambda e: on_label_format(e.value),
-            ).props("dense inline")
+            with ui.row().classes("gap-3 items-start"):
+                for title, keys in _COLUMN_BOXES.items():
+                    with render_box_frame(title):
+                        checkboxes(keys)
+                with render_box_frame("Keywords"):
+                    checkboxes(["keywords", *keyword_columns])
+                with render_box_frame("Labels"):
+                    checkboxes(label_columns)
+                    ui.label("Label values").classes("text-xs")
+                    ui.radio(
+                        dict(_LABEL_FORMATS),
+                        value=label_format,
+                        on_change=lambda e: on_label_format(e.value),
+                    ).props("dense inline")
             with ui.row().classes("gap-2 pt-2"):
                 ui.button("Restore defaults", color=None, on_click=on_restore).props(
                     "outline no-caps"

@@ -55,7 +55,7 @@ def _source_file(source: str | None) -> SourceFile:
         filename="export.ris",
         path=None,
         format="ris",
-        source=source,
+        sources=[source] if source is not None else [],
         imported_at=datetime.datetime(2026, 1, 1),
         row_count=None,
     )
@@ -116,7 +116,11 @@ def test_reset_columns__restores_defaults(session: Session) -> None:
 def test_columns__cover_every_record_field_plus_sources() -> None:
     record_fields = {column.key for column in Record.__table__.columns} - {"id"}
 
-    assert set(COLUMNS) == record_fields | {"sources"}
+    assert set(COLUMNS) == record_fields | {
+        "sources",
+        "publication_year",
+        "data_quality",
+    }
 
 
 def test_row_for__formats_lists_and_dicts() -> None:
@@ -139,6 +143,34 @@ def test_row_for__formats_lists_and_dicts() -> None:
         "publication_year": 2020,
         "doi": None,
     }
+
+
+def test_load_rows__publication_year_from_the_date(session: Session) -> None:
+    session.add(Record(id=1, publication_date="2020 May"))
+    session.add(Record(id=2, publication_date="May 2020"))
+    session.commit()
+
+    rows = load_rows(session, ["publication_year"])
+
+    assert [row["publication_year"] for row in rows] == [2020, None]
+
+
+def test_load_rows__data_quality_joins_each_records_problems(
+    session: Session,
+) -> None:
+    session.add(Record(id=1, publication_date="2020/05/"))
+    session.add(Record(id=2, publication_date="May 2020", author_ids="x:[1;2]"))
+    session.add(Record(id=3, publication_date="May 2020", author_names="A"))
+    session.commit()
+
+    rows = load_rows(session, ["data_quality", "publication_date"])
+
+    assert [row["data_quality"] for row in rows] == [
+        "",
+        "Unparsed dates | Misaligned authors",
+        "Unparsed dates",
+    ]
+    assert rows[0]["publication_date"] == "2020/05/"
 
 
 def test_load_rows__only_requested_columns(session: Session) -> None:
@@ -227,6 +259,7 @@ def test_render_table_settings__checkboxes_reflect_columns() -> None:
         if isinstance(element, ui.checkbox)
     }
     assert len(checkboxes) == len(COLUMNS)
+    assert set(checkboxes) == set(COLUMNS.values())
     assert checkboxes["DOI"] is True
     assert checkboxes["Title"] is False
 
@@ -413,6 +446,62 @@ def test_render_record_table__label_column_header_and_field() -> None:
     assert column["field"] == column_field(FT)
     assert column["headerName"] == "Label: ft / screener 1.0"
     assert column["filter"] == "agTextColumnFilter"
+
+
+def test_render_record_table__column_types_are_set_not_inferred() -> None:
+    panes = shell()
+
+    render_record_table(
+        panes.middle,
+        [_row(1)],
+        ["publication_date", "publication_year"],
+        RecordSelection(),
+    )
+
+    columns = _grid(panes.middle).options["columnDefs"]
+    assert [column["cellDataType"] for column in columns] == ["text", "number"]
+
+
+def test_render_record_table__quality_filter_opens_on_problem_records() -> None:
+    panes = shell()
+    rows = [
+        _row(1, data_quality=""),
+        _row(2, data_quality="Unparsed dates"),
+        _row(3, data_quality="Unparsed dates | Misaligned authors"),
+    ]
+
+    render_record_table(
+        panes.middle, rows, ["data_quality"], RecordSelection(), quality_filter=True
+    )
+
+    state = _grid(panes.middle).options["initialState"]
+    assert state["filter"] == {
+        "filterModel": {"data_quality": {"filterType": "text", "type": "notBlank"}}
+    }
+    assert state["sort"] == {"sortModel": [{"colId": "data_quality", "sort": "asc"}]}
+    labels = [e.text for e in panes.middle.descendants() if isinstance(e, ui.label)]
+    assert labels[labels.index("Rows in filter:") + 1] == "2"
+
+
+def test_render_record_table__no_filter_by_default() -> None:
+    panes = shell()
+
+    render_record_table(panes.middle, [_row(1)], ["doi"], RecordSelection())
+
+    assert set(_grid(panes.middle).options["initialState"]) == {"rowSelection"}
+
+
+def test_render_record_table__cell_tooltip_shows_full_value_when_truncated() -> None:
+    panes = shell()
+
+    render_record_table(panes.middle, [_row(1)], ["doi", FT], RecordSelection())
+
+    options = _grid(panes.middle).options
+    assert [column["tooltipField"] for column in options["columnDefs"]] == [
+        "doi",
+        column_field(FT),
+    ]
+    assert options["tooltipShowMode"] == "whenTruncated"
 
 
 def test_render_table_settings__label_checkboxes_after_fixed_ones() -> None:
@@ -625,7 +714,18 @@ def test_render_record_table__keyword_column_header_and_field() -> None:
     assert column["headerName"] == "Keywords: MeSH"
 
 
-def test_render_table_settings__keyword_checkboxes_after_label_ones() -> None:
+def _box_checkboxes(middle: Element) -> dict[str, list[ui.checkbox]]:
+    boxes = {}
+    for box in middle.descendants():
+        if box.tag != "fieldset":
+            continue
+        [legend] = (e for e in box.descendants() if e.tag == "legend")
+        [title] = (e.text for e in legend.descendants() if isinstance(e, ui.label))
+        boxes[title] = [e for e in box.descendants() if isinstance(e, ui.checkbox)]
+    return boxes
+
+
+def test_render_table_settings__columns_grouped_in_boxes() -> None:
     panes = shell()
     changes: list[list[str]] = []
     render_table_settings(
@@ -639,21 +739,28 @@ def test_render_table_settings__keyword_checkboxes_after_label_ones() -> None:
         on_restore=lambda: None,
         on_back=lambda: None,
     )
-    checkboxes = [
-        element
-        for element in panes.middle.descendants()
-        if isinstance(element, ui.checkbox)
+    boxes = _box_checkboxes(panes.middle)
+
+    assert list(boxes) == [
+        "General",
+        "Authors",
+        "Publication",
+        "Identifiers",
+        "Keywords",
+        "Labels",
     ]
-
-    assert [box.text for box in checkboxes[-2:]] == [
-        "Label: ft / screener 1.0",
-        "Keywords: MeSH",
+    assert [box.text for box in boxes["Authors"]] == [
+        "Authors",
+        "Author IDs",
+        "Affiliations",
     ]
+    assert [box.text for box in boxes["Keywords"]] == ["Keywords", "Keywords: MeSH"]
+    assert [box.text for box in boxes["Labels"]] == ["Label: ft / screener 1.0"]
 
-    checkboxes[-1].value = True
-    checkboxes[-2].value = True
+    boxes["Labels"][0].value = True
+    boxes["Keywords"][1].value = True
 
-    assert changes == [["doi", MESH], ["doi", FT, MESH]]
+    assert changes == [["doi", FT], ["doi", FT, MESH]]
 
 
 def test_render_record_table__header_tooltip_is_full_name() -> None:

@@ -19,6 +19,7 @@ from app.db.activity_log import (
 )
 from app.db.models import SourceFile
 from app.db.queries import (
+    count_data_quality,
     count_filled_fields,
     count_keywords,
     count_label_values,
@@ -29,6 +30,7 @@ from app.db.queries import (
     count_records_per_year,
     list_activity_log,
     list_label_columns,
+    list_record_ids_for_files,
     list_source_files,
     load_export_records,
 )
@@ -141,12 +143,14 @@ def home() -> None:
                 panes.middle,
                 count_records(session),
                 [(COLUMNS[key], count) for key, count in filled],
+                count_data_quality(session),
                 count_records_per_year(session),
                 count_publication_types(session),
                 count_records_per_source_file(session),
                 count_label_values(session),
                 count_keywords(session),
                 load_hidden(session),
+                on_show_quality=show_quality_problems,
             )
 
     def save_dashboard_hidden(hidden: set[str]) -> None:
@@ -173,7 +177,7 @@ def home() -> None:
             on_back=show_dashboard,
         )
 
-    async def show_table() -> None:
+    async def show_table(quality_filter: bool = False) -> None:
         def load() -> tuple[list[dict[str, Any]], list[str]]:
             with session_scope(_engine) as session:
                 columns = load_columns(session)
@@ -182,8 +186,19 @@ def home() -> None:
 
         rows, columns = await run_busy("Loading library table…", load)
         render_record_table(
-            panes.middle, rows, columns, selection, on_delete=delete_selected
+            panes.middle,
+            rows,
+            columns,
+            selection,
+            on_delete=delete_selected,
+            quality_filter=quality_filter,
         )
+
+    async def show_quality_problems(columns: list[str]) -> None:
+        save_table_columns(columns)
+        if nav is not None:
+            nav.highlight("library:table")
+        await show_table(quality_filter=True)
 
     async def delete_selected(ids: set[int]) -> None:
         def delete() -> None:
@@ -270,9 +285,10 @@ def home() -> None:
         files: list[tuple[Path, FileSummary]],
         file_type: FileType,
         mapping: FieldMapping,
-        source: str,
+        sources: tuple[str, ...],
         sheet: str | None,
         choices: ParsingChoices,
+        clean: bool,
     ) -> None:
         def store() -> tuple[list[int], list[tuple[str, str]]]:
             """Each file is stored on its own, so one that fails doesn't undo
@@ -288,7 +304,7 @@ def home() -> None:
                             file_type,
                             mapping,
                             summary,
-                            source,
+                            sources,
                             sheet,
                             choices,
                         )
@@ -306,6 +322,15 @@ def home() -> None:
         with panes.middle:
             for filename, reason in failures:
                 ui.notify(f"Could not import {filename}: {reason}", type="negative")
+        if clean and source_file_ids:
+
+            def load() -> tuple[set[int], CleaningOptions]:
+                with session_scope(_engine) as session:
+                    ids = list_record_ids_for_files(session, source_file_ids)
+                    return ids, load_cleaning_options(session)
+
+            ids, options = await run_busy("Loading cleaning options…", load)
+            await run_cleaning(options, ids)
         if len(source_file_ids) == 1:
             refresh(select_key=f"source_file:{source_file_ids[0]}")
         else:
@@ -373,6 +398,22 @@ def home() -> None:
             on_restore_options=restore_export_options,
         )
 
+    async def run_cleaning(options: CleaningOptions, ids: set[int] | None) -> None:
+        def run() -> tuple[int, int]:
+            with session_scope(_engine) as session:
+                total, changed, per_step = clean_records(session, options, ids)
+                log_cleaning(session, total, changed, per_step)
+            return total, changed
+
+        total, changed = await run_busy("Cleaning records…", run)
+        noun = "record" if total == 1 else "records"
+        with panes.middle:
+            ui.notify(
+                f"Cleaned {format_count(total)} {noun}:"
+                f" {format_count(changed)} changed",
+                type="positive",
+            )
+
     async def start_cleaning() -> None:
         clear_nav_selection()
         ids = set(selection.ids) or None
@@ -383,21 +424,11 @@ def home() -> None:
                 return count, load_cleaning_options(session)
 
         async def clean(options: CleaningOptions) -> None:
-            def run() -> tuple[int, int]:
-                with session_scope(_engine) as session:
-                    save_cleaning_options(session, options)
-                    total, changed, per_step = clean_records(session, options, ids)
-                    log_cleaning(session, total, changed, per_step)
-                return total, changed
-
-            total, changed = await run_busy("Cleaning records…", run)
-            noun = "record" if total == 1 else "records"
-            with panes.middle:
-                ui.notify(
-                    f"Cleaned {format_count(total)} {noun}:"
-                    f" {format_count(changed)} changed",
-                    type="positive",
-                )
+            with session_scope(_engine) as session:
+                save_cleaning_options(session, options)
+            await run_cleaning(options, ids)
+            if nav is not None:
+                nav.select("library:dashboard")
             refresh_log()
 
         count, options = await run_busy("Loading cleaning options…", load)

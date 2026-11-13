@@ -8,8 +8,11 @@ from app.parsers.csv_ import sniff_dialect
 from app.parsers.excel import read_excel_headers
 from app.parsers.profiles import PROFILES
 
-_RIS_FIRST_LINE = re.compile(r"^TY  -")
-_NBIB_FIRST_LINE = re.compile(r"^PMID ?-")
+_RIS_START = re.compile(r"^TY  -")
+_NBIB_START = re.compile(r"^PMID ?-")
+# Room for lines before the first record (ASReview numbers its RIS records, "1."),
+# yet a tabular file with tag-like text deep in a cell isn't taken for RIS/NBIB.
+_START_LINES = 10
 # Searched, not matched on the first line: exports may start with a free-text header.
 _BIBTEX_ENTRY = re.compile(
     r"^[ \t]*@(?!(?:comment|string|preamble)\b)[A-Za-z]+[ \t]*[{(]",
@@ -41,11 +44,12 @@ def _sniff_tabular(text: str) -> str | None:
 
 
 def _type_from_content(text: str) -> FileType | None:
-    first_line = next((line for line in text.splitlines() if line.strip()), "")
-    if _RIS_FIRST_LINE.match(first_line):
-        return "ris"
-    if _NBIB_FIRST_LINE.match(first_line):
-        return "nbib"
+    lines = [line for line in text.splitlines() if line.strip()][:_START_LINES]
+    for line in lines:
+        if _RIS_START.match(line):
+            return "ris"
+        if _NBIB_START.match(line):
+            return "nbib"
     if _BIBTEX_ENTRY.search(text):
         return "bibtex"
     delimiter = _sniff_tabular(text)
@@ -72,13 +76,13 @@ def _detect_text(path: Path, file_type: FileType) -> str:
     return decode_prefix(path, _DETECT_PREFIX_SIZE)
 
 
-def detect_source(path: Path, file_type: FileType) -> str | None:
+def detect_sources(path: Path, file_type: FileType) -> tuple[str, ...]:
     try:
         text = _detect_text(path, file_type)
     except ValueError:
-        return None
-    for key, profile in PROFILES.items():
-        format_profile = profile.formats.get(file_type)
-        if format_profile is not None and format_profile.matches(text):
-            return key
-    return None
+        return ()
+    return tuple(
+        key
+        for key, profile in PROFILES.items()
+        if file_type in profile.formats and profile.formats[file_type].matches(text)
+    )

@@ -5,7 +5,6 @@ from io import StringIO
 from app.parsers.mapping import Suggest
 from app.parsers.profiles.base import FormatProfile, Profile
 from app.parsers.profiles.default import (
-    default_row_defaults,
     default_settings,
 )
 
@@ -28,26 +27,16 @@ PUBMED = Profile(
     label="PubMed",
     formats={
         "nbib": FormatProfile(
-            suggestions={
-                "jt": Suggest("journal"),
-                "bti": Suggest("journal"),
-                "ti": Suggest("title"),
-                "tt": Suggest("title"),
-            },
+            suggestions={},
             matches=_matches_nbib,
             settings=default_settings("nbib"),
-            row_defaults=default_row_defaults("nbib"),
         ),
         "csv": FormatProfile(
             suggestions={
-                "authors": Suggest("authors"),
-                "journal/book": Suggest("journal"),
-                "pmcid": Suggest("other_ids", {"key": "pmc"}),
                 "nihms id": Suggest("other_ids", {"key": "mid"}),
             },
             matches=_matches_csv,
             settings=default_settings("csv"),
-            row_defaults=default_row_defaults("csv", delimiter=","),
         ),
     },
 )

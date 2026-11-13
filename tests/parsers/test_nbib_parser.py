@@ -15,7 +15,6 @@ from app.parsers.mapping import (
     Suggest,
 )
 from app.parsers.nbib import (
-    ROW_DEFAULTS,
     parse_nbib_file,
     parse_nbib_record,
     parse_nbib_text,
@@ -42,7 +41,6 @@ _MAPPING = mapping_of(
         "JT": "journal",
         "DOI": "doi",
     },
-    defaults=ROW_DEFAULTS,
 )
 
 
@@ -242,19 +240,21 @@ def test_suggest_nbib_mapping__maps_common_tags() -> None:
     }
 
 
-def test_suggest_nbib_mapping__uses_newline_delimiter_and_row_options() -> None:
+def test_suggest_nbib_mapping__uses_row_options() -> None:
     suggestions = suggest_nbib_mapping(["FAU", "AUID", "AD", "MH"])
 
     assert suggestions.rows == {
-        "FAU": AuthorsRow(delimiter="\n", id_key="fau"),
-        "AUID": AuthorsRow(role="ids", delimiter="\n", id_key="auid"),
-        "AD": AuthorsRow(role="affiliations", delimiter="\n", id_key="ad"),
-        "MH": KeywordsRow(delimiter="\n", prefix="MeSH"),
+        "FAU": AuthorsRow(id_key="fau"),
+        "AUID": AuthorsRow(role="ids", id_key="auid"),
+        "AD": AuthorsRow(role="affiliations", id_key="ad"),
+        "MH": KeywordsRow(prefix="MeSH"),
     }
 
 
-def test_suggest_nbib_mapping__alias_overrides_replace_defaults() -> None:
-    suggestions = suggest_nbib_mapping(["TA", "JT"], {"jt": Suggest("journal")})
+def test_suggest_nbib_mapping__ignored_keys_stay_unmapped() -> None:
+    suggestions = suggest_nbib_mapping(
+        ["PG", "JT"], {"jt": Suggest("journal")}, frozenset({"pg"})
+    )
 
     assert targets_of(suggestions) == {"JT": "journal"}
 
@@ -277,7 +277,7 @@ def test_suggest_nbib_mapping__routes_pmc_and_mid_to_other_ids() -> None:
     suggestions = suggest_nbib_mapping(["PMC", "MID"])
 
     assert suggestions.rows == {
-        "PMC": OtherIdRow(key="pmc"),
+        "PMC": OtherIdRow(key="pmcid"),
         "MID": OtherIdRow(key="mid"),
     }
 
@@ -335,17 +335,11 @@ def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
     assert first.author_names == "Smith, John A|Doe, Jane"
     assert first.pages == "100-110"
     assert first.doi == "10.1016/j.jbi.2020.1"
-    assert first.other_ids == {"pmc": "PMC7000001"}
+    assert first.other_ids == {"pmcid": "PMC7000001"}
     assert first.issn == "1532-0480 (Electronic)"
-    assert first.publication_date is not None
-    assert (
-        first.publication_date.year,
-        first.publication_date.month,
-        first.publication_date.day,
-    ) == (2020, 5, 14)
+    assert first.publication_date == "2020 May 14"
     assert second.keywords == ["[MeSH] Humans", "[MeSH] Review Literature as Topic"]
-    assert second.publication_date is not None
-    assert (second.publication_date.year, second.publication_date.month) == (2019, 1)
+    assert second.publication_date == "2019 Jan-Feb"
 
 
 def test_read_nbib_tags__returns_distinct_tags_in_first_seen_order_with_doi() -> None:
@@ -410,7 +404,6 @@ def test_read_nbib_tags__empty_file_has_zero_rows(tmp_path: Path) -> None:
 
 _AUTHOR_MAPPING = mapping_of(
     {"FAU": "authors", "AUID": _IDS, "AD": _AFFILIATIONS},
-    defaults=ROW_DEFAULTS,
 )
 
 
@@ -526,7 +519,6 @@ def test_parse_nbib_text__auid_ad_before_first_author_are_ignored() -> None:
 def test_parse_nbib_text__au_fallback_author_tag_groups_auid() -> None:
     mapping = mapping_of(
         {"AU": "authors", "AUID": _IDS, "AD": _AFFILIATIONS},
-        defaults=ROW_DEFAULTS,
     )
     text = (
         "PMID- 1\n"
@@ -558,7 +550,7 @@ def test_parse_nbib_text__unmapped_auid_ad_are_not_read() -> None:
 
 
 def test_parse_nbib_text__ad_mapped_elsewhere_behaves_like_normal_tag() -> None:
-    mapping = mapping_of({"FAU": "authors", "AD": "notes"}, defaults=ROW_DEFAULTS)
+    mapping = mapping_of({"FAU": "authors", "AD": "notes"})
     text = "PMID- 1\nFAU - Smith, John\nAD  - Department A.\n"
 
     record = parse_nbib_text(text, mapping).rows[0].record
@@ -604,7 +596,7 @@ def test_parse_nbib_text__ot_keywords_have_no_prefix() -> None:
 
 
 def test_parse_nbib_text__mh_mapped_elsewhere_has_no_prefix() -> None:
-    mapping = mapping_of({"MH": "notes"}, defaults=ROW_DEFAULTS)
+    mapping = mapping_of({"MH": "notes"})
 
     record = parse_nbib_text("PMID- 1\nMH  - *Dinosaurs\n", mapping).rows[0].record
 
@@ -621,6 +613,14 @@ def test_parse_nbib_text__mh_raw_fields_keep_original_values() -> None:
 
 def test_suggest_nbib_mapping__maps_bti_to_journal() -> None:
     assert targets_of(suggest_nbib_mapping(["BTI"])) == {"BTI": "journal"}
+
+
+def test_suggest_nbib_mapping__journal_from_jt_not_ta_and_tt_as_title() -> None:
+    assert targets_of(suggest_nbib_mapping(["TA", "JT", "TI", "TT"])) == {
+        "JT": "journal",
+        "TI": "title",
+        "TT": "title",
+    }
 
 
 def test_parse_nbib_text__bti_fills_journal() -> None:
@@ -670,9 +670,7 @@ def test_parse_nbib_text__author_after_editor_gets_its_own_ad() -> None:
 
 
 def test_parse_nbib_record__keeps_is_qualifier() -> None:
-    mapping = mapping_of(
-        {"IS": Suggest("issn_isbn", {"kind": "issn"})}, defaults=ROW_DEFAULTS
-    )
+    mapping = mapping_of({"IS": Suggest("issn_isbn", {"kind": "issn"})})
 
     row = parse_nbib_record([("IS", "1234-5678 (Print)")], mapping, _NBIB_SETTINGS)
 
@@ -683,7 +681,6 @@ def test_parse_nbib_record__keeps_is_qualifier() -> None:
 def test_parse_nbib_record__attaches_auid_and_ad_to_preceding_fau() -> None:
     mapping = mapping_of(
         {"FAU": "authors", "AUID": _IDS, "AD": _AFFILIATIONS},
-        defaults=ROW_DEFAULTS,
     )
     lines = [
         ("FAU", "Smith, John"),

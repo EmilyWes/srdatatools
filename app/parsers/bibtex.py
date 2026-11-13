@@ -18,10 +18,8 @@ from app.parsers.common import (
     parse_or_skip,
 )
 from app.parsers.mapping import (
-    LINE_DELIMITER,
     AuthorsRow,
     FieldMapping,
-    RowDefaults,
     Suggest,
     apply_mapping,
     override_aliases,
@@ -43,6 +41,7 @@ _SCALARS = {
     "volume": "volume",
     "number": "issue",
     "doi": "doi",
+    "pmid": "pmid",
     "publisher": "publisher",
     "url": "url",
     "note": "notes",
@@ -59,7 +58,6 @@ _SUGGESTIONS: dict[str, Suggest] = {
     "month": Suggest("date", {"part": "month"}),
     "keywords": Suggest("keywords"),
 }
-ROW_DEFAULTS = RowDefaults(author_delimiter=LINE_DELIMITER)
 
 _IGNORED_ENTRY_TYPES = frozenset({"comment", "string", "preamble"})
 _ENTRY_START = re.compile(
@@ -296,7 +294,7 @@ def read_bibtex_fields(path: Path) -> FileSummary:
 def suggest_bibtex_mapping(
     keys: list[str],
     overrides: Mapping[str, Suggest] | None = None,
-    defaults: RowDefaults = ROW_DEFAULTS,
+    ignored_keys: frozenset[str] = frozenset(),
 ) -> FieldMapping:
     suggestions = override_aliases(_SUGGESTIONS, overrides or {})
-    return _suggest_mapping(keys, suggestions, defaults, lenient=False)
+    return _suggest_mapping(keys, suggestions, lenient=False, ignored_keys=ignored_keys)

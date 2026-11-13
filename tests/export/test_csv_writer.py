@@ -3,7 +3,7 @@ from pathlib import Path
 from app.export.columns import ExportColumn, ExportRecord, export_columns
 from app.export.csv_ import write_csv
 from app.export.options import ExportOptions
-from app.models.record import PartialDate, Record
+from app.models.record import Record
 from app.parsers.csv_ import parse_csv_text, suggest_mapping
 
 _RECORDS = [
@@ -13,7 +13,7 @@ _RECORDS = [
             title="Deep learning, a review",
             author_names="LeCun, Yann; Bengio, Yoshua",
             abstract="First line.\nSecond line.",
-            publication_date=PartialDate(year=2015, month=5),
+            publication_date="2015/05/",
             doi="10.1038/nature14539",
             keywords=["deep learning", "[MeSH] Humans"],
         ),
@@ -23,7 +23,7 @@ _RECORDS = [
         record=Record(
             title="Gradient-based learning applied to document recognition",
             author_names="LeCun, Yann",
-            publication_date=PartialDate(year=1998),
+            publication_date="1998//",
             doi="10.1109/5.726791",
         ),
     ),
@@ -101,9 +101,9 @@ def test_write_csv__round_trips_through_the_csv_importer(tmp_path: Path) -> None
     assert first.title == "Deep learning, a review"
     assert first.author_names == "LeCun, Yann; Bengio, Yoshua"
     assert first.doi == "10.1038/nature14539"
-    assert first.publication_date == PartialDate(year=2015, month=5)
-    assert "deep learning" in first.keywords
-    assert result.rows[1].record.publication_date == PartialDate(year=1998)
+    assert first.publication_date == "2015/05/"
+    assert "keywords:[deep learning]" in first.keywords
+    assert result.rows[1].record.publication_date == "1998//"
 
 
 def test_write_csv__cuts_values_over_the_maximum_length(tmp_path: Path) -> None:

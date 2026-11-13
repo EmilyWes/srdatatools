@@ -12,14 +12,14 @@ from tests.mappings import targets_of
 def _parse_nbib(text: str) -> Record:
     tags = list(dict.fromkeys(line[:4].strip() for line in text.splitlines()))
     profile = PUBMED.formats["nbib"]
-    mapping = suggest_nbib_mapping(tags, profile.suggestions, profile.row_defaults)
+    mapping = suggest_nbib_mapping(tags, profile.suggestions, profile.ignored_keys)
     result = parse_nbib_text(text, mapping, settings=profile.settings)
     return result.rows[0].record
 
 
 def _suggest_csv(headers: list[str]) -> FieldMapping:
     profile = PUBMED.formats["csv"]
-    return suggest_mapping(headers, profile.suggestions, profile.row_defaults)
+    return suggest_mapping(headers, profile.suggestions)
 
 
 def _parse_csv(row: dict[str, str]) -> Record:
@@ -46,7 +46,10 @@ def test_pubmed_nbib__book_title_fills_journal() -> None:
 
 
 def test_pubmed_nbib__suggests_tt_as_title() -> None:
-    mapping = suggest_nbib_mapping(["TI", "TT"], PUBMED.formats["nbib"].suggestions)
+    profile = PUBMED.formats["nbib"]
+    mapping = suggest_nbib_mapping(
+        ["TI", "TT"], profile.suggestions, profile.ignored_keys
+    )
 
     assert targets_of(mapping) == {"TI": "title", "TT": "title"}
 
@@ -76,7 +79,7 @@ def test_pubmed_csv__suggests_exact_journal_and_nbib_id_keys() -> None:
 
     assert mapping.rows == {
         "Journal/Book": ScalarRow(target="journal"),
-        "PMCID": OtherIdRow(key="pmc"),
+        "PMCID": OtherIdRow(key="pmcid"),
         "NIHMS ID": OtherIdRow(key="mid"),
     }
     assert mapping.match_kinds["Journal/Book"] == "exact"
@@ -84,7 +87,7 @@ def test_pubmed_csv__suggests_exact_journal_and_nbib_id_keys() -> None:
 
 def test_pubmed_csv__suggests_author_names_split_on_comma() -> None:
     assert _suggest_csv(["Authors"]).rows == {
-        "Authors": AuthorsRow(role="names", delimiter=",", id_key="authors")
+        "Authors": AuthorsRow(role="names", id_key="authors")
     }
 
 

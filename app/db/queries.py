@@ -5,10 +5,12 @@ from typing import Any
 from sqlalchemy import JSON, ColumnElement, String, and_, case, cast, func, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
+from app.cleaning.quality import CHECKS, QUALITY_FIELDS, quality_issues
 from app.db.models import ActivityLog, Label, Record, RecordSource, SourceFile
 from app.export.columns import ExportRecord, ExportSource
 from app.models.record import Label as LabelSchema
 from app.models.record import Record as RecordSchema
+from app.models.record import publication_year
 from app.parsers.mapping import split_keyword
 
 _EMPTY_JSON = ("[]", "{}", "null")
@@ -33,13 +35,13 @@ def list_record_rows(session: Session, fields: Sequence[str]) -> list[dict[str, 
 
 def list_record_sources(session: Session) -> dict[int, list[str | None]]:
     statement = (
-        select(RecordSource.record_id, SourceFile.source)
+        select(RecordSource.record_id, SourceFile.sources)
         .join(RecordSource.source_file)
         .order_by(RecordSource.id)
     )
     sources: dict[int, list[str | None]] = defaultdict(list)
-    for record_id, source in session.execute(statement):
-        sources[record_id].append(source)
+    for record_id, file_sources in session.execute(statement):
+        sources[record_id].extend(file_sources or [None])
     return sources
 
 
@@ -77,13 +79,31 @@ def count_records_for_file(session: Session, source_file_id: int) -> int:
     return session.scalar(statement) or 0
 
 
-def count_records_per_year(session: Session) -> list[tuple[int | None, int]]:
-    statement = (
-        select(Record.publication_year, func.count(Record.id))
-        .group_by(Record.publication_year)
-        .order_by(Record.publication_year.asc().nulls_last())
+def list_record_ids_for_files(
+    session: Session, source_file_ids: Collection[int]
+) -> set[int]:
+    statement = select(RecordSource.record_id).where(
+        RecordSource.source_file_id.in_(source_file_ids)
     )
-    return [(year, count) for year, count in session.execute(statement)]
+    return set(session.scalars(statement))
+
+
+def count_records_per_year(session: Session) -> list[tuple[int | None, int]]:
+    counts = Counter(
+        publication_year(date)
+        for date in session.scalars(select(Record.publication_date))
+    )
+    return sorted(counts.items(), key=lambda item: (item[0] is None, item[0] or 0))
+
+
+def count_data_quality(session: Session) -> list[tuple[str, int]]:
+    statement = select(*(getattr(Record, name) for name in QUALITY_FIELDS))
+    counts = Counter(
+        issue
+        for fields in session.execute(statement).mappings()
+        for issue in quality_issues(dict(fields))
+    )
+    return [(name, counts[name]) for name in CHECKS]
 
 
 def count_label_values(session: Session) -> dict[tuple[str, str], dict[str, int]]:
@@ -103,9 +123,7 @@ def _is_filled(column: InstrumentedAttribute[Any]) -> ColumnElement[bool]:
     """JSON columns are compared as stored text, so no row has to be loaded."""
     if isinstance(column.type, JSON):
         return cast(column, String).not_in(_EMPTY_JSON)
-    if isinstance(column.type, String):
-        return and_(column.is_not(None), column != "")
-    return column.is_not(None)
+    return and_(column.is_not(None), column != "")
 
 
 def count_filled_fields(
@@ -184,13 +202,8 @@ def record_schema(record: Record, labels: list[LabelSchema]) -> RecordSchema:
     fields = {
         name: getattr(record, name)
         for name in RecordSchema.model_fields
-        if name not in ("publication_date", "labels")
+        if name != "labels"
     }
-    date = (record.publication_year, record.publication_month, record.publication_day)
-    if any(part is not None for part in date):
-        fields["publication_date"] = dict(
-            zip(("year", "month", "day"), date, strict=True)
-        )
     return RecordSchema.model_validate({**fields, "labels": labels})
 
 
@@ -216,7 +229,7 @@ def load_export_records(
         mapped = source_file.field_mapping.get("rows", {})
         sources[record_id].append(
             ExportSource(
-                vendor=source_file.source,
+                vendors=tuple(source_file.sources),
                 filename=source_file.filename,
                 raw_fields=raw_fields,
                 ignored_keys=frozenset(key for key in raw_fields if key not in mapped),

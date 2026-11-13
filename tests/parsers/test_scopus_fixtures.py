@@ -3,7 +3,6 @@ from pathlib import Path
 import pytest
 
 from app.models.record import Record
-from app.parsers.authors import parse_author_ids
 from app.parsers.bibtex import (
     parse_bibtex_file,
     read_bibtex_fields,
@@ -11,7 +10,7 @@ from app.parsers.bibtex import (
 )
 from app.parsers.common import FileType, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
-from app.parsers.detect import detect_source
+from app.parsers.detect import detect_sources
 from app.parsers.profiles.scopus import SCOPUS
 from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
 from tests.vendor_data import vendor_file, vendor_files
@@ -31,16 +30,14 @@ def _parse(path: Path, file_format: FileType) -> ParseResult:
     profile = SCOPUS.formats[file_format]
     if file_format == "csv":
         headers = list(read_csv_headers(path).samples)
-        mapping = suggest_mapping(
-            headers, profile.suggestions, profile.row_defaults, profile.ignored_keys
-        )
+        mapping = suggest_mapping(headers, profile.suggestions, profile.ignored_keys)
         return parse_csv_file(path, mapping, settings=profile.settings)
     if file_format == "ris":
         tags = list(read_ris_tags(path).samples)
-        mapping = suggest_ris_mapping(tags, profile.suggestions, profile.row_defaults)
+        mapping = suggest_ris_mapping(tags, profile.suggestions, profile.ignored_keys)
         return parse_ris_file(path, mapping, settings=profile.settings)
     keys = list(read_bibtex_fields(path).samples)
-    mapping = suggest_bibtex_mapping(keys, profile.suggestions, profile.row_defaults)
+    mapping = suggest_bibtex_mapping(keys, profile.suggestions, profile.ignored_keys)
     return parse_bibtex_file(path, mapping, settings=profile.settings)
 
 
@@ -77,19 +74,16 @@ def bibtex_records() -> dict[str, Record]:
 def test_scopus_small__detects_scopus_source(suffix: str) -> None:
     path = vendor_file("scopus", "small", suffix)
 
-    assert detect_source(path, _FORMAT_BY_SUFFIX[suffix]) == "scopus"
+    assert detect_sources(path, _FORMAT_BY_SUFFIX[suffix]) == ("scopus",)
 
 
 def test_scopus_small_csv__keeps_author_columns_as_in_the_file(
     csv_records: dict[str, Record],
 ) -> None:
     record = csv_records[_NODOSAUR_EID]
-    ids = parse_author_ids(record.author_ids)
 
     assert (record.author_names or "").startswith("Oyabu, Shumpei (60900075400); ")
-    assert ids[0] == ["scopus_author_id:60900075400"]
-    assert all(ids)
-    assert len(ids) == len((record.author_names or "").split(";"))
+    assert (record.author_ids or "").startswith("scopus_author_id:[60900075400; ")
     assert (record.author_affiliations or "").startswith(
         "Oyabu S., Department of Natural History and Planetary Sciences, "
         "Hokkaido University, Kita 10, Nishi 8, Kita-ku, Hokkaido, Sapporo, "
@@ -97,13 +91,13 @@ def test_scopus_small_csv__keeps_author_columns_as_in_the_file(
     )
 
 
-def test_scopus_small_csv__prefixes_author_keywords(
+def test_scopus_small_csv__keys_author_keywords_by_prefix(
     csv_records: dict[str, Record],
 ) -> None:
     keywords = csv_records[_CONFERENCE_EID].keywords
 
-    assert "[Author] ANSYS Simulation" in keywords
-    assert "Balancing" in keywords
+    assert keywords[0].startswith("Author:[ANSYS Simulation; ")
+    assert keywords[1].startswith("keywords:[")
 
 
 def test_scopus_small_ris__keeps_values_as_in_the_file(
@@ -125,7 +119,11 @@ def test_scopus_small_bibtex__keeps_values_as_in_the_file(
     hummingbird = bibtex_records[_HUMMINGBIRD_EID]
     assert hummingbird.pmid == "32161388"
     assert hummingbird.publication_type == "Retracted"
-    assert "[Author] ANSYS Simulation" in bibtex_records[_CONFERENCE_EID].keywords
+    assert (
+        bibtex_records[_CONFERENCE_EID]
+        .keywords[0]
+        .startswith("Author:[ANSYS Simulation; ")
+    )
 
 
 def test_scopus_small__formats_agree_on_ids_and_document_type(

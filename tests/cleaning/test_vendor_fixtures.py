@@ -21,21 +21,19 @@ _OPTIONS = CleaningOptions()
 
 
 def _mapping(path: Path, file_type: FileType, source: str) -> FieldMapping:
-    profile = profile_for(source, file_type)
+    profile = profile_for((source,), file_type)
     assert profile is not None
     if file_type == "csv":
         headers = list(read_csv_headers(path).samples)
-        return suggest_mapping(
-            headers, profile.suggestions, profile.row_defaults, profile.ignored_keys
-        )
+        return suggest_mapping(headers, profile.suggestions, profile.ignored_keys)
     if file_type == "ris":
         tags = list(read_ris_tags(path).samples)
-        return suggest_ris_mapping(tags, profile.suggestions, profile.row_defaults)
+        return suggest_ris_mapping(tags, profile.suggestions, profile.ignored_keys)
     if file_type == "nbib":
         tags = list(read_nbib_tags(path).samples)
-        return suggest_nbib_mapping(tags, profile.suggestions, profile.row_defaults)
+        return suggest_nbib_mapping(tags, profile.suggestions, profile.ignored_keys)
     keys = list(read_bibtex_fields(path).samples)
-    return suggest_bibtex_mapping(keys, profile.suggestions, profile.row_defaults)
+    return suggest_bibtex_mapping(keys, profile.suggestions, profile.ignored_keys)
 
 
 def _cleaned(
@@ -44,7 +42,7 @@ def _cleaned(
     """Parsed with the vendor's profile, then cleaned as one source file."""
     path = vendor_file(vendor, "small", suffix)
     mapping = _mapping(path, file_type, vendor)
-    profile = profile_for(vendor, file_type)
+    profile = profile_for((vendor,), file_type)
     assert profile is not None
     settings = profile.settings
     if file_type == "csv":
@@ -56,7 +54,7 @@ def _cleaned(
     else:
         result = parse_bibtex_file(path, mapping, settings)
     records = [row.record for row in result.rows]
-    names, affiliations = file_separators(records, options)
+    names, affiliations, ids, keywords = file_separators(records, options)
     return [
         clean_record(
             row.record,
@@ -65,6 +63,8 @@ def _cleaned(
                 mapping=mapping,
                 names_separator=names,
                 affiliations_separator=affiliations,
+                ids_separator=ids,
+                keywords_separator=keywords,
             ),
             options,
         )[0]
@@ -94,6 +94,16 @@ def test_cleaned_scopus_csv__splits_authors_and_moves_ids_out_of_names() -> None
         "Department of Natural History and Planetary Sciences, Hokkaido University,"
         " Kita 10, Nishi 8, Kita-ku, Hokkaido, Sapporo, 060-0810, Japan|"
     )
+
+
+def test_cleaned_scopus_csv__splits_keywords_keeping_the_author_prefix() -> None:
+    keywords = _by(_cleaned("scopus", ".csv", "csv"), "eid")[
+        "2-s2.0-105040180364"
+    ].keywords
+
+    assert "[Author] ANSYS Simulation" in keywords
+    assert "Balancing" in keywords
+    assert not any(":[" in keyword for keyword in keywords)
 
 
 def test_cleaned_scopus_ris__reads_eid_and_conference_name_from_notes() -> None:
@@ -145,6 +155,27 @@ def test_cleaned_pubmed_csv__fills_parts_from_citation_and_drops_et_al() -> None
     assert (nature.volume, nature.issue, nature.pages) == ("620", "7974", "589-594")
     assert records["11523304"].pages == "521-522"
     assert (records["30527956"].author_names or "").endswith(", Walsworth AK")
+
+
+def test_cleaned_openalex_csv__groups_author_ids_and_orcids() -> None:
+    records = {r.doi: r for r in _cleaned("openalex", ".csv", "csv")}
+
+    dinosaur = records["10.1038/nature21700"]
+    assert set(parse_author_ids(dinosaur.author_ids)[0]) == {
+        "orcid:0000-0001-9069-7638",
+        "openalex_author_id:A5091833725",
+    }
+
+    chicken = records["10.1038/nature03154"]
+    names = (chicken.author_names or "").split(AUTHOR_JOINER)
+    ids = parse_author_ids(chicken.author_ids)
+    assert len(names) == len(ids) == 100
+    assert ids[0] == []
+    assert names[12] == "John D. McPherson"
+    assert set(ids[12]) == {
+        "orcid:0000-0001-8049-9347",
+        "openalex_author_id:A5047690257",
+    }
 
 
 def test_cleaned_openalex_csv__strips_pmid_and_keeps_one_issn() -> None:
