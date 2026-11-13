@@ -506,7 +506,7 @@ class ImportView:
                         "Import and clean", on_click=lambda: self._import(clean=True)
                     ).props("dense")
                     for button in (self.import_button, self.import_clean_button):
-                        button.classes("w-44 px-4")
+                        button.classes("w-40 px-4")
                         button.set_enabled(has_file and type_known and has_mapping)
                         if not type_known:
                             button.tooltip("please select the type")
