@@ -30,6 +30,7 @@ from app.db.queries import (
     count_records_per_year,
     list_activity_log,
     list_label_columns,
+    list_record_ids_for_files,
     list_source_files,
     load_export_records,
 )
@@ -287,6 +288,7 @@ def home() -> None:
         source: str,
         sheet: str | None,
         choices: ParsingChoices,
+        clean: bool,
     ) -> None:
         def store() -> tuple[list[int], list[tuple[str, str]]]:
             """Each file is stored on its own, so one that fails doesn't undo
@@ -320,6 +322,15 @@ def home() -> None:
         with panes.middle:
             for filename, reason in failures:
                 ui.notify(f"Could not import {filename}: {reason}", type="negative")
+        if clean and source_file_ids:
+
+            def load() -> tuple[set[int], CleaningOptions]:
+                with session_scope(_engine) as session:
+                    ids = list_record_ids_for_files(session, source_file_ids)
+                    return ids, load_cleaning_options(session)
+
+            ids, options = await run_busy("Loading cleaning options…", load)
+            await run_cleaning(options, ids)
         if len(source_file_ids) == 1:
             refresh(select_key=f"source_file:{source_file_ids[0]}")
         else:
@@ -387,6 +398,22 @@ def home() -> None:
             on_restore_options=restore_export_options,
         )
 
+    async def run_cleaning(options: CleaningOptions, ids: set[int] | None) -> None:
+        def run() -> tuple[int, int]:
+            with session_scope(_engine) as session:
+                total, changed, per_step = clean_records(session, options, ids)
+                log_cleaning(session, total, changed, per_step)
+            return total, changed
+
+        total, changed = await run_busy("Cleaning records…", run)
+        noun = "record" if total == 1 else "records"
+        with panes.middle:
+            ui.notify(
+                f"Cleaned {format_count(total)} {noun}:"
+                f" {format_count(changed)} changed",
+                type="positive",
+            )
+
     async def start_cleaning() -> None:
         clear_nav_selection()
         ids = set(selection.ids) or None
@@ -397,21 +424,9 @@ def home() -> None:
                 return count, load_cleaning_options(session)
 
         async def clean(options: CleaningOptions) -> None:
-            def run() -> tuple[int, int]:
-                with session_scope(_engine) as session:
-                    save_cleaning_options(session, options)
-                    total, changed, per_step = clean_records(session, options, ids)
-                    log_cleaning(session, total, changed, per_step)
-                return total, changed
-
-            total, changed = await run_busy("Cleaning records…", run)
-            noun = "record" if total == 1 else "records"
-            with panes.middle:
-                ui.notify(
-                    f"Cleaned {format_count(total)} {noun}:"
-                    f" {format_count(changed)} changed",
-                    type="positive",
-                )
+            with session_scope(_engine) as session:
+                save_cleaning_options(session, options)
+            await run_cleaning(options, ids)
             if nav is not None:
                 nav.select("library:dashboard")
             refresh_log()

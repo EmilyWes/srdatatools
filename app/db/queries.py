@@ -79,6 +79,15 @@ def count_records_for_file(session: Session, source_file_id: int) -> int:
     return session.scalar(statement) or 0
 
 
+def list_record_ids_for_files(
+    session: Session, source_file_ids: Collection[int]
+) -> set[int]:
+    statement = select(RecordSource.record_id).where(
+        RecordSource.source_file_id.in_(source_file_ids)
+    )
+    return set(session.scalars(statement))
+
+
 def count_records_per_year(session: Session) -> list[tuple[int | None, int]]:
     counts = Counter(
         publication_year(date)

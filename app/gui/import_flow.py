@@ -257,6 +257,7 @@ OnImport = Callable[
         str,
         str | None,
         ParsingChoices,
+        bool,
     ],
     Awaitable[None] | None,
 ]
@@ -278,6 +279,7 @@ class ImportView:
     quirks_screen: QuirksScreen[ParsingChoices] | None = None
     views: MappingParsingViews | None = None
     import_button: ui.button | None = None
+    import_clean_button: ui.button | None = None
 
     def _name(self) -> str:
         if len(self.paths) == 1:
@@ -353,7 +355,7 @@ class ImportView:
         self.source = source
         self.render()
 
-    def _import(self) -> Awaitable[None] | None:
+    def _import(self, clean: bool = False) -> Awaitable[None] | None:
         assert self.paths
         assert self.mapping_screen is not None
         assert self.quirks_screen is not None
@@ -365,6 +367,7 @@ class ImportView:
             self.source,
             self.sheet,
             self.quirks_screen.current_choices(),
+            clean,
         )
 
     def _current_mapping(self) -> FieldMapping:
@@ -497,17 +500,19 @@ class ImportView:
 
                 with ui.row().classes("items-center gap-2"):
                     self.import_button = ui.button(
-                        "Import", on_click=self._import
+                        "Import", on_click=lambda: self._import()
                     ).props("dense")
-                    self.import_button.set_enabled(
-                        has_file and type_known and has_mapping
-                    )
-                    if not type_known:
-                        self.import_button.tooltip("please select the type")
-                    elif self._too_many_for_excel():
-                        self.import_button.tooltip(_EXCEL_SINGLE_FILE)
-                    elif not has_mapping:
-                        self.import_button.tooltip("file has no mapping available")
+                    self.import_clean_button = ui.button(
+                        "Import and clean", on_click=lambda: self._import(clean=True)
+                    ).props("dense")
+                    for button in (self.import_button, self.import_clean_button):
+                        button.set_enabled(has_file and type_known and has_mapping)
+                        if not type_known:
+                            button.tooltip("please select the type")
+                        elif self._too_many_for_excel():
+                            button.tooltip(_EXCEL_SINGLE_FILE)
+                        elif not has_mapping:
+                            button.tooltip("file has no mapping available")
 
 
 def render_import_view(middle: Element, on_import: OnImport) -> ImportView:
