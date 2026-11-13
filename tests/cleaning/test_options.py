@@ -79,13 +79,13 @@ def test_cleaning_boxes__every_control_key_is_an_option() -> None:
 def test_cleaning_boxes__titles_in_order() -> None:
     assert [box.title for box in CLEANING_BOXES] == [
         "ISSN/ISBN",
-        "Authors",
         "Keywords",
         "Dates",
-        "Empty values",
         "Identifiers",
         "Other",
         "From raw fields",
+        "Authors",
+        "Empty values",
     ]
 
 
