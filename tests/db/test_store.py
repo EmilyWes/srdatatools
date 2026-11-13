@@ -548,10 +548,10 @@ def test_clean_records__chosen_separator_is_used_for_every_file(
 ) -> None:
     _store(session, [(RecordSchema(author_names="Romano M, Novacek MJ."), {})])
 
-    clean_records(session, CleaningOptions(names_separator=",", drop_trailing=True))
+    clean_records(session, CleaningOptions(names_separator=","))
     session.commit()
 
-    assert session.query(Record).one().author_names == "Romano M|Novacek MJ"
+    assert session.query(Record).one().author_names == "Romano M|Novacek MJ."
 
 
 def test_clean_records__refills_from_the_source_mapping_and_ordering(

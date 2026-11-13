@@ -40,6 +40,8 @@ _TRAILING_BRACKETS = re.compile(r"\s*(?:\([^()]*\)|\[[^\[\]]*\])\s*$")
 _DOI = re.compile(r"10\.\d{4,9}/\S+")
 _DIGITS = re.compile(r"\d+")
 _TRAILING_NON_NAME = ".,;:…" + string.whitespace
+_ENDS_IN_WORD = re.compile(r"[^\W\d_]{3}$")
+_INITIALS = re.compile(r"(?:[\s.\-]+[^\W\d_]{1,3})*\.?")
 # Only the plain form: ;volume(issue):pages followed by a full stop.
 _CITATION_PARTS = re.compile(
     r";(?P<volume>\d+)\((?P<issue>\d+)\):(?P<pages>\d+(?:-\d+)?)\.(?:\s|$)"
@@ -311,9 +313,10 @@ def strip_author_extras(
 def strip_affiliation_start(
     record: Record, context: CleaningContext, options: CleaningOptions
 ) -> Record:
-    """Only strips when the text before the separator starts with the last name of
-    the author at the same position, so cleaning again strips nothing more. Such
-    an affiliation without the separator is only a name, so it is dropped."""
+    """Only strips when the text before the separator is the last name of the
+    author at the same position plus initials, so cleaning again strips nothing
+    more and "Steinmann Institut" is kept for author Stein. Such an affiliation
+    without the separator is only a name, so it is dropped."""
     separator = options.affiliation_start
     if not record.author_affiliations or not record.author_names or not separator:
         return record
@@ -324,7 +327,12 @@ def strip_affiliation_start(
     ):
         last_name = names[index].split(",")[0].strip() if index < len(names) else ""
         lead, found, rest = affiliation.partition(separator)
-        if not (last_name and lead.lower().startswith(last_name.lower())):
+        is_name = (
+            last_name
+            and lead.lower().startswith(last_name.lower())
+            and _INITIALS.fullmatch(lead[len(last_name) :])
+        )
+        if not is_name:
             kept.append(affiliation)
         elif found and rest.strip():
             kept.append(rest.strip())
@@ -345,9 +353,14 @@ def drop_et_al(
 def drop_trailing(
     record: Record, context: CleaningContext, options: CleaningOptions
 ) -> Record:
+    """A full stop is kept unless it follows a word of three or more letters, so
+    an initial's (J.) or an abbreviated name's (Yu.) stays."""
     if not record.author_names:
         return record
     names = record.author_names.rstrip(_TRAILING_NON_NAME)
+    trailing = record.author_names[len(names) :]
+    if trailing.startswith(".") and not _ENDS_IN_WORD.search(names):
+        names += "."
     return record.model_copy(update={"author_names": names or None})
 
 

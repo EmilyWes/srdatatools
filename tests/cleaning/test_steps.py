@@ -181,15 +181,34 @@ def test_drop_et_al__keeps_names_without_et_al() -> None:
 @pytest.mark.parametrize(
     ("names", "expected"),
     [
-        ("Smith J.|Doe A.", "Smith J.|Doe A"),
+        ("Brown, Barnum.", "Brown, Barnum"),
+        ("Owen,", "Owen"),
         ("Doe ...", "Doe"),
-        ("Doe A.;, ", "Doe A"),
+        ("Doe A;, ", "Doe A"),
         ("Doe…", "Doe"),
-        ("Doe (1).", "Doe (1)"),
-        ("Romano M, Novacek MJ.", "Romano M, Novacek MJ"),
+        ("Illinois State Museum;", "Illinois State Museum"),
     ],
 )
 def test_drop_trailing__strips_punctuation_and_spaces(
+    names: str, expected: str
+) -> None:
+    record = drop_trailing(Record(author_names=names), _NO_CONTEXT, _OPTIONS)
+
+    assert record.author_names == expected
+
+
+@pytest.mark.parametrize(
+    ("names", "expected"),
+    [
+        ("Smith J.|Doe A.", "Smith J.|Doe A."),
+        ("Galton, P.M.", "Galton, P.M."),
+        ("Bolotsky, I. Yu.", "Bolotsky, I. Yu."),
+        ("Doe A.;, ", "Doe A."),
+        ("Doe (1).", "Doe (1)."),
+        ("Romano M, Novacek MJ.", "Romano M, Novacek MJ."),
+    ],
+)
+def test_drop_trailing__keeps_full_stop_after_short_word(
     names: str, expected: str
 ) -> None:
     record = drop_trailing(Record(author_names=names), _NO_CONTEXT, _OPTIONS)
@@ -481,6 +500,32 @@ def test_strip_affiliation_start__keeps_affiliation_not_starting_with_the_name()
     )
 
     assert cleaned == record
+
+
+def test_strip_affiliation_start__keeps_name_followed_by_more_than_initials() -> None:
+    record = Record(
+        author_names="Stein, Koen|Lauer, R.",
+        author_affiliations="Steinmann Institut, Bonn|Lauer Foundation, Wheaton",
+    )
+
+    cleaned = strip_affiliation_start(
+        record, _NO_CONTEXT, _options(affiliation_start=", ")
+    )
+
+    assert cleaned == record
+
+
+def test_strip_affiliation_start__name_without_initials() -> None:
+    record = Record(
+        author_names="Qinggele|Broderick, Timothy J.",
+        author_affiliations="Qinggele, Inner Mongolia Museum|Broderick T.J., Harare",
+    )
+
+    cleaned = strip_affiliation_start(
+        record, _NO_CONTEXT, _options(affiliation_start=", ")
+    )
+
+    assert cleaned.author_affiliations == "Inner Mongolia Museum|Harare"
 
 
 def test_strip_affiliation_start__without_names_leaves_record_unchanged() -> None:

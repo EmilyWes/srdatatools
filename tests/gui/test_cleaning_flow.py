@@ -86,14 +86,14 @@ def test_render_cleaning_view__no_records_disables_run() -> None:
 
 
 def test_render_cleaning_view__opens_on_saved_options_tinted_as_changed() -> None:
-    view = _render(CleaningOptions(drop_et_al=False, affiliation_start=", "))
+    view = _render(CleaningOptions(drop_et_al=False, affiliation_start="; "))
 
     drop = view.screen.widgets["drop_et_al"]
     start = view.screen.widgets["affiliation_start"]
     assert drop.value is False and drop.props["color"] == "blue"
-    assert start.value == ", " and start.props["bg-color"] == "blue-2"
+    assert start.value == "; " and start.props["bg-color"] == "blue-2"
     assert view.screen.current_choices() == CleaningOptions(
-        drop_et_al=False, affiliation_start=", "
+        drop_et_al=False, affiliation_start="; "
     )
 
 

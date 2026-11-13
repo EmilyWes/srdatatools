@@ -13,14 +13,14 @@ class CleaningOptions(BaseModel):
     only_one: bool = True
     preferred_qualifier: str = "Electronic"
     drop_et_al: bool = True
-    drop_trailing: bool = False
+    drop_trailing: bool = True
     split_authors: bool = True
     names_separator: str = ""
     affiliations_separator: str = ""
     ids_separator: str = ""
     id_from_name: bool = True
-    author_strip_extras: bool = False
-    affiliation_start: str = ""
+    author_strip_extras: bool = True
+    affiliation_start: str = ", "
     split_keywords: bool = True
     clean_dates: bool = True
     date_order: DateOrder = "eu"
@@ -96,8 +96,9 @@ _AUTHORS = QuirkBox(
         QuirkItem(
             "drop_trailing",
             "Drop trailing",
-            "Removes non-name characters, like ... or ., from the end of the last"
-            " author's name.",
+            "Removes non-name characters, like ... or ;, from the end of the last"
+            " author's name. A full stop is only removed after a word of three or"
+            " more letters, so initials like J. are kept.",
             "checkbox",
         ),
         QuirkItem(
@@ -153,8 +154,8 @@ _AUTHORS = QuirkBox(
             "affiliation_start",
             "Affiliation start",
             "Sometimes an affiliation starts with the author's name; strips"
-            " everything up to this delimiter, if the text before it starts"
-            " with that author's last name. Such an affiliation without the"
+            " everything up to this delimiter, if the text before it is that"
+            " author's last name plus initials. Such an affiliation without the"
             " delimiter is only a name and is dropped. Leave empty to keep"
             " affiliations as they are.",
             "text",
