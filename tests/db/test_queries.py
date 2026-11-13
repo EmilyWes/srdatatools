@@ -278,7 +278,7 @@ def test_count_data_quality__rows_in_order(session: Session) -> None:
     assert count_data_quality(session) == [
         ("Unparsed dates", 0),
         ("Misaligned authors", 0),
-        ("Unmapped publication types", 0),
+        ("Unmapped pub. types", 0),
     ]
 
 
@@ -298,7 +298,7 @@ def test_count_data_quality__unmapped_publication_types(
     session.add(Record(publication_type=publication_type))
     session.commit()
 
-    assert dict(count_data_quality(session))["Unmapped publication types"] == unmapped
+    assert dict(count_data_quality(session))["Unmapped pub. types"] == unmapped
 
 
 def test_count_filled_fields__counts_non_empty_values(session: Session) -> None:

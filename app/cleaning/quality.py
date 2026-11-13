@@ -53,9 +53,7 @@ class Check:
 CHECKS: dict[str, Check] = {
     "Unparsed dates": Check(_unparsed_date, ("publication_date",)),
     "Misaligned authors": Check(_misaligned_authors, ("author_names", "author_ids")),
-    "Unmapped publication types": Check(
-        _unmapped_publication_type, ("publication_type",)
-    ),
+    "Unmapped pub. types": Check(_unmapped_publication_type, ("publication_type",)),
 }
 
 

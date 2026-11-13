@@ -23,7 +23,7 @@ def test_quality_issues__all_problems_in_check_order() -> None:
     assert quality_issues(fields) == [
         "Unparsed dates",
         "Misaligned authors",
-        "Unmapped publication types",
+        "Unmapped pub. types",
     ]
 
 
@@ -41,7 +41,7 @@ def test_problem_columns__every_problem_found() -> None:
     counts = {
         "Unparsed dates": 1,
         "Misaligned authors": 1,
-        "Unmapped publication types": 1,
+        "Unmapped pub. types": 1,
     }
 
     assert problem_columns(counts) == [
