@@ -9,6 +9,13 @@ from app.parsers.detect import detect_sources, detect_type
 _DATA_DIR = Path(__file__).parent.parent / "data" / "general"
 
 
+def _vendor_fixture(pattern: str) -> Path:
+    matches = sorted(_DATA_DIR.parent.glob(pattern))
+    if not matches:
+        pytest.skip(f"vendor fixture missing: {pattern}")
+    return matches[0]
+
+
 def _write(tmp_path: Path, name: str, text: str) -> Path:
     path = tmp_path / name
     path.write_text(text, encoding="utf-8")
@@ -84,7 +91,7 @@ def test_detect_type__ris_tag_after_the_first_lines_is_not_ris(tmp_path: Path) -
 
 
 def test_detect_type__asreview_ris_fixture_by_content(tmp_path: Path) -> None:
-    source = _DATA_DIR.parent / "asreview" / "asreview_scopus_small_261022.ris"
+    source = _vendor_fixture("asreview/asreview_scopus_small_*.ris")
     path = _write(tmp_path, "export.txt", source.read_text(encoding="utf-8"))
 
     assert detect_type(path) == "ris"
@@ -93,14 +100,14 @@ def test_detect_type__asreview_ris_fixture_by_content(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("fixture", "expected"),
     [
-        ("asreview/asreview_scopus_small_261022.tsv", "tsv"),
-        ("openalex/openalex_small_261030.csv", "csv"),
+        ("asreview/asreview_scopus_small_*.tsv", "tsv"),
+        ("openalex/openalex_small_*.csv", "csv"),
     ],
 )
 def test_detect_type__tabular_with_long_cells_by_content(
     tmp_path: Path, fixture: str, expected: str
 ) -> None:
-    source = _DATA_DIR.parent / fixture
+    source = _vendor_fixture(fixture)
     path = _write(tmp_path, "export.txt", source.read_text(encoding="utf-8"))
 
     assert detect_type(path) == expected
