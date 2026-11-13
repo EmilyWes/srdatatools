@@ -29,9 +29,9 @@ logger = logging.getLogger(__name__)
 
 _SCALARS = {
     "ti": "title",
+    "tt": "title",
     "ab": "abstract",
     "jt": "journal",
-    "ta": "journal",
     "bti": "journal",
     "vi": "volume",
     "ip": "issue",

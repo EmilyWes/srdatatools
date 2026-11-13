@@ -438,6 +438,10 @@ def test_suggest_bibtex_mapping__booktitle_maps_to_journal() -> None:
     assert targets_of(mapping) == {"booktitle": "journal"}
 
 
+def test_suggest_bibtex_mapping__maps_pmid() -> None:
+    assert targets_of(suggest_bibtex_mapping(["pmid"])) == {"pmid": "pmid"}
+
+
 def test_suggest_bibtex_mapping__applies_alias_overrides() -> None:
     mapping = suggest_bibtex_mapping(
         ["type", "@type"],

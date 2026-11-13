@@ -67,11 +67,9 @@ SCOPUS = Profile(
         "bibtex": FormatProfile(
             suggestions={
                 "type": Suggest("publication_type"),
-                "pmid": Suggest("pmid"),
                 "author_keywords": Suggest(
                     "keywords", {"prefix": _AUTHOR_KEYWORD_PREFIX}
                 ),
-                "keywords": Suggest("keywords"),
             },
             matches=_matches_bibtex,
             settings=default_settings("bibtex"),

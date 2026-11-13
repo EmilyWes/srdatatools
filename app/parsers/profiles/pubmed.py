@@ -27,16 +27,9 @@ PUBMED = Profile(
     label="PubMed",
     formats={
         "nbib": FormatProfile(
-            suggestions={
-                "jt": Suggest("journal"),
-                "bti": Suggest("journal"),
-                "ti": Suggest("title"),
-                "tt": Suggest("title"),
-            },
+            suggestions={},
             matches=_matches_nbib,
             settings=default_settings("nbib"),
-            # TA abbreviates the journal name in JT.
-            ignored_keys=frozenset({"ta"}),
         ),
         "csv": FormatProfile(
             suggestions={

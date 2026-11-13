@@ -41,6 +41,7 @@ _SCALARS = {
     "volume": "volume",
     "number": "issue",
     "doi": "doi",
+    "pmid": "pmid",
     "publisher": "publisher",
     "url": "url",
     "note": "notes",

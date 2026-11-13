@@ -36,7 +36,6 @@ OPENALEX = Profile(
         ),
         "ris": FormatProfile(
             suggestions={
-                "au": Suggest("authors"),
                 "c1": Suggest("authors", {"role": "affiliations"}),
             },
             matches=never_matches,

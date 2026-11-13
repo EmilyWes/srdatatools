@@ -253,7 +253,7 @@ def test_suggest_nbib_mapping__uses_row_options() -> None:
 
 def test_suggest_nbib_mapping__ignored_keys_stay_unmapped() -> None:
     suggestions = suggest_nbib_mapping(
-        ["TA", "JT"], {"jt": Suggest("journal")}, frozenset({"ta"})
+        ["PG", "JT"], {"jt": Suggest("journal")}, frozenset({"pg"})
     )
 
     assert targets_of(suggestions) == {"JT": "journal"}
@@ -613,6 +613,14 @@ def test_parse_nbib_text__mh_raw_fields_keep_original_values() -> None:
 
 def test_suggest_nbib_mapping__maps_bti_to_journal() -> None:
     assert targets_of(suggest_nbib_mapping(["BTI"])) == {"BTI": "journal"}
+
+
+def test_suggest_nbib_mapping__journal_from_jt_not_ta_and_tt_as_title() -> None:
+    assert targets_of(suggest_nbib_mapping(["TA", "JT", "TI", "TT"])) == {
+        "JT": "journal",
+        "TI": "title",
+        "TT": "title",
+    }
 
 
 def test_parse_nbib_text__bti_fills_journal() -> None:
