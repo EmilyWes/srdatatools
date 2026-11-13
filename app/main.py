@@ -1,6 +1,7 @@
 import argparse
 import logging
 import multiprocessing
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -8,6 +9,14 @@ from nicegui import app, native, ui
 
 from app.db.session import default_db_path, project_root, run_migrations
 from app.gui import home  # noqa: F401  (registers the "/" page)
+
+if sys.platform == "win32":
+    import ctypes
+
+    # Without its own app ID, Windows shows python.exe's taskbar icon when run
+    # from source. Set at import, as the native window opens in a spawned
+    # process that re-imports this module but skips main().
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("srdatatools")
 
 
 def configure_logging(debug: bool, log_path: Path) -> None:
