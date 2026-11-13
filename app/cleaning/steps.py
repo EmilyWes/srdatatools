@@ -57,6 +57,46 @@ _RIS_NOTE_IDS = {"EID: ": "eid"}
 _RIS_NOTE_FIELDS = {"Conference name: ": "conference_name"}
 _BIBTEX_URL_KEY = "url"
 _CITATION_KEY = "Citation"
+_PUBLICATION_TYPES = {
+    "Journal article": ("jour", "article", "journal article"),
+    "Review": ("review", "short survey"),
+    "Book": ("book",),
+    "Book chapter": (
+        "chap",
+        "book chapter",
+        "book-chapter",
+        "incollection",
+        "inbook",
+        "label.ris.referencetype.book_chapter",
+    ),
+    "Conference paper": (
+        "conf",
+        "cpaper",
+        "conference paper",
+        "conference-paper",
+        "inproceedings",
+        "conference",
+    ),
+    "Conference abstract": (
+        "conference review",
+        "conference-abstract",
+        "label.ris.referencetype.conference_review.p",
+    ),
+    "Thesis": ("thes", "phdthesis", "mastersthesis", "dissertation"),
+    "Report": ("rprt", "techreport", "report"),
+    "Dataset": ("data", "dataset", "data paper", "data-paper"),
+    "Preprint": ("preprint",),
+    "Letter": ("letter",),
+    "Editorial": ("editorial",),
+    "Note": ("note",),
+    "Erratum": ("errt", "erratum"),
+    "Retraction": ("retracted", "retraction"),
+}
+_STANDARD_PUBLICATION_TYPE = {
+    value: standard
+    for standard, values in _PUBLICATION_TYPES.items()
+    for value in values
+}
 
 
 @dataclass(frozen=True)
@@ -380,6 +420,16 @@ def first_publication_type(
     return record.model_copy(update={"publication_type": first})
 
 
+def standardize_publication_type(
+    record: Record, context: CleaningContext, options: CleaningOptions
+) -> Record:
+    if not record.publication_type:
+        return record
+    key = record.publication_type.strip().lower()
+    standard = _STANDARD_PUBLICATION_TYPE.get(key, record.publication_type)
+    return record.model_copy(update={"publication_type": standard})
+
+
 def ris_notes(
     record: Record, context: CleaningContext, options: CleaningOptions
 ) -> Record:
@@ -471,6 +521,11 @@ def _steps(options: CleaningOptions) -> list[tuple[bool, str, Step]]:
         (options.strip_pmid, "Strip PMID", strip_pmid),
         (options.strip_extras or options.only_one, "ISSN/ISBN", clean_issn_isbn),
         (options.first_publication_type, "First pub. type", first_publication_type),
+        (
+            options.standardize_publication_type,
+            "Standardize pub. type",
+            standardize_publication_type,
+        ),
         (options.ris_notes, "RIS notes", ris_notes),
         (options.eid_from_url, "EID from URL", eid_from_url),
         (options.citation_parts, "Values from Citation", citation_parts),

@@ -31,6 +31,7 @@ class CleaningOptions(BaseModel):
     strip_pmid: bool = True
     pages_set: bool = True
     first_publication_type: bool = True
+    standardize_publication_type: bool = True
     ris_notes: bool = True
     eid_from_url: bool = True
     citation_parts: bool = True
@@ -260,6 +261,14 @@ _OTHER = QuirkBox(
             "First pub. type",
             "NBIB can have several lines for publication type; keeps only the"
             " first.",
+            "checkbox",
+        ),
+        QuirkItem(
+            "standardize_publication_type",
+            "Standardize pub. type",
+            "Maps vendor publication types to one list, e.g. JOUR, article and"
+            " Journal Article become Journal article. Not case-sensitive. A type"
+            " that isn't on the list keeps its text.",
             "checkbox",
         ),
     ),

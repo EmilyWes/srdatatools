@@ -20,6 +20,7 @@ from app.cleaning.steps import (
     sniff_separator,
     split_authors,
     split_keywords,
+    standardize_publication_type,
     strip_affiliation_start,
     strip_author_extras,
     strip_doi,
@@ -93,6 +94,36 @@ def test_first_publication_type__keeps_first_line() -> None:
     cleaned = first_publication_type(record, _NO_CONTEXT, _OPTIONS)
 
     assert cleaned.publication_type == "Journal Article"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("JOUR", "Journal article"),
+        (" Journal Article ", "Journal article"),
+        ("incollection", "Book chapter"),
+        ("label.ris.referenceType.BOOK_CHAPTER", "Book chapter"),
+        ("Short survey", "Review"),
+        ("GEN", "GEN"),
+        ("Journal Article\nReview", "Journal Article\nReview"),
+    ],
+)
+def test_standardize_publication_type__maps_known_values(
+    value: str, expected: str
+) -> None:
+    record = Record(publication_type=value)
+
+    cleaned = standardize_publication_type(record, _NO_CONTEXT, _OPTIONS)
+
+    assert cleaned.publication_type == expected
+
+
+def test_standardize_publication_type__runs_after_first_publication_type() -> None:
+    record = Record(publication_type="Journal Article\nReview")
+
+    cleaned, _ = clean_record(record, _NO_CONTEXT, _OPTIONS)
+
+    assert cleaned.publication_type == "Journal article"
 
 
 @pytest.mark.parametrize(
