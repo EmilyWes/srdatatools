@@ -17,14 +17,18 @@ _RIS_LABEL_LINE = re.compile(r"^N1  - ASReview_", re.MULTILINE)
 _TABULAR_SUGGESTIONS: dict[str, Suggest] = {
     _LABEL_HEADER: Suggest("label"),
     "asreview_note": Suggest("notes"),
-    "start_page": Suggest("pages", {"part": "start"}),
-    "end_page": Suggest("pages", {"part": "end"}),
     "number": Suggest("issue"),
-    "type_of_reference": Suggest("publication_type"),
 }
-# The unnamed first column is ASReview's record id.
+# The unnamed first column is ASReview's record id; asreview_note is the notes.
 _TABULAR_IGNORED = frozenset(
-    {"", "asreview_group_id", "asreview_time", "secondary_title", "author_address"}
+    {
+        "",
+        "asreview_group_id",
+        "asreview_time",
+        "secondary_title",
+        "author_address",
+        "notes",
+    }
 )
 # In the Parsing view's include/exclude/maybe/unlabeled order, so it round-trips.
 _RIS_LABEL_VALUES: tuple[tuple[str, LabelValue], ...] = (

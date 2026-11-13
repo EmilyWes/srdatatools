@@ -293,6 +293,7 @@ def read_bibtex_fields(path: Path) -> FileSummary:
 def suggest_bibtex_mapping(
     keys: list[str],
     overrides: Mapping[str, Suggest] | None = None,
+    ignored_keys: frozenset[str] = frozenset(),
 ) -> FieldMapping:
     suggestions = override_aliases(_SUGGESTIONS, overrides or {})
-    return _suggest_mapping(keys, suggestions, lenient=False)
+    return _suggest_mapping(keys, suggestions, lenient=False, ignored_keys=ignored_keys)

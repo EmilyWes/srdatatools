@@ -28,7 +28,7 @@ from app.parsers.mapping import (
     unsplit_keywords,
 )
 from app.parsers.quirks import ParseSettings
-from tests.mappings import mapping_of
+from tests.mappings import mapping_of, targets_of
 
 
 def test_field_mapping__rejects_other_id_without_key() -> None:
@@ -653,20 +653,33 @@ def test_suggest_mapping__lenient_fuzzy_matches_and_falls_back_to_id() -> None:
     }
 
 
-def test_override_aliases__drops_base_aliases_of_an_overridden_target() -> None:
+def test_override_aliases__keeps_other_base_aliases_of_the_same_target() -> None:
     base = {"jt": Suggest("journal"), "ta": Suggest("journal"), "ti": Suggest("title")}
 
-    merged = override_aliases(base, {"jt": Suggest("journal")})
+    merged = override_aliases(base, {"bti": Suggest("journal")})
 
-    assert merged == {"ti": Suggest("title"), "jt": Suggest("journal")}
+    assert merged == {**base, "bti": Suggest("journal")}
 
 
-def test_override_aliases__moves_alias_to_a_new_target() -> None:
+def test_override_aliases__replaces_the_same_alias() -> None:
     base = {"type": Suggest("notes"), "ty": Suggest("publication_type")}
 
     merged = override_aliases(base, {"type": Suggest("publication_type")})
 
-    assert merged == {"type": Suggest("publication_type")}
+    assert merged == {
+        "type": Suggest("publication_type"),
+        "ty": Suggest("publication_type"),
+    }
+
+
+def test_suggest_mapping__ignored_keys_stay_unmapped() -> None:
+    suggestions = {"ty": Suggest("publication_type"), "m3": Suggest("publication_type")}
+
+    mapping = suggest_mapping(
+        ["TY", "M3"], suggestions, lenient=False, ignored_keys=frozenset({"ty"})
+    )
+
+    assert targets_of(mapping) == {"M3": "publication_type"}
 
 
 def test_split_keyword__splits_prefix_off() -> None:

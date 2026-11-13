@@ -174,6 +174,7 @@ def read_ris_tags(path: Path) -> FileSummary:
 def suggest_ris_mapping(
     tags: list[str],
     overrides: Mapping[str, Suggest] | None = None,
+    ignored_keys: frozenset[str] = frozenset(),
 ) -> FieldMapping:
     suggestions = override_aliases(_SUGGESTIONS, overrides or {})
-    return _suggest_mapping(tags, suggestions, lenient=False)
+    return _suggest_mapping(tags, suggestions, lenient=False, ignored_keys=ignored_keys)

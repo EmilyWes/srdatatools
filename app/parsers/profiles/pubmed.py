@@ -35,11 +35,11 @@ PUBMED = Profile(
             },
             matches=_matches_nbib,
             settings=default_settings("nbib"),
+            # TA abbreviates the journal name in JT.
+            ignored_keys=frozenset({"ta"}),
         ),
         "csv": FormatProfile(
             suggestions={
-                "authors": Suggest("authors"),
-                "journal/book": Suggest("journal"),
                 "pmcid": Suggest("other_ids", {"key": "pmc"}),
                 "nihms id": Suggest("other_ids", {"key": "mid"}),
             },

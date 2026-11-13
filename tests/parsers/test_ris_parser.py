@@ -377,7 +377,9 @@ def test_suggest_ris_mapping__maps_sn_to_issn_isbn() -> None:
 
 def test_suggest_ris_mapping__applies_alias_overrides() -> None:
     mapping = suggest_ris_mapping(
-        ["TY", "M3"], overrides={"m3": Suggest("publication_type")}
+        ["TY", "M3"],
+        overrides={"m3": Suggest("publication_type")},
+        ignored_keys=frozenset({"ty"}),
     )
 
     assert targets_of(mapping) == {"M3": "publication_type"}

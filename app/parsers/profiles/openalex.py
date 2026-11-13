@@ -22,13 +22,10 @@ OPENALEX = Profile(
     formats={
         "csv": FormatProfile(
             suggestions={
-                "author": Suggest("authors"),
-                "orcid": Suggest("authors", {"role": "ids", "id_key": "orcid"}),
                 "author ids": Suggest(
                     "authors", {"role": "ids", "id_key": "openalex_author_id"}
                 ),
                 "source": Suggest("journal"),
-                "keyword": Suggest("keywords"),
                 "concept": Suggest("keywords", {"prefix": "Concept"}),
                 "topic": Suggest("keywords", {"prefix": "Topic"}),
                 "type": Suggest("publication_type"),

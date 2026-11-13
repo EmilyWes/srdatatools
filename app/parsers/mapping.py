@@ -517,10 +517,9 @@ def apply_line_mapping(
 def override_aliases(
     base: Mapping[str, Suggest], overrides: Mapping[str, Suggest]
 ) -> dict[str, Suggest]:
-    """A target the overrides suggest for drops every base alias of that target."""
-    replaced = {suggest.target for suggest in overrides.values()}
-    kept = {a: s for a, s in base.items() if s.target not in replaced}
-    return {**kept, **overrides}
+    """An override only replaces the base alias of the same name; a base alias a
+    profile doesn't want is left out through its ignored keys."""
+    return {**base, **overrides}
 
 
 def suggest_mapping(
@@ -528,12 +527,15 @@ def suggest_mapping(
     suggestions: Mapping[str, Suggest],
     *,
     lenient: bool,
+    ignored_keys: frozenset[str] = frozenset(),
 ) -> FieldMapping:
     """lenient adds fuzzy matching and an ID-header fallback, for free-text headers."""
     rows: dict[str, RowMapping] = {}
     match_kinds: dict[str, MatchKind] = {}
     for key in keys:
         normalized = key.strip().lower()
+        if normalized in ignored_keys:
+            continue
         kind: MatchKind = "exact"
         alias = normalized if normalized in suggestions else None
         if alias is None and lenient:

@@ -12,7 +12,7 @@ from tests.mappings import targets_of
 def _parse_nbib(text: str) -> Record:
     tags = list(dict.fromkeys(line[:4].strip() for line in text.splitlines()))
     profile = PUBMED.formats["nbib"]
-    mapping = suggest_nbib_mapping(tags, profile.suggestions)
+    mapping = suggest_nbib_mapping(tags, profile.suggestions, profile.ignored_keys)
     result = parse_nbib_text(text, mapping, settings=profile.settings)
     return result.rows[0].record
 
@@ -46,7 +46,10 @@ def test_pubmed_nbib__book_title_fills_journal() -> None:
 
 
 def test_pubmed_nbib__suggests_tt_as_title() -> None:
-    mapping = suggest_nbib_mapping(["TI", "TT"], PUBMED.formats["nbib"].suggestions)
+    profile = PUBMED.formats["nbib"]
+    mapping = suggest_nbib_mapping(
+        ["TI", "TT"], profile.suggestions, profile.ignored_keys
+    )
 
     assert targets_of(mapping) == {"TI": "title", "TT": "title"}
 

@@ -440,7 +440,9 @@ def test_suggest_bibtex_mapping__booktitle_maps_to_journal() -> None:
 
 def test_suggest_bibtex_mapping__applies_alias_overrides() -> None:
     mapping = suggest_bibtex_mapping(
-        ["type", "@type"], overrides={"type": Suggest("publication_type")}
+        ["type", "@type"],
+        overrides={"type": Suggest("publication_type")},
+        ignored_keys=frozenset({"@type"}),
     )
 
     assert targets_of(mapping) == {"type": "publication_type"}

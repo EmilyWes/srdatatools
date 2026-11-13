@@ -32,6 +32,7 @@ _SCALARS = {
     "abstract": "abstract",
     "source title": "journal",
     "journal": "journal",
+    "journal/book": "journal",
     "publication title": "journal",
     "conference name": "conference_name",
     "proceedings title": "conference_name",
@@ -42,6 +43,7 @@ _SCALARS = {
     "pmid": "pmid",
     "document type": "publication_type",
     "publication type": "publication_type",
+    "type_of_reference": "publication_type",
     "language of original document": "language",
     "language": "language",
     "publisher": "publisher",
@@ -55,12 +57,20 @@ _SUGGESTIONS: dict[str, Suggest] = {
     "page range": Suggest("pages"),
     "page start": Suggest("pages", {"part": "start"}),
     "page end": Suggest("pages", {"part": "end"}),
+    "start_page": Suggest("pages", {"part": "start"}),
+    "end_page": Suggest("pages", {"part": "end"}),
     "issn": Suggest("issn_isbn", {"kind": "issn"}),
     "isbn": Suggest("issn_isbn", {"kind": "isbn"}),
-    **dict.fromkeys(("authors", "author full names", "author(s)"), Suggest("authors")),
-    **dict.fromkeys(("author(s) id", "orcids"), Suggest("authors", {"role": "ids"})),
     **dict.fromkeys(
-        ("author keywords", "index keywords", "keywords"), Suggest("keywords")
+        ("author", "authors", "author full names", "author(s)"), Suggest("authors")
+    ),
+    **dict.fromkeys(
+        ("author ids", "author(s) id", "orcid", "orcids"),
+        Suggest("authors", {"role": "ids"}),
+    ),
+    **dict.fromkeys(
+        ("author keywords", "index keywords", "keyword", "keywords"),
+        Suggest("keywords"),
     ),
     "year": Suggest("date", {"part": "year"}),
     "publication year": Suggest("date", {"part": "year"}),
@@ -225,5 +235,6 @@ def suggest_mapping(
     ignored_keys: frozenset[str] = frozenset(),
 ) -> FieldMapping:
     suggestions = override_aliases(_SUGGESTIONS, overrides or {})
-    kept = [h for h in headers if h.strip().lower() not in ignored_keys]
-    return _suggest_mapping(kept, suggestions, lenient=True)
+    return _suggest_mapping(
+        headers, suggestions, lenient=True, ignored_keys=ignored_keys
+    )

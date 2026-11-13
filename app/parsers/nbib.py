@@ -210,8 +210,9 @@ def read_nbib_tags(path: Path) -> FileSummary:
 def suggest_nbib_mapping(
     tags: list[str],
     overrides: Mapping[str, Suggest] | None = None,
+    ignored_keys: frozenset[str] = frozenset(),
 ) -> FieldMapping:
     suggestions = override_aliases(_SUGGESTIONS, overrides or {})
     if _FAU_TAG not in tags:
         suggestions[_AU_TAG.lower()] = Suggest("authors")
-    return _suggest_mapping(tags, suggestions, lenient=False)
+    return _suggest_mapping(tags, suggestions, lenient=False, ignored_keys=ignored_keys)

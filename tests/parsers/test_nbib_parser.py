@@ -251,8 +251,10 @@ def test_suggest_nbib_mapping__uses_row_options() -> None:
     }
 
 
-def test_suggest_nbib_mapping__alias_overrides_replace_defaults() -> None:
-    suggestions = suggest_nbib_mapping(["TA", "JT"], {"jt": Suggest("journal")})
+def test_suggest_nbib_mapping__ignored_keys_stay_unmapped() -> None:
+    suggestions = suggest_nbib_mapping(
+        ["TA", "JT"], {"jt": Suggest("journal")}, frozenset({"ta"})
+    )
 
     assert targets_of(suggestions) == {"JT": "journal"}
 

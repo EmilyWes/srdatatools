@@ -35,11 +35,13 @@ def _parse(path: Path, file_format: FileType) -> ParseResult:
         mapping = suggest_mapping(headers, profile.suggestions, profile.ignored_keys)
     elif file_format == "ris":
         mapping = suggest_ris_mapping(
-            list(read_ris_tags(path).samples), profile.suggestions
+            list(read_ris_tags(path).samples), profile.suggestions, profile.ignored_keys
         )
     else:
         keys = list(read_bibtex_fields(path).samples)
-        mapping = suggest_bibtex_mapping(keys, profile.suggestions)
+        mapping = suggest_bibtex_mapping(
+            keys, profile.suggestions, profile.ignored_keys
+        )
     if file_format == "csv":
         result = parse_csv_file(path, mapping, settings=profile.settings)
     elif file_format == "ris":

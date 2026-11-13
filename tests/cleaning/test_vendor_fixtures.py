@@ -28,12 +28,12 @@ def _mapping(path: Path, file_type: FileType, source: str) -> FieldMapping:
         return suggest_mapping(headers, profile.suggestions, profile.ignored_keys)
     if file_type == "ris":
         tags = list(read_ris_tags(path).samples)
-        return suggest_ris_mapping(tags, profile.suggestions)
+        return suggest_ris_mapping(tags, profile.suggestions, profile.ignored_keys)
     if file_type == "nbib":
         tags = list(read_nbib_tags(path).samples)
-        return suggest_nbib_mapping(tags, profile.suggestions)
+        return suggest_nbib_mapping(tags, profile.suggestions, profile.ignored_keys)
     keys = list(read_bibtex_fields(path).samples)
-    return suggest_bibtex_mapping(keys, profile.suggestions)
+    return suggest_bibtex_mapping(keys, profile.suggestions, profile.ignored_keys)
 
 
 def _cleaned(

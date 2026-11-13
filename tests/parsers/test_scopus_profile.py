@@ -174,13 +174,17 @@ def test_scopus_csv__does_not_match_header_without_eid() -> None:
 def _parse_ris(body: str) -> Record:
     text = f"TY  - JOUR\n{body}ER  - \n"
     tags = list(dict.fromkeys(line[:2] for line in text.splitlines()))
-    mapping = suggest_ris_mapping(tags, _RIS_PROFILE.suggestions)
+    mapping = suggest_ris_mapping(
+        tags, _RIS_PROFILE.suggestions, _RIS_PROFILE.ignored_keys
+    )
     result = parse_ris_text(text, mapping, settings=_RIS_PROFILE.settings)
     return result.rows[0].record
 
 
 def test_scopus_ris__publication_type_from_m3_not_ty() -> None:
-    mapping = suggest_ris_mapping(["TY", "M3"], _RIS_PROFILE.suggestions)
+    mapping = suggest_ris_mapping(
+        ["TY", "M3"], _RIS_PROFILE.suggestions, _RIS_PROFILE.ignored_keys
+    )
 
     assert targets_of(mapping) == {"M3": "publication_type"}
 
@@ -208,7 +212,9 @@ def _parse_bibtex(fields: str, mapping: FieldMapping | None = None) -> Record:
             "@key",
             *(line.split("=")[0].strip() for line in fields.splitlines()),
         ]
-        mapping = suggest_bibtex_mapping(keys, _BIBTEX_PROFILE.suggestions)
+        mapping = suggest_bibtex_mapping(
+            keys, _BIBTEX_PROFILE.suggestions, _BIBTEX_PROFILE.ignored_keys
+        )
     result = parse_bibtex_text(text, mapping, settings=_BIBTEX_PROFILE.settings)
     return result.rows[0].record
 
@@ -216,7 +222,9 @@ def _parse_bibtex(fields: str, mapping: FieldMapping | None = None) -> Record:
 def test_scopus_bibtex__suggests_scopus_fields() -> None:
     keys = ["@type", "type", "pmid", "author_keywords", "keywords"]
 
-    mapping = suggest_bibtex_mapping(keys, _BIBTEX_PROFILE.suggestions)
+    mapping = suggest_bibtex_mapping(
+        keys, _BIBTEX_PROFILE.suggestions, _BIBTEX_PROFILE.ignored_keys
+    )
 
     assert targets_of(mapping) == {
         "type": "publication_type",

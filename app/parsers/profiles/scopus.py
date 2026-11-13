@@ -69,6 +69,8 @@ SCOPUS = Profile(
             },
             matches=_matches_ris,
             settings=default_settings("ris"),
+            # TY is only the RIS reference type (JOUR); M3 holds Scopus's own.
+            ignored_keys=frozenset({"ty"}),
         ),
         "bibtex": FormatProfile(
             suggestions={
@@ -81,6 +83,8 @@ SCOPUS = Profile(
             },
             matches=_matches_bibtex,
             settings=default_settings("bibtex"),
+            # The entry type (@article) is less precise than Scopus's own type.
+            ignored_keys=frozenset({"@type"}),
         ),
     },
 )

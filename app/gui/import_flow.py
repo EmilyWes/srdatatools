@@ -143,7 +143,9 @@ _TYPES: dict[FileType, _TypeHandlers] = {
     ),
     "ris": _TypeHandlers(
         read_keys=lambda path, _, __: read_ris_tags(path),
-        suggest=lambda keys, profile: suggest_ris_mapping(keys, profile.suggestions),
+        suggest=lambda keys, profile: suggest_ris_mapping(
+            keys, profile.suggestions, profile.ignored_keys
+        ),
         parse_file=lambda path, mapping, _, settings: parse_ris_file(
             path, mapping, settings
         ),
@@ -151,7 +153,9 @@ _TYPES: dict[FileType, _TypeHandlers] = {
     ),
     "nbib": _TypeHandlers(
         read_keys=lambda path, _, __: read_nbib_tags(path),
-        suggest=lambda keys, profile: suggest_nbib_mapping(keys, profile.suggestions),
+        suggest=lambda keys, profile: suggest_nbib_mapping(
+            keys, profile.suggestions, profile.ignored_keys
+        ),
         parse_file=lambda path, mapping, _, settings: parse_nbib_file(
             path, mapping, settings
         ),
@@ -159,7 +163,9 @@ _TYPES: dict[FileType, _TypeHandlers] = {
     ),
     "bibtex": _TypeHandlers(
         read_keys=lambda path, _, __: read_bibtex_fields(path),
-        suggest=lambda keys, profile: suggest_bibtex_mapping(keys, profile.suggestions),
+        suggest=lambda keys, profile: suggest_bibtex_mapping(
+            keys, profile.suggestions, profile.ignored_keys
+        ),
         parse_file=lambda path, mapping, _, settings: parse_bibtex_file(
             path, mapping, settings
         ),

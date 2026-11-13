@@ -34,10 +34,10 @@ def _parse(path: Path, file_format: FileType) -> ParseResult:
         return parse_csv_file(path, mapping, settings=profile.settings)
     if file_format == "ris":
         tags = list(read_ris_tags(path).samples)
-        mapping = suggest_ris_mapping(tags, profile.suggestions)
+        mapping = suggest_ris_mapping(tags, profile.suggestions, profile.ignored_keys)
         return parse_ris_file(path, mapping, settings=profile.settings)
     keys = list(read_bibtex_fields(path).samples)
-    mapping = suggest_bibtex_mapping(keys, profile.suggestions)
+    mapping = suggest_bibtex_mapping(keys, profile.suggestions, profile.ignored_keys)
     return parse_bibtex_file(path, mapping, settings=profile.settings)
 
 
