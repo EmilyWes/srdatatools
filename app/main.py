@@ -6,7 +6,7 @@ from pathlib import Path
 
 from nicegui import app, native, ui
 
-from app.db.session import default_db_path, run_migrations
+from app.db.session import default_db_path, project_root, run_migrations
 from app.gui import home  # noqa: F401  (registers the "/" page)
 
 
@@ -35,6 +35,9 @@ def main(argv: list[str] | None = None) -> None:
     configure_logging(args.debug, default_db_path().with_name("srdatatools.log"))
     run_migrations()
     app.native.window_args["maximized"] = True
+    app.native.start_args["icon"] = str(
+        project_root() / "app" / "assets" / "srdatatools.ico"
+    )
     ui.run(
         title="srdatatools",
         native=True,

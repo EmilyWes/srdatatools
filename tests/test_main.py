@@ -51,6 +51,19 @@ def test_main__configures_logging_then_migrates_then_starts_ui(
     ]
 
 
+def test_main__sets_window_icon_to_bundled_ico(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_startup(monkeypatch, [])
+    monkeypatch.setattr(app.main.app.native, "start_args", {})
+
+    app.main.main([])
+
+    icon = Path(app.main.app.native.start_args["icon"])
+    assert icon.name == "srdatatools.ico"
+    assert icon.is_file()
+
+
 def test_main__debug_flag_enables_debug_logging(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
