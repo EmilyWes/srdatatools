@@ -305,12 +305,12 @@ _FROM_FILE = QuirkBox(
 )
 
 CLEANING_BOXES = [
-    _ISSN_ISBN,
-    _KEYWORDS,
-    _DATES,
     _IDENTIFIERS,
-    _OTHER,
+    _DATES,
+    _KEYWORDS,
+    _ISSN_ISBN,
     _FROM_FILE,
+    _OTHER,
     _AUTHORS,
     _EMPTY_VALUES,
 ]

@@ -46,12 +46,12 @@ def test_render_cleaning_view__boxes_in_order() -> None:
     boxes = [e for e in middle.descendants() if e.tag == "fieldset"]
     titles = [_labels(box.default_slot.children[0]) for box in boxes]
     assert titles == [
-        ["ISSN/ISBN"],
-        ["Keywords"],
-        ["Dates"],
         ["Identifiers"],
-        ["Other"],
+        ["Dates"],
+        ["Keywords"],
+        ["ISSN/ISBN"],
         ["From raw fields"],
+        ["Other"],
         ["Authors"],
         ["Empty values"],
     ]
