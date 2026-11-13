@@ -444,11 +444,18 @@ def test_suggest_mapping__non_id_words_containing_id_stay_unmapped(
 
 def test_suggest_mapping__ignored_keys_stay_unmapped() -> None:
     mapping = suggest_mapping(
-        ["Conference name", "Conference date"],
-        ignored_keys=frozenset({"conference date"}),
+        ["Conference name", "Publication Stage"],
+        ignored_keys=frozenset({"publication stage"}),
     )
 
     assert targets_of(mapping) == {"Conference name": "conference_name"}
+
+
+@pytest.mark.parametrize(
+    "header", ["Conference date", "Has ORCID", "Has PMCID", "ROR ID"]
+)
+def test_suggest_mapping__generic_ignored_headers_stay_unmapped(header: str) -> None:
+    assert targets_of(suggest_mapping([header])) == {}
 
 
 def test_suggest_mapping__leaves_unrecognized_header_out() -> None:

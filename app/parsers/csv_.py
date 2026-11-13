@@ -83,6 +83,8 @@ _SUGGESTIONS: dict[str, Suggest] = {
         Suggest("label"),
     ),
 }
+# Headers that would otherwise be fuzzy-matched or caught by the ID fallback.
+_IGNORED = frozenset({"conference date", "has orcid", "has pmcid", "ror id"})
 
 _EXTRA_FIELDS_KEY = "__extra__"
 _SNIFF_SAMPLE_SIZE = 2048
@@ -236,5 +238,5 @@ def suggest_mapping(
 ) -> FieldMapping:
     suggestions = override_aliases(_SUGGESTIONS, overrides or {})
     return _suggest_mapping(
-        headers, suggestions, lenient=True, ignored_keys=ignored_keys
+        headers, suggestions, lenient=True, ignored_keys=_IGNORED | ignored_keys
     )

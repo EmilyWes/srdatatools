@@ -43,11 +43,8 @@ OPENALEX = Profile(
                     "oa source",
                     "source ojs",
                     "oa published",
-                    "has orcid",
-                    "has pmcid",
                     "has abstract",
                     "pubmed",
-                    "ror id",
                 }
             ),
         ),

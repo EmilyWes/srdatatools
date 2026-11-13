@@ -55,7 +55,6 @@ SCOPUS = Profile(
             ignored_keys=frozenset(
                 {
                     "authors",
-                    "conference date",
                     "conference location",
                     "conference code",
                     "publication stage",
