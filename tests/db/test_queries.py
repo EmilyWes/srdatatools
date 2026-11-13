@@ -278,7 +278,27 @@ def test_count_data_quality__rows_in_order(session: Session) -> None:
     assert count_data_quality(session) == [
         ("Unparsed dates", 0),
         ("Misaligned authors", 0),
+        ("Unmapped publication types", 0),
     ]
+
+
+@pytest.mark.parametrize(
+    ("publication_type", "unmapped"),
+    [
+        ("Journal article", False),
+        ("JOUR", True),
+        ("GEN", True),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_count_data_quality__unmapped_publication_types(
+    session: Session, publication_type: str | None, unmapped: bool
+) -> None:
+    session.add(Record(publication_type=publication_type))
+    session.commit()
+
+    assert dict(count_data_quality(session))["Unmapped publication types"] == unmapped
 
 
 def test_count_filled_fields__counts_non_empty_values(session: Session) -> None:

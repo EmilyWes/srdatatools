@@ -2,6 +2,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from app.cleaning.steps import PUBLICATION_TYPES
 from app.models.record import CLEANED_DATE
 from app.parsers.authors import (
     AUTHOR_JOINER,
@@ -10,7 +11,12 @@ from app.parsers.authors import (
 )
 
 # The record fields the checks read.
-QUALITY_FIELDS = ("publication_date", "author_names", "author_ids")
+QUALITY_FIELDS = (
+    "publication_date",
+    "author_names",
+    "author_ids",
+    "publication_type",
+)
 ISSUE_JOINER = " | "
 
 Fields = Mapping[str, Any]
@@ -32,6 +38,11 @@ def _misaligned_authors(fields: Fields) -> bool:
     return len(parse_author_ids(ids)) > name_count
 
 
+def _unmapped_publication_type(fields: Fields) -> bool:
+    value: str | None = fields.get("publication_type")
+    return bool(value) and value not in PUBLICATION_TYPES
+
+
 @dataclass(frozen=True)
 class Check:
     test: Callable[[Fields], bool]
@@ -42,6 +53,9 @@ class Check:
 CHECKS: dict[str, Check] = {
     "Unparsed dates": Check(_unparsed_date, ("publication_date",)),
     "Misaligned authors": Check(_misaligned_authors, ("author_names", "author_ids")),
+    "Unmapped publication types": Check(
+        _unmapped_publication_type, ("publication_type",)
+    ),
 }
 
 

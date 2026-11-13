@@ -57,7 +57,7 @@ _RIS_NOTE_IDS = {"EID: ": "eid"}
 _RIS_NOTE_FIELDS = {"Conference name: ": "conference_name"}
 _BIBTEX_URL_KEY = "url"
 _CITATION_KEY = "Citation"
-_PUBLICATION_TYPES = {
+PUBLICATION_TYPES = {
     "Journal article": ("jour", "article", "journal article"),
     "Review": ("review", "short survey"),
     "Book": ("book",),
@@ -94,7 +94,7 @@ _PUBLICATION_TYPES = {
 }
 _STANDARD_PUBLICATION_TYPE = {
     value: standard
-    for standard, values in _PUBLICATION_TYPES.items()
+    for standard, values in PUBLICATION_TYPES.items()
     for value in values
 }
 
