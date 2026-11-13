@@ -498,7 +498,7 @@ class ImportView:
                     views.toggle.disable()
                     views.toggle.tooltip(self._no_mapping_reason(type_known))
 
-                with ui.row().classes("items-center gap-2"):
+                with ui.column().classes("items-center gap-2"):
                     self.import_button = ui.button(
                         "Import", icon="upload_file", on_click=lambda: self._import()
                     ).props("dense")
@@ -508,7 +508,7 @@ class ImportView:
                         on_click=lambda: self._import(clean=True),
                     ).props("dense icon-right=cleaning_services")
                     for button in (self.import_button, self.import_clean_button):
-                        button.classes("w-56 px-4").props("no-wrap")
+                        button.classes("w-52 px-4").props("no-wrap")
                         button.set_enabled(has_file and type_known and has_mapping)
                         if not type_known:
                             button.tooltip("please select the type")
