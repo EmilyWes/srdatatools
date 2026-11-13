@@ -500,13 +500,15 @@ class ImportView:
 
                 with ui.row().classes("items-center gap-2"):
                     self.import_button = ui.button(
-                        "Import", on_click=lambda: self._import()
+                        "Import", icon="upload_file", on_click=lambda: self._import()
                     ).props("dense")
                     self.import_clean_button = ui.button(
-                        "Import and clean", on_click=lambda: self._import(clean=True)
-                    ).props("dense")
+                        "Import and clean",
+                        icon="upload_file",
+                        on_click=lambda: self._import(clean=True),
+                    ).props("dense icon-right=cleaning_services")
                     for button in (self.import_button, self.import_clean_button):
-                        button.classes("w-40 px-4")
+                        button.classes("w-56 px-4").props("no-wrap")
                         button.set_enabled(has_file and type_known and has_mapping)
                         if not type_known:
                             button.tooltip("please select the type")
