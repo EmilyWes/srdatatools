@@ -4,7 +4,7 @@ import pytest
 from openpyxl import Workbook
 
 from app.parsers import detect
-from app.parsers.detect import detect_source, detect_type
+from app.parsers.detect import detect_sources, detect_type
 
 _DATA_DIR = Path(__file__).parent.parent / "data" / "general"
 
@@ -194,7 +194,7 @@ def test_detect_type__falls_back_to_extension_for_undecodable_file(
     assert detect_type(path) == "nbib"
 
 
-def test_detect_type__unrecognised_content_and_extension_returns_none(
+def test_detect_type__unrecognised_content_and_extension_returns_empty(
     tmp_path: Path,
 ) -> None:
     path = _write(tmp_path, "notes.txt", "just some notes\n")
@@ -202,101 +202,101 @@ def test_detect_type__unrecognised_content_and_extension_returns_none(
     assert detect_type(path) is None
 
 
-def test_detect_source__pubmed_nbib() -> None:
-    assert detect_source(_DATA_DIR / "pubmed_style.nbib", "nbib") == "pubmed"
+def test_detect_sources__pubmed_nbib() -> None:
+    assert detect_sources(_DATA_DIR / "pubmed_style.nbib", "nbib") == ("pubmed",)
 
 
-def test_detect_source__pubmed_csv(tmp_path: Path) -> None:
+def test_detect_sources__pubmed_csv(tmp_path: Path) -> None:
     path = _write(tmp_path, "pubmed.csv", "PMID,Title,Citation,Journal/Book\n1,A,B,C\n")
 
-    assert detect_source(path, "csv") == "pubmed"
+    assert detect_sources(path, "csv") == ("pubmed",)
 
 
-def test_detect_source__scopus_csv(tmp_path: Path) -> None:
+def test_detect_sources__scopus_csv(tmp_path: Path) -> None:
     path = _write(tmp_path, "scopus.csv", '"Authors","Title","EID"\n"A","T","E"\n')
 
-    assert detect_source(path, "csv") == "scopus"
+    assert detect_sources(path, "csv") == ("scopus",)
 
 
-def test_detect_source__scopus_ris(tmp_path: Path) -> None:
+def test_detect_sources__scopus_ris(tmp_path: Path) -> None:
     path = _write(tmp_path, "scopus.ris", "TY  - JOUR\nDB  - Scopus\nER  - \n")
 
-    assert detect_source(path, "ris") == "scopus"
+    assert detect_sources(path, "ris") == ("scopus",)
 
 
-def test_detect_source__scopus_bibtex(tmp_path: Path) -> None:
+def test_detect_sources__scopus_bibtex(tmp_path: Path) -> None:
     text = "Scopus\n\n@ARTICLE{k,\n\ttitle = {T},\n\tsource = {Scopus}\n}\n"
     path = _write(tmp_path, "scopus.bib", text)
 
-    assert detect_source(path, "bibtex") == "scopus"
+    assert detect_sources(path, "bibtex") == ("scopus",)
 
 
-def test_detect_source__ignores_content_after_prefix(
+def test_detect_sources__ignores_content_after_prefix(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(detect, "_DETECT_PREFIX_SIZE", 22)
     text = "TY  - JOUR\nTI  - Title\nDB  - Scopus\nER  - \n"
     path = _write(tmp_path, "scopus.ris", text)
 
-    assert detect_source(path, "ris") is None
+    assert detect_sources(path, "ris") == ()
 
 
-def test_detect_source__no_matching_profile_returns_none() -> None:
-    assert detect_source(_DATA_DIR / "scopus_style.ris", "ris") is None
+def test_detect_sources__no_matching_profile_returns_empty() -> None:
+    assert detect_sources(_DATA_DIR / "scopus_style.ris", "ris") == ()
 
 
-def test_detect_source__tsv_without_marker_returns_none(tmp_path: Path) -> None:
+def test_detect_sources__tsv_without_marker_returns_empty(tmp_path: Path) -> None:
     path = _write(tmp_path, "scopus.tsv", "Authors\tTitle\tEID\nA\tT\tE\n")
 
-    assert detect_source(path, "tsv") is None
+    assert detect_sources(path, "tsv") == ()
 
 
-def test_detect_source__excel_without_marker_returns_none(tmp_path: Path) -> None:
+def test_detect_sources__excel_without_marker_returns_empty(tmp_path: Path) -> None:
     path = _workbook(tmp_path, "scopus.xlsx", [["Authors", "Title", "EID"]])
 
-    assert detect_source(path, "excel") is None
+    assert detect_sources(path, "excel") == ()
 
 
-def test_detect_source__undecodable_file_returns_none(tmp_path: Path) -> None:
+def test_detect_sources__undecodable_file_returns_empty(tmp_path: Path) -> None:
     path = tmp_path / "broken.nbib"
     path.write_bytes(b"\x81\x8d\x8f\x90\x9d")
 
-    assert detect_source(path, "nbib") is None
+    assert detect_sources(path, "nbib") == ()
 
 
-def test_detect_source__asreview_csv(tmp_path: Path) -> None:
+def test_detect_sources__asreview_csv(tmp_path: Path) -> None:
     path = _write(tmp_path, "a.csv", ",title,asreview_label\n0,A,1\n")
 
-    assert detect_source(path, "csv") == "asreview"
+    assert detect_sources(path, "csv") == ("asreview",)
 
 
-def test_detect_source__asreview_tsv(tmp_path: Path) -> None:
+def test_detect_sources__asreview_tsv(tmp_path: Path) -> None:
     path = _write(tmp_path, "a.tsv", "\ttitle\tasreview_label\n0\tA\t1\n")
 
-    assert detect_source(path, "tsv") == "asreview"
+    assert detect_sources(path, "tsv") == ("asreview",)
 
 
-def test_detect_source__asreview_excel(tmp_path: Path) -> None:
+def test_detect_sources__asreview_excel(tmp_path: Path) -> None:
     path = _workbook(tmp_path, "a.xlsx", [[None, "title", "asreview_label"]])
 
-    assert detect_source(path, "excel") == "asreview"
+    assert detect_sources(path, "excel") == ("asreview",)
 
 
-def test_detect_source__asreview_beats_pubmed_csv(tmp_path: Path) -> None:
+def test_detect_sources__pubmed_csv_through_asreview(tmp_path: Path) -> None:
     text = ",PMID,Title,Citation,Journal/Book,asreview_label\n0,1,A,B,C,1\n"
     path = _write(tmp_path, "a.csv", text)
 
-    assert detect_source(path, "csv") == "asreview"
+    assert detect_sources(path, "csv") == ("pubmed", "asreview")
 
 
-def test_detect_source__asreview_beats_scopus_ris(tmp_path: Path) -> None:
+def test_detect_sources__scopus_ris_through_asreview(tmp_path: Path) -> None:
     text = "1.\nTY  - JOUR\nN1  - ASReview_relevant\nDB  - Scopus\nER  - \n"
     path = _write(tmp_path, "a.ris", text)
 
-    assert detect_source(path, "ris") == "asreview"
+    assert detect_sources(path, "ris") == ("scopus", "asreview")
 
 
-def test_detect_source__unreadable_workbook_returns_none(tmp_path: Path) -> None:
+def test_detect_sources__unreadable_workbook_returns_empty(tmp_path: Path) -> None:
     path = _write(tmp_path, "a.xlsx", "not a workbook")
 
-    assert detect_source(path, "excel") is None
+    assert detect_sources(path, "excel") == ()

@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Collection
 from dataclasses import dataclass, replace
 from typing import Any, Literal
 
@@ -138,15 +139,15 @@ def quirk_boxes(file_type: FileType, type_label: str) -> list[QuirkBox]:
     return [_LABELING, _ORDERING, *type_box]
 
 
-def _profile(file_type: FileType, source: str) -> FormatProfile:
-    profile = profile_for(source, file_type)
+def _profile(file_type: FileType, sources: Collection[str]) -> FormatProfile:
+    profile = profile_for(sources, file_type)
     if profile is None:
         raise ValueError(f"unsupported file type: {file_type!r}")
     return profile
 
 
-def default_choices(file_type: FileType, source: str) -> ParsingChoices:
-    profile = _profile(file_type, source)
+def default_choices(file_type: FileType, sources: Collection[str]) -> ParsingChoices:
+    profile = _profile(file_type, sources)
     settings = profile.settings
     return ParsingChoices(
         **{
@@ -170,10 +171,12 @@ def _label_values(choices: ParsingChoices) -> tuple[tuple[str, LabelValue], ...]
 
 
 def profile_with(
-    file_type: FileType, source: str, choices: ParsingChoices | None = None
+    file_type: FileType,
+    sources: Collection[str],
+    choices: ParsingChoices | None = None,
 ) -> FormatProfile:
-    """The selected profile with the choices applied; None keeps its defaults."""
-    profile = _profile(file_type, source)
+    """The sources' profile with the choices applied; None keeps its defaults."""
+    profile = _profile(file_type, sources)
     if choices is None:
         return profile
     settings = replace(
@@ -190,10 +193,10 @@ def dump_choices(choices: ParsingChoices) -> dict[str, Any]:
 
 
 def load_choices(
-    data: dict[str, Any], file_type: FileType, source: str
+    data: dict[str, Any], file_type: FileType, sources: Collection[str]
 ) -> ParsingChoices:
     """Unknown keys are dropped and missing ones keep the profile's defaults."""
-    defaults = default_choices(file_type, source)
+    defaults = default_choices(file_type, sources)
     fields = ParsingChoices.model_fields
     known = {key: value for key, value in data.items() if key in fields}
     try:

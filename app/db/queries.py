@@ -35,13 +35,13 @@ def list_record_rows(session: Session, fields: Sequence[str]) -> list[dict[str, 
 
 def list_record_sources(session: Session) -> dict[int, list[str | None]]:
     statement = (
-        select(RecordSource.record_id, SourceFile.source)
+        select(RecordSource.record_id, SourceFile.sources)
         .join(RecordSource.source_file)
         .order_by(RecordSource.id)
     )
     sources: dict[int, list[str | None]] = defaultdict(list)
-    for record_id, source in session.execute(statement):
-        sources[record_id].append(source)
+    for record_id, file_sources in session.execute(statement):
+        sources[record_id].extend(file_sources or [None])
     return sources
 
 
@@ -229,7 +229,7 @@ def load_export_records(
         mapped = source_file.field_mapping.get("rows", {})
         sources[record_id].append(
             ExportSource(
-                vendor=source_file.source,
+                vendors=tuple(source_file.sources),
                 filename=source_file.filename,
                 raw_fields=raw_fields,
                 ignored_keys=frozenset(key for key in raw_fields if key not in mapped),

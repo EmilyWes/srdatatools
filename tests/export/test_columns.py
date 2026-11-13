@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from app.export.columns import (
@@ -21,7 +23,7 @@ _OPTIONS = ExportOptions(empty_columns=True)
 
 def _pubmed_source(**raw_fields: str) -> ExportSource:
     return ExportSource(
-        vendor="pubmed",
+        vendors=("pubmed",),
         filename="pubmed-deeplearni-set.nbib",
         raw_fields=raw_fields,
         ignored_keys=frozenset({"OWN", "STAT"}) & raw_fields.keys(),
@@ -30,7 +32,7 @@ def _pubmed_source(**raw_fields: str) -> ExportSource:
 
 def _scopus_source(**raw_fields: str) -> ExportSource:
     return ExportSource(
-        vendor="scopus",
+        vendors=("scopus",),
         filename="scopus.csv",
         raw_fields=raw_fields,
         ignored_keys=frozenset({"Link", "Source"}) & raw_fields.keys(),
@@ -165,6 +167,18 @@ def test_column_value__extras() -> None:
     assert _value(record, "record_id") == "42"
     assert _value(record, "sources") == "PubMed, Scopus"
     assert _value(record, "source_files") == ("pubmed-deeplearni-set.nbib; scopus.csv")
+
+
+def test_column_value__sources_lists_each_of_a_files_sources() -> None:
+    source = replace(_pubmed_source(TI="A"), vendors=("pubmed", "asreview"))
+
+    assert _value(_record(sources=[source]), "sources") == "PubMed, ASReview"
+
+
+def test_column_value__file_without_sources_is_unknown() -> None:
+    source = replace(_pubmed_source(TI="A"), vendors=())
+
+    assert _value(_record(sources=[source]), "sources") == "Unknown"
 
 
 def test_export_columns__no_raw_rows_by_default() -> None:

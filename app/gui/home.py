@@ -285,7 +285,7 @@ def home() -> None:
         files: list[tuple[Path, FileSummary]],
         file_type: FileType,
         mapping: FieldMapping,
-        source: str,
+        sources: tuple[str, ...],
         sheet: str | None,
         choices: ParsingChoices,
         clean: bool,
@@ -304,7 +304,7 @@ def home() -> None:
                             file_type,
                             mapping,
                             summary,
-                            source,
+                            sources,
                             sheet,
                             choices,
                         )

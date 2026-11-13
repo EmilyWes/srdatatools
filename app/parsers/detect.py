@@ -76,13 +76,13 @@ def _detect_text(path: Path, file_type: FileType) -> str:
     return decode_prefix(path, _DETECT_PREFIX_SIZE)
 
 
-def detect_source(path: Path, file_type: FileType) -> str | None:
+def detect_sources(path: Path, file_type: FileType) -> tuple[str, ...]:
     try:
         text = _detect_text(path, file_type)
     except ValueError:
-        return None
-    for key, profile in PROFILES.items():
-        format_profile = profile.formats.get(file_type)
-        if format_profile is not None and format_profile.matches(text):
-            return key
-    return None
+        return ()
+    return tuple(
+        key
+        for key, profile in PROFILES.items()
+        if file_type in profile.formats and profile.formats[file_type].matches(text)
+    )

@@ -19,7 +19,7 @@ from tests.mappings import mapping_of
 
 def _render(
     file_type: FileType = "csv",
-    source: str = "unknown",
+    sources: tuple[str, ...] = (),
     chosen: ParsingChoices | None = None,
     mapping: FieldMapping | None = None,
     middle: Element | None = None,
@@ -27,7 +27,7 @@ def _render(
     return render_quirks_overview(
         middle or shell().middle,
         quirk_boxes(file_type, file_type.upper()),
-        default_choices(file_type, source),
+        default_choices(file_type, sources),
         chosen,
         (lambda: mapping) if mapping is not None else None,
     )
@@ -58,9 +58,9 @@ def _buttons(middle: Element, icon: str) -> list[ui.button]:
 
 
 def test_render_quirks_overview__defaults_give_the_profile_defaults() -> None:
-    screen = _render(source="scopus")
+    screen = _render(sources=("scopus",))
 
-    assert screen.current_choices() == default_choices("csv", "scopus")
+    assert screen.current_choices() == default_choices("csv", ("scopus",))
 
 
 def test_render_quirks_overview__boxes_in_order_with_title_in_the_border() -> None:
@@ -117,7 +117,7 @@ def test_render_quirks_overview__field_size_only_for_csv_and_tsv() -> None:
 def test_render_quirks_overview__text_box_is_prefilled_and_tinted_when_changed() -> (
     None
 ):
-    screen = _render("ris", source="asreview")
+    screen = _render("ris", sources=("asreview",))
     widget = screen.widgets["label_include"]
     assert widget.value == "asreview_relevant"
     assert "bg-color" not in widget.props
@@ -181,14 +181,16 @@ def test_render_quirks_overview__stale_ordering_pick_is_kept() -> None:
 
 
 def test_render_quirks_overview__restore_defaults_resets_every_choice() -> None:
-    screen = _render(source="scopus", mapping=mapping_of({"A": "title", "B": "title"}))
+    screen = _render(
+        sources=("scopus",), mapping=mapping_of({"A": "title", "B": "title"})
+    )
     screen.set_value("label_maybe", "?!")
     screen.set_value("field_size_limit", 500)
     screen.order_rows[0].value = "B"
 
     screen.restore_defaults()
 
-    assert screen.current_choices() == default_choices("csv", "scopus")
+    assert screen.current_choices() == default_choices("csv", ("scopus",))
     assert "bg-color" not in screen.widgets["label_maybe"].props
     assert len(screen.order_rows) == 1
 
@@ -197,7 +199,7 @@ def test_render_quirks_overview__restore_defaults_button_only_when_editable() ->
     editable = shell().middle
     _render(middle=editable)
     readonly = shell().middle
-    _render(chosen=default_choices("csv", "unknown"), middle=readonly)
+    _render(chosen=default_choices("csv", ()), middle=readonly)
 
     def texts(middle: Element) -> list[str]:
         return [e.text for e in middle.descendants() if isinstance(e, ui.button)]
@@ -207,7 +209,7 @@ def test_render_quirks_overview__restore_defaults_button_only_when_editable() ->
 
 
 def test_render_quirks_overview__chosen_is_read_only_and_shows_stored_values() -> None:
-    chosen = default_choices("csv", "unknown").model_copy(
+    chosen = default_choices("csv", ()).model_copy(
         update={"label_maybe": "?!", "use_first": ["TT"]}
     )
 

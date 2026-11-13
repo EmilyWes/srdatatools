@@ -115,7 +115,7 @@ def _source_file(
         filename=filename,
         path=None,
         format="ris",
-        source=source,
+        sources=[source] if source is not None else [],
         imported_at=imported_at,
         row_count=None,
     )
@@ -186,6 +186,17 @@ def test_list_record_sources__sources_per_record_in_import_order(
         3: ["scopus"],
         4: [None],
     }
+
+
+def test_list_record_sources__file_with_several_sources_lists_each(
+    session: Session,
+) -> None:
+    source_file = _source_file("a.csv", None, datetime.datetime(2026, 1, 1))
+    source_file.sources = ["pubmed", "asreview"]
+    session.add(_record(None, source_file))
+    session.commit()
+
+    assert list(list_record_sources(session).values()) == [["pubmed", "asreview"]]
 
 
 @pytest.fixture
@@ -441,7 +452,7 @@ def test_load_export_records__builds_record_sources_and_labels(
         ("ft", "s1", "include")
     ]
     [source] = export.sources
-    assert (source.vendor, source.filename) == ("scopus", "scopus.csv")
+    assert (source.vendors, source.filename) == (("scopus",), "scopus.csv")
     assert source.raw_fields == {"Title": "Deep learning", "Link": "https://x"}
     assert source.ignored_keys == {"Link"}
 

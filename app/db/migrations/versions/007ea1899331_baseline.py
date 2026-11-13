@@ -64,7 +64,7 @@ def upgrade() -> None:
         sa.Column("filename", sa.String(), nullable=False),
         sa.Column("path", sa.String(), nullable=True),
         sa.Column("format", sa.String(), nullable=False),
-        sa.Column("source", sa.String(), nullable=True),
+        sa.Column("sources", sa.JSON(), nullable=False),
         sa.Column("sheet", sa.String(), nullable=True),
         sa.Column("imported_at", sa.DateTime(), nullable=False),
         sa.Column("row_count", sa.Integer(), nullable=True),

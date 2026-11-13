@@ -70,27 +70,27 @@ def test_store_parsed_rows__creates_source_file_with_row_count(
     assert source_file.imported_at == datetime.datetime(2026, 1, 1)
 
 
-def test_store_parsed_rows__stores_source(session: Session) -> None:
+def test_store_parsed_rows__stores_sources(session: Session) -> None:
     store_parsed_rows(
         session,
-        filename="pubmed_export.nbib",
+        filename="pubmed_export.csv",
         path=None,
-        format="nbib",
-        source="pubmed",
+        format="csv",
+        sources=("pubmed", "asreview"),
         parsed_rows=[],
     )
     session.commit()
 
-    assert session.query(SourceFile).one().source == "pubmed"
+    assert session.query(SourceFile).one().sources == ["pubmed", "asreview"]
 
 
-def test_store_parsed_rows__source_defaults_to_none(session: Session) -> None:
+def test_store_parsed_rows__sources_default_to_empty(session: Session) -> None:
     store_parsed_rows(
         session, filename="export.ris", path=None, format="ris", parsed_rows=[]
     )
     session.commit()
 
-    assert session.query(SourceFile).one().source is None
+    assert session.query(SourceFile).one().sources == []
 
 
 def test_store_parsed_rows__stores_sheet(session: Session) -> None:

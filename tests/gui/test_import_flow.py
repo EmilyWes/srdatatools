@@ -83,23 +83,27 @@ def test_pick_files__returns_empty_when_cancelled(
 
 
 def test_common_detection__agreeing_files_keep_values() -> None:
-    detected = [("nbib", "pubmed"), ("nbib", "pubmed")]
+    detected: list[tuple[str, tuple[str, ...]]] = [
+        ("csv", ("pubmed", "asreview")),
+        ("csv", ("pubmed", "asreview")),
+    ]
 
-    assert common_detection(detected) == ("nbib", "pubmed")
+    assert common_detection(detected) == ("csv", ("pubmed", "asreview"))
 
 
 def test_common_detection__differing_values_become_unknown() -> None:
-    assert common_detection([("nbib", "pubmed"), ("csv", "pubmed")]) == (
+    assert common_detection([("nbib", ("pubmed",)), ("csv", ("pubmed",))]) == (
         "unknown",
-        "pubmed",
+        ("pubmed",),
     )
-    assert common_detection([("csv", "pubmed"), ("csv", "unknown")]) == (
-        "csv",
-        "unknown",
-    )
+    assert common_detection([("csv", ("pubmed",)), ("csv", ())]) == ("csv", ())
+    assert common_detection(
+        [("csv", ("pubmed", "asreview")), ("csv", ("pubmed",))]
+    ) == ("csv", ())
 
 
 _EMPTY_SUMMARY = FileSummary({}, {}, 0)
+_DETECTED_PUBMED_TEXT = "PMID- 1\nOWN - NLM\nTI  - A title\n"
 
 
 def _summary(file_type: FileType, path: Path) -> FileSummary:
@@ -108,10 +112,13 @@ def _summary(file_type: FileType, path: Path) -> FileSummary:
 
 
 def _render_mapping(
-    container: Element, file_type: FileType, path: Path, source: str = "unknown"
+    container: Element,
+    file_type: FileType,
+    path: Path,
+    sources: tuple[str, ...] = (),
 ) -> MappingScreen | None:
     summary = read_summary(file_type, path)
-    return render_mapping(container, file_type, path.name, summary, source)
+    return render_mapping(container, file_type, path.name, summary, sources)
 
 
 def test_render_mapping__renders_mapping_screen_with_file_headers(
@@ -232,7 +239,7 @@ def test_import_file__saves_every_parsing_choice(
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title\nSome Paper\n")
-    choices = default_choices("csv", "unknown").model_copy(update={"drop_et_al": False})
+    choices = default_choices("csv", ()).model_copy(update={"drop_et_al": False})
 
     source_file = import_file(
         session,
@@ -244,7 +251,7 @@ def test_import_file__saves_every_parsing_choice(
     )
 
     assert set(source_file.quirk_choices) == set(ParsingChoices.model_fields)
-    assert load_choices(source_file.quirk_choices, "csv", "unknown") == choices
+    assert load_choices(source_file.quirk_choices, "csv", ()) == choices
 
 
 def test_import_file__without_choices_saves_the_profile_defaults(
@@ -261,8 +268,8 @@ def test_import_file__without_choices_saves_the_profile_defaults(
         _summary("csv", csv_path),
     )
 
-    stored = load_choices(source_file.quirk_choices, "csv", "unknown")
-    assert stored == default_choices("csv", "unknown")
+    stored = load_choices(source_file.quirk_choices, "csv", ())
+    assert stored == default_choices("csv", ())
 
 
 def test_import_file__unsupported_type_raises(session: Session, tmp_path: Path) -> None:
@@ -601,7 +608,7 @@ def test_render_import_view__selecting_file_prefills_detected_type_and_source(
     run_in(view.middle, view._select_files())
 
     assert view.file_type == "nbib"
-    assert view.source == "pubmed"
+    assert view.sources == ("pubmed",)
     assert view.mapping_screen is not None
     assert view.import_button is not None
     assert view.import_button.enabled is True
@@ -616,12 +623,12 @@ def test_render_import_view__undetected_file_resets_type_and_source_to_unknown(
     _pick(monkeypatch, txt_path)
     view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q, c: None)
     run_in(view.middle, view._set_type("csv"))
-    view._set_source("pubmed")
+    view.sources = ("pubmed",)
 
     run_in(view.middle, view._select_files())
 
     assert view.file_type == "unknown"
-    assert view.source == "unknown"
+    assert view.sources == ()
     assert view.import_button is not None
     assert view.import_button.enabled is False
 
@@ -633,7 +640,9 @@ def test_render_import_view__import_reads_live_mapping_edits(
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Scopus Author ID\nabc123\n")
     _pick(monkeypatch, csv_path)
-    calls: list[tuple[list[tuple[Path, FileSummary]], str, FieldMapping, str]] = []
+    calls: list[
+        tuple[list[tuple[Path, FileSummary]], str, FieldMapping, tuple[str, ...]]
+    ] = []
     view = render_import_view(
         panes.middle,
         on_import=lambda f, t, m, s, sh, q, c: calls.append((f, t, m, s)),
@@ -657,7 +666,7 @@ def test_render_import_view__import_reads_live_mapping_edits(
             ],
             "csv",
             mapping_of({"Scopus Author ID": "authors"}),
-            "unknown",
+            (),
         )
     ]
 
@@ -679,7 +688,7 @@ def test_render_import_view__import_buttons_await_async_on_import(
         files: list[tuple[Path, FileSummary]],
         file_type: FileType,
         mapping: FieldMapping,
-        source: str,
+        sources: tuple[str, ...],
         sheet: str | None,
         choices: ParsingChoices,
         clean: bool,
@@ -747,7 +756,7 @@ def test_render_mapping__pubmed_nbib_suggests_jt_not_ta(tmp_path: Path) -> None:
     nbib_path.write_text(_PUBMED_NBIB_TEXT)
     panes = shell()
 
-    screen = _render_mapping(panes.middle, "nbib", nbib_path, "pubmed")
+    screen = _render_mapping(panes.middle, "nbib", nbib_path, ("pubmed",))
 
     assert screen is not None
     targets = targets_of(screen.current_mapping())
@@ -762,7 +771,7 @@ def test_render_mapping__pubmed_csv_splits_author_names_on_comma(
     csv_path.write_text('PMID,Authors\n1,"Romano M, Novacek MJ."\n')
     panes = shell()
 
-    screen = _render_mapping(panes.middle, "csv", csv_path, "pubmed")
+    screen = _render_mapping(panes.middle, "csv", csv_path, ("pubmed",))
 
     assert screen is not None
     assert screen.current_mapping().rows["Authors"] == AuthorsRow(
@@ -777,7 +786,7 @@ def test_render_mapping__scopus_csv_leaves_ignored_columns_unmapped(
     csv_path.write_text("Conference name,Conference date,EID\nC,D,2-s2.0-1\n")
     panes = shell()
 
-    screen = _render_mapping(panes.middle, "csv", csv_path, "scopus")
+    screen = _render_mapping(panes.middle, "csv", csv_path, ("scopus",))
 
     assert screen is not None
     targets = targets_of(screen.current_mapping())
@@ -790,7 +799,7 @@ def test_render_mapping__scopus_ris_uses_profile_aliases(tmp_path: Path) -> None
     ris_path.write_text("TY  - JOUR\nM3  - Article\nDB  - Scopus\nER  - \n")
     panes = shell()
 
-    screen = _render_mapping(panes.middle, "ris", ris_path, "scopus")
+    screen = _render_mapping(panes.middle, "ris", ris_path, ("scopus",))
 
     assert screen is not None
     targets = targets_of(screen.current_mapping())
@@ -806,11 +815,11 @@ def test_import_file__pubmed_stores_source_and_values_as_in_the_file(
     mapping = mapping_of({"TI": "title", "TT": "title", "PG": "pages"})
 
     source_file = import_file(
-        session, nbib_path, "nbib", mapping, _summary("nbib", nbib_path), "pubmed"
+        session, nbib_path, "nbib", mapping, _summary("nbib", nbib_path), ("pubmed",)
     )
     session.commit()
 
-    assert source_file.source == "pubmed"
+    assert source_file.sources == ["pubmed"]
     record = session.query(Record).one()
     assert record.title == "[Not Available]."
     assert record.pages == "521-2"
@@ -823,49 +832,77 @@ def test_import_file__pubmed_ris_imports_generically_and_stores_source(
     ris_path.write_text(_RIS_TEXT)
 
     source_file = import_file(
-        session, ris_path, "ris", FieldMapping(), _summary("ris", ris_path), "pubmed"
+        session, ris_path, "ris", FieldMapping(), _summary("ris", ris_path), ("pubmed",)
     )
 
-    assert source_file.source == "pubmed"
+    assert source_file.sources == ["pubmed"]
     assert source_file.row_count == 1
 
 
-def test_import_file__unknown_source_stores_no_source(
-    session: Session, tmp_path: Path
-) -> None:
+def test_import_file__no_sources_stores_none(session: Session, tmp_path: Path) -> None:
     nbib_path = tmp_path / "pubmed.nbib"
     nbib_path.write_text(_PUBMED_NBIB_TEXT)
     mapping = mapping_of({"PG": "pages"})
 
     source_file = import_file(
-        session, nbib_path, "nbib", mapping, _summary("nbib", nbib_path), "unknown"
+        session, nbib_path, "nbib", mapping, _summary("nbib", nbib_path)
     )
     session.commit()
 
-    assert source_file.source is None
+    assert source_file.sources == []
     assert source_file.row_count == 1
 
 
-def test_render_import_view__source_change_rerenders_mapping_and_is_passed_on(
+def test_render_import_view__type_change_redetects_sources_and_passes_them_on(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     panes = shell()
     nbib_path = tmp_path / "pubmed.nbib"
-    nbib_path.write_text(_PUBMED_NBIB_TEXT)
+    nbib_path.write_text(_DETECTED_PUBMED_TEXT)
     _pick(monkeypatch, nbib_path)
-    calls: list[str] = []
+    calls: list[tuple[str, ...]] = []
     view = render_import_view(
         panes.middle, on_import=lambda f, t, m, s, sh, q, c: calls.append(s)
     )
     run_in(view.middle, view._select_files())
+
+    run_in(view.middle, view._set_type("ris"))
+    assert view.sources == ()
     run_in(view.middle, view._set_type("nbib"))
 
-    view._set_source("pubmed")
-
-    assert view.mapping_screen is not None
-    assert "TA" not in view.mapping_screen.current_mapping().rows
+    assert view.sources == ("pubmed",)
     view._import()
-    assert calls == ["pubmed"]
+    assert calls == [("pubmed",)]
+
+
+def _source_cell(middle: Element) -> list[Element]:
+    return list(_grid_cells(middle)[3].default_slot.children)
+
+
+def test_render_import_view__shows_each_detected_source_as_a_chip(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    panes = shell()
+    csv_path = tmp_path / "a.csv"
+    csv_path.write_text("PMID,Title,Citation,Journal/Book,asreview_label\n1,A,B,C,1\n")
+    _pick(monkeypatch, csv_path)
+    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q, c: None)
+
+    run_in(view.middle, view._select_files())
+
+    chips = _source_cell(panes.middle)
+    assert all(isinstance(chip, ui.chip) for chip in chips)
+    assert [chip.text for chip in chips] == ["PubMed", "ASReview"]  # type: ignore[attr-defined]
+
+
+def test_render_import_view__no_detected_source_shows_unknown() -> None:
+    panes = shell()
+
+    render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q, c: None)
+
+    [label] = _source_cell(panes.middle)
+    assert not isinstance(label, ui.chip)
+    assert label.text == "Unknown"  # type: ignore[attr-defined]
 
 
 def test_render_import_view__unknown_type_shows_select_type_tooltip() -> None:
@@ -881,54 +918,6 @@ def test_render_import_view__unknown_type_shows_select_type_tooltip() -> None:
         and t.props["target"] == f"#{view.import_button.html_id}"
     ]
     assert tooltips == ["please select the type"]
-
-
-_NO_PROFILE_NOTICE = (
-    "No profile for this source/type combination — using the default parser."
-)
-
-
-def _visible_notices(middle: Any) -> list[str]:
-    icons = [
-        icon
-        for icon in middle.descendants()
-        if isinstance(icon, Icon) and "invisible" not in icon.classes
-    ]
-    return [
-        tooltip.text
-        for tooltip in middle.descendants()
-        if isinstance(tooltip, Tooltip)
-        and any(tooltip.props["target"] == f"#{icon.html_id}" for icon in icons)
-    ]
-
-
-def test_render_import_view__mismatched_source_and_type_shows_notice() -> None:
-    panes = shell()
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q, c: None)
-
-    view._set_source("pubmed")
-    run_in(view.middle, view._set_type("ris"))
-
-    assert _visible_notices(panes.middle) == [_NO_PROFILE_NOTICE]
-
-
-@pytest.mark.parametrize(
-    ("source", "file_type"),
-    [("pubmed", "nbib"), ("unknown", "ris"), ("pubmed", "unknown")],
-)
-def test_render_import_view__no_notice_unless_both_set_without_profile(
-    source: str, file_type: FileType
-) -> None:
-    panes = shell()
-    view = render_import_view(panes.middle, on_import=lambda f, t, m, s, sh, q, c: None)
-
-    view._set_source(source)
-    run_in(view.middle, view._set_type(file_type))
-
-    assert _visible_notices(panes.middle) == []
-
-
-_DETECTED_PUBMED_TEXT = "PMID- 1\nOWN - NLM\nTI  - A title\n"
 
 
 def _file_row_children(middle: Element) -> list[Element]:
@@ -986,7 +975,7 @@ def test_render_import_view__matching_files_no_warning(
 
     run_in(view.middle, view._select_files())
 
-    assert (view.file_type, view.source) == ("nbib", "pubmed")
+    assert (view.file_type, view.sources) == ("nbib", ("pubmed",))
     assert _warning_icons(panes.middle) == []
 
 
@@ -1009,7 +998,7 @@ def test_render_import_view__mixed_sources_warns_and_prefills_unknown(
 
     run_in(view.middle, view._select_files())
 
-    assert (view.file_type, view.source) == ("unknown", "unknown")
+    assert (view.file_type, view.sources) == ("unknown", ())
     assert view.import_button is not None
     assert view.import_button.enabled is False
     assert notifications == ["warning"]
@@ -1322,19 +1311,19 @@ def test_render_import_view__detected_source_and_type_start_retracted(
 
     run_in(view.middle, view._select_files())
 
-    assert (view.file_type, view.source) == ("nbib", "pubmed")
+    assert (view.file_type, view.sources) == ("nbib", ("pubmed",))
     assert _toggle(panes.middle).value is None
     assert view.views is not None
     assert not _shown(view.views.mapping) and not _shown(view.views.parsing)
 
 
-def test_render_import_view__source_change_keeps_retracted(
+def test_render_import_view__type_change_keeps_retracted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     view, middle = _nbib_view(monkeypatch, tmp_path)
     _toggle(middle).value = None
 
-    view._set_source("pubmed")
+    run_in(view.middle, view._set_type("nbib"))
 
     assert _toggle(middle).value is None
 
@@ -1354,13 +1343,13 @@ def test_render_import_view__toggle_switches_to_parsing_and_keeps_edits(
     assert view.mapping_screen.current_mapping().rows["TA"].target == "journal"
 
 
-def test_render_import_view__source_change_keeps_the_selected_view(
+def test_render_import_view__type_change_keeps_the_selected_view(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     view, middle = _nbib_view(monkeypatch, tmp_path)
     _toggle(middle).value = "parsing"
 
-    view._set_source("pubmed")
+    run_in(view.middle, view._set_type("nbib"))
 
     assert _toggle(middle).value == "parsing"
     assert view.views is not None and _shown(view.views.parsing)
@@ -1430,7 +1419,7 @@ def test_import_file__applies_parsing_choices(session: Session, tmp_path: Path) 
     nbib_path = tmp_path / "pubmed.nbib"
     nbib_path.write_text(_PUBMED_NBIB_TEXT)
     mapping = mapping_of({"PG": "pages"})
-    choices = default_choices("nbib", "unknown").model_copy(update={"pages_set": False})
+    choices = default_choices("nbib", ()).model_copy(update={"pages_set": False})
 
     import_file(
         session,

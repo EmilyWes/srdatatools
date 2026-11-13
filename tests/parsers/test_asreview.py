@@ -10,7 +10,7 @@ from app.parsers.csv_ import (
     read_csv_headers,
     suggest_mapping,
 )
-from app.parsers.detect import detect_source, detect_type
+from app.parsers.detect import detect_sources, detect_type
 from app.parsers.excel import parse_excel_file, read_excel_headers
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.asreview import ASREVIEW
@@ -148,6 +148,8 @@ _FIXTURES = [
     ("scopus", ".xlsx"),
     ("scopus", ".ris"),
 ]
+# Only these keep the vendor's own marker after ASReview writes them back.
+_VENDOR_DETECTED = {("pubmed", ".csv"), ("scopus", ".ris")}
 _LABEL_COUNTS = {
     "openalex": {"include": 3, "exclude": 3, "unlabeled": 6},
     "pubmed": {"include": 2, "exclude": 2, "unlabeled": 8},
@@ -162,7 +164,8 @@ def test_asreview_fixture__detected_as_asreview(vendor: str, ext: str) -> None:
     file_type = detect_type(path)
 
     assert file_type == _TYPES[ext]
-    assert detect_source(path, file_type) == "asreview"
+    vendor_sources = (vendor,) if (vendor, ext) in _VENDOR_DETECTED else ()
+    assert detect_sources(path, file_type) == (*vendor_sources, "asreview")
 
 
 @pytest.mark.parametrize(("vendor", "ext"), _FIXTURES)

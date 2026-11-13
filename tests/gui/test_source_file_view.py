@@ -21,7 +21,7 @@ def _source_file(
         filename="pubmed.nbib",
         path="/imports/pubmed.nbib",
         format="nbib",
-        source="pubmed",
+        sources=["pubmed"],
         imported_at=datetime.datetime(2026, 1, 1, 9, 5),
         row_count=3,
         skipped_rows=skipped_rows,

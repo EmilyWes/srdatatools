@@ -31,20 +31,22 @@ def _type_box_keys(file_type: FileType) -> list[str]:
 
 
 def _with(
-    file_type: FileType, source: str = "unknown", **changes: object
+    file_type: FileType, sources: tuple[str, ...] = (), **changes: object
 ) -> ParsingChoices:
-    return default_choices(file_type, source).model_copy(update=changes)
+    return default_choices(file_type, sources).model_copy(update=changes)
 
 
-@pytest.mark.parametrize("source", ["unknown", *PROFILES], ids=["unknown", *PROFILES])
+@pytest.mark.parametrize(
+    "sources", [(), *((key,) for key in PROFILES)], ids=["unknown", *PROFILES]
+)
 @pytest.mark.parametrize("file_type", _ALL_TYPES)
 def test_profile_with__defaults_reproduce_the_profile(
-    file_type: FileType, source: str
+    file_type: FileType, sources: tuple[str, ...]
 ) -> None:
-    profile = profile_for(source, file_type)
+    profile = profile_for(sources, file_type)
 
-    assert profile_with(file_type, source) == profile
-    assert profile_with(file_type, source, default_choices(file_type, source)) == (
+    assert profile_with(file_type, sources) == profile
+    assert profile_with(file_type, sources, default_choices(file_type, sources)) == (
         profile
     )
 
@@ -94,7 +96,7 @@ def test_quirk_boxes__type_specific_items_only_in_their_type() -> None:
 
 
 def test_default_choices__unknown_source_defaults() -> None:
-    choices = default_choices("csv", "unknown")
+    choices = default_choices("csv", ())
 
     assert choices.use_first == []
     assert choices.field_size_limit == 1_000_000
@@ -103,7 +105,7 @@ def test_default_choices__unknown_source_defaults() -> None:
 
 def test_default_choices__unsupported_type_raises() -> None:
     with pytest.raises(ValueError):
-        default_choices("unknown", "unknown")  # type: ignore[arg-type]
+        default_choices("unknown", ())  # type: ignore[arg-type]
 
 
 def test_profile_with__applies_the_settings() -> None:
@@ -114,7 +116,7 @@ def test_profile_with__applies_the_settings() -> None:
         use_first=["B", "A"],
     )
 
-    settings = profile_with("csv", "unknown", choices).settings
+    settings = profile_with("csv", (), choices).settings
 
     assert settings.label_values == ()
     assert settings.csv_field_size_limit == 500
@@ -129,7 +131,7 @@ def test_profile_with__label_values_are_split_lowercased_and_trimmed() -> None:
         label_unlabeled="not seen",
     )
 
-    settings = profile_with("ris", "unknown", choices).settings
+    settings = profile_with("ris", (), choices).settings
 
     assert settings.label_values == (
         ("asreview_relevant", "include"),
@@ -139,21 +141,23 @@ def test_profile_with__label_values_are_split_lowercased_and_trimmed() -> None:
 
 
 def test_dump_choices__round_trips() -> None:
-    choices = _with("csv", "scopus", label_maybe="a|b", use_first=["X"])
+    choices = _with("csv", ("scopus",), label_maybe="a|b", use_first=["X"])
 
-    assert load_choices(dump_choices(choices), "csv", "scopus") == choices
+    assert load_choices(dump_choices(choices), "csv", ("scopus",)) == choices
 
 
 def test_load_choices__missing_keys_keep_the_profile_defaults() -> None:
-    choices = load_choices({"label_maybe": "?!"}, "csv", "scopus")
+    choices = load_choices({"label_maybe": "?!"}, "csv", ("scopus",))
 
-    assert choices == _with("csv", "scopus", label_maybe="?!")
+    assert choices == _with("csv", ("scopus",), label_maybe="?!")
 
 
 def test_load_choices__drops_choices_that_moved_to_cleaning() -> None:
-    choices = load_choices({"drop_et_al": False, "label_maybe": "?!"}, "ris", "scopus")
+    choices = load_choices(
+        {"drop_et_al": False, "label_maybe": "?!"}, "ris", ("scopus",)
+    )
 
-    assert choices == _with("ris", "scopus", label_maybe="?!")
+    assert choices == _with("ris", ("scopus",), label_maybe="?!")
 
 
 def test_load_choices__old_style_choices_fall_back_to_defaults() -> None:
@@ -162,4 +166,4 @@ def test_load_choices__old_style_choices_fall_back_to_defaults() -> None:
         "minus_one_unlabeled": {"on": False, "values": {}},
     }
 
-    assert load_choices(old, "ris", "unknown") == default_choices("ris", "unknown")
+    assert load_choices(old, "ris", ()) == default_choices("ris", ())

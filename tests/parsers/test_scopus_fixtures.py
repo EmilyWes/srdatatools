@@ -10,7 +10,7 @@ from app.parsers.bibtex import (
 )
 from app.parsers.common import FileType, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
-from app.parsers.detect import detect_source
+from app.parsers.detect import detect_sources
 from app.parsers.profiles.scopus import SCOPUS
 from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
 from tests.vendor_data import vendor_file, vendor_files
@@ -74,7 +74,7 @@ def bibtex_records() -> dict[str, Record]:
 def test_scopus_small__detects_scopus_source(suffix: str) -> None:
     path = vendor_file("scopus", "small", suffix)
 
-    assert detect_source(path, _FORMAT_BY_SUFFIX[suffix]) == "scopus"
+    assert detect_sources(path, _FORMAT_BY_SUFFIX[suffix]) == ("scopus",)
 
 
 def test_scopus_small_csv__keeps_author_columns_as_in_the_file(

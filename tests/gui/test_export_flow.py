@@ -39,7 +39,7 @@ def _records() -> list[ExportRecord]:
             ),
             sources=[
                 ExportSource(
-                    vendor="scopus",
+                    vendors=("scopus",),
                     filename="scopus.csv",
                     raw_fields={"Title": "Deep learning", "Link": "https://x"},
                     ignored_keys=frozenset({"Link"}),

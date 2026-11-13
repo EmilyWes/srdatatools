@@ -256,9 +256,9 @@ def test_home__import_stores_given_summary_and_selects_new_file(
                 [(csv_path, summary)],
                 "csv",
                 mapping_of({"Title": "title"}),
-                "unknown",
+                (),
                 None,
-                default_choices("csv", "unknown"),
+                default_choices("csv", ()),
                 False,
             )
 
@@ -299,9 +299,9 @@ def test_home__import_and_clean_cleans_only_the_imported_records(
                 [(csv_path, summary)],
                 "csv",
                 mapping_of({"Pages": "pages"}),
-                "unknown",
+                (),
                 None,
-                default_choices("csv", "unknown"),
+                default_choices("csv", ()),
                 True,
             )
 
@@ -344,9 +344,9 @@ def test_home__multi_file_import_stores_each_file_and_selects_dashboard(
                 [(first_path, first_summary), (second_path, second_summary)],
                 "csv",
                 mapping_of({"Title": "title"}),
-                "unknown",
+                (),
                 None,
-                default_choices("csv", "unknown"),
+                default_choices("csv", ()),
                 False,
             )
 
@@ -561,9 +561,9 @@ def test_home__failing_file_is_logged_and_notified_without_undoing_others(
                 [(moved_path, summary), (good_path, summary)],
                 "csv",
                 mapping_of({"Title": "title"}),
-                "unknown",
+                (),
                 None,
-                default_choices("csv", "unknown"),
+                default_choices("csv", ()),
                 False,
             )
 

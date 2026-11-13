@@ -51,7 +51,7 @@ class SourceFile(Base):
     filename: Mapped[str]
     path: Mapped[str | None]
     format: Mapped[str]
-    source: Mapped[str | None]
+    sources: Mapped[list[str]] = mapped_column(JSON, default=list)
     sheet: Mapped[str | None]
     imported_at: Mapped[datetime.datetime]
     row_count: Mapped[int | None]

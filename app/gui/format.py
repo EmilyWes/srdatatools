@@ -1,4 +1,5 @@
 import json
+from collections.abc import Collection
 from typing import Literal
 
 from app.parsers.profiles import PROFILES
@@ -25,6 +26,10 @@ def source_label(source: str | None) -> str:
         return _UNKNOWN_SOURCE
     profile = PROFILES.get(source)
     return profile.label if profile is not None else source
+
+
+def sources_label(sources: Collection[str]) -> str:
+    return ", ".join(map(source_label, sources)) or _UNKNOWN_SOURCE
 
 
 def label_key(phase: str, screener: str) -> str:

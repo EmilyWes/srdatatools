@@ -11,7 +11,7 @@ from app.parsers.bibtex import (
 )
 from app.parsers.common import FileType, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
-from app.parsers.detect import detect_source
+from app.parsers.detect import detect_sources
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.openalex import OPENALEX
 from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
@@ -76,14 +76,14 @@ def bibtex_records() -> dict[str, Record]:
 def test_openalex_small_csv__detects_openalex_source() -> None:
     path = vendor_file("openalex", "small", ".csv")
 
-    assert detect_source(path, "csv") == "openalex"
+    assert detect_sources(path, "csv") == ("openalex",)
 
 
 @pytest.mark.parametrize("suffix", [".ris", ".bib"])
 def test_openalex_small__ris_and_bibtex_are_not_detected(suffix: str) -> None:
     path = vendor_file("openalex", "small", suffix)
 
-    assert detect_source(path, _FORMAT_BY_SUFFIX[suffix]) is None
+    assert detect_sources(path, _FORMAT_BY_SUFFIX[suffix]) == ()
 
 
 def _names(record: Record) -> list[str]:

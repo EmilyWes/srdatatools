@@ -21,7 +21,7 @@ _OPTIONS = CleaningOptions()
 
 
 def _mapping(path: Path, file_type: FileType, source: str) -> FieldMapping:
-    profile = profile_for(source, file_type)
+    profile = profile_for((source,), file_type)
     assert profile is not None
     if file_type == "csv":
         headers = list(read_csv_headers(path).samples)
@@ -42,7 +42,7 @@ def _cleaned(
     """Parsed with the vendor's profile, then cleaned as one source file."""
     path = vendor_file(vendor, "small", suffix)
     mapping = _mapping(path, file_type, vendor)
-    profile = profile_for(vendor, file_type)
+    profile = profile_for((vendor,), file_type)
     assert profile is not None
     settings = profile.settings
     if file_type == "csv":

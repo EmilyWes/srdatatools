@@ -55,7 +55,7 @@ def _source_file(source: str | None) -> SourceFile:
         filename="export.ris",
         path=None,
         format="ris",
-        source=source,
+        sources=[source] if source is not None else [],
         imported_at=datetime.datetime(2026, 1, 1),
         row_count=None,
     )

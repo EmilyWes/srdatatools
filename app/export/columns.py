@@ -43,7 +43,7 @@ _EXTRA_LABELS: dict[ExtraKind, str] = {
 
 @dataclass(frozen=True)
 class ExportSource:
-    vendor: str | None
+    vendors: tuple[str, ...]
     filename: str
     raw_fields: dict[str, str]
     ignored_keys: frozenset[str]
@@ -254,7 +254,11 @@ def column_value(
             return str(export.id)
         if column.kind == "sources":
             return ", ".join(
-                dict.fromkeys(source_label(source.vendor) for source in export.sources)
+                dict.fromkeys(
+                    source_label(vendor)
+                    for source in export.sources
+                    for vendor in source.vendors or (None,)
+                )
             )
         return _joined_distinct([source.filename for source in export.sources])
     if isinstance(column, RawColumn):
