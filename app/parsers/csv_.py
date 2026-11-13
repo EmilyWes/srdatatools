@@ -58,6 +58,7 @@ _SUGGESTIONS: dict[str, Suggest] = {
     "issn": Suggest("issn_isbn", {"kind": "issn"}),
     "isbn": Suggest("issn_isbn", {"kind": "isbn"}),
     **dict.fromkeys(("authors", "author full names", "author(s)"), Suggest("authors")),
+    **dict.fromkeys(("author(s) id", "orcids"), Suggest("authors", {"role": "ids"})),
     **dict.fromkeys(
         ("author keywords", "index keywords", "keywords"), Suggest("keywords")
     ),
