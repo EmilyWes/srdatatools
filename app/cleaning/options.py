@@ -25,7 +25,7 @@ class CleaningOptions(BaseModel):
     clean_dates: bool = True
     date_order: DateOrder = "eu"
     keywords_separator: str = ""
-    empty_values: list[str] = ["[Not Available]."]
+    empty_values: list[str] = ["[Not Available].", "none", "unknown"]
     refill_from_raw: bool = True
     strip_doi: bool = True
     strip_pmid: bool = True

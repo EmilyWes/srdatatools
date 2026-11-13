@@ -7,6 +7,8 @@ from app.gui.cleaning_flow import CleaningView, render_cleaning_view
 from app.gui.layout import shell
 from tests.gui.clicks import click_and_wait
 
+_ONE_EMPTY = CleaningOptions(empty_values=["[Not Available]."])
+
 
 def _render(
     options: CleaningOptions | None = None,
@@ -160,7 +162,7 @@ def test_render_cleaning_view__preferred_qualifier_greyed_out_without_only_one()
 
 
 def test_render_cleaning_view__empty_values_show_saved_plus_a_blank_box() -> None:
-    screen = _render().screen
+    screen = _render(_ONE_EMPTY).screen
 
     assert [text.value for text in screen.empty_rows] == ["[Not Available].", ""]
     assert "w-[7rem]" in screen.empty_rows[0].classes
@@ -168,7 +170,7 @@ def test_render_cleaning_view__empty_values_show_saved_plus_a_blank_box() -> Non
 
 def test_render_cleaning_view__typing_in_the_blank_box_adds_the_next() -> None:
     middle = shell().middle
-    screen = _render(middle=middle).screen
+    screen = _render(_ONE_EMPTY, middle=middle).screen
     blank = screen.empty_rows[1]
 
     blank.value = "n"
@@ -185,7 +187,7 @@ def test_render_cleaning_view__typing_in_the_blank_box_adds_the_next() -> None:
 
 
 def test_render_cleaning_view__cleared_box_stays_but_is_ignored() -> None:
-    screen = _render().screen
+    screen = _render(_ONE_EMPTY).screen
 
     screen.empty_rows[0].value = " "
 
@@ -197,7 +199,7 @@ def test_render_cleaning_view__red_remove_button_drops_a_value(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     middle = shell().middle
-    screen = _render(middle=middle).screen
+    screen = _render(_ONE_EMPTY, middle=middle).screen
     [remove] = _buttons(middle, "close")
     assert remove.props["color"] == "negative"
 
