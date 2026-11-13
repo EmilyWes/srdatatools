@@ -19,7 +19,7 @@ from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
-_SUGGESTION_CUTOFF = 0.7
+_SUGGESTION_CUTOFF = 0.85
 
 # Case-sensitive on purpose: "PMCID" is an ID header, "Valid" is not.
 _ID_HEADER = re.compile(r"(?<![A-Za-z])[Ii][Dd](?![A-Za-z])|[A-Z]ID(?![A-Za-z])")
