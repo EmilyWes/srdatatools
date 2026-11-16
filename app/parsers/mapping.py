@@ -23,6 +23,7 @@ _SUGGESTION_CUTOFF = 0.85
 
 # Case-sensitive on purpose: "PMCID" is an ID header, "Valid" is not.
 _ID_HEADER = re.compile(r"(?<![A-Za-z])[Ii][Dd](?![A-Za-z])|[A-Z]ID(?![A-Za-z])")
+_KEYWORD_HEADER = re.compile(r"keywords?", re.IGNORECASE)
 
 _TAGGED_KEYWORD = re.compile(r"\[([^\]]+)\] (.*)", re.DOTALL)
 _UNSPLIT_KEYWORDS = re.compile(r"(?P<key>[^:\[\]]+):\[(?P<value>.*)\]", re.DOTALL)
@@ -203,7 +204,7 @@ TARGETS = (
     LABEL_TARGET,
 )
 
-MatchKind = Literal["exact", "fuzzy", "id_fallback"]
+MatchKind = Literal["exact", "fuzzy", "id_fallback", "keyword_fallback"]
 
 _Row = TypeVar("_Row", bound=BaseModel)
 
@@ -224,9 +225,16 @@ class Suggest:
     options: Mapping[str, str] = field(default_factory=dict)
 
 
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", text.strip().lower()).strip("_")
+
+
 def default_other_id_key(header: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "_", header.strip().lower()).strip("_")
-    return slug or "id"
+    return _slug(header) or "id"
+
+
+def default_keyword_prefix(header: str) -> str:
+    return _slug(_KEYWORD_HEADER.sub(" ", header))
 
 
 def default_row(target: str, key: str) -> RowMapping:
@@ -529,7 +537,8 @@ def suggest_mapping(
     lenient: bool,
     ignored_keys: frozenset[str] = frozenset(),
 ) -> FieldMapping:
-    """lenient adds fuzzy matching and an ID-header fallback, for free-text headers."""
+    """lenient adds fuzzy matching and ID- and keyword-header fallbacks, for
+    free-text headers."""
     rows: dict[str, RowMapping] = {}
     match_kinds: dict[str, MatchKind] = {}
     for key in keys:
@@ -548,6 +557,10 @@ def suggest_mapping(
             suggest = suggestions[alias]
         elif lenient and _ID_HEADER.search(key):
             suggest, kind = Suggest(OTHER_IDS_TARGET), "id_fallback"
+        elif lenient and _KEYWORD_HEADER.search(key):
+            prefix = default_keyword_prefix(key)
+            suggest = Suggest(KEYWORDS_TARGET, {"prefix": prefix})
+            kind = "keyword_fallback"
         else:
             continue
         rows[key] = make_row(suggest, key)

@@ -8,7 +8,7 @@ from app.parsers.profiles.default import (
     default_settings,
 )
 
-_AUTHOR_KEYWORD_PREFIX = "Author"
+_AUTHOR_KEYWORD_PREFIX = "author"
 _AUTHOR_ID_KEY = "scopus_author_id"
 
 _CSV_EID_HEADER = "eid"
@@ -47,7 +47,7 @@ SCOPUS = Profile(
                 "author keywords": Suggest(
                     "keywords", {"prefix": _AUTHOR_KEYWORD_PREFIX}
                 ),
-                "index keywords": Suggest("keywords"),
+                "index keywords": Suggest("keywords", {"prefix": "index"}),
             },
             matches=_matches_csv,
             settings=default_settings("csv"),

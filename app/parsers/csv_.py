@@ -76,10 +76,7 @@ _SUGGESTIONS: dict[str, Suggest] = {
         ("author ids", "author(s) id", "orcid", "orcids"),
         Suggest("authors", {"role": "ids"}),
     ),
-    **dict.fromkeys(
-        ("author keywords", "index keywords", "keyword", "keywords"),
-        Suggest("keywords"),
-    ),
+    **dict.fromkeys(("keyword", "keywords"), Suggest("keywords")),
     "year": Suggest("date", {"part": "year"}),
     "publication year": Suggest("date", {"part": "year"}),
     "publication_year": Suggest("date"),
@@ -94,8 +91,10 @@ _SUGGESTIONS: dict[str, Suggest] = {
         Suggest("label"),
     ),
 }
-# Headers that would otherwise be fuzzy-matched or caught by the ID fallback.
-_IGNORED = frozenset({"conference date", "has orcid", "has pmcid", "ror id"})
+# Headers that would otherwise be fuzzy-matched or caught by a fallback.
+_IGNORED = frozenset(
+    {"conference date", "has orcid", "has pmcid", "keyword ids", "ror id"}
+)
 
 _EXTRA_FIELDS_KEY = "__extra__"
 _SNIFF_SAMPLE_SIZE = 2048

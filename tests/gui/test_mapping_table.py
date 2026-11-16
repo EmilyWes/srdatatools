@@ -318,7 +318,7 @@ def test_render_mapping_table__keys_competing_for_one_value_are_orange() -> None
 
 
 def test_render_mapping_table__keys_whose_values_are_all_kept_stay_green() -> None:
-    screen = _render(["Author Keywords", "Index Keywords", "Author(s) ID", "ORCIDs"])
+    screen = _render(["Keywords", "Keyword", "Author(s) ID", "ORCIDs"])
 
     assert {status for _, status in _statuses(screen)} == {"green"}
 
