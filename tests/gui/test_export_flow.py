@@ -265,14 +265,14 @@ def test_export_view__tsv_sets_tab_and_recomputes_default_path(tmp_path: Path) -
     assert view.path == tmp_path / "library_1.tsv"
 
 
-def test_export_view__back_to_csv_keeps_delimiter(tmp_path: Path) -> None:
+def test_export_view__back_to_csv_sets_comma(tmp_path: Path) -> None:
     view = _view_at(tmp_path / "library.csv")
     assert view.file_type_select is not None
     view.file_type_select.value = "tsv"
 
     view.file_type_select.value = "csv"
 
-    assert view.options.delimiter == "	"
+    assert view.options.delimiter == ","
     assert view.path == tmp_path / "library.csv"
 
 

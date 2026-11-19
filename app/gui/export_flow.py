@@ -269,8 +269,7 @@ class ExportView:
         else:
             self.path = default_path(self.path.parent, file_type)
         self._show_path()
-        if file_type == "tsv":
-            self.option_widgets["delimiter"].value = "	"
+        self.option_widgets["delimiter"].value = "	" if file_type == "tsv" else ","
 
     def _refresh_option_colors(self) -> None:
         defaults = ExportOptions()
