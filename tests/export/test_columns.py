@@ -166,6 +166,8 @@ def test_export_columns__author_id_key_clashing_with_other_id_gets_suffix() -> N
         ("2021/03/07", "month", "3"),
         ("2021/03/", "day", ""),
         ("Mar 2021", "year", ""),
+        ("2021", "year", "2021"),
+        ("2021", "month", ""),
         (None, "full", ""),
     ],
 )
@@ -185,6 +187,33 @@ def test_export_columns__unsplit_keywords_exported_as_stored_per_prefix() -> Non
     assert [c.name for c in keyword_columns] == ["Keywords", "Keywords: MeSH"]
     assert _value(record, "keywords:None") == "deep learning; AI"
     assert _value(record, "keywords:MeSH") == "Humans; Mice"
+
+
+@pytest.mark.parametrize("dates", [["2021//", None], ["2021", "1998//"], ["2021"]])
+def test_export_columns__year_only_dates_suggest_publication_year(
+    dates: list[str | None],
+) -> None:
+    records = [_record(publication_date=date) for date in dates]
+
+    column = _column(export_columns(records, _OPTIONS), "date")
+
+    assert isinstance(column, DateColumn)
+    assert (column.name, column.part) == ("Publication year", "year")
+    assert column.label == "Publication date"
+
+
+@pytest.mark.parametrize(
+    "dates", [["2021//", "2021/03/"], ["Mar 2021"], [None], ["2021", "2021/03/07"]]
+)
+def test_export_columns__other_dates_suggest_full_publication_date(
+    dates: list[str | None],
+) -> None:
+    records = [_record(publication_date=date) for date in dates]
+
+    column = _column(export_columns(records, _OPTIONS), "date")
+
+    assert isinstance(column, DateColumn)
+    assert (column.name, column.part) == ("Publication date", "full")
 
 
 def test_export_columns__one_keyword_row_per_prefix_with_prefix_stripped() -> None:

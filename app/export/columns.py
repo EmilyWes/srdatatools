@@ -1,3 +1,4 @@
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal
@@ -12,6 +13,7 @@ DatePart = Literal["full", "year", "month", "day"]
 ExtraKind = Literal["record_id", "sources", "source_files"]
 
 _ORIGINAL_SUFFIX = " (original)"
+_PLAIN_YEAR = re.compile(r"\d{4}")
 _AUTHOR_IDS_SUFFIX = " (author IDs)"
 
 _SCALAR_LABELS = {
@@ -158,6 +160,23 @@ def _label(phase: str, screener: str) -> LabelColumn:
     )
 
 
+def _year_only(date: str) -> bool:
+    match = CLEANED_DATE.fullmatch(date)
+    if match is not None:
+        return not (match["month"] or match["day"])
+    return _PLAIN_YEAR.fullmatch(date) is not None
+
+
+def _date(schemas: Sequence[Record]) -> DateColumn:
+    """Suggests the year when every dated record has nothing more than a year."""
+    dates = [schema.publication_date for schema in schemas if schema.publication_date]
+    if dates and all(map(_year_only, dates)):
+        return DateColumn(
+            key="date", label="Publication date", name="Publication year", part="year"
+        )
+    return DateColumn(key="date", label="Publication date", name="Publication date")
+
+
 def _extra(kind: ExtraKind) -> ExtraColumn:
     label = _EXTRA_LABELS[kind]
     return ExtraColumn(key=kind, label=label, name=label, kind=kind)
@@ -193,7 +212,7 @@ def export_columns(
         _scalar("title"),
         _joined("author_names"),
         _joined("author_affiliations"),
-        DateColumn(key="date", label="Publication date", name="Publication date"),
+        _date(schemas),
         _scalar("journal"),
         _scalar("conference_name"),
         _scalar("volume"),
@@ -247,10 +266,13 @@ def _raw_keys(records: Sequence[ExportRecord], options: ExportOptions) -> list[s
 
 
 def _date_text(record: Record, part: DatePart) -> str:
-    """A part is only read from a cleaned YYYY/MM/DD date."""
+    """A part is only read from a cleaned YYYY/MM/DD date, or the year from a
+    plain four-digit year."""
     date = record.publication_date or ""
     if part == "full":
         return date
+    if part == "year" and _PLAIN_YEAR.fullmatch(date):
+        return str(int(date))
     match = CLEANED_DATE.fullmatch(date)
     if match is None or not match[part]:
         return ""
