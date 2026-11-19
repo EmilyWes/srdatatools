@@ -8,6 +8,7 @@ from nicegui.element import Element
 from webview import FileDialog
 
 from app.export.columns import (
+    AuthorsColumn,
     DateColumn,
     ExportColumn,
     ExportRecord,
@@ -172,7 +173,7 @@ class ExportView:
         column = row.column
         if isinstance(column, DateColumn):
             self._option(row, "part", "part", "Part", _DATE_PARTS)
-        elif isinstance(column, KeywordsColumn):
+        elif isinstance(column, AuthorsColumn | KeywordsColumn):
             self._option(row, "delimiter", "sep", "Delimiter")
 
     def _render_mapping(self) -> None:

@@ -3,6 +3,7 @@ from dataclasses import replace
 import pytest
 
 from app.export.columns import (
+    AuthorsColumn,
     DateColumn,
     ExportColumn,
     ExportRecord,
@@ -59,16 +60,25 @@ def _value(record: ExportRecord, key: str, options: ExportOptions = _OPTIONS) ->
     )
 
 
-def test_column_value__author_fields_are_written_as_stored() -> None:
+def test_column_value__author_fields_are_separated_by_semicolon() -> None:
     record = _record(
         author_names="LeCun, Yann|Bengio, Yoshua",
-        author_ids="orcid:1|",
+        author_ids="orcid:1, scopus_author_id:2|",
         author_affiliations="NYU|Mila",
     )
 
-    assert _value(record, "author_names") == "LeCun, Yann|Bengio, Yoshua"
-    assert _value(record, "author_ids") == "orcid:1|"
-    assert _value(record, "author_affiliations") == "NYU|Mila"
+    assert _value(record, "author_names") == "LeCun, Yann; Bengio, Yoshua"
+    assert _value(record, "author_ids") == "orcid:1, scopus_author_id:2; "
+    assert _value(record, "author_affiliations") == "NYU; Mila"
+
+
+def test_column_value__authors_delimiter_option() -> None:
+    record = _record(author_names="LeCun, Yann|Bengio, Yoshua")
+    column = AuthorsColumn(
+        key="a", label="", name="", field="author_names", delimiter=" / "
+    )
+
+    assert column_value(column, record, _OPTIONS) == "LeCun, Yann / Bengio, Yoshua"
 
 
 def test_export_columns__author_columns_follow_title() -> None:

@@ -3,14 +3,14 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from app.export.options import ExportOptions
-from app.gui.format import label_text, source_label
+from app.gui.format import DISPLAY_SEPARATOR, label_text, source_label
 from app.models.record import CLEANED_DATE, Record
+from app.parsers.authors import AUTHOR_JOINER
 from app.parsers.mapping import split_keyword
 
 DatePart = Literal["full", "year", "month", "day"]
 ExtraKind = Literal["record_id", "sources", "source_files"]
 
-_JOINER = "; "
 _ORIGINAL_SUFFIX = " (original)"
 
 _SCALAR_LABELS = {
@@ -72,6 +72,11 @@ class ScalarColumn(ExportColumn):
 
 
 @dataclass
+class AuthorsColumn(ScalarColumn):
+    delimiter: str = DISPLAY_SEPARATOR
+
+
+@dataclass
 class DateColumn(ExportColumn):
     part: DatePart = "full"
 
@@ -79,7 +84,7 @@ class DateColumn(ExportColumn):
 @dataclass
 class KeywordsColumn(ExportColumn):
     prefix: str | None = None
-    delimiter: str = "; "
+    delimiter: str = DISPLAY_SEPARATOR
 
 
 @dataclass
@@ -106,6 +111,11 @@ class RawColumn(ExportColumn):
 def _scalar(field_name: str) -> ScalarColumn:
     label = _SCALAR_LABELS[field_name]
     return ScalarColumn(key=field_name, label=label, name=label, field=field_name)
+
+
+def _authors(field_name: str) -> AuthorsColumn:
+    label = _SCALAR_LABELS[field_name]
+    return AuthorsColumn(key=field_name, label=label, name=label, field=field_name)
 
 
 def _keywords(prefix: str | None) -> KeywordsColumn:
@@ -162,9 +172,9 @@ def export_columns(
     columns: list[ExportColumn] = [
         _extra("record_id"),
         _scalar("title"),
-        _scalar("author_names"),
-        _scalar("author_ids"),
-        _scalar("author_affiliations"),
+        _authors("author_names"),
+        _authors("author_ids"),
+        _authors("author_affiliations"),
         DateColumn(key="date", label="Publication date", name="Publication date"),
         _scalar("journal"),
         _scalar("conference_name"),
@@ -223,13 +233,16 @@ def _date_text(record: Record, part: DatePart) -> str:
 
 
 def _joined_distinct(values: Sequence[str]) -> str:
-    return _JOINER.join(dict.fromkeys(value for value in values if value))
+    return DISPLAY_SEPARATOR.join(dict.fromkeys(value for value in values if value))
 
 
 def column_value(
     column: ExportColumn, export: ExportRecord, options: ExportOptions
 ) -> str:
     record = export.record
+    if isinstance(column, AuthorsColumn):
+        value = getattr(record, column.field) or ""
+        return value.replace(AUTHOR_JOINER, column.delimiter)
     if isinstance(column, ScalarColumn):
         value = getattr(record, column.field)
         return "" if value is None else str(value)
@@ -248,7 +261,7 @@ def column_value(
             for label in record.labels
             if (label.phase, label.screener) == (column.phase, column.screener)
         )
-        return _JOINER.join(text for text in texts if text)
+        return DISPLAY_SEPARATOR.join(text for text in texts if text)
     if isinstance(column, ExtraColumn):
         if column.kind == "record_id":
             return str(export.id)

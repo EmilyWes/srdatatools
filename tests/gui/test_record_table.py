@@ -123,6 +123,22 @@ def test_columns__cover_every_record_field_plus_sources() -> None:
     }
 
 
+def test_row_for__separates_authors_with_semicolon() -> None:
+    row = row_for(
+        {
+            "author_names": "Smith, J|Doe, A",
+            "author_ids": "orcid:1|",
+            "author_affiliations": None,
+        }
+    )
+
+    assert row == {
+        "author_names": "Smith, J; Doe, A",
+        "author_ids": "orcid:1; ",
+        "author_affiliations": None,
+    }
+
+
 def test_row_for__formats_lists_and_dicts() -> None:
     row = row_for(
         {
@@ -167,7 +183,7 @@ def test_load_rows__data_quality_joins_each_records_problems(
 
     assert [row["data_quality"] for row in rows] == [
         "",
-        "Unparsed dates | Misaligned authors",
+        "Unparsed dates; Misaligned authors",
         "Unparsed dates",
     ]
     assert rows[0]["publication_date"] == "2020/05/"

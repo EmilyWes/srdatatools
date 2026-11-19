@@ -15,7 +15,7 @@ from nicegui.element import Element
 from nicegui.events import GenericEventArguments
 from sqlalchemy.orm import Session
 
-from app.cleaning.quality import ISSUE_JOINER, QUALITY_FIELDS, quality_issues
+from app.cleaning.quality import QUALITY_FIELDS, quality_issues
 from app.db.queries import (
     list_keyword_prefixes,
     list_label_columns,
@@ -25,6 +25,7 @@ from app.db.queries import (
 )
 from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.format import (
+    DISPLAY_SEPARATOR,
     LabelFormat,
     format_count,
     is_keyword_key,
@@ -38,6 +39,7 @@ from app.gui.format import (
 )
 from app.gui.quirks_overview import render_box_frame
 from app.models.record import publication_year
+from app.parsers.authors import AUTHOR_JOINER
 from app.parsers.mapping import split_keyword
 
 _COLUMNS_KEY = "table_columns"
@@ -91,6 +93,7 @@ COLUMNS: dict[str, str] = {
 # Columns worked out from other fields rather than read from one.
 _DERIVED_COLUMNS = ("sources", "keywords", "publication_year", "data_quality")
 DEFAULT_COLUMNS = ["doi", "title", "author_names"]
+_AUTHOR_FIELDS = frozenset({"author_names", "author_ids", "author_affiliations"})
 _QUALITY_FILTER_STATE: dict[str, Any] = {
     "filter": {
         "filterModel": {"data_quality": {"filterType": "text", "type": "notBlank"}}
@@ -208,9 +211,13 @@ def row_for(values: Mapping[str, Any]) -> dict[str, Any]:
     row: dict[str, Any] = {}
     for key, value in values.items():
         if isinstance(value, list):
-            value = "; ".join(value)
+            value = DISPLAY_SEPARATOR.join(value)
+        elif key in _AUTHOR_FIELDS and value:
+            value = value.replace(AUTHOR_JOINER, DISPLAY_SEPARATOR)
         elif isinstance(value, dict):
-            value = "; ".join(f"{name}: {id_}" for name, id_ in value.items())
+            value = DISPLAY_SEPARATOR.join(
+                f"{name}: {id_}" for name, id_ in value.items()
+            )
         row[key] = value
     return row
 
@@ -232,15 +239,15 @@ def load_rows(
         keywords = [split_keyword(keyword) for keyword in record.pop("keywords", [])]
         row = row_for(record)
         if "data_quality" in columns:
-            row["data_quality"] = ISSUE_JOINER.join(quality_issues(record))
+            row["data_quality"] = DISPLAY_SEPARATOR.join(quality_issues(record))
         if "publication_year" in columns:
             row["publication_year"] = publication_year(row.get("publication_date"))
         if "keywords" in columns:
-            row["keywords"] = "; ".join(
+            row["keywords"] = DISPLAY_SEPARATOR.join(
                 text for prefix, text in keywords if prefix is None
             )
         for key in keyword_columns:
-            row[column_field(key)] = "; ".join(
+            row[column_field(key)] = DISPLAY_SEPARATOR.join(
                 text for prefix, text in keywords if prefix == keyword_prefix(key)
             )
         rows.append(row)
@@ -254,7 +261,7 @@ def load_rows(
             pairs = labels.get(row["id"], {})
             for key in label_columns:
                 values = pairs.get(label_pair(key), [])
-                row[column_field(key)] = "; ".join(
+                row[column_field(key)] = DISPLAY_SEPARATOR.join(
                     label_text(value, label_format) for value in values
                 )
     return rows

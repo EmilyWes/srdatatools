@@ -4,6 +4,8 @@ from typing import Literal
 
 from app.parsers.profiles import PROFILES
 
+# Between the values of a list, wherever one is shown or exported.
+DISPLAY_SEPARATOR = "; "
 _UNKNOWN_SOURCE = "Unknown"
 _LABEL_PREFIX = "label:"
 _KEYWORD_PREFIX = "keywords:"
