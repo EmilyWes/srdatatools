@@ -399,7 +399,9 @@ class ExportView:
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):
                 with ui.grid(columns=GRID_COLUMNS).classes(GRID_CLASSES):
-                    with ui.row().classes("col-span-2 gap-1 text-sm"):
+                    with ui.row().classes(
+                        "col-span-2 justify-self-center gap-1 text-sm"
+                    ):
                         ui.label("Exporting")
                         ui.label(format_count(len(self.records))).classes("font-bold")
                         ui.label(self._records_noun() + " to:")
