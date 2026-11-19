@@ -372,10 +372,14 @@ class ExportView:
 
     def _show_path(self) -> None:
         assert self.path_label is not None
-        self.path_label.set_text(self.path.name)
+        self.path_label.set_text(str(Path(self.path.parent.name) / self.path.name))
         self.path_label.clear()
         with self.path_label:
             ui.tooltip(str(self.path))
+
+    def _records_noun(self) -> str:
+        noun = "record" if len(self.records) == 1 else "records"
+        return f"selected {noun}" if self.selected else noun
 
     def _refresh_export_button(self) -> None:
         assert self.export_button is not None
@@ -395,19 +399,19 @@ class ExportView:
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):
                 with ui.grid(columns=GRID_COLUMNS).classes(GRID_CLASSES):
-                    ui.button("Save as…", on_click=self._choose_path).props(
+                    with ui.row().classes("col-span-2 gap-1 text-sm"):
+                        ui.label("Exporting")
+                        ui.label(format_count(len(self.records))).classes("font-bold")
+                        ui.label(self._records_noun() + " to:")
+                    ui.label("File type:").classes("text-sm")
+                    ui.select(_TYPE_OPTIONS, value=self.options.file_type).props(
+                        SELECT_PROPS
+                    ).classes(SELECT_CLASSES)
+                    ui.button("Select file path…", on_click=self._choose_path).props(
                         BUTTON_PROPS
                     )
                     self.path_label = ui.label().classes(FILE_LABEL_CLASSES)
                     self._show_path()
-                    ui.label("Select type:").classes("text-sm")
-                    ui.select(_TYPE_OPTIONS, value=self.options.file_type).props(
-                        SELECT_PROPS
-                    ).classes(SELECT_CLASSES)
-                    ui.label("Number of records:").classes("text-sm")
-                    ui.label(records_count(len(self.records), self.selected)).classes(
-                        "text-sm"
-                    )
                 views = render_view_toggle(parsing_label="Options")
                 self.mapping = views.mapping
                 self._render_mapping()
