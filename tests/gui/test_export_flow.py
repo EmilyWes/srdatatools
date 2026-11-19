@@ -218,7 +218,22 @@ def test_export_view__export_disabled_until_a_path_is_chosen(
 
     assert view.export_button.enabled is True
     assert _tooltip(view.export_button) is None
-    assert str(tmp_path / "a.csv") in _texts(view)
+
+
+def test_export_view__chosen_path_shows_name_with_full_path_on_hover(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = _view()
+    for name in ("a.csv", "b.csv"):
+        monkeypatch.setattr(
+            export_flow.app.native, "main_window", _FakeWindow((str(tmp_path / name),))
+        )
+        run_in(view.middle, view._choose_path())
+
+    assert view.path_label is not None
+    assert view.path_label.text == "b.csv"
+    assert _tooltip(view.path_label) == str(tmp_path / "b.csv")
+    assert len(view.path_label.default_slot.children) == 1
 
 
 def test_export_view__export_disabled_without_records() -> None:

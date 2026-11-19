@@ -367,7 +367,10 @@ class ExportView:
             return
         self.path = path
         assert self.path_label is not None
-        self.path_label.set_text(str(path))
+        self.path_label.set_text(path.name)
+        self.path_label.clear()
+        with self.path_label:
+            ui.tooltip(str(path))
         self._refresh_export_button()
 
     def _refresh_export_button(self) -> None:
