@@ -30,6 +30,7 @@ from app.db.queries import (
     list_record_rows,
     list_record_sources,
     list_source_files,
+    list_unsplit_author_id_keys,
     load_export_records,
 )
 
@@ -373,6 +374,22 @@ def test_count_keywords__unsplit_value_counts_as_one_keyword(
         None: [("Cancer; Diet", 1)],
         "MeSH": [("Humans", 1)],
     }
+
+
+def test_list_unsplit_author_id_keys__first_seen_order_ignoring_cleaned(
+    session: Session,
+) -> None:
+    session.add_all(
+        [
+            Record(author_ids="scopus_author_id:[1; 2]"),
+            Record(author_ids="orcid:1|orcid:2"),
+            Record(author_ids="orcid:[a], scopus_author_id:[3]"),
+            Record(author_ids=None),
+        ]
+    )
+    session.commit()
+
+    assert list_unsplit_author_id_keys(session) == ["scopus_author_id", "orcid"]
 
 
 def test_count_publication_types__case_insensitive_sorted_with_none(

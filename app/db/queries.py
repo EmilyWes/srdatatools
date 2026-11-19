@@ -11,6 +11,7 @@ from app.export.columns import ExportRecord, ExportSource
 from app.models.record import Label as LabelSchema
 from app.models.record import Record as RecordSchema
 from app.models.record import publication_year
+from app.parsers.authors import parse_unsplit_author_ids
 from app.parsers.mapping import split_keyword
 
 _EMPTY_JSON = ("[]", "{}", "null")
@@ -156,6 +157,15 @@ def count_keywords(session: Session) -> dict[str | None, list[tuple[str, int]]]:
 
 def list_keyword_prefixes(session: Session) -> list[str]:
     return [prefix for prefix in count_keywords(session) if prefix is not None]
+
+
+def list_unsplit_author_id_keys(session: Session) -> list[str]:
+    values = session.scalars(select(Record.author_ids).order_by(Record.id))
+    return list(
+        dict.fromkeys(
+            key for value in values for key, _ in parse_unsplit_author_ids(value)
+        )
+    )
 
 
 def count_publication_types(session: Session) -> list[tuple[str | None, int]]:

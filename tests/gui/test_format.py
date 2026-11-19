@@ -1,5 +1,8 @@
 from app.gui.format import (
+    author_id_key,
+    author_id_name,
     format_count,
+    is_author_id_key,
     is_keyword_key,
     is_label_key,
     keyword_key,
@@ -36,3 +39,12 @@ def test_keyword_key__round_trips_prefix_and_unprefixed() -> None:
     assert is_keyword_key(keyword_key("MeSH"))
     assert keyword_prefix(keyword_key("MeSH")) == "MeSH"
     assert keyword_prefix(keyword_key(None)) is None
+
+
+def test_author_id_key__round_trips_key() -> None:
+    key = author_id_key("orcid")
+
+    assert is_author_id_key(key)
+    assert not is_author_id_key("author_ids")
+    assert not is_keyword_key(key)
+    assert author_id_name(key) == "orcid"

@@ -9,6 +9,7 @@ DISPLAY_SEPARATOR = "; "
 _UNKNOWN_SOURCE = "Unknown"
 _LABEL_PREFIX = "label:"
 _KEYWORD_PREFIX = "keywords:"
+_AUTHOR_ID_PREFIX = "author_ids:"
 _LABEL_NUMBERS = {
     "include": "1",
     "exclude": "0",
@@ -61,6 +62,20 @@ def is_keyword_key(key: str) -> bool:
 def keyword_prefix(key: str) -> str | None:
     prefix: str | None = json.loads(key.removeprefix(_KEYWORD_PREFIX))
     return prefix
+
+
+def author_id_key(id_key: str) -> str:
+    """Identifies an author-ID key not yet split by cleaning in the table settings."""
+    return _AUTHOR_ID_PREFIX + json.dumps(id_key)
+
+
+def is_author_id_key(key: str) -> bool:
+    return key.startswith(_AUTHOR_ID_PREFIX)
+
+
+def author_id_name(key: str) -> str:
+    name: str = json.loads(key.removeprefix(_AUTHOR_ID_PREFIX))
+    return name
 
 
 def label_text(value: str, label_format: LabelFormat) -> str:

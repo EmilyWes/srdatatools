@@ -71,6 +71,7 @@ from app.gui.record_table import (
     COLUMNS,
     LabelFormat,
     RecordSelection,
+    load_author_id_columns,
     load_columns,
     load_keyword_columns,
     load_label_columns,
@@ -229,12 +230,14 @@ def home() -> None:
             columns = load_columns(session)
             label_columns = load_label_columns(session)
             keyword_columns = load_keyword_columns(session)
+            author_id_columns = load_author_id_columns(session)
             label_format = load_label_format(session)
         render_table_settings(
             panes.middle,
             columns,
             label_columns=label_columns,
             keyword_columns=keyword_columns,
+            author_id_columns=author_id_columns,
             label_format=label_format,
             on_change=save_table_columns,
             on_label_format=save_table_label_format,

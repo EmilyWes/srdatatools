@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import Base, Label, Record, RecordSource, SourceFile
 from app.db.settings import set_setting
-from app.gui.format import keyword_key, label_key
+from app.gui.format import author_id_key, keyword_key, label_key
 from app.gui.layout import shell
 from app.gui.record_table import (
     COLUMNS,
@@ -19,6 +19,7 @@ from app.gui.record_table import (
     LabelFormat,
     RecordSelection,
     column_field,
+    load_author_id_columns,
     load_columns,
     load_keyword_columns,
     load_label_columns,
@@ -730,6 +731,45 @@ def test_load_rows__unsplit_keywords_shown_as_stored_per_prefix(
 
     assert load_rows(session, ["keywords", MESH]) == [
         {"id": 1, "keywords": "Cancer; Diet", column_field(MESH): "Humans"}
+    ]
+
+
+ORCID = author_id_key("orcid")
+
+
+def _add_author_ids(session: Session) -> None:
+    session.add_all(
+        [
+            Record(id=1, author_ids="orcid:[0000-1; 0000-2], scopus_author_id:[1]"),
+            Record(id=2, author_ids="orcid:9|orcid:8"),
+        ]
+    )
+    session.commit()
+
+
+def test_load_author_id_columns__one_key_per_unsplit_key(session: Session) -> None:
+    _add_author_ids(session)
+
+    assert load_author_id_columns(session) == [
+        ORCID,
+        author_id_key("scopus_author_id"),
+    ]
+
+
+def test_load_columns__keeps_saved_author_id_column(session: Session) -> None:
+    _add_author_ids(session)
+    save_columns(session, [ORCID, "doi"])
+    session.commit()
+
+    assert load_columns(session) == ["doi", ORCID]
+
+
+def test_load_rows__unsplit_author_ids_shown_per_key(session: Session) -> None:
+    _add_author_ids(session)
+
+    assert load_rows(session, ["author_ids", ORCID]) == [
+        {"id": 1, "author_ids": "", column_field(ORCID): "0000-1; 0000-2"},
+        {"id": 2, "author_ids": "orcid:9; orcid:8", column_field(ORCID): ""},
     ]
 
 
