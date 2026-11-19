@@ -101,6 +101,43 @@ def test_export_columns__author_columns_follow_title() -> None:
     ]
 
 
+_UNSPLIT_IDS = "orcid:[0000-1; 0000-2], scopus_author_id:[11; 22]"
+
+
+def test_export_columns__unsplit_author_id_keys_follow_author_ids() -> None:
+    columns = export_columns([_record(author_ids=_UNSPLIT_IDS)], _OPTIONS)
+
+    assert [(c.key, c.name) for c in columns[3:6]] == [
+        ("author_ids", "Author IDs"),
+        ("author_ids:orcid", "orcid"),
+        ("author_ids:scopus_author_id", "scopus_author_id"),
+    ]
+
+
+def test_column_value__unsplit_author_ids_per_key_as_stored() -> None:
+    record = _record(author_ids=_UNSPLIT_IDS)
+
+    assert _value(record, "author_ids") == ""
+    assert _value(record, "author_ids:orcid") == "0000-1; 0000-2"
+    assert _value(record, "author_ids:scopus_author_id") == "11; 22"
+
+
+def test_export_columns__cleaned_author_ids_stay_in_one_column() -> None:
+    record = _record(author_ids="orcid:1, scopus_author_id:2|orcid:3")
+    columns = export_columns([record], ExportOptions())
+
+    assert not any(c.key.startswith("author_ids:") for c in columns)
+    assert _value(record, "author_ids") == "orcid:1, scopus_author_id:2; orcid:3"
+
+
+def test_export_columns__author_id_key_clashing_with_other_id_gets_suffix() -> None:
+    record = _record(author_ids="orcid:[0000-1]", other_ids={"ORCID": "x"})
+
+    column = _column(export_columns([record], _OPTIONS), "author_ids:orcid")
+
+    assert column.name == "orcid (author IDs)"
+
+
 @pytest.mark.parametrize(
     ("date", "part", "expected"),
     [
