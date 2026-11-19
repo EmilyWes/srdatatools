@@ -15,8 +15,9 @@ from nicegui.element import Element
 from nicegui.events import GenericEventArguments
 from sqlalchemy.orm import Session
 
-from app.cleaning.quality import ISSUE_JOINER, QUALITY_FIELDS, quality_issues
+from app.cleaning.quality import QUALITY_FIELDS, quality_issues
 from app.db.queries import (
+    list_author_id_keys,
     list_keyword_prefixes,
     list_label_columns,
     list_record_labels,
@@ -25,8 +26,12 @@ from app.db.queries import (
 )
 from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.format import (
+    DISPLAY_SEPARATOR,
     LabelFormat,
+    author_id_key,
+    author_id_name,
     format_count,
+    is_author_id_key,
     is_keyword_key,
     is_label_key,
     keyword_key,
@@ -38,6 +43,7 @@ from app.gui.format import (
 )
 from app.gui.quirks_overview import render_box_frame
 from app.models.record import publication_year
+from app.parsers.authors import AUTHOR_JOINER, author_ids_for_key
 from app.parsers.mapping import split_keyword
 
 _COLUMNS_KEY = "table_columns"
@@ -70,7 +76,6 @@ COLUMNS: dict[str, str] = {
     "journal": "Journal",
     "sources": "Sources",
     "abstract": "Abstract",
-    "author_ids": "Author IDs",
     "author_affiliations": "Affiliations",
     "conference_name": "Conference",
     "volume": "Volume",
@@ -91,6 +96,7 @@ COLUMNS: dict[str, str] = {
 # Columns worked out from other fields rather than read from one.
 _DERIVED_COLUMNS = ("sources", "keywords", "publication_year", "data_quality")
 DEFAULT_COLUMNS = ["doi", "title", "author_names"]
+_JOINED_FIELDS = frozenset({"author_names", "author_affiliations", "issn", "isbn"})
 _QUALITY_FILTER_STATE: dict[str, Any] = {
     "filter": {
         "filterModel": {"data_quality": {"filterType": "text", "type": "notBlank"}}
@@ -108,7 +114,7 @@ _COLUMN_BOXES: dict[str, tuple[str, ...]] = {
         "sources",
         "data_quality",
     ),
-    "Authors": ("author_names", "author_ids", "author_affiliations"),
+    "Authors": ("author_names", "author_affiliations"),
     "Publication": (
         "publication_date",
         "publication_year",
@@ -132,12 +138,14 @@ class RecordSelection:
 
 
 def column_field(key: str) -> str:
-    """ag-grid reads dots in a field as a nested path, so label and keyword keys are
-    hex-encoded."""
+    """ag-grid reads dots in a field as a nested path, so label, keyword and
+    author-ID keys are hex-encoded."""
     if is_label_key(key):
         return f"label_{key.encode().hex()}"
     if is_keyword_key(key):
         return f"keywords_{key.encode().hex()}"
+    if is_author_id_key(key):
+        return f"author_ids_{key.encode().hex()}"
     return key
 
 
@@ -147,6 +155,8 @@ def _header(key: str) -> str:
         return f"Label: {phase} / {screener}"
     if is_keyword_key(key):
         return f"Keywords: {keyword_prefix(key)}"
+    if is_author_id_key(key):
+        return author_id_name(key)
     return COLUMNS[key]
 
 
@@ -165,19 +175,27 @@ def load_keyword_columns(session: Session) -> list[str]:
     return [keyword_key(prefix) for prefix in list_keyword_prefixes(session)]
 
 
+def load_author_id_columns(session: Session) -> list[str]:
+    return [author_id_key(key) for key in list_author_id_keys(session)]
+
+
 def load_columns(session: Session) -> list[str]:
     stored = get_setting(session, _COLUMNS_KEY)
     if stored is None:
         return DEFAULT_COLUMNS
     return _in_display_order(
         json.loads(stored),
-        load_label_columns(session) + load_keyword_columns(session),
+        load_label_columns(session)
+        + load_keyword_columns(session)
+        + load_author_id_columns(session),
     )
 
 
 def save_columns(session: Session, columns: Sequence[str]) -> None:
-    extra_columns = [key for key in columns if is_label_key(key)] + [
-        key for key in columns if is_keyword_key(key)
+    extra_columns = [
+        *(key for key in columns if is_label_key(key)),
+        *(key for key in columns if is_keyword_key(key)),
+        *(key for key in columns if is_author_id_key(key)),
     ]
     set_setting(
         session, _COLUMNS_KEY, json.dumps(_in_display_order(columns, extra_columns))
@@ -208,9 +226,13 @@ def row_for(values: Mapping[str, Any]) -> dict[str, Any]:
     row: dict[str, Any] = {}
     for key, value in values.items():
         if isinstance(value, list):
-            value = "; ".join(value)
+            value = DISPLAY_SEPARATOR.join(value)
+        elif key in _JOINED_FIELDS and value:
+            value = value.replace(AUTHOR_JOINER, DISPLAY_SEPARATOR)
         elif isinstance(value, dict):
-            value = "; ".join(f"{name}: {id_}" for name, id_ in value.items())
+            value = DISPLAY_SEPARATOR.join(
+                f"{name}: {id_}" for name, id_ in value.items()
+            )
         row[key] = value
     return row
 
@@ -220,9 +242,12 @@ def load_rows(
 ) -> list[dict[str, Any]]:
     label_columns = [key for key in columns if is_label_key(key)]
     keyword_columns = [key for key in columns if is_keyword_key(key)]
+    author_id_columns = [key for key in columns if is_author_id_key(key)]
     fields = [key for key in columns if key in COLUMNS and key not in _DERIVED_COLUMNS]
     if "keywords" in columns or keyword_columns:
         fields.append("keywords")
+    if author_id_columns:
+        fields.append("author_ids")
     if "publication_year" in columns:
         fields.append("publication_date")
     if "data_quality" in columns:
@@ -231,16 +256,20 @@ def load_rows(
     for record in list_record_rows(session, list(dict.fromkeys(fields))):
         keywords = [split_keyword(keyword) for keyword in record.pop("keywords", [])]
         row = row_for(record)
+        for key in author_id_columns:
+            row[column_field(key)] = author_ids_for_key(
+                record.get("author_ids"), author_id_name(key), DISPLAY_SEPARATOR
+            )
         if "data_quality" in columns:
-            row["data_quality"] = ISSUE_JOINER.join(quality_issues(record))
+            row["data_quality"] = DISPLAY_SEPARATOR.join(quality_issues(record))
         if "publication_year" in columns:
             row["publication_year"] = publication_year(row.get("publication_date"))
         if "keywords" in columns:
-            row["keywords"] = "; ".join(
+            row["keywords"] = DISPLAY_SEPARATOR.join(
                 text for prefix, text in keywords if prefix is None
             )
         for key in keyword_columns:
-            row[column_field(key)] = "; ".join(
+            row[column_field(key)] = DISPLAY_SEPARATOR.join(
                 text for prefix, text in keywords if prefix == keyword_prefix(key)
             )
         rows.append(row)
@@ -254,7 +283,7 @@ def load_rows(
             pairs = labels.get(row["id"], {})
             for key in label_columns:
                 values = pairs.get(label_pair(key), [])
-                row[column_field(key)] = "; ".join(
+                row[column_field(key)] = DISPLAY_SEPARATOR.join(
                     label_text(value, label_format) for value in values
                 )
     return rows
@@ -395,9 +424,10 @@ def render_table_settings(
     on_back: Callable[[], Any],
     label_columns: Sequence[str] = (),
     keyword_columns: Sequence[str] = (),
+    author_id_columns: Sequence[str] = (),
 ) -> None:
     selected = set(columns)
-    extra_columns = [*label_columns, *keyword_columns]
+    extra_columns = [*label_columns, *keyword_columns, *author_id_columns]
 
     def toggle(key: str, checked: bool) -> None:
         if checked:
@@ -422,6 +452,9 @@ def render_table_settings(
             ui.label("Columns").classes("title-small pt-2")
             with ui.row().classes("gap-3 items-start"):
                 for title, keys in _COLUMN_BOXES.items():
+                    if title == "Authors":
+                        at = keys.index("author_names") + 1
+                        keys = (*keys[:at], *author_id_columns, *keys[at:])
                     with render_box_frame(title):
                         checkboxes(keys)
                 with render_box_frame("Keywords"):

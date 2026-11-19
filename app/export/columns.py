@@ -1,22 +1,24 @@
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
 from app.export.options import ExportOptions
-from app.gui.format import label_text, source_label
+from app.gui.format import DISPLAY_SEPARATOR, label_text, source_label
 from app.models.record import CLEANED_DATE, Record
+from app.parsers.authors import AUTHOR_JOINER, author_id_keys, author_ids_for_key
 from app.parsers.mapping import split_keyword
 
 DatePart = Literal["full", "year", "month", "day"]
 ExtraKind = Literal["record_id", "sources", "source_files"]
 
-_JOINER = "; "
 _ORIGINAL_SUFFIX = " (original)"
+_PLAIN_YEAR = re.compile(r"\d{4}")
+_AUTHOR_IDS_SUFFIX = " (author IDs)"
 
 _SCALAR_LABELS = {
     "title": "Title",
     "author_names": "Authors",
-    "author_ids": "Author IDs",
     "author_affiliations": "Affiliations",
     "journal": "Journal",
     "conference_name": "Conference",
@@ -72,6 +74,11 @@ class ScalarColumn(ExportColumn):
 
 
 @dataclass
+class JoinedColumn(ScalarColumn):
+    delimiter: str = DISPLAY_SEPARATOR
+
+
+@dataclass
 class DateColumn(ExportColumn):
     part: DatePart = "full"
 
@@ -79,7 +86,13 @@ class DateColumn(ExportColumn):
 @dataclass
 class KeywordsColumn(ExportColumn):
     prefix: str | None = None
-    delimiter: str = "; "
+    delimiter: str = DISPLAY_SEPARATOR
+
+
+@dataclass
+class AuthorIdKeyColumn(ExportColumn):
+    id_key: str = ""
+    delimiter: str = DISPLAY_SEPARATOR
 
 
 @dataclass
@@ -108,10 +121,25 @@ def _scalar(field_name: str) -> ScalarColumn:
     return ScalarColumn(key=field_name, label=label, name=label, field=field_name)
 
 
+def _joined(field_name: str) -> JoinedColumn:
+    label = _SCALAR_LABELS[field_name]
+    return JoinedColumn(key=field_name, label=label, name=label, field=field_name)
+
+
 def _keywords(prefix: str | None) -> KeywordsColumn:
     label = "Keywords" if prefix is None else f"Keywords: {prefix}"
     return KeywordsColumn(
         key=f"keywords:{prefix}", label=label, name=label, prefix=prefix
+    )
+
+
+def _author_id_key(id_key: str, taken: set[str]) -> AuthorIdKeyColumn:
+    name = id_key + _AUTHOR_IDS_SUFFIX if id_key.casefold() in taken else id_key
+    return AuthorIdKeyColumn(
+        key=f"author_ids:{id_key}",
+        label=f"Author IDs: {id_key}",
+        name=name,
+        id_key=id_key,
     )
 
 
@@ -130,6 +158,23 @@ def _label(phase: str, screener: str) -> LabelColumn:
         phase=phase,
         screener=screener,
     )
+
+
+def _year_only(date: str) -> bool:
+    match = CLEANED_DATE.fullmatch(date)
+    if match is not None:
+        return not (match["month"] or match["day"])
+    return _PLAIN_YEAR.fullmatch(date) is not None
+
+
+def _date(schemas: Sequence[Record]) -> DateColumn:
+    """Suggests the year when every dated record has nothing more than a year."""
+    dates = [schema.publication_date for schema in schemas if schema.publication_date]
+    if dates and all(map(_year_only, dates)):
+        return DateColumn(
+            key="date", label="Publication date", name="Publication year", part="year"
+        )
+    return DateColumn(key="date", label="Publication date", name="Publication date")
 
 
 def _extra(kind: ExtraKind) -> ExtraColumn:
@@ -155,6 +200,9 @@ def export_columns(
         if prefix is not None
     )
     id_keys = dict.fromkeys(key for schema in schemas for key in schema.other_ids)
+    id_keys_of_authors = dict.fromkeys(
+        key for schema in schemas for key in author_id_keys(schema.author_ids)
+    )
     label_pairs = dict.fromkeys(
         (label.phase, label.screener) for schema in schemas for label in schema.labels
     )
@@ -162,10 +210,9 @@ def export_columns(
     columns: list[ExportColumn] = [
         _extra("record_id"),
         _scalar("title"),
-        _scalar("author_names"),
-        _scalar("author_ids"),
-        _scalar("author_affiliations"),
-        DateColumn(key="date", label="Publication date", name="Publication date"),
+        _joined("author_names"),
+        _joined("author_affiliations"),
+        _date(schemas),
         _scalar("journal"),
         _scalar("conference_name"),
         _scalar("volume"),
@@ -174,8 +221,8 @@ def export_columns(
         _scalar("abstract"),
         _scalar("doi"),
         _scalar("pmid"),
-        _scalar("issn"),
-        _scalar("isbn"),
+        _joined("issn"),
+        _joined("isbn"),
         *(_other_id(key) for key in id_keys),
         _scalar("publication_type"),
         _keywords(None),
@@ -189,6 +236,13 @@ def export_columns(
         _extra("source_files"),
     ]
 
+    taken = {column.name.casefold() for column in columns}
+    after_authors = (
+        next(i for i, c in enumerate(columns) if c.key == "author_names") + 1
+    )
+    columns[after_authors:after_authors] = [
+        _author_id_key(key, taken) for key in id_keys_of_authors
+    ]
     raw_keys = _raw_keys(records, options)
     taken = {column.name.casefold() for column in columns}
     columns.extend(_raw(key, taken) for key in raw_keys)
@@ -212,10 +266,13 @@ def _raw_keys(records: Sequence[ExportRecord], options: ExportOptions) -> list[s
 
 
 def _date_text(record: Record, part: DatePart) -> str:
-    """A part is only read from a cleaned YYYY/MM/DD date."""
+    """A part is only read from a cleaned YYYY/MM/DD date, or the year from a
+    plain four-digit year."""
     date = record.publication_date or ""
     if part == "full":
         return date
+    if part == "year" and _PLAIN_YEAR.fullmatch(date):
+        return str(int(date))
     match = CLEANED_DATE.fullmatch(date)
     if match is None or not match[part]:
         return ""
@@ -223,13 +280,16 @@ def _date_text(record: Record, part: DatePart) -> str:
 
 
 def _joined_distinct(values: Sequence[str]) -> str:
-    return _JOINER.join(dict.fromkeys(value for value in values if value))
+    return DISPLAY_SEPARATOR.join(dict.fromkeys(value for value in values if value))
 
 
 def column_value(
     column: ExportColumn, export: ExportRecord, options: ExportOptions
 ) -> str:
     record = export.record
+    if isinstance(column, JoinedColumn):
+        value = getattr(record, column.field) or ""
+        return value.replace(AUTHOR_JOINER, column.delimiter)
     if isinstance(column, ScalarColumn):
         value = getattr(record, column.field)
         return "" if value is None else str(value)
@@ -240,6 +300,8 @@ def column_value(
         return column.delimiter.join(
             text for prefix, text in keywords if prefix == column.prefix
         )
+    if isinstance(column, AuthorIdKeyColumn):
+        return author_ids_for_key(record.author_ids, column.id_key, column.delimiter)
     if isinstance(column, OtherIdColumn):
         return record.other_ids.get(column.id_key, "")
     if isinstance(column, LabelColumn):
@@ -248,7 +310,7 @@ def column_value(
             for label in record.labels
             if (label.phase, label.screener) == (column.phase, column.screener)
         )
-        return _JOINER.join(text for text in texts if text)
+        return DISPLAY_SEPARATOR.join(text for text in texts if text)
     if isinstance(column, ExtraColumn):
         if column.kind == "record_id":
             return str(export.id)

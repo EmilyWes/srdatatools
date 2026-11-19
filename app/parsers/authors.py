@@ -46,6 +46,36 @@ def parse_author_ids(value: str | None) -> AuthorIds:
     ]
 
 
+def _split_author_id(item: str) -> tuple[str, str]:
+    key, _, value = item.partition(":")
+    return key, value
+
+
+def author_id_keys(value: str | None) -> list[str]:
+    unsplit = parse_unsplit_author_ids(value)
+    if unsplit:
+        return list(dict.fromkeys(key for key, _ in unsplit))
+    return list(
+        dict.fromkeys(
+            _split_author_id(item)[0]
+            for slot in parse_author_ids(value)
+            for item in slot
+        )
+    )
+
+
+def author_ids_for_key(value: str | None, key: str, delimiter: str) -> str:
+    """Unsplit ids as stored, or cleaned ids with one slot per author even when
+    no author has that key (an author's ids of one key joined with ID_JOINER)."""
+    unsplit = parse_unsplit_author_ids(value)
+    if unsplit:
+        return delimiter.join(ids for k, ids in unsplit if k == key)
+    return delimiter.join(
+        ID_JOINER.join(id_ for k, id_ in map(_split_author_id, slot) if k == key)
+        for slot in parse_author_ids(value)
+    )
+
+
 def merge_author_ids(existing: AuthorIds, new: AuthorIds, source: str) -> AuthorIds:
     """Adds each author's new ids to their slot; a different author count can't
     be matched by position, so the new ids are then ignored."""

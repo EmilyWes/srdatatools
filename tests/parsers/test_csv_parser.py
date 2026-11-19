@@ -394,7 +394,7 @@ def test_read_csv_headers__decodes_cp1252_file() -> None:
         ("Author full names", AuthorsRow(id_key="author_full_names")),
         ("Author(s) ID", AuthorsRow(role="ids", id_key="author_s_id")),
         ("ORCIDs", AuthorsRow(role="ids", id_key="orcids")),
-        ("Author Keywords", KeywordsRow()),
+        ("Author Keywords", KeywordsRow(prefix="author")),
         ("DOI", ScalarRow(target="doi")),
         ("Document Type", ScalarRow(target="publication_type")),
         ("Year", DateRow(part="year")),

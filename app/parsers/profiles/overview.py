@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 Control = Literal["checkbox", "text", "number", "select", "note"]
 
 _FIELD_SIZE_TYPES: frozenset[FileType] = frozenset({"csv", "tsv"})
-_LABEL_VALUES_SEPARATOR = "|"
+_LABEL_VALUES_SEPARATOR = ";"
 _LABEL_KEYS: dict[str, LabelValue] = {
     "label_include": "include",
     "label_exclude": "exclude",
@@ -65,7 +65,7 @@ _LABELING = QuirkBox(
                 key,
                 decision.capitalize(),
                 f"Label values that mean {decision}, besides the built-in"
-                " spellings. Separate values with |; not case-sensitive.",
+                " spellings. Separate values with ;, not case-sensitive.",
                 "text",
                 wide=True,
             )
@@ -151,7 +151,7 @@ def default_choices(file_type: FileType, sources: Collection[str]) -> ParsingCho
     settings = profile.settings
     return ParsingChoices(
         **{
-            key: _LABEL_VALUES_SEPARATOR.join(
+            key: f"{_LABEL_VALUES_SEPARATOR} ".join(
                 value for value, label in settings.label_values if label == decision
             )
             for key, decision in _LABEL_KEYS.items()

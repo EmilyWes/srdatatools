@@ -101,8 +101,8 @@ def test_cleaned_scopus_csv__splits_keywords_keeping_the_author_prefix() -> None
         "2-s2.0-105040180364"
     ].keywords
 
-    assert "[Author] ANSYS Simulation" in keywords
-    assert "Balancing" in keywords
+    assert "[author] ANSYS Simulation" in keywords
+    assert "[index] Balancing" in keywords
     assert not any(":[" in keyword for keyword in keywords)
 
 

@@ -3,10 +3,12 @@ from dataclasses import replace
 import pytest
 
 from app.export.columns import (
+    AuthorIdKeyColumn,
     DateColumn,
     ExportColumn,
     ExportRecord,
     ExportSource,
+    JoinedColumn,
     KeywordsColumn,
     LabelColumn,
     RawColumn,
@@ -59,27 +61,100 @@ def _value(record: ExportRecord, key: str, options: ExportOptions = _OPTIONS) ->
     )
 
 
-def test_column_value__author_fields_are_written_as_stored() -> None:
+def test_column_value__author_fields_are_separated_by_semicolon() -> None:
     record = _record(
         author_names="LeCun, Yann|Bengio, Yoshua",
-        author_ids="orcid:1|",
         author_affiliations="NYU|Mila",
     )
 
-    assert _value(record, "author_names") == "LeCun, Yann|Bengio, Yoshua"
-    assert _value(record, "author_ids") == "orcid:1|"
-    assert _value(record, "author_affiliations") == "NYU|Mila"
+    assert _value(record, "author_names") == "LeCun, Yann; Bengio, Yoshua"
+    assert _value(record, "author_affiliations") == "NYU; Mila"
+
+
+def test_column_value__authors_delimiter_option() -> None:
+    record = _record(author_names="LeCun, Yann|Bengio, Yoshua")
+    column = JoinedColumn(
+        key="a", label="", name="", field="author_names", delimiter=" / "
+    )
+
+    assert column_value(column, record, _OPTIONS) == "LeCun, Yann / Bengio, Yoshua"
+
+
+def test_column_value__issn_isbn_delimiter_option() -> None:
+    record = _record(issn="1234-5678|8765-4321", isbn="9783161484100")
+    column = JoinedColumn(key="i", label="", name="", field="issn", delimiter=" / ")
+
+    assert _value(record, "issn") == "1234-5678; 8765-4321"
+    assert _value(record, "isbn") == "9783161484100"
+    assert column_value(column, record, _OPTIONS) == "1234-5678 / 8765-4321"
 
 
 def test_export_columns__author_columns_follow_title() -> None:
     columns = export_columns([_record()], _OPTIONS)
 
-    assert [(c.key, c.name) for c in columns[1:5]] == [
+    assert [(c.key, c.name) for c in columns[1:4]] == [
         ("title", "Title"),
         ("author_names", "Authors"),
-        ("author_ids", "Author IDs"),
         ("author_affiliations", "Affiliations"),
     ]
+
+
+_UNSPLIT_IDS = "orcid:[0000-1; 0000-2], scopus_author_id:[11; 22]"
+
+
+_CLEANED_IDS = "orcid:1, scopus_author_id:2||scopus_author_id:3"
+
+
+def test_export_columns__author_id_keys_follow_authors() -> None:
+    records = [_record(author_ids=_UNSPLIT_IDS), _record(author_ids=_CLEANED_IDS)]
+    columns = export_columns(records, _OPTIONS)
+
+    assert [(c.key, c.name) for c in columns[3:6]] == [
+        ("author_ids:orcid", "orcid"),
+        ("author_ids:scopus_author_id", "scopus_author_id"),
+        ("author_affiliations", "Affiliations"),
+    ]
+    assert not any(c.key == "author_ids" for c in columns)
+
+
+def test_column_value__unsplit_author_ids_per_key_as_stored() -> None:
+    record = _record(author_ids=_UNSPLIT_IDS)
+
+    assert _value(record, "author_ids:orcid") == "0000-1; 0000-2"
+    assert _value(record, "author_ids:scopus_author_id") == "11; 22"
+
+
+def test_column_value__cleaned_author_ids_one_slot_per_author() -> None:
+    record = _record(author_ids=_CLEANED_IDS)
+
+    assert _value(record, "author_ids:orcid") == "1; ; "
+    assert _value(record, "author_ids:scopus_author_id") == "2; ; 3"
+
+
+def test_column_value__cleaned_author_ids_slots_for_key_of_other_records() -> None:
+    records = [_record(author_ids="orcid:1"), _record(author_ids="pmid:7|pmid:8")]
+    columns = export_columns(records, _OPTIONS)
+
+    assert column_value(_column(columns, "author_ids:orcid"), records[1], _OPTIONS) == (
+        "; "
+    )
+
+
+def test_column_value__author_ids_delimiter_option() -> None:
+    record = _record(author_ids=_CLEANED_IDS)
+    column = AuthorIdKeyColumn(
+        key="a", label="", name="", id_key="scopus_author_id", delimiter=" / "
+    )
+
+    assert column_value(column, record, _OPTIONS) == "2 /  / 3"
+
+
+def test_export_columns__author_id_key_clashing_with_other_id_gets_suffix() -> None:
+    record = _record(author_ids="orcid:[0000-1]", other_ids={"ORCID": "x"})
+
+    column = _column(export_columns([record], _OPTIONS), "author_ids:orcid")
+
+    assert column.name == "orcid (author IDs)"
 
 
 @pytest.mark.parametrize(
@@ -91,6 +166,8 @@ def test_export_columns__author_columns_follow_title() -> None:
         ("2021/03/07", "month", "3"),
         ("2021/03/", "day", ""),
         ("Mar 2021", "year", ""),
+        ("2021", "year", "2021"),
+        ("2021", "month", ""),
         (None, "full", ""),
     ],
 )
@@ -100,6 +177,43 @@ def test_column_value__date_parts_only_from_cleaned_date(
     column = DateColumn(key="date", label="", name="", part=part)  # type: ignore[arg-type]
 
     assert column_value(column, _record(publication_date=date), _OPTIONS) == expected
+
+
+def test_export_columns__unsplit_keywords_exported_as_stored_per_prefix() -> None:
+    record = _record(keywords=["keywords:[deep learning; AI]", "MeSH:[Humans; Mice]"])
+    columns = export_columns([record], _OPTIONS)
+
+    keyword_columns = [c for c in columns if isinstance(c, KeywordsColumn)]
+    assert [c.name for c in keyword_columns] == ["Keywords", "Keywords: MeSH"]
+    assert _value(record, "keywords:None") == "deep learning; AI"
+    assert _value(record, "keywords:MeSH") == "Humans; Mice"
+
+
+@pytest.mark.parametrize("dates", [["2021//", None], ["2021", "1998//"], ["2021"]])
+def test_export_columns__year_only_dates_suggest_publication_year(
+    dates: list[str | None],
+) -> None:
+    records = [_record(publication_date=date) for date in dates]
+
+    column = _column(export_columns(records, _OPTIONS), "date")
+
+    assert isinstance(column, DateColumn)
+    assert (column.name, column.part) == ("Publication year", "year")
+    assert column.label == "Publication date"
+
+
+@pytest.mark.parametrize(
+    "dates", [["2021//", "2021/03/"], ["Mar 2021"], [None], ["2021", "2021/03/07"]]
+)
+def test_export_columns__other_dates_suggest_full_publication_date(
+    dates: list[str | None],
+) -> None:
+    records = [_record(publication_date=date) for date in dates]
+
+    column = _column(export_columns(records, _OPTIONS), "date")
+
+    assert isinstance(column, DateColumn)
+    assert (column.name, column.part) == ("Publication date", "full")
 
 
 def test_export_columns__one_keyword_row_per_prefix_with_prefix_stripped() -> None:

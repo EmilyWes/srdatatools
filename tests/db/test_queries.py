@@ -24,6 +24,7 @@ from app.db.queries import (
     count_records_per_source_file,
     count_records_per_year,
     list_activity_log,
+    list_author_id_keys,
     list_keyword_prefixes,
     list_label_columns,
     list_record_labels,
@@ -361,6 +362,34 @@ def test_list_keyword_prefixes__first_seen_order_without_unprefixed(
     keyworded: Session,
 ) -> None:
     assert list_keyword_prefixes(keyworded) == ["MeSH", "Author"]
+
+
+def test_count_keywords__unsplit_value_counts_as_one_keyword(
+    session: Session,
+) -> None:
+    session.add(Record(keywords=["keywords:[Cancer; Diet]", "MeSH:[Humans]"]))
+    session.commit()
+
+    assert count_keywords(session) == {
+        None: [("Cancer; Diet", 1)],
+        "MeSH": [("Humans", 1)],
+    }
+
+
+def test_list_author_id_keys__first_seen_order_cleaned_and_unsplit(
+    session: Session,
+) -> None:
+    session.add_all(
+        [
+            Record(author_ids="scopus_author_id:[1; 2]"),
+            Record(author_ids="pmid:1|orcid:2"),
+            Record(author_ids="orcid:[a], scopus_author_id:[3]"),
+            Record(author_ids=None),
+        ]
+    )
+    session.commit()
+
+    assert list_author_id_keys(session) == ["scopus_author_id", "pmid", "orcid"]
 
 
 def test_count_publication_types__case_insensitive_sorted_with_none(

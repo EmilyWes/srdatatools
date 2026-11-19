@@ -13,6 +13,7 @@ import app.gui.home as home_module
 import app.main
 from app.db.models import ActivityLog, Base, Record, RecordSource, SourceFile
 from app.gui.action_panel import ActionPanel
+from app.gui.format import author_id_key
 from app.gui.home import home
 from app.gui.layout import ShellPanes
 from app.gui.library_dashboard import save_hidden
@@ -414,6 +415,31 @@ def test_home__show_in_table_opens_problem_records(
         assert load_columns(session) == ["publication_date", "data_quality"]
 
 
+def test_home__show_in_table_expands_author_ids_to_key_columns(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_source_file_with_record(engine)
+    with Session(engine) as session:
+        session.query(Record).one().author_ids = "orcid:[1; 2]"
+        session.commit()
+    shells = _capture_shells(monkeypatch)
+    home()
+    show = next(
+        e
+        for e in shells[-1].middle.descendants()
+        if isinstance(e, ui.button) and e.text == "Show in table"
+    )
+
+    click_and_wait(show, monkeypatch)
+
+    with Session(engine) as session:
+        assert load_columns(session) == [
+            "author_names",
+            "data_quality",
+            author_id_key("orcid"),
+        ]
+
+
 def test_home__selecting_source_file_shows_detail_view(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -638,6 +664,22 @@ def test_home__export_writes_csv_logs_notifies_and_shows_dashboard(
     assert notifications == ["Exported 1 record to library.csv"]
     assert navs[-1].selected_key == "library:dashboard"
     assert len(navs) == 2
+
+
+def test_home__next_export_suggests_free_name_in_last_folder(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _add_source_file_with_record(engine)
+    shells = _capture_shells(monkeypatch)
+    views = _capture_export_views(monkeypatch)
+    home()
+    click_and_wait(_export_button(shells[-1]), monkeypatch)
+    views[-1].path = tmp_path / "library.csv"
+
+    click_and_wait(views[-1].export_button, monkeypatch)
+    click_and_wait(_export_button(shells[-1]), monkeypatch)
+
+    assert views[-1].path == tmp_path / "library_1.csv"
 
 
 def test_home__failed_export_is_logged_as_warning(

@@ -51,7 +51,6 @@ _SCOPUS_URL_EID = re.compile(
     r"scopus\.com/(?:pages/publications/|inward/record\.uri\?.*?\beid=2-s2\.0-)(\d+)"
 )
 _EID_PREFIX = "2-s2.0-"
-_ISSN_ISBN_JOINER = "; "
 _AUTHOR_TEXT_FIELDS = {"names": "author_names", "affiliations": "author_affiliations"}
 _EMPTY_VALUE_FIELDS = (*sorted(SCALAR_FIELDS), *_AUTHOR_TEXT_FIELDS.values())
 _RIS_NOTES_TAG = "N1"
@@ -406,7 +405,7 @@ def _clean_issn_isbn(
         return value
     if options.only_one:
         tokens = [_preferred_token(tokens, options.preferred_qualifier)]
-    return _ISSN_ISBN_JOINER.join(
+    return AUTHOR_JOINER.join(
         token["id"] if options.strip_extras else token[0] for token in tokens
     )
 

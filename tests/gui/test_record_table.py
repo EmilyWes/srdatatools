@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import Base, Label, Record, RecordSource, SourceFile
 from app.db.settings import set_setting
-from app.gui.format import keyword_key, label_key
+from app.gui.format import author_id_key, keyword_key, label_key
 from app.gui.layout import shell
 from app.gui.record_table import (
     COLUMNS,
@@ -19,6 +19,7 @@ from app.gui.record_table import (
     LabelFormat,
     RecordSelection,
     column_field,
+    load_author_id_columns,
     load_columns,
     load_keyword_columns,
     load_label_columns,
@@ -114,12 +115,32 @@ def test_reset_columns__restores_defaults(session: Session) -> None:
 
 
 def test_columns__cover_every_record_field_plus_sources() -> None:
-    record_fields = {column.key for column in Record.__table__.columns} - {"id"}
+    # Author IDs are shown as one column per key instead.
+    record_fields = {column.key for column in Record.__table__.columns} - {
+        "id",
+        "author_ids",
+    }
 
     assert set(COLUMNS) == record_fields | {
         "sources",
         "publication_year",
         "data_quality",
+    }
+
+
+def test_row_for__separates_joined_values_with_semicolon() -> None:
+    row = row_for(
+        {
+            "author_names": "Smith, J|Doe, A",
+            "author_affiliations": None,
+            "issn": "1234-5678|8765-4321",
+        }
+    )
+
+    assert row == {
+        "author_names": "Smith, J; Doe, A",
+        "author_affiliations": None,
+        "issn": "1234-5678; 8765-4321",
     }
 
 
@@ -167,7 +188,7 @@ def test_load_rows__data_quality_joins_each_records_problems(
 
     assert [row["data_quality"] for row in rows] == [
         "",
-        "Unparsed dates | Misaligned authors",
+        "Unparsed dates; Misaligned authors",
         "Unparsed dates",
     ]
     assert rows[0]["publication_date"] == "2020/05/"
@@ -704,6 +725,59 @@ def test_load_rows__keyword_columns_strip_prefix_per_column(session: Session) ->
     ]
 
 
+def test_load_rows__unsplit_keywords_shown_as_stored_per_prefix(
+    session: Session,
+) -> None:
+    session.add(Record(id=1, keywords=["keywords:[Cancer; Diet]", "MeSH:[Humans]"]))
+    session.commit()
+
+    assert load_rows(session, ["keywords", MESH]) == [
+        {"id": 1, "keywords": "Cancer; Diet", column_field(MESH): "Humans"}
+    ]
+
+
+ORCID = author_id_key("orcid")
+
+
+def _add_author_ids(session: Session) -> None:
+    session.add_all(
+        [
+            Record(id=1, author_ids="orcid:[0000-1; 0000-2], scopus_author_id:[1]"),
+            Record(id=2, author_ids="orcid:9|orcid:8"),
+        ]
+    )
+    session.commit()
+
+
+def test_load_author_id_columns__one_key_per_unsplit_key(session: Session) -> None:
+    _add_author_ids(session)
+
+    assert load_author_id_columns(session) == [
+        ORCID,
+        author_id_key("scopus_author_id"),
+    ]
+
+
+def test_load_columns__keeps_saved_author_id_column(session: Session) -> None:
+    _add_author_ids(session)
+    save_columns(session, [ORCID, "doi"])
+    session.commit()
+
+    assert load_columns(session) == ["doi", ORCID]
+
+
+def test_load_rows__author_ids_shown_per_key(session: Session) -> None:
+    _add_author_ids(session)
+
+    rows = load_rows(session, [ORCID, author_id_key("scopus_author_id")])
+
+    assert [row[column_field(ORCID)] for row in rows] == ["0000-1; 0000-2", "9; 8"]
+    assert [row[column_field(author_id_key("scopus_author_id"))] for row in rows] == [
+        "1",
+        "; ",
+    ]
+
+
 def test_render_record_table__keyword_column_header_and_field() -> None:
     panes = shell()
 
@@ -733,6 +807,7 @@ def test_render_table_settings__columns_grouped_in_boxes() -> None:
         ["doi"],
         label_columns=[FT],
         keyword_columns=[MESH],
+        author_id_columns=[ORCID],
         label_format="words",
         on_change=changes.append,
         on_label_format=print,
@@ -751,7 +826,7 @@ def test_render_table_settings__columns_grouped_in_boxes() -> None:
     ]
     assert [box.text for box in boxes["Authors"]] == [
         "Authors",
-        "Author IDs",
+        "orcid",
         "Affiliations",
     ]
     assert [box.text for box in boxes["Keywords"]] == ["Keywords", "Keywords: MeSH"]

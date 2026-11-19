@@ -126,8 +126,8 @@ def test_profile_with__applies_the_settings() -> None:
 def test_profile_with__label_values_are_split_lowercased_and_trimmed() -> None:
     choices = _with(
         "ris",
-        label_include=" ASReview_relevant | Yes please ",
-        label_exclude=" | ",
+        label_include=" ASReview_relevant ; Yes please ",
+        label_exclude=" ; ",
         label_unlabeled="not seen",
     )
 

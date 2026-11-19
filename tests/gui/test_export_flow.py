@@ -60,10 +60,14 @@ def _view(
         panes.middle,
         _records(),
         options or ExportOptions(),
+        _DEFAULT_PATH,
         selected=selected,
         on_export=callbacks.pop("on_export", lambda p, c, r, o: None),
         **callbacks,
     )
+
+
+_DEFAULT_PATH = Path("exports") / "library.csv"
 
 
 def _row(view: ExportView, key: str) -> Any:
@@ -83,28 +87,38 @@ def _tooltip(element: Element) -> str | None:
     return tooltips[0].text if tooltips else None
 
 
-def test_pick_save_path__returns_chosen_path_with_csv_default(
+def test_pick_save_path__opens_in_suggested_folder_with_suggested_name(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     window = _FakeWindow((str(tmp_path / "out.csv"),))
     monkeypatch.setattr(export_flow.app.native, "main_window", window)
 
-    assert asyncio.run(pick_save_path()) == tmp_path / "out.csv"
-    assert window.kwargs["save_filename"] == "library.csv"
+    assert asyncio.run(pick_save_path(tmp_path / "library_1.csv", "csv")) == (
+        tmp_path / "out.csv"
+    )
+    assert window.kwargs["directory"] == str(tmp_path)
+    assert window.kwargs["save_filename"] == "library_1.csv"
+    assert window.kwargs["file_types"] == ("CSV files (*.csv)",)
 
 
 def test_pick_save_path__none_when_cancelled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(export_flow.app.native, "main_window", _FakeWindow(None))
 
-    assert asyncio.run(pick_save_path()) is None
+    assert asyncio.run(pick_save_path(_DEFAULT_PATH, "csv")) is None
 
 
 @pytest.mark.parametrize(
-    ("selected", "line"),
-    [(False, "2"), (True, "2 (selected)")],
+    ("selected", "noun"),
+    [(False, "records to:"), (True, "selected records to:")],
 )
-def test_render_export_view__says_which_records(selected: bool, line: str) -> None:
-    assert line in _texts(_view(selected=selected))
+def test_render_export_view__says_which_records(selected: bool, noun: str) -> None:
+    texts = _texts(_view(selected=selected))
+
+    assert texts[texts.index("Exporting") : texts.index("Exporting") + 3] == [
+        "Exporting",
+        "2",
+        noun,
+    ]
 
 
 def test_render_export_view__starts_retracted() -> None:
@@ -130,7 +144,7 @@ def test_render_export_view__fill_bar_and_example() -> None:
     assert doi.example.text == "10.1038/nature14539"
 
 
-def test_export_view__emptied_name_turns_red_and_leaves_column_out() -> None:
+def test_export_view__emptied_name_turns_red() -> None:
     view = _view()
     row = _row(view, "title")
 
@@ -203,22 +217,106 @@ def test_export_view__restore_defaults_resets_options_and_calls_back() -> None:
     assert not any(row.column.key.startswith("raw:") for row in view.rows)
 
 
-def test_export_view__export_disabled_until_a_path_is_chosen(
+def test_export_view__default_path_shown_and_export_enabled() -> None:
+    view = _view()
+
+    assert view.path_label is not None
+    assert view.path_label.text == str(Path("exports") / "library.csv")
+    assert _tooltip(view.path_label) == str(_DEFAULT_PATH)
+    assert view.export_button is not None
+    assert view.export_button.enabled is True
+    assert _tooltip(view.export_button) is None
+
+
+def test_export_view__save_as_starts_from_current_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     view = _view()
-    assert view.export_button is not None
-    assert view.export_button.enabled is False
-    assert _tooltip(view.export_button) == "choose a target file"
-    monkeypatch.setattr(
-        export_flow.app.native, "main_window", _FakeWindow((str(tmp_path / "a.csv"),))
-    )
+    window = _FakeWindow(None)
+    monkeypatch.setattr(export_flow.app.native, "main_window", window)
 
     run_in(view.middle, view._choose_path())
 
-    assert view.export_button.enabled is True
-    assert _tooltip(view.export_button) is None
-    assert str(tmp_path / "a.csv") in _texts(view)
+    assert window.kwargs["directory"] == str(_DEFAULT_PATH.parent)
+    assert window.kwargs["save_filename"] == "library.csv"
+    assert view.path == _DEFAULT_PATH
+
+
+def _view_at(path: Path) -> ExportView:
+    return render_export_view(
+        shell().middle,
+        _records(),
+        ExportOptions(),
+        path,
+        selected=False,
+        on_export=lambda p, c, r, o: None,
+    )
+
+
+def test_export_view__tsv_sets_tab_and_recomputes_default_path(tmp_path: Path) -> None:
+    (tmp_path / "library.tsv").touch()
+    view = _view_at(tmp_path / "library.csv")
+    assert view.file_type_select is not None
+
+    view.file_type_select.value = "tsv"
+
+    assert view.options.file_type == "tsv"
+    assert view.options.delimiter == "	"
+    assert view.path == tmp_path / "library_1.tsv"
+
+
+def test_export_view__back_to_csv_sets_comma(tmp_path: Path) -> None:
+    view = _view_at(tmp_path / "library.csv")
+    assert view.file_type_select is not None
+    view.file_type_select.value = "tsv"
+
+    view.file_type_select.value = "csv"
+
+    assert view.options.delimiter == ","
+    assert view.path == tmp_path / "library.csv"
+
+
+def test_export_view__file_type_swaps_extension_of_chosen_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = _view_at(tmp_path / "library.csv")
+    window = _FakeWindow((str(tmp_path / "mine.csv"),))
+    monkeypatch.setattr(export_flow.app.native, "main_window", window)
+    run_in(view.middle, view._choose_path())
+    assert view.file_type_select is not None
+
+    view.file_type_select.value = "tsv"
+
+    assert view.path == tmp_path / "mine.tsv"
+    assert view.path_label is not None
+    assert view.path_label.text == str(Path(tmp_path.name) / "mine.tsv")
+
+
+def test_export_view__restore_defaults_resets_file_type(tmp_path: Path) -> None:
+    view = _view_at(tmp_path / "library.csv")
+    assert view.file_type_select is not None
+    view.file_type_select.value = "tsv"
+
+    view._restore_options()
+
+    assert view.options == ExportOptions()
+    assert view.path == tmp_path / "library.csv"
+
+
+def test_export_view__chosen_path_shows_name_with_full_path_on_hover(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = _view()
+    for name in ("a.csv", "b.csv"):
+        monkeypatch.setattr(
+            export_flow.app.native, "main_window", _FakeWindow((str(tmp_path / name),))
+        )
+        run_in(view.middle, view._choose_path())
+
+    assert view.path_label is not None
+    assert view.path_label.text == str(Path(tmp_path.name) / "b.csv")
+    assert _tooltip(view.path_label) == str(tmp_path / "b.csv")
+    assert len(view.path_label.default_slot.children) == 1
 
 
 def test_export_view__export_disabled_without_records() -> None:
@@ -226,11 +324,10 @@ def test_export_view__export_disabled_without_records() -> None:
         shell().middle,
         [],
         ExportOptions(),
+        _DEFAULT_PATH,
         selected=False,
         on_export=lambda p, c, r, o: None,
     )
-    view.path = Path("library.csv")
-    view._refresh_export_button()
 
     assert view.export_button is not None
     assert view.export_button.enabled is False
@@ -250,9 +347,64 @@ def test_export_view__export_passes_path_columns_records_and_options(
 
     [(path, columns, records, options)] = calls
     assert path == tmp_path / "library.csv"
-    assert columns is view.columns
+    assert columns == view.columns
     assert [record.id for record in records] == [1, 2]
     assert options == view.options
+
+
+def test_export_view__all_columns_checked_by_default() -> None:
+    view = _view()
+
+    assert all(row.checkbox.value for row in view.rows)
+    assert view.header_checkbox is not None
+    assert view.header_checkbox.value is True
+
+
+def test_export_view__unchecked_column_greyed_and_left_out_of_export(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[Path, list[ExportColumn], list[ExportRecord], ExportOptions]] = []
+    view = _view(on_export=lambda *args: calls.append(args))
+    row = _row(view, "title")
+
+    row.checkbox.value = False
+    assert view.export_button is not None
+    click_and_wait(view.export_button, monkeypatch)
+
+    assert all("opacity-50" in cell.classes for cell in row.cells)
+    assert view.header_checkbox is not None
+    assert view.header_checkbox.value is None
+    [(_, columns, _, _)] = calls
+    assert "title" not in [column.key for column in columns]
+    assert len(columns) == len(view.columns) - 1
+
+
+def test_export_view__header_checkbox_toggles_all_and_disables_export() -> None:
+    view = _view()
+    assert view.header_checkbox is not None
+
+    view.header_checkbox.value = False
+
+    assert not any(row.checkbox.value for row in view.rows)
+    assert view.export_button is not None
+    assert view.export_button.enabled is False
+    assert _tooltip(view.export_button) == "no columns selected"
+
+    view.header_checkbox.value = True
+
+    assert all(row.checkbox.value for row in view.rows)
+    assert view.export_button.enabled is True
+
+
+def test_export_view__unchecked_column_stays_unchecked_on_rebuild() -> None:
+    view = _view()
+    _row(view, "title").checkbox.value = False
+
+    view.option_widgets["empty_columns"].value = True
+
+    assert len(view.rows) > 2
+    assert _row(view, "title").checkbox.value is False
+    assert _row(view, "doi").checkbox.value is True
 
 
 def test_export_view__maximum_length_box_sets_option_and_empty_restores_default() -> (

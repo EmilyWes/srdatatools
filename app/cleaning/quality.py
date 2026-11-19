@@ -17,7 +17,6 @@ QUALITY_FIELDS = (
     "author_ids",
     "publication_type",
 )
-ISSUE_JOINER = " | "
 
 Fields = Mapping[str, Any]
 

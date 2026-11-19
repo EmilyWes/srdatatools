@@ -2,6 +2,8 @@ import pytest
 
 from app.parsers.authors import (
     author_id,
+    author_id_keys,
+    author_ids_for_key,
     format_author_ids,
     merge_author_ids,
     parse_author_ids,
@@ -59,3 +61,42 @@ def test_merge_author_ids__different_author_count_is_ignored(
 
     assert merged == [["a:1"], ["a:2"]]
     assert "author ids" in caplog.text
+
+
+_UNSPLIT = "orcid:[0000-1; 0000-2], scopus_author_id:[1, 2]"
+_CLEANED = "orcid:1, scopus_author_id:2||scopus_author_id:3"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (_UNSPLIT, ["orcid", "scopus_author_id"]),
+        (_CLEANED, ["orcid", "scopus_author_id"]),
+        (None, []),
+    ],
+)
+def test_author_id_keys__first_seen_order(
+    value: str | None, expected: list[str]
+) -> None:
+    assert author_id_keys(value) == expected
+
+
+def test_author_ids_for_key__unsplit_value_as_stored() -> None:
+    assert author_ids_for_key(_UNSPLIT, "orcid", " / ") == "0000-1; 0000-2"
+    assert author_ids_for_key(_UNSPLIT, "pmid", " / ") == ""
+
+
+def test_author_ids_for_key__cleaned_one_slot_per_author() -> None:
+    assert author_ids_for_key(_CLEANED, "orcid", "; ") == "1; ; "
+    assert author_ids_for_key(_CLEANED, "scopus_author_id", "; ") == "2; ; 3"
+    assert author_ids_for_key(_CLEANED, "pmid", "; ") == "; ; "
+
+
+def test_author_ids_for_key__same_key_twice_for_one_author() -> None:
+    value = "scopus_author_id:1, scopus_author_id:9|scopus_author_id:2"
+
+    assert author_ids_for_key(value, "scopus_author_id", "; ") == "1, 9; 2"
+
+
+def test_author_ids_for_key__no_ids_is_empty() -> None:
+    assert author_ids_for_key(None, "orcid", "; ") == ""

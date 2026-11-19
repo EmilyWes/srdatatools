@@ -45,8 +45,11 @@ from app.export.columns import ExportColumn, ExportRecord
 from app.export.csv_ import write_csv
 from app.export.options import (
     ExportOptions,
+    default_path,
+    load_folder,
     load_options,
     reset_options,
+    save_folder,
     save_options,
 )
 from app.gui.about import render_about_view, render_help_view
@@ -71,6 +74,7 @@ from app.gui.record_table import (
     COLUMNS,
     LabelFormat,
     RecordSelection,
+    load_author_id_columns,
     load_columns,
     load_keyword_columns,
     load_label_columns,
@@ -195,7 +199,15 @@ def home() -> None:
         )
 
     async def show_quality_problems(columns: list[str]) -> None:
-        save_table_columns(columns)
+        with session_scope(_engine) as session:
+            author_id_columns = load_author_id_columns(session)
+        save_table_columns(
+            [
+                shown
+                for key in columns
+                for shown in (author_id_columns if key == "author_ids" else [key])
+            ]
+        )
         if nav is not None:
             nav.highlight("library:table")
         await show_table(quality_filter=True)
@@ -229,12 +241,14 @@ def home() -> None:
             columns = load_columns(session)
             label_columns = load_label_columns(session)
             keyword_columns = load_keyword_columns(session)
+            author_id_columns = load_author_id_columns(session)
             label_format = load_label_format(session)
         render_table_settings(
             panes.middle,
             columns,
             label_columns=label_columns,
             keyword_columns=keyword_columns,
+            author_id_columns=author_id_columns,
             label_format=label_format,
             on_change=save_table_columns,
             on_label_format=save_table_label_format,
@@ -352,6 +366,7 @@ def home() -> None:
                 return 0, str(exc)
             with session_scope(_engine) as session:
                 log_export(session, path.name, len(records), cut)
+                save_folder(session, path.parent)
             return cut, None
 
         cut, error = await run_busy(f"Exporting to {path.name}…", write)
@@ -383,15 +398,21 @@ def home() -> None:
         clear_nav_selection()
         ids = set(selection.ids) or None
 
-        def load() -> tuple[list[ExportRecord], ExportOptions]:
+        def load() -> tuple[list[ExportRecord], ExportOptions, Path]:
             with session_scope(_engine) as session:
-                return load_export_records(session, ids), load_options(session)
+                options = load_options(session)
+                return (
+                    load_export_records(session, ids),
+                    options,
+                    default_path(load_folder(session), options.file_type),
+                )
 
-        records, options = await run_busy("Loading records…", load)
+        records, options, path = await run_busy("Loading records…", load)
         render_export_view(
             panes.middle,
             records,
             options,
+            path,
             selected=ids is not None,
             on_export=export,
             on_options_change=save_export_options,

@@ -653,6 +653,25 @@ def test_suggest_mapping__lenient_fuzzy_matches_and_falls_back_to_id() -> None:
     }
 
 
+def test_suggest_mapping__lenient_falls_back_to_keywords_with_derived_prefix() -> None:
+    mapping = suggest_mapping(
+        ["MeSH Keywords", "Author_keywords", "KeywordsPlus"], {}, lenient=True
+    )
+
+    assert mapping.rows == {
+        "MeSH Keywords": KeywordsRow(prefix="mesh"),
+        "Author_keywords": KeywordsRow(prefix="author"),
+        "KeywordsPlus": KeywordsRow(prefix="plus"),
+    }
+    assert set(mapping.match_kinds.values()) == {"keyword_fallback"}
+
+
+def test_suggest_mapping__strict_has_no_keyword_fallback() -> None:
+    mapping = suggest_mapping(["MeSH Keywords"], {}, lenient=False)
+
+    assert mapping.rows == {}
+
+
 def test_override_aliases__keeps_other_base_aliases_of_the_same_target() -> None:
     base = {"jt": Suggest("journal"), "ta": Suggest("journal"), "ti": Suggest("title")}
 
@@ -688,6 +707,11 @@ def test_split_keyword__splits_prefix_off() -> None:
 
 def test_split_keyword__unprefixed_keyword() -> None:
     assert split_keyword("Humans") == (None, "Humans")
+
+
+def test_split_keyword__unwraps_unsplit_value() -> None:
+    assert split_keyword(unsplit_keywords("MeSH", "a; b")) == ("MeSH", "a; b")
+    assert split_keyword(unsplit_keywords("", "a; b")) == (None, "a; b")
 
 
 def test_split_keyword__round_trips_tagged() -> None:

@@ -96,8 +96,8 @@ def test_scopus_small_csv__keys_author_keywords_by_prefix(
 ) -> None:
     keywords = csv_records[_CONFERENCE_EID].keywords
 
-    assert keywords[0].startswith("Author:[ANSYS Simulation; ")
-    assert keywords[1].startswith("keywords:[")
+    assert keywords[0].startswith("author:[ANSYS Simulation; ")
+    assert keywords[1].startswith("index:[")
 
 
 def test_scopus_small_ris__keeps_values_as_in_the_file(
@@ -122,7 +122,7 @@ def test_scopus_small_bibtex__keeps_values_as_in_the_file(
     assert (
         bibtex_records[_CONFERENCE_EID]
         .keywords[0]
-        .startswith("Author:[ANSYS Simulation; ")
+        .startswith("author:[ANSYS Simulation; ")
     )
 
 

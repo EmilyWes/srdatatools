@@ -8,15 +8,17 @@ from nicegui.element import Element
 from webview import FileDialog
 
 from app.export.columns import (
+    AuthorIdKeyColumn,
     DateColumn,
     ExportColumn,
     ExportRecord,
+    JoinedColumn,
     KeywordsColumn,
     example,
     export_columns,
     fill_count,
 )
-from app.export.options import ExportOptions
+from app.export.options import ExportFileType, ExportOptions, default_path
 from app.gui.format import format_count
 from app.gui.import_flow import (
     BUTTON_PROPS,
@@ -38,11 +40,14 @@ OnExport = Callable[
     Awaitable[None] | None,
 ]
 
-_DEFAULT_FILENAME = "library.csv"
-_FILE_TYPES = ("CSV files (*.csv)",)
-_TYPE_OPTIONS = {"csv": "CSV"}
-_NO_PATH = "choose a target file"
+_FILE_TYPES: dict[ExportFileType, str] = {
+    "csv": "CSV files (*.csv)",
+    "tsv": "TSV files (*.tsv)",
+}
+_TYPE_OPTIONS = {"csv": "CSV", "tsv": "TSV"}
 _NO_RECORDS = "no records to export"
+_NO_COLUMNS = "no columns selected"
+_UNCHECKED_CLASS = "opacity-50"
 
 _EMPTY_NAME_COLOR = "red-2"
 _CHANGED_COLOR = "blue-2"
@@ -61,10 +66,13 @@ _LABEL_FORMATS = {"numbers": "Numbers", "words": "Words"}
 _LINE_BREAKS = {"keep": "Keep", "space": "Replace with a space"}
 
 
-async def pick_save_path() -> Path | None:
+async def pick_save_path(suggested: Path, file_type: ExportFileType) -> Path | None:
     assert app.native.main_window is not None, "native window is not running"
     selected = await app.native.main_window.create_file_dialog(
-        FileDialog.SAVE, save_filename=_DEFAULT_FILENAME, file_types=_FILE_TYPES
+        FileDialog.SAVE,
+        directory=str(suggested.parent),
+        save_filename=suggested.name,
+        file_types=(_FILE_TYPES[file_type],),
     )
     return Path(selected[0]) if selected else None
 
@@ -79,9 +87,12 @@ def records_count(count: int, selected: bool) -> str:
 class _Row:
     column: ExportColumn
     default_name: str
+    checkbox: ui.checkbox
     name: ui.input
     count: ui.linear_progress
     example: ui.label
+    # Greyed out while the column is unchecked.
+    cells: list[Element]
 
 
 @dataclass
@@ -90,10 +101,10 @@ class ExportView:
     records: list[ExportRecord]
     selected: bool
     options: ExportOptions
+    path: Path
     on_export: OnExport
     on_options_change: Callable[[ExportOptions], Any] | None = None
     on_restore_options: Callable[[], Any] | None = None
-    path: Path | None = None
     columns: list[ExportColumn] = field(default_factory=list)
     rows: list[_Row] = field(default_factory=list)
     option_widgets: dict[str, ui.select | ui.checkbox | ui.number] = field(
@@ -101,7 +112,13 @@ class ExportView:
     )
     mapping: ui.column | None = None
     path_label: ui.label | None = None
+    path_chosen: bool = False
+    file_type_select: ui.select | None = None
     export_button: ui.button | None = None
+    header_checkbox: ui.checkbox | None = None
+    # Keys of the unchecked columns; kept when the rows are rebuilt.
+    unchecked: set[str] = field(default_factory=set)
+    syncing_header: bool = False
 
     def __post_init__(self) -> None:
         self.columns = export_columns(self.records, self.options)
@@ -136,6 +153,42 @@ class ExportView:
             row.name.props(f"bg-color={_CHANGED_COLOR}")
         else:
             row.name.props(remove="bg-color")
+
+    def _exported_columns(self) -> list[ExportColumn]:
+        return [c for c in self.columns if c.key not in self.unchecked]
+
+    def _set_checked(self, row: _Row, checked: bool) -> None:
+        if checked:
+            self.unchecked.discard(row.column.key)
+        else:
+            self.unchecked.add(row.column.key)
+        self._refresh_checked(row)
+        self._sync_header_checkbox()
+        self._refresh_export_button()
+
+    def _refresh_checked(self, row: _Row) -> None:
+        for cell in row.cells:
+            if row.column.key in self.unchecked:
+                cell.classes(add=_UNCHECKED_CLASS)
+            else:
+                cell.classes(remove=_UNCHECKED_CLASS)
+
+    def _set_all_checked(self, value: bool | None) -> None:
+        if self.syncing_header:
+            return
+        for row in self.rows:
+            row.checkbox.value = value is not False
+
+    def _sync_header_checkbox(self) -> None:
+        """Partly checked shows as indeterminate (None)."""
+        assert self.header_checkbox is not None
+        exported = len(self._exported_columns())
+        value = (
+            True if exported == len(self.columns) else False if not exported else None
+        )
+        self.syncing_header = True
+        self.header_checkbox.value = value
+        self.syncing_header = False
 
     def _set_name(self, row: _Row, value: str) -> None:
         row.column.name = value.strip()
@@ -172,7 +225,7 @@ class ExportView:
         column = row.column
         if isinstance(column, DateColumn):
             self._option(row, "part", "part", "Part", _DATE_PARTS)
-        elif isinstance(column, KeywordsColumn):
+        elif isinstance(column, AuthorIdKeyColumn | JoinedColumn | KeywordsColumn):
             self._option(row, "delimiter", "sep", "Delimiter")
 
     def _render_mapping(self) -> None:
@@ -188,6 +241,9 @@ class ExportView:
         with self.mapping:
             with ui.column().classes("gap-0 border outline-variant rounded-xl"):
                 with ui.row().classes(f"{row_base} py-2 surface-container"):
+                    self.header_checkbox = ui.checkbox(
+                        on_change=lambda e: self._set_all_checked(e.value)
+                    ).props("dense")
                     with (
                         ui.element("div")
                         .classes(count_cell_classes)
@@ -204,16 +260,24 @@ class ExportView:
                     if i % 2 == 1:
                         row_classes += " surface-low"
                     with ui.row().classes(row_classes):
+                        checkbox = ui.checkbox(
+                            value=column.key not in self.unchecked
+                        ).props("dense")
                         with (
                             ui.element("div")
                             .classes(count_cell_classes)
                             .style(count_cell_style)
-                        ):
+                        ) as count_cell:
                             count = ui.linear_progress(show_value=False).classes("w-10")
-                        ui.label(column.label).classes("truncate text-xs").style(
-                            _FIELD_WIDTH
-                        ).tooltip(column.label)
-                        with ui.column().classes("gap-0").style(_NAME_WIDTH):
+                        field_label = (
+                            ui.label(column.label)
+                            .classes("truncate text-xs")
+                            .style(_FIELD_WIDTH)
+                            .tooltip(column.label)
+                        )
+                        with (
+                            ui.column().classes("gap-0").style(_NAME_WIDTH) as name_cell
+                        ):
                             name = (
                                 ui.input(value=column.name)
                                 .classes("mapping-field text-xs w-full")
@@ -224,9 +288,11 @@ class ExportView:
                     row = _Row(
                         column=column,
                         default_name=defaults[column.key],
+                        checkbox=checkbox,
                         name=name,
                         count=count,
                         example=sample,
+                        cells=[count_cell, field_label, name_cell, sample],
                     )
                     self.rows.append(row)
                     with options:
@@ -234,8 +300,13 @@ class ExportView:
                     name.on_value_change(
                         lambda e, row=row: self._set_name(row, e.value)
                     )
+                    checkbox.on_value_change(
+                        lambda e, row=row: self._set_checked(row, e.value)
+                    )
                     self._refresh_name_color(row)
                     self._refresh_row(row)
+                    self._refresh_checked(row)
+        self._sync_header_checkbox()
 
     def _set_option(self, key: str, value: Any) -> None:
         if key == "max_length":
@@ -243,7 +314,9 @@ class ExportView:
             value = int(value) if value else ExportOptions().max_length
         self.options = self.options.model_copy(update={key: value})
         self._refresh_option_colors()
-        if key in ("ignored_columns", "original_data", "empty_columns"):
+        if key == "file_type":
+            self._change_file_type(value)
+        elif key in ("ignored_columns", "original_data", "empty_columns"):
             self._rebuild_columns()
             self._render_mapping()
         elif key == "label_format":
@@ -251,6 +324,15 @@ class ExportView:
                 self._refresh_row(row)
         if self.on_options_change is not None:
             self.on_options_change(self.options)
+
+    def _change_file_type(self, file_type: ExportFileType) -> None:
+        """A chosen path keeps its name; the default is worked out again."""
+        if self.path_chosen:
+            self.path = self.path.with_suffix(f".{file_type}")
+        else:
+            self.path = default_path(self.path.parent, file_type)
+        self._show_path()
+        self.option_widgets["delimiter"].value = "	" if file_type == "tsv" else ","
 
     def _refresh_option_colors(self) -> None:
         defaults = ExportOptions()
@@ -357,30 +439,48 @@ class ExportView:
     def _restore_options(self) -> None:
         for key, widget in self.option_widgets.items():
             widget.value = getattr(ExportOptions(), key)
+        assert self.file_type_select is not None
+        self.file_type_select.value = ExportOptions().file_type
         if self.on_restore_options is not None:
             self.on_restore_options()
 
     async def _choose_path(self) -> None:
-        path = await pick_save_path()
+        path = await pick_save_path(self.path, self.options.file_type)
         if path is None:
             return
         self.path = path
+        self.path_chosen = True
+        self._show_path()
+
+    def _show_path(self) -> None:
         assert self.path_label is not None
-        self.path_label.set_text(str(path))
-        self._refresh_export_button()
+        self.path_label.set_text(str(Path(self.path.parent.name) / self.path.name))
+        self.path_label.clear()
+        with self.path_label:
+            ui.tooltip(str(self.path))
+
+    def _records_noun(self) -> str:
+        noun = "record" if len(self.records) == 1 else "records"
+        return f"selected {noun}" if self.selected else noun
 
     def _refresh_export_button(self) -> None:
-        assert self.export_button is not None
-        self.export_button.set_enabled(bool(self.path and self.records))
+        if self.export_button is None:
+            return
+        reason = (
+            _NO_RECORDS
+            if not self.records
+            else None if self._exported_columns() else _NO_COLUMNS
+        )
+        self.export_button.set_enabled(reason is None)
         self.export_button.clear()
-        reason = _NO_RECORDS if not self.records else None if self.path else _NO_PATH
         if reason is not None:
             with self.export_button:
                 ui.tooltip(reason)
 
     def _export(self) -> Awaitable[None] | None:
-        assert self.path is not None
-        return self.on_export(self.path, self.columns, self.records, self.options)
+        return self.on_export(
+            self.path, self._exported_columns(), self.records, self.options
+        )
 
     def render(self) -> None:
         ui.add_css(ROW_FIELD_CSS)
@@ -389,20 +489,26 @@ class ExportView:
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):
                 with ui.grid(columns=GRID_COLUMNS).classes(GRID_CLASSES):
-                    ui.button("Save as…", on_click=self._choose_path).props(
+                    with ui.row().classes(
+                        "col-span-2 justify-self-center gap-1 text-sm"
+                    ):
+                        ui.label("Exporting")
+                        ui.label(format_count(len(self.records))).classes("font-bold")
+                        ui.label(self._records_noun() + " to:")
+                    ui.label("File type:").classes("text-sm")
+                    self.file_type_select = (
+                        ui.select(_TYPE_OPTIONS, value=self.options.file_type)
+                        .props(SELECT_PROPS)
+                        .classes(SELECT_CLASSES)
+                    )
+                    self.file_type_select.on_value_change(
+                        lambda e: self._set_option("file_type", e.value)
+                    )
+                    ui.button("Select file path…", on_click=self._choose_path).props(
                         BUTTON_PROPS
                     )
-                    self.path_label = ui.label("No file selected").classes(
-                        FILE_LABEL_CLASSES
-                    )
-                    ui.label("Select type:").classes("text-sm")
-                    ui.select(_TYPE_OPTIONS, value=self.options.file_type).props(
-                        SELECT_PROPS
-                    ).classes(SELECT_CLASSES)
-                    ui.label("Number of records:").classes("text-sm")
-                    ui.label(records_count(len(self.records), self.selected)).classes(
-                        "text-sm"
-                    )
+                    self.path_label = ui.label().classes(FILE_LABEL_CLASSES)
+                    self._show_path()
                 views = render_view_toggle(parsing_label="Options")
                 self.mapping = views.mapping
                 self._render_mapping()
@@ -417,6 +523,7 @@ def render_export_view(
     middle: Element,
     records: list[ExportRecord],
     options: ExportOptions,
+    path: Path,
     *,
     selected: bool,
     on_export: OnExport,
@@ -428,6 +535,7 @@ def render_export_view(
         records=records,
         selected=selected,
         options=options,
+        path=path,
         on_export=on_export,
         on_options_change=on_options_change,
         on_restore_options=on_restore_options,
