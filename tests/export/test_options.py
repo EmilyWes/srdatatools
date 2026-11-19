@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from sqlalchemy import Engine, create_engine
@@ -6,7 +7,15 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import Base
 from app.db.settings import set_setting
-from app.export.options import ExportOptions, load_options, reset_options, save_options
+from app.export.options import (
+    ExportOptions,
+    default_path,
+    load_folder,
+    load_options,
+    reset_options,
+    save_folder,
+    save_options,
+)
 
 
 @pytest.fixture
@@ -23,6 +32,37 @@ def session(engine: Engine) -> Iterator[Session]:
     session = session_factory()
     yield session
     session.close()
+
+
+def test_load_folder__documents_when_unset(session: Session) -> None:
+    assert load_folder(session) == Path.home() / "Documents"
+
+
+def test_save_folder__round_trips(session: Session, tmp_path: Path) -> None:
+    save_folder(session, tmp_path)
+    session.commit()
+
+    assert load_folder(session) == tmp_path
+
+
+def test_load_folder__documents_when_saved_folder_is_gone(
+    session: Session, tmp_path: Path
+) -> None:
+    save_folder(session, tmp_path / "gone")
+    session.commit()
+
+    assert load_folder(session) == Path.home() / "Documents"
+
+
+def test_default_path__library_when_free(tmp_path: Path) -> None:
+    assert default_path(tmp_path) == tmp_path / "library.csv"
+
+
+def test_default_path__numbers_past_existing_files(tmp_path: Path) -> None:
+    (tmp_path / "library.csv").touch()
+    (tmp_path / "library_1.csv").touch()
+
+    assert default_path(tmp_path) == tmp_path / "library_2.csv"
 
 
 def test_load_options__defaults_when_unset(session: Session) -> None:

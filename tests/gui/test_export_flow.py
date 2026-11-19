@@ -60,10 +60,14 @@ def _view(
         panes.middle,
         _records(),
         options or ExportOptions(),
+        _DEFAULT_PATH,
         selected=selected,
         on_export=callbacks.pop("on_export", lambda p, c, r, o: None),
         **callbacks,
     )
+
+
+_DEFAULT_PATH = Path("exports") / "library.csv"
 
 
 def _row(view: ExportView, key: str) -> Any:
@@ -83,20 +87,23 @@ def _tooltip(element: Element) -> str | None:
     return tooltips[0].text if tooltips else None
 
 
-def test_pick_save_path__returns_chosen_path_with_csv_default(
+def test_pick_save_path__opens_in_suggested_folder_with_suggested_name(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     window = _FakeWindow((str(tmp_path / "out.csv"),))
     monkeypatch.setattr(export_flow.app.native, "main_window", window)
 
-    assert asyncio.run(pick_save_path()) == tmp_path / "out.csv"
-    assert window.kwargs["save_filename"] == "library.csv"
+    assert asyncio.run(pick_save_path(tmp_path / "library_1.csv")) == (
+        tmp_path / "out.csv"
+    )
+    assert window.kwargs["directory"] == str(tmp_path)
+    assert window.kwargs["save_filename"] == "library_1.csv"
 
 
 def test_pick_save_path__none_when_cancelled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(export_flow.app.native, "main_window", _FakeWindow(None))
 
-    assert asyncio.run(pick_save_path()) is None
+    assert asyncio.run(pick_save_path(_DEFAULT_PATH)) is None
 
 
 @pytest.mark.parametrize(
@@ -203,21 +210,29 @@ def test_export_view__restore_defaults_resets_options_and_calls_back() -> None:
     assert not any(row.column.key.startswith("raw:") for row in view.rows)
 
 
-def test_export_view__export_disabled_until_a_path_is_chosen(
+def test_export_view__default_path_shown_and_export_enabled() -> None:
+    view = _view()
+
+    assert view.path_label is not None
+    assert view.path_label.text == "library.csv"
+    assert _tooltip(view.path_label) == str(_DEFAULT_PATH)
+    assert view.export_button is not None
+    assert view.export_button.enabled is True
+    assert _tooltip(view.export_button) is None
+
+
+def test_export_view__save_as_starts_from_current_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     view = _view()
-    assert view.export_button is not None
-    assert view.export_button.enabled is False
-    assert _tooltip(view.export_button) == "choose a target file"
-    monkeypatch.setattr(
-        export_flow.app.native, "main_window", _FakeWindow((str(tmp_path / "a.csv"),))
-    )
+    window = _FakeWindow(None)
+    monkeypatch.setattr(export_flow.app.native, "main_window", window)
 
     run_in(view.middle, view._choose_path())
 
-    assert view.export_button.enabled is True
-    assert _tooltip(view.export_button) is None
+    assert window.kwargs["directory"] == str(_DEFAULT_PATH.parent)
+    assert window.kwargs["save_filename"] == "library.csv"
+    assert view.path == _DEFAULT_PATH
 
 
 def test_export_view__chosen_path_shows_name_with_full_path_on_hover(
@@ -241,11 +256,10 @@ def test_export_view__export_disabled_without_records() -> None:
         shell().middle,
         [],
         ExportOptions(),
+        _DEFAULT_PATH,
         selected=False,
         on_export=lambda p, c, r, o: None,
     )
-    view.path = Path("library.csv")
-    view._refresh_export_button()
 
     assert view.export_button is not None
     assert view.export_button.enabled is False

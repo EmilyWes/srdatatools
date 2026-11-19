@@ -45,8 +45,11 @@ from app.export.columns import ExportColumn, ExportRecord
 from app.export.csv_ import write_csv
 from app.export.options import (
     ExportOptions,
+    default_path,
+    load_folder,
     load_options,
     reset_options,
+    save_folder,
     save_options,
 )
 from app.gui.about import render_about_view, render_help_view
@@ -355,6 +358,7 @@ def home() -> None:
                 return 0, str(exc)
             with session_scope(_engine) as session:
                 log_export(session, path.name, len(records), cut)
+                save_folder(session, path.parent)
             return cut, None
 
         cut, error = await run_busy(f"Exporting to {path.name}…", write)
@@ -386,15 +390,20 @@ def home() -> None:
         clear_nav_selection()
         ids = set(selection.ids) or None
 
-        def load() -> tuple[list[ExportRecord], ExportOptions]:
+        def load() -> tuple[list[ExportRecord], ExportOptions, Path]:
             with session_scope(_engine) as session:
-                return load_export_records(session, ids), load_options(session)
+                return (
+                    load_export_records(session, ids),
+                    load_options(session),
+                    default_path(load_folder(session)),
+                )
 
-        records, options = await run_busy("Loading records…", load)
+        records, options, path = await run_busy("Loading records…", load)
         render_export_view(
             panes.middle,
             records,
             options,
+            path,
             selected=ids is not None,
             on_export=export,
             on_options_change=save_export_options,

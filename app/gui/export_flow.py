@@ -39,10 +39,8 @@ OnExport = Callable[
     Awaitable[None] | None,
 ]
 
-_DEFAULT_FILENAME = "library.csv"
 _FILE_TYPES = ("CSV files (*.csv)",)
 _TYPE_OPTIONS = {"csv": "CSV"}
-_NO_PATH = "choose a target file"
 _NO_RECORDS = "no records to export"
 
 _EMPTY_NAME_COLOR = "red-2"
@@ -62,10 +60,13 @@ _LABEL_FORMATS = {"numbers": "Numbers", "words": "Words"}
 _LINE_BREAKS = {"keep": "Keep", "space": "Replace with a space"}
 
 
-async def pick_save_path() -> Path | None:
+async def pick_save_path(suggested: Path) -> Path | None:
     assert app.native.main_window is not None, "native window is not running"
     selected = await app.native.main_window.create_file_dialog(
-        FileDialog.SAVE, save_filename=_DEFAULT_FILENAME, file_types=_FILE_TYPES
+        FileDialog.SAVE,
+        directory=str(suggested.parent),
+        save_filename=suggested.name,
+        file_types=_FILE_TYPES,
     )
     return Path(selected[0]) if selected else None
 
@@ -91,10 +92,10 @@ class ExportView:
     records: list[ExportRecord]
     selected: bool
     options: ExportOptions
+    path: Path
     on_export: OnExport
     on_options_change: Callable[[ExportOptions], Any] | None = None
     on_restore_options: Callable[[], Any] | None = None
-    path: Path | None = None
     columns: list[ExportColumn] = field(default_factory=list)
     rows: list[_Row] = field(default_factory=list)
     option_widgets: dict[str, ui.select | ui.checkbox | ui.number] = field(
@@ -362,28 +363,28 @@ class ExportView:
             self.on_restore_options()
 
     async def _choose_path(self) -> None:
-        path = await pick_save_path()
+        path = await pick_save_path(self.path)
         if path is None:
             return
         self.path = path
+        self._show_path()
+
+    def _show_path(self) -> None:
         assert self.path_label is not None
-        self.path_label.set_text(path.name)
+        self.path_label.set_text(self.path.name)
         self.path_label.clear()
         with self.path_label:
-            ui.tooltip(str(path))
-        self._refresh_export_button()
+            ui.tooltip(str(self.path))
 
     def _refresh_export_button(self) -> None:
         assert self.export_button is not None
-        self.export_button.set_enabled(bool(self.path and self.records))
+        self.export_button.set_enabled(bool(self.records))
         self.export_button.clear()
-        reason = _NO_RECORDS if not self.records else None if self.path else _NO_PATH
-        if reason is not None:
+        if not self.records:
             with self.export_button:
-                ui.tooltip(reason)
+                ui.tooltip(_NO_RECORDS)
 
     def _export(self) -> Awaitable[None] | None:
-        assert self.path is not None
         return self.on_export(self.path, self.columns, self.records, self.options)
 
     def render(self) -> None:
@@ -396,9 +397,8 @@ class ExportView:
                     ui.button("Save as…", on_click=self._choose_path).props(
                         BUTTON_PROPS
                     )
-                    self.path_label = ui.label("No file selected").classes(
-                        FILE_LABEL_CLASSES
-                    )
+                    self.path_label = ui.label().classes(FILE_LABEL_CLASSES)
+                    self._show_path()
                     ui.label("Select type:").classes("text-sm")
                     ui.select(_TYPE_OPTIONS, value=self.options.file_type).props(
                         SELECT_PROPS
@@ -421,6 +421,7 @@ def render_export_view(
     middle: Element,
     records: list[ExportRecord],
     options: ExportOptions,
+    path: Path,
     *,
     selected: bool,
     on_export: OnExport,
@@ -432,6 +433,7 @@ def render_export_view(
         records=records,
         selected=selected,
         options=options,
+        path=path,
         on_export=on_export,
         on_options_change=on_options_change,
         on_restore_options=on_restore_options,

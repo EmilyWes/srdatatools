@@ -640,6 +640,22 @@ def test_home__export_writes_csv_logs_notifies_and_shows_dashboard(
     assert len(navs) == 2
 
 
+def test_home__next_export_suggests_free_name_in_last_folder(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _add_source_file_with_record(engine)
+    shells = _capture_shells(monkeypatch)
+    views = _capture_export_views(monkeypatch)
+    home()
+    click_and_wait(_export_button(shells[-1]), monkeypatch)
+    views[-1].path = tmp_path / "library.csv"
+
+    click_and_wait(views[-1].export_button, monkeypatch)
+    click_and_wait(_export_button(shells[-1]), monkeypatch)
+
+    assert views[-1].path == tmp_path / "library_1.csv"
+
+
 def test_home__failed_export_is_logged_as_warning(
     engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
