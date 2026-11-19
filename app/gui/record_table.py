@@ -93,7 +93,9 @@ COLUMNS: dict[str, str] = {
 # Columns worked out from other fields rather than read from one.
 _DERIVED_COLUMNS = ("sources", "keywords", "publication_year", "data_quality")
 DEFAULT_COLUMNS = ["doi", "title", "author_names"]
-_AUTHOR_FIELDS = frozenset({"author_names", "author_ids", "author_affiliations"})
+_JOINED_FIELDS = frozenset(
+    {"author_names", "author_ids", "author_affiliations", "issn", "isbn"}
+)
 _QUALITY_FILTER_STATE: dict[str, Any] = {
     "filter": {
         "filterModel": {"data_quality": {"filterType": "text", "type": "notBlank"}}
@@ -212,7 +214,7 @@ def row_for(values: Mapping[str, Any]) -> dict[str, Any]:
     for key, value in values.items():
         if isinstance(value, list):
             value = DISPLAY_SEPARATOR.join(value)
-        elif key in _AUTHOR_FIELDS and value:
+        elif key in _JOINED_FIELDS and value:
             value = value.replace(AUTHOR_JOINER, DISPLAY_SEPARATOR)
         elif isinstance(value, dict):
             value = DISPLAY_SEPARATOR.join(

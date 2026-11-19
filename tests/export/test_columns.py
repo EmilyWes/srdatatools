@@ -3,11 +3,11 @@ from dataclasses import replace
 import pytest
 
 from app.export.columns import (
-    AuthorsColumn,
     DateColumn,
     ExportColumn,
     ExportRecord,
     ExportSource,
+    JoinedColumn,
     KeywordsColumn,
     LabelColumn,
     RawColumn,
@@ -74,11 +74,20 @@ def test_column_value__author_fields_are_separated_by_semicolon() -> None:
 
 def test_column_value__authors_delimiter_option() -> None:
     record = _record(author_names="LeCun, Yann|Bengio, Yoshua")
-    column = AuthorsColumn(
+    column = JoinedColumn(
         key="a", label="", name="", field="author_names", delimiter=" / "
     )
 
     assert column_value(column, record, _OPTIONS) == "LeCun, Yann / Bengio, Yoshua"
+
+
+def test_column_value__issn_isbn_delimiter_option() -> None:
+    record = _record(issn="1234-5678|8765-4321", isbn="9783161484100")
+    column = JoinedColumn(key="i", label="", name="", field="issn", delimiter=" / ")
+
+    assert _value(record, "issn") == "1234-5678; 8765-4321"
+    assert _value(record, "isbn") == "9783161484100"
+    assert column_value(column, record, _OPTIONS) == "1234-5678 / 8765-4321"
 
 
 def test_export_columns__author_columns_follow_title() -> None:

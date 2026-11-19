@@ -123,12 +123,13 @@ def test_columns__cover_every_record_field_plus_sources() -> None:
     }
 
 
-def test_row_for__separates_authors_with_semicolon() -> None:
+def test_row_for__separates_joined_values_with_semicolon() -> None:
     row = row_for(
         {
             "author_names": "Smith, J|Doe, A",
             "author_ids": "orcid:1|",
             "author_affiliations": None,
+            "issn": "1234-5678|8765-4321",
         }
     )
 
@@ -136,6 +137,7 @@ def test_row_for__separates_authors_with_semicolon() -> None:
         "author_names": "Smith, J; Doe, A",
         "author_ids": "orcid:1; ",
         "author_affiliations": None,
+        "issn": "1234-5678; 8765-4321",
     }
 
 

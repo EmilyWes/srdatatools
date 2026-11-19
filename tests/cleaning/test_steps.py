@@ -545,7 +545,7 @@ _SN = "1234-5678 (electronic), 9123-4567 (print)"
     ("strip", "only_one", "expected"),
     [
         (True, True, "1234-5678"),
-        (True, False, "1234-5678; 9123-4567"),
+        (True, False, "1234-5678|9123-4567"),
         (False, True, "1234-5678 (electronic)"),
     ],
 )
@@ -625,7 +625,7 @@ def test_clean_issn_isbn__preferred_qualifier_is_ignored_without_only_one() -> N
     options = _options(only_one=False)
 
     assert clean_issn_isbn(Record(issn=_IS_LINES), _NO_CONTEXT, options).issn == (
-        "1234-5678; 8765-4321; 1234-5678"
+        "1234-5678|8765-4321|1234-5678"
     )
 
 

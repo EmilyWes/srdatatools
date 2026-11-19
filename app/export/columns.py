@@ -72,7 +72,7 @@ class ScalarColumn(ExportColumn):
 
 
 @dataclass
-class AuthorsColumn(ScalarColumn):
+class JoinedColumn(ScalarColumn):
     delimiter: str = DISPLAY_SEPARATOR
 
 
@@ -113,9 +113,9 @@ def _scalar(field_name: str) -> ScalarColumn:
     return ScalarColumn(key=field_name, label=label, name=label, field=field_name)
 
 
-def _authors(field_name: str) -> AuthorsColumn:
+def _joined(field_name: str) -> JoinedColumn:
     label = _SCALAR_LABELS[field_name]
-    return AuthorsColumn(key=field_name, label=label, name=label, field=field_name)
+    return JoinedColumn(key=field_name, label=label, name=label, field=field_name)
 
 
 def _keywords(prefix: str | None) -> KeywordsColumn:
@@ -172,9 +172,9 @@ def export_columns(
     columns: list[ExportColumn] = [
         _extra("record_id"),
         _scalar("title"),
-        _authors("author_names"),
-        _authors("author_ids"),
-        _authors("author_affiliations"),
+        _joined("author_names"),
+        _joined("author_ids"),
+        _joined("author_affiliations"),
         DateColumn(key="date", label="Publication date", name="Publication date"),
         _scalar("journal"),
         _scalar("conference_name"),
@@ -184,8 +184,8 @@ def export_columns(
         _scalar("abstract"),
         _scalar("doi"),
         _scalar("pmid"),
-        _scalar("issn"),
-        _scalar("isbn"),
+        _joined("issn"),
+        _joined("isbn"),
         *(_other_id(key) for key in id_keys),
         _scalar("publication_type"),
         _keywords(None),
@@ -240,7 +240,7 @@ def column_value(
     column: ExportColumn, export: ExportRecord, options: ExportOptions
 ) -> str:
     record = export.record
-    if isinstance(column, AuthorsColumn):
+    if isinstance(column, JoinedColumn):
         value = getattr(record, column.field) or ""
         return value.replace(AUTHOR_JOINER, column.delimiter)
     if isinstance(column, ScalarColumn):
