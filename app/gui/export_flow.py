@@ -46,6 +46,8 @@ _FILE_TYPES: dict[ExportFileType, str] = {
 }
 _TYPE_OPTIONS = {"csv": "CSV", "tsv": "TSV"}
 _NO_RECORDS = "no records to export"
+_NO_COLUMNS = "no columns selected"
+_UNCHECKED_CLASS = "opacity-50"
 
 _EMPTY_NAME_COLOR = "red-2"
 _CHANGED_COLOR = "blue-2"
@@ -85,9 +87,12 @@ def records_count(count: int, selected: bool) -> str:
 class _Row:
     column: ExportColumn
     default_name: str
+    checkbox: ui.checkbox
     name: ui.input
     count: ui.linear_progress
     example: ui.label
+    # Greyed out while the column is unchecked.
+    cells: list[Element]
 
 
 @dataclass
@@ -110,6 +115,10 @@ class ExportView:
     path_chosen: bool = False
     file_type_select: ui.select | None = None
     export_button: ui.button | None = None
+    header_checkbox: ui.checkbox | None = None
+    # Keys of the unchecked columns; kept when the rows are rebuilt.
+    unchecked: set[str] = field(default_factory=set)
+    syncing_header: bool = False
 
     def __post_init__(self) -> None:
         self.columns = export_columns(self.records, self.options)
@@ -144,6 +153,42 @@ class ExportView:
             row.name.props(f"bg-color={_CHANGED_COLOR}")
         else:
             row.name.props(remove="bg-color")
+
+    def _exported_columns(self) -> list[ExportColumn]:
+        return [c for c in self.columns if c.key not in self.unchecked]
+
+    def _set_checked(self, row: _Row, checked: bool) -> None:
+        if checked:
+            self.unchecked.discard(row.column.key)
+        else:
+            self.unchecked.add(row.column.key)
+        self._refresh_checked(row)
+        self._sync_header_checkbox()
+        self._refresh_export_button()
+
+    def _refresh_checked(self, row: _Row) -> None:
+        for cell in row.cells:
+            if row.column.key in self.unchecked:
+                cell.classes(add=_UNCHECKED_CLASS)
+            else:
+                cell.classes(remove=_UNCHECKED_CLASS)
+
+    def _set_all_checked(self, value: bool | None) -> None:
+        if self.syncing_header:
+            return
+        for row in self.rows:
+            row.checkbox.value = value is not False
+
+    def _sync_header_checkbox(self) -> None:
+        """Partly checked shows as indeterminate (None)."""
+        assert self.header_checkbox is not None
+        exported = len(self._exported_columns())
+        value = (
+            True if exported == len(self.columns) else False if not exported else None
+        )
+        self.syncing_header = True
+        self.header_checkbox.value = value
+        self.syncing_header = False
 
     def _set_name(self, row: _Row, value: str) -> None:
         row.column.name = value.strip()
@@ -196,6 +241,9 @@ class ExportView:
         with self.mapping:
             with ui.column().classes("gap-0 border outline-variant rounded-xl"):
                 with ui.row().classes(f"{row_base} py-2 surface-container"):
+                    self.header_checkbox = ui.checkbox(
+                        on_change=lambda e: self._set_all_checked(e.value)
+                    ).props("dense")
                     with (
                         ui.element("div")
                         .classes(count_cell_classes)
@@ -212,16 +260,24 @@ class ExportView:
                     if i % 2 == 1:
                         row_classes += " surface-low"
                     with ui.row().classes(row_classes):
+                        checkbox = ui.checkbox(
+                            value=column.key not in self.unchecked
+                        ).props("dense")
                         with (
                             ui.element("div")
                             .classes(count_cell_classes)
                             .style(count_cell_style)
-                        ):
+                        ) as count_cell:
                             count = ui.linear_progress(show_value=False).classes("w-10")
-                        ui.label(column.label).classes("truncate text-xs").style(
-                            _FIELD_WIDTH
-                        ).tooltip(column.label)
-                        with ui.column().classes("gap-0").style(_NAME_WIDTH):
+                        field_label = (
+                            ui.label(column.label)
+                            .classes("truncate text-xs")
+                            .style(_FIELD_WIDTH)
+                            .tooltip(column.label)
+                        )
+                        with (
+                            ui.column().classes("gap-0").style(_NAME_WIDTH) as name_cell
+                        ):
                             name = (
                                 ui.input(value=column.name)
                                 .classes("mapping-field text-xs w-full")
@@ -232,9 +288,11 @@ class ExportView:
                     row = _Row(
                         column=column,
                         default_name=defaults[column.key],
+                        checkbox=checkbox,
                         name=name,
                         count=count,
                         example=sample,
+                        cells=[count_cell, field_label, name_cell, sample],
                     )
                     self.rows.append(row)
                     with options:
@@ -242,8 +300,13 @@ class ExportView:
                     name.on_value_change(
                         lambda e, row=row: self._set_name(row, e.value)
                     )
+                    checkbox.on_value_change(
+                        lambda e, row=row: self._set_checked(row, e.value)
+                    )
                     self._refresh_name_color(row)
                     self._refresh_row(row)
+                    self._refresh_checked(row)
+        self._sync_header_checkbox()
 
     def _set_option(self, key: str, value: Any) -> None:
         if key == "max_length":
@@ -401,15 +464,23 @@ class ExportView:
         return f"selected {noun}" if self.selected else noun
 
     def _refresh_export_button(self) -> None:
-        assert self.export_button is not None
-        self.export_button.set_enabled(bool(self.records))
+        if self.export_button is None:
+            return
+        reason = (
+            _NO_RECORDS
+            if not self.records
+            else None if self._exported_columns() else _NO_COLUMNS
+        )
+        self.export_button.set_enabled(reason is None)
         self.export_button.clear()
-        if not self.records:
+        if reason is not None:
             with self.export_button:
-                ui.tooltip(_NO_RECORDS)
+                ui.tooltip(reason)
 
     def _export(self) -> Awaitable[None] | None:
-        return self.on_export(self.path, self.columns, self.records, self.options)
+        return self.on_export(
+            self.path, self._exported_columns(), self.records, self.options
+        )
 
     def render(self) -> None:
         ui.add_css(ROW_FIELD_CSS)

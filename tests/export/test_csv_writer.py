@@ -31,9 +31,9 @@ _RECORDS = [
 
 
 def _columns(names: dict[str, str], options: ExportOptions) -> list[ExportColumn]:
-    columns = export_columns(_RECORDS, options)
+    columns = [c for c in export_columns(_RECORDS, options) if c.key in names]
     for column in columns:
-        column.name = names.get(column.key, "")
+        column.name = names[column.key]
     return columns
 
 
@@ -43,7 +43,15 @@ def _write(tmp_path: Path, names: dict[str, str], options: ExportOptions) -> byt
     return path.read_bytes()
 
 
-def test_write_csv__only_named_columns_in_order_with_quoting(tmp_path: Path) -> None:
+def test_write_csv__empty_name_writes_empty_header(tmp_path: Path) -> None:
+    options = ExportOptions(encoding="utf-8")
+
+    content = _write(tmp_path, {"title": "", "doi": "DOI"}, options)
+
+    assert content.decode().splitlines()[0] == ",DOI"
+
+
+def test_write_csv__given_columns_in_order_with_quoting(tmp_path: Path) -> None:
     options = ExportOptions(encoding="utf-8")
 
     content = _write(tmp_path, {"title": "Title", "doi": "DOI"}, options)

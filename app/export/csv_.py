@@ -19,14 +19,13 @@ def write_csv(
     options: ExportOptions,
 ) -> int:
     """Returns how many values were cut to the maximum length."""
-    exported = [column for column in columns if column.name]
     cut = 0
     with path.open("w", encoding=options.encoding, newline="") as file:
         writer = csv.writer(file, delimiter=options.delimiter)
-        writer.writerow(column.name for column in exported)
+        writer.writerow(column.name for column in columns)
         for record in records:
             row = []
-            for column in exported:
+            for column in columns:
                 value = _cell(column_value(column, record, options), options)
                 if len(value) > options.max_length:
                     value = value[: options.max_length]

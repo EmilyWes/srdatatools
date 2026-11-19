@@ -144,7 +144,7 @@ def test_render_export_view__fill_bar_and_example() -> None:
     assert doi.example.text == "10.1038/nature14539"
 
 
-def test_export_view__emptied_name_turns_red_and_leaves_column_out() -> None:
+def test_export_view__emptied_name_turns_red() -> None:
     view = _view()
     row = _row(view, "title")
 
@@ -347,9 +347,64 @@ def test_export_view__export_passes_path_columns_records_and_options(
 
     [(path, columns, records, options)] = calls
     assert path == tmp_path / "library.csv"
-    assert columns is view.columns
+    assert columns == view.columns
     assert [record.id for record in records] == [1, 2]
     assert options == view.options
+
+
+def test_export_view__all_columns_checked_by_default() -> None:
+    view = _view()
+
+    assert all(row.checkbox.value for row in view.rows)
+    assert view.header_checkbox is not None
+    assert view.header_checkbox.value is True
+
+
+def test_export_view__unchecked_column_greyed_and_left_out_of_export(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[Path, list[ExportColumn], list[ExportRecord], ExportOptions]] = []
+    view = _view(on_export=lambda *args: calls.append(args))
+    row = _row(view, "title")
+
+    row.checkbox.value = False
+    assert view.export_button is not None
+    click_and_wait(view.export_button, monkeypatch)
+
+    assert all("opacity-50" in cell.classes for cell in row.cells)
+    assert view.header_checkbox is not None
+    assert view.header_checkbox.value is None
+    [(_, columns, _, _)] = calls
+    assert "title" not in [column.key for column in columns]
+    assert len(columns) == len(view.columns) - 1
+
+
+def test_export_view__header_checkbox_toggles_all_and_disables_export() -> None:
+    view = _view()
+    assert view.header_checkbox is not None
+
+    view.header_checkbox.value = False
+
+    assert not any(row.checkbox.value for row in view.rows)
+    assert view.export_button is not None
+    assert view.export_button.enabled is False
+    assert _tooltip(view.export_button) == "no columns selected"
+
+    view.header_checkbox.value = True
+
+    assert all(row.checkbox.value for row in view.rows)
+    assert view.export_button.enabled is True
+
+
+def test_export_view__unchecked_column_stays_unchecked_on_rebuild() -> None:
+    view = _view()
+    _row(view, "title").checkbox.value = False
+
+    view.option_widgets["empty_columns"].value = True
+
+    assert len(view.rows) > 2
+    assert _row(view, "title").checkbox.value is False
+    assert _row(view, "doi").checkbox.value is True
 
 
 def test_export_view__maximum_length_box_sets_option_and_empty_restores_default() -> (
