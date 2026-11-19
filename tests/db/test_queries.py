@@ -363,6 +363,18 @@ def test_list_keyword_prefixes__first_seen_order_without_unprefixed(
     assert list_keyword_prefixes(keyworded) == ["MeSH", "Author"]
 
 
+def test_count_keywords__unsplit_value_counts_as_one_keyword(
+    session: Session,
+) -> None:
+    session.add(Record(keywords=["keywords:[Cancer; Diet]", "MeSH:[Humans]"]))
+    session.commit()
+
+    assert count_keywords(session) == {
+        None: [("Cancer; Diet", 1)],
+        "MeSH": [("Humans", 1)],
+    }
+
+
 def test_count_publication_types__case_insensitive_sorted_with_none(
     session: Session,
 ) -> None:

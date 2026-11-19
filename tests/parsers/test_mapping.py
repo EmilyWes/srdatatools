@@ -709,5 +709,10 @@ def test_split_keyword__unprefixed_keyword() -> None:
     assert split_keyword("Humans") == (None, "Humans")
 
 
+def test_split_keyword__unwraps_unsplit_value() -> None:
+    assert split_keyword(unsplit_keywords("MeSH", "a; b")) == ("MeSH", "a; b")
+    assert split_keyword(unsplit_keywords("", "a; b")) == (None, "a; b")
+
+
 def test_split_keyword__round_trips_tagged() -> None:
     assert split_keyword(tag_keyword("Author", "[a] b")) == ("Author", "[a] b")

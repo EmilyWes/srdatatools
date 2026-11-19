@@ -155,6 +155,10 @@ def tag_keyword(prefix: str, keyword: str) -> str:
 
 
 def split_keyword(keyword: str) -> tuple[str | None, str]:
+    """An unsplit "prefix:[value]" gives its whole value as one keyword."""
+    if (unsplit := parse_unsplit_keywords(keyword)) is not None:
+        prefix, value = unsplit
+        return prefix or None, value
     match = _TAGGED_KEYWORD.fullmatch(keyword)
     return (match[1], match[2]) if match else (None, keyword)
 

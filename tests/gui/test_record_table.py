@@ -722,6 +722,17 @@ def test_load_rows__keyword_columns_strip_prefix_per_column(session: Session) ->
     ]
 
 
+def test_load_rows__unsplit_keywords_shown_as_stored_per_prefix(
+    session: Session,
+) -> None:
+    session.add(Record(id=1, keywords=["keywords:[Cancer; Diet]", "MeSH:[Humans]"]))
+    session.commit()
+
+    assert load_rows(session, ["keywords", MESH]) == [
+        {"id": 1, "keywords": "Cancer; Diet", column_field(MESH): "Humans"}
+    ]
+
+
 def test_render_record_table__keyword_column_header_and_field() -> None:
     panes = shell()
 

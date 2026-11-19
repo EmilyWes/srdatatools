@@ -121,6 +121,16 @@ def test_column_value__date_parts_only_from_cleaned_date(
     assert column_value(column, _record(publication_date=date), _OPTIONS) == expected
 
 
+def test_export_columns__unsplit_keywords_exported_as_stored_per_prefix() -> None:
+    record = _record(keywords=["keywords:[deep learning; AI]", "MeSH:[Humans; Mice]"])
+    columns = export_columns([record], _OPTIONS)
+
+    keyword_columns = [c for c in columns if isinstance(c, KeywordsColumn)]
+    assert [c.name for c in keyword_columns] == ["Keywords", "Keywords: MeSH"]
+    assert _value(record, "keywords:None") == "deep learning; AI"
+    assert _value(record, "keywords:MeSH") == "Humans; Mice"
+
+
 def test_export_columns__one_keyword_row_per_prefix_with_prefix_stripped() -> None:
     record = _record(
         keywords=["deep learning", "[MeSH] Humans", "[MeSH] Neural Networks"]
