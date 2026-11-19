@@ -24,13 +24,13 @@ from app.db.queries import (
     count_records_per_source_file,
     count_records_per_year,
     list_activity_log,
+    list_author_id_keys,
     list_keyword_prefixes,
     list_label_columns,
     list_record_labels,
     list_record_rows,
     list_record_sources,
     list_source_files,
-    list_unsplit_author_id_keys,
     load_export_records,
 )
 
@@ -376,20 +376,20 @@ def test_count_keywords__unsplit_value_counts_as_one_keyword(
     }
 
 
-def test_list_unsplit_author_id_keys__first_seen_order_ignoring_cleaned(
+def test_list_author_id_keys__first_seen_order_cleaned_and_unsplit(
     session: Session,
 ) -> None:
     session.add_all(
         [
             Record(author_ids="scopus_author_id:[1; 2]"),
-            Record(author_ids="orcid:1|orcid:2"),
+            Record(author_ids="pmid:1|orcid:2"),
             Record(author_ids="orcid:[a], scopus_author_id:[3]"),
             Record(author_ids=None),
         ]
     )
     session.commit()
 
-    assert list_unsplit_author_id_keys(session) == ["scopus_author_id", "orcid"]
+    assert list_author_id_keys(session) == ["scopus_author_id", "pmid", "orcid"]
 
 
 def test_count_publication_types__case_insensitive_sorted_with_none(

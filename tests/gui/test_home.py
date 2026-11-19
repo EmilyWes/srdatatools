@@ -13,6 +13,7 @@ import app.gui.home as home_module
 import app.main
 from app.db.models import ActivityLog, Base, Record, RecordSource, SourceFile
 from app.gui.action_panel import ActionPanel
+from app.gui.format import author_id_key
 from app.gui.home import home
 from app.gui.layout import ShellPanes
 from app.gui.library_dashboard import save_hidden
@@ -412,6 +413,31 @@ def test_home__show_in_table_opens_problem_records(
     assert "filter" in grid.options["initialState"]
     with Session(engine) as session:
         assert load_columns(session) == ["publication_date", "data_quality"]
+
+
+def test_home__show_in_table_expands_author_ids_to_key_columns(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _add_source_file_with_record(engine)
+    with Session(engine) as session:
+        session.query(Record).one().author_ids = "orcid:[1; 2]"
+        session.commit()
+    shells = _capture_shells(monkeypatch)
+    home()
+    show = next(
+        e
+        for e in shells[-1].middle.descendants()
+        if isinstance(e, ui.button) and e.text == "Show in table"
+    )
+
+    click_and_wait(show, monkeypatch)
+
+    with Session(engine) as session:
+        assert load_columns(session) == [
+            "author_names",
+            "data_quality",
+            author_id_key("orcid"),
+        ]
 
 
 def test_home__selecting_source_file_shows_detail_view(

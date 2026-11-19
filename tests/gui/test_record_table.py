@@ -115,7 +115,11 @@ def test_reset_columns__restores_defaults(session: Session) -> None:
 
 
 def test_columns__cover_every_record_field_plus_sources() -> None:
-    record_fields = {column.key for column in Record.__table__.columns} - {"id"}
+    # Author IDs are shown as one column per key instead.
+    record_fields = {column.key for column in Record.__table__.columns} - {
+        "id",
+        "author_ids",
+    }
 
     assert set(COLUMNS) == record_fields | {
         "sources",
@@ -128,7 +132,6 @@ def test_row_for__separates_joined_values_with_semicolon() -> None:
     row = row_for(
         {
             "author_names": "Smith, J|Doe, A",
-            "author_ids": "orcid:1|",
             "author_affiliations": None,
             "issn": "1234-5678|8765-4321",
         }
@@ -136,7 +139,6 @@ def test_row_for__separates_joined_values_with_semicolon() -> None:
 
     assert row == {
         "author_names": "Smith, J; Doe, A",
-        "author_ids": "orcid:1; ",
         "author_affiliations": None,
         "issn": "1234-5678; 8765-4321",
     }
@@ -764,12 +766,15 @@ def test_load_columns__keeps_saved_author_id_column(session: Session) -> None:
     assert load_columns(session) == ["doi", ORCID]
 
 
-def test_load_rows__unsplit_author_ids_shown_per_key(session: Session) -> None:
+def test_load_rows__author_ids_shown_per_key(session: Session) -> None:
     _add_author_ids(session)
 
-    assert load_rows(session, ["author_ids", ORCID]) == [
-        {"id": 1, "author_ids": "", column_field(ORCID): "0000-1; 0000-2"},
-        {"id": 2, "author_ids": "orcid:9; orcid:8", column_field(ORCID): ""},
+    rows = load_rows(session, [ORCID, author_id_key("scopus_author_id")])
+
+    assert [row[column_field(ORCID)] for row in rows] == ["0000-1; 0000-2", "9; 8"]
+    assert [row[column_field(author_id_key("scopus_author_id"))] for row in rows] == [
+        "1",
+        "; ",
     ]
 
 
@@ -802,6 +807,7 @@ def test_render_table_settings__columns_grouped_in_boxes() -> None:
         ["doi"],
         label_columns=[FT],
         keyword_columns=[MESH],
+        author_id_columns=[ORCID],
         label_format="words",
         on_change=changes.append,
         on_label_format=print,
@@ -820,7 +826,7 @@ def test_render_table_settings__columns_grouped_in_boxes() -> None:
     ]
     assert [box.text for box in boxes["Authors"]] == [
         "Authors",
-        "Author IDs",
+        "orcid",
         "Affiliations",
     ]
     assert [box.text for box in boxes["Keywords"]] == ["Keywords", "Keywords: MeSH"]

@@ -3,6 +3,7 @@ from dataclasses import replace
 import pytest
 
 from app.export.columns import (
+    AuthorIdKeyColumn,
     DateColumn,
     ExportColumn,
     ExportRecord,
@@ -63,12 +64,10 @@ def _value(record: ExportRecord, key: str, options: ExportOptions = _OPTIONS) ->
 def test_column_value__author_fields_are_separated_by_semicolon() -> None:
     record = _record(
         author_names="LeCun, Yann|Bengio, Yoshua",
-        author_ids="orcid:1, scopus_author_id:2|",
         author_affiliations="NYU|Mila",
     )
 
     assert _value(record, "author_names") == "LeCun, Yann; Bengio, Yoshua"
-    assert _value(record, "author_ids") == "orcid:1, scopus_author_id:2; "
     assert _value(record, "author_affiliations") == "NYU; Mila"
 
 
@@ -93,10 +92,9 @@ def test_column_value__issn_isbn_delimiter_option() -> None:
 def test_export_columns__author_columns_follow_title() -> None:
     columns = export_columns([_record()], _OPTIONS)
 
-    assert [(c.key, c.name) for c in columns[1:5]] == [
+    assert [(c.key, c.name) for c in columns[1:4]] == [
         ("title", "Title"),
         ("author_names", "Authors"),
-        ("author_ids", "Author IDs"),
         ("author_affiliations", "Affiliations"),
     ]
 
@@ -104,30 +102,51 @@ def test_export_columns__author_columns_follow_title() -> None:
 _UNSPLIT_IDS = "orcid:[0000-1; 0000-2], scopus_author_id:[11; 22]"
 
 
-def test_export_columns__unsplit_author_id_keys_follow_author_ids() -> None:
-    columns = export_columns([_record(author_ids=_UNSPLIT_IDS)], _OPTIONS)
+_CLEANED_IDS = "orcid:1, scopus_author_id:2||scopus_author_id:3"
+
+
+def test_export_columns__author_id_keys_follow_authors() -> None:
+    records = [_record(author_ids=_UNSPLIT_IDS), _record(author_ids=_CLEANED_IDS)]
+    columns = export_columns(records, _OPTIONS)
 
     assert [(c.key, c.name) for c in columns[3:6]] == [
-        ("author_ids", "Author IDs"),
         ("author_ids:orcid", "orcid"),
         ("author_ids:scopus_author_id", "scopus_author_id"),
+        ("author_affiliations", "Affiliations"),
     ]
+    assert not any(c.key == "author_ids" for c in columns)
 
 
 def test_column_value__unsplit_author_ids_per_key_as_stored() -> None:
     record = _record(author_ids=_UNSPLIT_IDS)
 
-    assert _value(record, "author_ids") == ""
     assert _value(record, "author_ids:orcid") == "0000-1; 0000-2"
     assert _value(record, "author_ids:scopus_author_id") == "11; 22"
 
 
-def test_export_columns__cleaned_author_ids_stay_in_one_column() -> None:
-    record = _record(author_ids="orcid:1, scopus_author_id:2|orcid:3")
-    columns = export_columns([record], ExportOptions())
+def test_column_value__cleaned_author_ids_one_slot_per_author() -> None:
+    record = _record(author_ids=_CLEANED_IDS)
 
-    assert not any(c.key.startswith("author_ids:") for c in columns)
-    assert _value(record, "author_ids") == "orcid:1, scopus_author_id:2; orcid:3"
+    assert _value(record, "author_ids:orcid") == "1; ; "
+    assert _value(record, "author_ids:scopus_author_id") == "2; ; 3"
+
+
+def test_column_value__cleaned_author_ids_slots_for_key_of_other_records() -> None:
+    records = [_record(author_ids="orcid:1"), _record(author_ids="pmid:7|pmid:8")]
+    columns = export_columns(records, _OPTIONS)
+
+    assert column_value(_column(columns, "author_ids:orcid"), records[1], _OPTIONS) == (
+        "; "
+    )
+
+
+def test_column_value__author_ids_delimiter_option() -> None:
+    record = _record(author_ids=_CLEANED_IDS)
+    column = AuthorIdKeyColumn(
+        key="a", label="", name="", id_key="scopus_author_id", delimiter=" / "
+    )
+
+    assert column_value(column, record, _OPTIONS) == "2 /  / 3"
 
 
 def test_export_columns__author_id_key_clashing_with_other_id_gets_suffix() -> None:

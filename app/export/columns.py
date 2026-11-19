@@ -5,7 +5,7 @@ from typing import Literal
 from app.export.options import ExportOptions
 from app.gui.format import DISPLAY_SEPARATOR, label_text, source_label
 from app.models.record import CLEANED_DATE, Record
-from app.parsers.authors import AUTHOR_JOINER, parse_unsplit_author_ids
+from app.parsers.authors import AUTHOR_JOINER, author_id_keys, author_ids_for_key
 from app.parsers.mapping import split_keyword
 
 DatePart = Literal["full", "year", "month", "day"]
@@ -17,7 +17,6 @@ _AUTHOR_IDS_SUFFIX = " (author IDs)"
 _SCALAR_LABELS = {
     "title": "Title",
     "author_names": "Authors",
-    "author_ids": "Author IDs",
     "author_affiliations": "Affiliations",
     "journal": "Journal",
     "conference_name": "Conference",
@@ -90,9 +89,8 @@ class KeywordsColumn(ExportColumn):
 
 @dataclass
 class AuthorIdKeyColumn(ExportColumn):
-    """Author IDs not yet split by cleaning, one column per key."""
-
     id_key: str = ""
+    delimiter: str = DISPLAY_SEPARATOR
 
 
 @dataclass
@@ -183,10 +181,8 @@ def export_columns(
         if prefix is not None
     )
     id_keys = dict.fromkeys(key for schema in schemas for key in schema.other_ids)
-    author_id_keys = dict.fromkeys(
-        key
-        for schema in schemas
-        for key, _ in parse_unsplit_author_ids(schema.author_ids)
+    id_keys_of_authors = dict.fromkeys(
+        key for schema in schemas for key in author_id_keys(schema.author_ids)
     )
     label_pairs = dict.fromkeys(
         (label.phase, label.screener) for schema in schemas for label in schema.labels
@@ -196,7 +192,6 @@ def export_columns(
         _extra("record_id"),
         _scalar("title"),
         _joined("author_names"),
-        _joined("author_ids"),
         _joined("author_affiliations"),
         DateColumn(key="date", label="Publication date", name="Publication date"),
         _scalar("journal"),
@@ -223,9 +218,11 @@ def export_columns(
     ]
 
     taken = {column.name.casefold() for column in columns}
-    author_ids_at = next(i for i, c in enumerate(columns) if c.key == "author_ids") + 1
-    columns[author_ids_at:author_ids_at] = [
-        _author_id_key(key, taken) for key in author_id_keys
+    after_authors = (
+        next(i for i, c in enumerate(columns) if c.key == "author_names") + 1
+    )
+    columns[after_authors:after_authors] = [
+        _author_id_key(key, taken) for key in id_keys_of_authors
     ]
     raw_keys = _raw_keys(records, options)
     taken = {column.name.casefold() for column in columns}
@@ -270,8 +267,6 @@ def column_value(
     record = export.record
     if isinstance(column, JoinedColumn):
         value = getattr(record, column.field) or ""
-        if column.field == "author_ids" and parse_unsplit_author_ids(value):
-            return ""
         return value.replace(AUTHOR_JOINER, column.delimiter)
     if isinstance(column, ScalarColumn):
         value = getattr(record, column.field)
@@ -284,11 +279,7 @@ def column_value(
             text for prefix, text in keywords if prefix == column.prefix
         )
     if isinstance(column, AuthorIdKeyColumn):
-        return DISPLAY_SEPARATOR.join(
-            value
-            for key, value in parse_unsplit_author_ids(record.author_ids)
-            if key == column.id_key
-        )
+        return author_ids_for_key(record.author_ids, column.id_key, column.delimiter)
     if isinstance(column, OtherIdColumn):
         return record.other_ids.get(column.id_key, "")
     if isinstance(column, LabelColumn):

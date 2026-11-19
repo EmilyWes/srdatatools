@@ -17,12 +17,12 @@ from sqlalchemy.orm import Session
 
 from app.cleaning.quality import QUALITY_FIELDS, quality_issues
 from app.db.queries import (
+    list_author_id_keys,
     list_keyword_prefixes,
     list_label_columns,
     list_record_labels,
     list_record_rows,
     list_record_sources,
-    list_unsplit_author_id_keys,
 )
 from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.format import (
@@ -43,7 +43,7 @@ from app.gui.format import (
 )
 from app.gui.quirks_overview import render_box_frame
 from app.models.record import publication_year
-from app.parsers.authors import AUTHOR_JOINER, parse_unsplit_author_ids
+from app.parsers.authors import AUTHOR_JOINER, author_ids_for_key
 from app.parsers.mapping import split_keyword
 
 _COLUMNS_KEY = "table_columns"
@@ -76,7 +76,6 @@ COLUMNS: dict[str, str] = {
     "journal": "Journal",
     "sources": "Sources",
     "abstract": "Abstract",
-    "author_ids": "Author IDs",
     "author_affiliations": "Affiliations",
     "conference_name": "Conference",
     "volume": "Volume",
@@ -97,9 +96,7 @@ COLUMNS: dict[str, str] = {
 # Columns worked out from other fields rather than read from one.
 _DERIVED_COLUMNS = ("sources", "keywords", "publication_year", "data_quality")
 DEFAULT_COLUMNS = ["doi", "title", "author_names"]
-_JOINED_FIELDS = frozenset(
-    {"author_names", "author_ids", "author_affiliations", "issn", "isbn"}
-)
+_JOINED_FIELDS = frozenset({"author_names", "author_affiliations", "issn", "isbn"})
 _QUALITY_FILTER_STATE: dict[str, Any] = {
     "filter": {
         "filterModel": {"data_quality": {"filterType": "text", "type": "notBlank"}}
@@ -117,7 +114,7 @@ _COLUMN_BOXES: dict[str, tuple[str, ...]] = {
         "sources",
         "data_quality",
     ),
-    "Authors": ("author_names", "author_ids", "author_affiliations"),
+    "Authors": ("author_names", "author_affiliations"),
     "Publication": (
         "publication_date",
         "publication_year",
@@ -179,7 +176,7 @@ def load_keyword_columns(session: Session) -> list[str]:
 
 
 def load_author_id_columns(session: Session) -> list[str]:
-    return [author_id_key(key) for key in list_unsplit_author_id_keys(session)]
+    return [author_id_key(key) for key in list_author_id_keys(session)]
 
 
 def load_columns(session: Session) -> list[str]:
@@ -258,13 +255,10 @@ def load_rows(
     rows = []
     for record in list_record_rows(session, list(dict.fromkeys(fields))):
         keywords = [split_keyword(keyword) for keyword in record.pop("keywords", [])]
-        unsplit_ids = parse_unsplit_author_ids(record.get("author_ids"))
         row = row_for(record)
-        if unsplit_ids:
-            row["author_ids"] = ""
         for key in author_id_columns:
-            row[column_field(key)] = DISPLAY_SEPARATOR.join(
-                value for id_key, value in unsplit_ids if id_key == author_id_name(key)
+            row[column_field(key)] = author_ids_for_key(
+                record.get("author_ids"), author_id_name(key), DISPLAY_SEPARATOR
             )
         if "data_quality" in columns:
             row["data_quality"] = DISPLAY_SEPARATOR.join(quality_issues(record))
@@ -459,7 +453,7 @@ def render_table_settings(
             with ui.row().classes("gap-3 items-start"):
                 for title, keys in _COLUMN_BOXES.items():
                     if title == "Authors":
-                        at = keys.index("author_ids") + 1
+                        at = keys.index("author_names") + 1
                         keys = (*keys[:at], *author_id_columns, *keys[at:])
                     with render_box_frame(title):
                         checkboxes(keys)

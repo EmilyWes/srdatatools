@@ -199,7 +199,15 @@ def home() -> None:
         )
 
     async def show_quality_problems(columns: list[str]) -> None:
-        save_table_columns(columns)
+        with session_scope(_engine) as session:
+            author_id_columns = load_author_id_columns(session)
+        save_table_columns(
+            [
+                shown
+                for key in columns
+                for shown in (author_id_columns if key == "author_ids" else [key])
+            ]
+        )
         if nav is not None:
             nav.highlight("library:table")
         await show_table(quality_filter=True)
