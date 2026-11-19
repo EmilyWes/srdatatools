@@ -18,7 +18,7 @@ from app.export.columns import (
     export_columns,
     fill_count,
 )
-from app.export.options import ExportOptions
+from app.export.options import ExportFileType, ExportOptions, default_path
 from app.gui.format import format_count
 from app.gui.import_flow import (
     BUTTON_PROPS,
@@ -40,8 +40,11 @@ OnExport = Callable[
     Awaitable[None] | None,
 ]
 
-_FILE_TYPES = ("CSV files (*.csv)",)
-_TYPE_OPTIONS = {"csv": "CSV"}
+_FILE_TYPES: dict[ExportFileType, str] = {
+    "csv": "CSV files (*.csv)",
+    "tsv": "TSV files (*.tsv)",
+}
+_TYPE_OPTIONS = {"csv": "CSV", "tsv": "TSV"}
 _NO_RECORDS = "no records to export"
 
 _EMPTY_NAME_COLOR = "red-2"
@@ -61,13 +64,13 @@ _LABEL_FORMATS = {"numbers": "Numbers", "words": "Words"}
 _LINE_BREAKS = {"keep": "Keep", "space": "Replace with a space"}
 
 
-async def pick_save_path(suggested: Path) -> Path | None:
+async def pick_save_path(suggested: Path, file_type: ExportFileType) -> Path | None:
     assert app.native.main_window is not None, "native window is not running"
     selected = await app.native.main_window.create_file_dialog(
         FileDialog.SAVE,
         directory=str(suggested.parent),
         save_filename=suggested.name,
-        file_types=_FILE_TYPES,
+        file_types=(_FILE_TYPES[file_type],),
     )
     return Path(selected[0]) if selected else None
 
@@ -104,6 +107,8 @@ class ExportView:
     )
     mapping: ui.column | None = None
     path_label: ui.label | None = None
+    path_chosen: bool = False
+    file_type_select: ui.select | None = None
     export_button: ui.button | None = None
 
     def __post_init__(self) -> None:
@@ -246,7 +251,9 @@ class ExportView:
             value = int(value) if value else ExportOptions().max_length
         self.options = self.options.model_copy(update={key: value})
         self._refresh_option_colors()
-        if key in ("ignored_columns", "original_data", "empty_columns"):
+        if key == "file_type":
+            self._change_file_type(value)
+        elif key in ("ignored_columns", "original_data", "empty_columns"):
             self._rebuild_columns()
             self._render_mapping()
         elif key == "label_format":
@@ -254,6 +261,16 @@ class ExportView:
                 self._refresh_row(row)
         if self.on_options_change is not None:
             self.on_options_change(self.options)
+
+    def _change_file_type(self, file_type: ExportFileType) -> None:
+        """A chosen path keeps its name; the default is worked out again."""
+        if self.path_chosen:
+            self.path = self.path.with_suffix(f".{file_type}")
+        else:
+            self.path = default_path(self.path.parent, file_type)
+        self._show_path()
+        if file_type == "tsv":
+            self.option_widgets["delimiter"].value = "	"
 
     def _refresh_option_colors(self) -> None:
         defaults = ExportOptions()
@@ -360,14 +377,17 @@ class ExportView:
     def _restore_options(self) -> None:
         for key, widget in self.option_widgets.items():
             widget.value = getattr(ExportOptions(), key)
+        assert self.file_type_select is not None
+        self.file_type_select.value = ExportOptions().file_type
         if self.on_restore_options is not None:
             self.on_restore_options()
 
     async def _choose_path(self) -> None:
-        path = await pick_save_path(self.path)
+        path = await pick_save_path(self.path, self.options.file_type)
         if path is None:
             return
         self.path = path
+        self.path_chosen = True
         self._show_path()
 
     def _show_path(self) -> None:
@@ -406,9 +426,14 @@ class ExportView:
                         ui.label(format_count(len(self.records))).classes("font-bold")
                         ui.label(self._records_noun() + " to:")
                     ui.label("File type:").classes("text-sm")
-                    ui.select(_TYPE_OPTIONS, value=self.options.file_type).props(
-                        SELECT_PROPS
-                    ).classes(SELECT_CLASSES)
+                    self.file_type_select = (
+                        ui.select(_TYPE_OPTIONS, value=self.options.file_type)
+                        .props(SELECT_PROPS)
+                        .classes(SELECT_CLASSES)
+                    )
+                    self.file_type_select.on_value_change(
+                        lambda e: self._set_option("file_type", e.value)
+                    )
                     ui.button("Select file path…", on_click=self._choose_path).props(
                         BUTTON_PROPS
                     )

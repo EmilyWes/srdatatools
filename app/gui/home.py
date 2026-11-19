@@ -400,10 +400,11 @@ def home() -> None:
 
         def load() -> tuple[list[ExportRecord], ExportOptions, Path]:
             with session_scope(_engine) as session:
+                options = load_options(session)
                 return (
                     load_export_records(session, ids),
-                    load_options(session),
-                    default_path(load_folder(session)),
+                    options,
+                    default_path(load_folder(session), options.file_type),
                 )
 
         records, options, path = await run_busy("Loading records…", load)

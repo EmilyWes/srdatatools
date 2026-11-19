@@ -10,11 +10,13 @@ from app.gui.format import LabelFormat
 _OPTIONS_KEY = "export_options"
 _FOLDER_KEY = "export_folder"
 _DEFAULT_STEM = "library"
-_DEFAULT_SUFFIX = ".csv"
+
+
+ExportFileType = Literal["csv", "tsv"]
 
 
 class ExportOptions(BaseModel):
-    file_type: Literal["csv"] = "csv"
+    file_type: ExportFileType = "csv"
     delimiter: Literal[",", ";", "\t"] = ","
     encoding: Literal["utf-8-sig", "utf-8"] = "utf-8-sig"
     label_format: LabelFormat = "numbers"
@@ -57,11 +59,11 @@ def save_folder(session: Session, folder: Path) -> None:
     set_setting(session, _FOLDER_KEY, str(folder))
 
 
-def default_path(folder: Path) -> Path:
+def default_path(folder: Path, file_type: ExportFileType) -> Path:
     """library.csv, or library_1.csv, library_2.csv, ... when it already exists."""
-    path = folder / f"{_DEFAULT_STEM}{_DEFAULT_SUFFIX}"
+    path = folder / f"{_DEFAULT_STEM}.{file_type}"
     number = 0
     while path.exists():
         number += 1
-        path = folder / f"{_DEFAULT_STEM}_{number}{_DEFAULT_SUFFIX}"
+        path = folder / f"{_DEFAULT_STEM}_{number}.{file_type}"
     return path

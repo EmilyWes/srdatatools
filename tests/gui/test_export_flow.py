@@ -93,17 +93,18 @@ def test_pick_save_path__opens_in_suggested_folder_with_suggested_name(
     window = _FakeWindow((str(tmp_path / "out.csv"),))
     monkeypatch.setattr(export_flow.app.native, "main_window", window)
 
-    assert asyncio.run(pick_save_path(tmp_path / "library_1.csv")) == (
+    assert asyncio.run(pick_save_path(tmp_path / "library_1.csv", "csv")) == (
         tmp_path / "out.csv"
     )
     assert window.kwargs["directory"] == str(tmp_path)
     assert window.kwargs["save_filename"] == "library_1.csv"
+    assert window.kwargs["file_types"] == ("CSV files (*.csv)",)
 
 
 def test_pick_save_path__none_when_cancelled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(export_flow.app.native, "main_window", _FakeWindow(None))
 
-    assert asyncio.run(pick_save_path(_DEFAULT_PATH)) is None
+    assert asyncio.run(pick_save_path(_DEFAULT_PATH, "csv")) is None
 
 
 @pytest.mark.parametrize(
@@ -239,6 +240,67 @@ def test_export_view__save_as_starts_from_current_path(
     assert window.kwargs["directory"] == str(_DEFAULT_PATH.parent)
     assert window.kwargs["save_filename"] == "library.csv"
     assert view.path == _DEFAULT_PATH
+
+
+def _view_at(path: Path) -> ExportView:
+    return render_export_view(
+        shell().middle,
+        _records(),
+        ExportOptions(),
+        path,
+        selected=False,
+        on_export=lambda p, c, r, o: None,
+    )
+
+
+def test_export_view__tsv_sets_tab_and_recomputes_default_path(tmp_path: Path) -> None:
+    (tmp_path / "library.tsv").touch()
+    view = _view_at(tmp_path / "library.csv")
+    assert view.file_type_select is not None
+
+    view.file_type_select.value = "tsv"
+
+    assert view.options.file_type == "tsv"
+    assert view.options.delimiter == "	"
+    assert view.path == tmp_path / "library_1.tsv"
+
+
+def test_export_view__back_to_csv_keeps_delimiter(tmp_path: Path) -> None:
+    view = _view_at(tmp_path / "library.csv")
+    assert view.file_type_select is not None
+    view.file_type_select.value = "tsv"
+
+    view.file_type_select.value = "csv"
+
+    assert view.options.delimiter == "	"
+    assert view.path == tmp_path / "library.csv"
+
+
+def test_export_view__file_type_swaps_extension_of_chosen_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = _view_at(tmp_path / "library.csv")
+    window = _FakeWindow((str(tmp_path / "mine.csv"),))
+    monkeypatch.setattr(export_flow.app.native, "main_window", window)
+    run_in(view.middle, view._choose_path())
+    assert view.file_type_select is not None
+
+    view.file_type_select.value = "tsv"
+
+    assert view.path == tmp_path / "mine.tsv"
+    assert view.path_label is not None
+    assert view.path_label.text == str(Path(tmp_path.name) / "mine.tsv")
+
+
+def test_export_view__restore_defaults_resets_file_type(tmp_path: Path) -> None:
+    view = _view_at(tmp_path / "library.csv")
+    assert view.file_type_select is not None
+    view.file_type_select.value = "tsv"
+
+    view._restore_options()
+
+    assert view.options == ExportOptions()
+    assert view.path == tmp_path / "library.csv"
 
 
 def test_export_view__chosen_path_shows_name_with_full_path_on_hover(

@@ -55,14 +55,16 @@ def test_load_folder__documents_when_saved_folder_is_gone(
 
 
 def test_default_path__library_when_free(tmp_path: Path) -> None:
-    assert default_path(tmp_path) == tmp_path / "library.csv"
+    assert default_path(tmp_path, "csv") == tmp_path / "library.csv"
+    assert default_path(tmp_path, "tsv") == tmp_path / "library.tsv"
 
 
 def test_default_path__numbers_past_existing_files(tmp_path: Path) -> None:
     (tmp_path / "library.csv").touch()
     (tmp_path / "library_1.csv").touch()
 
-    assert default_path(tmp_path) == tmp_path / "library_2.csv"
+    assert default_path(tmp_path, "csv") == tmp_path / "library_2.csv"
+    assert default_path(tmp_path, "tsv") == tmp_path / "library.tsv"
 
 
 def test_load_options__defaults_when_unset(session: Session) -> None:
