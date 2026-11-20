@@ -123,9 +123,6 @@ app/
     settings.py      # app_settings key/value read/write
     activity_log.py  # writes plain-language activity_log rows (for every module that acts)
     migrations/      # Alembic
-  dedup/             # (planned) matching strategies (DOI, fuzzy title+author+year)
-  enrich/            # (planned) OpenAlex client, field-merging logic
-  snowball/          # (planned) reference/citation graph traversal via OpenAlex
   gui/
     general/
       home.py        # the single page, wires the panes together
@@ -142,6 +139,9 @@ app/
       dashboard.py   # Library dashboard stats in the middle panel
       record_table.py # Library record table + its column settings view
       quality.py     # data-quality checks per record, worked out from its fields (not stored), for the dashboard and the table
+    dedup/           # (planned) matching strategies (DOI, fuzzy title+author+year)
+    enrich/          # (planned) OpenAlex client, field-merging logic
+    snowball/        # (planned) reference/citation graph traversal via OpenAlex
     export/
       export_flow.py # export view in the middle panel
       columns.py     # export columns (one per output column) and their cell values
@@ -162,7 +162,7 @@ app/
   main.py            # launches pywebview + NiceGUI server
 ```
 
-Keeping parsers, dedup, enrich and the export writers (in `gui/export/`) as separate modules with a shared internal `Record` schema means each input/output format only needs a thin adapter, and new sources (e.g. Scopus, Web of Science exports) can be added later without touching the rest of the app.
+Keeping parsers, dedup, enrich and the export writers (the last three in `gui/`) as separate modules with a shared internal `Record` schema means each input/output format only needs a thin adapter, and new sources (e.g. Scopus, Web of Science exports) can be added later without touching the rest of the app.
 
 ## Data model
 
