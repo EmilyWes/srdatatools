@@ -150,6 +150,31 @@ def test_log_export__cut_values_make_a_warning(session: Session) -> None:
     assert entry.status == "warning"
 
 
+def test_log_export__removed_control_characters_make_a_warning(
+    session: Session,
+) -> None:
+    log_export(session, "library.xlsx", records=10, cut=3, removed=2)
+    session.commit()
+
+    entry = session.query(ActivityLog).one()
+    assert entry.message == (
+        "Exported to:\nlibrary.xlsx\nRecords: 10\nValues cut: 3"
+        "\nControl characters removed: 2"
+    )
+    assert entry.status == "warning"
+
+
+def test_log_export__removed_alone_makes_a_warning(session: Session) -> None:
+    log_export(session, "library.xlsx", records=10, removed=1)
+    session.commit()
+
+    entry = session.query(ActivityLog).one()
+    assert entry.message == (
+        "Exported to:\nlibrary.xlsx\nRecords: 10\nControl characters removed: 1"
+    )
+    assert entry.status == "warning"
+
+
 def test_log_cleaning__one_line_per_step_in_given_order(session: Session) -> None:
     per_step = Counter({"Split authors": 300, "Pages set": 4000})
 

@@ -70,16 +70,18 @@ def log_records_deleted(session: Session, count: int) -> ActivityLog:
 
 
 def log_export(
-    session: Session, filename: str, records: int, cut: int = 0
+    session: Session, filename: str, records: int, cut: int = 0, removed: int = 0
 ) -> ActivityLog:
     message = f"Exported to:\n{filename}\nRecords: {format_count(records)}"
     if cut:
         message += f"\nValues cut: {format_count(cut)}"
+    if removed:
+        message += f"\nControl characters removed: {format_count(removed)}"
     entry = ActivityLog(
         timestamp=datetime.datetime.now(),
         action_type="export",
         message=message,
-        status="warning" if cut else "ok",
+        status="warning" if cut or removed else "ok",
     )
     session.add(entry)
     return entry

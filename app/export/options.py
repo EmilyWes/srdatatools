@@ -12,7 +12,7 @@ _FOLDER_KEY = "export_folder"
 _DEFAULT_STEM = "library"
 
 
-ExportFileType = Literal["csv", "tsv"]
+ExportFileType = Literal["csv", "tsv", "xlsx"]
 
 
 class ExportOptions(BaseModel):
@@ -24,6 +24,8 @@ class ExportOptions(BaseModel):
     # Python's csv module rejects longer fields by default, and so do the tools
     # built on it.
     max_length: int = Field(default=131_072, ge=1)
+    # Excel holds at most 32.767 characters per cell.
+    excel_max_length: int = Field(default=32_767, ge=1, le=32_767)
     empty_columns: bool = False
     ignored_columns: bool = False
     original_data: bool = False

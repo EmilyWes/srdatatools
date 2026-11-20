@@ -292,6 +292,71 @@ def test_export_view__file_type_swaps_extension_of_chosen_path(
     assert view.path_label.text == str(Path(tmp_path.name) / "mine.tsv")
 
 
+def test_pick_save_path__excel_filter(monkeypatch: pytest.MonkeyPatch) -> None:
+    window = _FakeWindow(None)
+    monkeypatch.setattr(export_flow.app.native, "main_window", window)
+
+    asyncio.run(pick_save_path(Path("library.xlsx"), "xlsx"))
+
+    assert window.kwargs["file_types"] == ("Excel files (*.xlsx)",)
+
+
+def test_export_view__excel_hides_delimiter_and_encoding(tmp_path: Path) -> None:
+    view = _view_at(tmp_path / "library.csv")
+    assert view.file_type_select is not None
+
+    view.file_type_select.value = "xlsx"
+
+    assert view.options.file_type == "xlsx"
+    assert view.path == tmp_path / "library.xlsx"
+    assert "delimiter" not in view.option_widgets
+    assert "encoding" not in view.option_widgets
+    assert "max_length" not in view.option_widgets
+    assert view.option_widgets["excel_max_length"].value == 32_767
+
+
+def test_export_view__excel_keeps_delimiter_and_back_to_csv_shows_it(
+    tmp_path: Path,
+) -> None:
+    view = _view_at(tmp_path / "library.csv")
+    assert view.file_type_select is not None
+    view.option_widgets["delimiter"].value = ";"
+
+    view.file_type_select.value = "xlsx"
+    assert view.options.delimiter == ";"
+    view.file_type_select.value = "csv"
+
+    assert view.options.delimiter == ","
+    assert view.option_widgets["delimiter"].value == ","
+    assert "excel_max_length" not in view.option_widgets
+
+
+def test_export_view__excel_maximum_length_box_sets_its_own_option() -> None:
+    changes: list[ExportOptions] = []
+    view = _view(
+        options=ExportOptions(file_type="xlsx"), on_options_change=changes.append
+    )
+
+    view.option_widgets["excel_max_length"].value = 100
+    assert view.options.excel_max_length == 100
+    assert view.options.max_length == 131_072
+    assert changes[-1].excel_max_length == 100
+
+    view.option_widgets["excel_max_length"].value = None
+    assert view.options.excel_max_length == 32_767
+
+
+def test_export_view__restore_defaults_resets_hidden_options() -> None:
+    view = _view(
+        options=ExportOptions(file_type="xlsx", delimiter=";", encoding="utf-8")
+    )
+
+    view._restore_options()
+
+    assert view.options == ExportOptions()
+    assert view.option_widgets["delimiter"].value == ","
+
+
 def test_export_view__restore_defaults_resets_file_type(tmp_path: Path) -> None:
     view = _view_at(tmp_path / "library.csv")
     assert view.file_type_select is not None

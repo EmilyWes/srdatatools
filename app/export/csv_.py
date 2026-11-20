@@ -6,7 +6,7 @@ from app.export.columns import ExportColumn, ExportRecord, column_value
 from app.export.options import ExportOptions
 
 
-def _cell(value: str, options: ExportOptions) -> str:
+def line_breaks(value: str, options: ExportOptions) -> str:
     if options.line_breaks == "space":
         return " ".join(value.split("\n")).replace("\r", "")
     return value
@@ -26,7 +26,7 @@ def write_csv(
         for record in records:
             row = []
             for column in columns:
-                value = _cell(column_value(column, record, options), options)
+                value = line_breaks(column_value(column, record, options), options)
                 if len(value) > options.max_length:
                     value = value[: options.max_length]
                     cut += 1

@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 from nicegui import ui
+from openpyxl import load_workbook
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
@@ -731,6 +732,28 @@ def test_home__export_with_cut_values_warns(
     assert notifications == [
         "Exported 1 record to library.csv; 3 values cut to 3 characters"
     ]
+    with Session(engine) as session:
+        assert session.query(ActivityLog).one().status == "warning"
+
+
+def test_home__export_writes_excel_and_warns_about_cuts(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _add_source_file_with_record(engine)
+    notifications = _capture_notifications(monkeypatch)
+    [view] = _open_export(monkeypatch)
+    assert view.file_type_select is not None
+    view.file_type_select.value = "xlsx"
+    view.option_widgets["excel_max_length"].value = 3
+    view.path = tmp_path / "library.xlsx"
+    view._refresh_export_button()
+
+    click_and_wait(view.export_button, monkeypatch)
+
+    sheet = load_workbook(tmp_path / "library.xlsx")["Records"]
+    assert sheet["A1"].value == "Record ID"
+    assert notifications[0].startswith("Exported 1 record to library.xlsx; ")
+    assert notifications[0].endswith(" values cut to 3 characters")
     with Session(engine) as session:
         assert session.query(ActivityLog).one().status == "warning"
 
