@@ -18,7 +18,7 @@ ExportFileType = Literal["csv", "tsv", "xlsx"]
 class ExportOptions(BaseModel):
     file_type: ExportFileType = "csv"
     delimiter: Literal[",", ";", "\t"] = ","
-    encoding: Literal["utf-8-sig", "utf-8"] = "utf-8-sig"
+    encoding: Literal["utf-8-sig", "utf-8"] = "utf-8"
     label_format: LabelFormat = "numbers"
     line_breaks: Literal["keep", "space"] = "keep"
     # Python's csv module rejects longer fields by default, and so do the tools
