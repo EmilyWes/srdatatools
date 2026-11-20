@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Base
 from app.db.settings import set_setting
-from app.helpers.format import keyword_key, label_key
 from app.gui.general.layout import shell
 from app.gui.library.dashboard import (
     dashboard_items,
@@ -20,6 +19,7 @@ from app.gui.library.dashboard import (
     reset_hidden,
     save_hidden,
 )
+from app.helpers.format import keyword_key, label_key
 from app.helpers.theme import (
     CHART_COLORS,
     COMPLETE_COLOR,

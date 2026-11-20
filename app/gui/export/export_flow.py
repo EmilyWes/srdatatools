@@ -24,8 +24,7 @@ from app.gui.export.columns import (
 )
 from app.gui.export.options import ExportFileType, ExportOptions, default_path
 from app.gui.export.ris_tags import CURATED_TAGS, RIS_TAGS, TAG_PATTERN
-from app.helpers.format import format_count
-from app.gui.import.import_flow import (
+from app.gui.importing.import_flow import (
     BUTTON_PROPS,
     FILE_LABEL_CLASSES,
     GRID_CLASSES,
@@ -33,6 +32,7 @@ from app.gui.import.import_flow import (
     SELECT_CLASSES,
     SELECT_PROPS,
 )
+from app.helpers.format import format_count
 from app.helpers.mapping_table import ROW_FIELD_CSS, fill_color
 from app.helpers.quirks_overview import (
     FIELD_CSS,

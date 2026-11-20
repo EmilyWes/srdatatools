@@ -4,6 +4,8 @@ import pytest
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.db.models import Base
+from app.db.settings import set_setting
 from app.gui.cleaning.options import (
     CLEANING_BOXES,
     CleaningOptions,
@@ -11,8 +13,6 @@ from app.gui.cleaning.options import (
     reset_options,
     save_options,
 )
-from app.db.models import Base
-from app.db.settings import set_setting
 from app.parsers.profiles.overview import QuirkItem
 
 

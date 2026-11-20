@@ -7,10 +7,15 @@ from nicegui import ui
 from nicegui.element import Element
 from nicegui.elements.tooltip import Tooltip
 
-from app.gui.export.columns import ExportColumn, ExportRecord, ExportSource, RisTypeColumn
-from app.gui.export.options import ExportOptions
 from app.gui.export import export_flow
+from app.gui.export.columns import (
+    ExportColumn,
+    ExportRecord,
+    ExportSource,
+    RisTypeColumn,
+)
 from app.gui.export.export_flow import ExportView, pick_save_path, render_export_view
+from app.gui.export.options import ExportOptions
 from app.gui.general.layout import shell
 from app.models.record import Record
 from tests.gui.clicks import click_and_wait, run_in

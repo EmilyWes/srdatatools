@@ -1,4 +1,4 @@
-﻿﻿import re
+﻿import re
 from collections.abc import Sequence
 from pathlib import Path
 

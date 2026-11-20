@@ -2,13 +2,13 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.session import project_root
+from app.gui.general.layout import shell
 from app.gui.other.about import (
     HELP_PLACEHOLDER,
     REPOSITORY_URL,
     render_about_view,
     render_help_view,
 )
-from app.gui.general.layout import shell
 
 
 def _texts(middle: Element) -> list[str]:

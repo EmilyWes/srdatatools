@@ -2,8 +2,8 @@ import pytest
 from nicegui import ui
 from nicegui.element import Element
 
-from app.gui.cleaning.options import CleaningOptions
 from app.gui.cleaning.cleaning_flow import CleaningView, render_cleaning_view
+from app.gui.cleaning.options import CleaningOptions
 from app.gui.general.layout import shell
 from tests.gui.clicks import click_and_wait
 

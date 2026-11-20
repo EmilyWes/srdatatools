@@ -16,7 +16,7 @@ from app.gui.export.ris_tags import (
 from app.models.record import Record
 from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
 
-_DATA = Path(__file__).parent.parent / "data"
+_DATA = Path(__file__).parents[2] / "data"
 
 
 def test_ris_tags__curated_tags_come_first() -> None:

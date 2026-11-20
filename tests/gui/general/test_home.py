@@ -14,12 +14,12 @@ import app.gui.general.home as home_module
 import app.main
 from app.db.models import ActivityLog, Base, Record, RecordSource, SourceFile
 from app.gui.general.action_panel import ActionPanel
-from app.helpers.format import author_id_key
 from app.gui.general.home import home
 from app.gui.general.layout import ShellPanes
 from app.gui.library.dashboard import save_hidden
 from app.gui.library.navigation import LeftPanelNav
 from app.gui.library.record_table import load_columns
+from app.helpers.format import author_id_key
 from app.parsers.common import FileSummary
 from app.parsers.profiles.overview import default_choices
 from tests.gui.clicks import click_and_wait
