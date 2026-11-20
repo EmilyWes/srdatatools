@@ -12,7 +12,9 @@ from app.export.columns import (
     KeywordsColumn,
     LabelColumn,
     RawColumn,
+    RisTypeColumn,
     column_value,
+    column_values,
     example,
     export_columns,
     fill_count,
@@ -370,3 +372,191 @@ def test_fill_count_and_example__count_records_with_a_value() -> None:
 
     assert fill_count(column, records, _OPTIONS) == 2
     assert example(column, records, _OPTIONS) == "10.1038/nature14539"
+
+
+_RIS = ExportOptions(file_type="ris", empty_columns=True)
+
+
+def _ris_column(key: str, records: list[ExportRecord] | None = None) -> ExportColumn:
+    return _column(export_columns(records or [_record()], _RIS), key)
+
+
+@pytest.mark.parametrize(
+    ("key", "tag"),
+    [
+        ("record_id", "ID"),
+        ("title", "TI"),
+        ("author_names", "AU"),
+        ("author_affiliations", "AD"),
+        ("date:year", "PY"),
+        ("date", "DA"),
+        ("journal", "T2"),
+        ("conference_name", "T2"),
+        ("volume", "VL"),
+        ("issue", "IS"),
+        ("pages:start", "SP"),
+        ("pages:end", "EP"),
+        ("abstract", "AB"),
+        ("doi", "DO"),
+        ("pmid", "AN"),
+        ("issn", "SN"),
+        ("isbn", "SN"),
+        ("keywords:None", "KW"),
+        ("language", "LA"),
+        ("publisher", "PB"),
+        ("url", "UR"),
+    ],
+)
+def test_export_columns__ris_default_tags(key: str, tag: str) -> None:
+    column = _ris_column(key)
+
+    assert column.name == tag
+    assert column.default_checked
+
+
+def test_export_columns__ris_type_row_first() -> None:
+    column = export_columns([_record()], _RIS)[0]
+
+    assert isinstance(column, RisTypeColumn)
+    assert column.name == "TY"
+
+
+def test_export_columns__ris_notes_row_is_n1_without_note_name() -> None:
+    column = _ris_column("notes")
+
+    assert (column.name, column.note_name) == ("N1", "")
+
+
+def test_export_columns__ris_keyword_prefix_rows_are_kw() -> None:
+    record = _record(keywords=["[Author] fossils"])
+
+    assert _ris_column("keywords:Author", [record]).name == "KW"
+
+
+def test_export_columns__ris_pages_one_sp_row_without_split() -> None:
+    options = _RIS.model_copy(update={"split_pages": False})
+    keys = [c.key for c in export_columns([_record()], options)]
+
+    assert "pages" in keys
+    assert "pages:start" not in keys
+    assert _column(export_columns([_record()], options), "pages").name == "SP"
+
+
+@pytest.mark.parametrize(
+    ("key", "note_name", "checked"),
+    [
+        ("other_id:eid", "eid", True),
+        ("label:ta\x00screener 1", "Label: ta / screener 1", True),
+        ("author_ids:orcid", "Author IDs: orcid", False),
+        ("sources", "Sources", False),
+        ("source_files", "Source files", False),
+    ],
+)
+def test_export_columns__ris_rows_without_a_tag_go_to_n1(
+    key: str, note_name: str, checked: bool
+) -> None:
+    record = _record(
+        other_ids={"eid": "2-s2.0-1"},
+        labels=[Label(phase="ta", screener="screener 1", value="include")],
+        author_ids="orcid:1",
+    )
+
+    column = _ris_column(key, [record])
+
+    assert (column.name, column.note_name) == ("N1", note_name)
+    assert column.default_checked is checked
+
+
+def test_export_columns__ris_raw_keys_keep_tag_or_go_to_n1() -> None:
+    record = _record(sources=[_scopus_source(**{"M3": "Article", "Cited by": "4"})])
+    options = _RIS.model_copy(update={"original_data": True})
+    columns = export_columns([record], options)
+
+    tagged = _column(columns, "raw:M3")
+    other = _column(columns, "raw:Cited by")
+    assert (tagged.name, tagged.note_name) == ("M3", "")
+    assert (other.name, other.note_name) == ("N1", "Cited by")
+    assert tagged.default_checked and other.default_checked
+
+
+@pytest.mark.parametrize(
+    ("pages", "start", "end"),
+    [("12-34", "12", "34"), ("e123", "e123", ""), (None, "", "")],
+)
+def test_column_value__ris_pages_split(pages: str | None, start: str, end: str) -> None:
+    record = _record(pages=pages)
+
+    assert column_value(_ris_column("pages:start"), record, _RIS) == start
+    assert column_value(_ris_column("pages:end"), record, _RIS) == end
+
+
+@pytest.mark.parametrize(
+    ("date", "year", "ris_date"),
+    [
+        ("2021/03/07", "2021", "2021/03/07/"),
+        ("2021/03/", "2021", "2021/03//"),
+        ("2021//", "2021", "2021///"),
+        ("Mar 2021", "", "Mar 2021"),
+        (None, "", ""),
+    ],
+)
+def test_column_value__ris_year_and_date(
+    date: str | None, year: str, ris_date: str
+) -> None:
+    record = _record(publication_date=date)
+
+    assert column_value(_ris_column("date:year"), record, _RIS) == year
+    assert column_value(_ris_column("date"), record, _RIS) == ris_date
+
+
+def test_column_value__ris_cleaned_dates_only_leaves_out_uncleaned() -> None:
+    options = _RIS.model_copy(update={"cleaned_dates_only": True})
+    column = _ris_column("date")
+
+    assert column_value(column, _record(publication_date="Mar 2021"), options) == ""
+    assert column_value(column, _record(publication_date="2021//"), options) == (
+        "2021///"
+    )
+
+
+@pytest.mark.parametrize(
+    ("stored", "code"), [("Article", "JOUR"), ("CPAPER", "CPAPER"), (None, "GEN")]
+)
+def test_column_value__ris_type(stored: str | None, code: str) -> None:
+    record = _record(publication_type=stored)
+
+    assert column_value(_ris_column("publication_type"), record, _RIS) == code
+
+
+def test_column_values__one_value_per_author_keyword_and_label() -> None:
+    record = _record(
+        author_names="LeCun, Yann|Bengio, Yoshua",
+        keywords=["fossils", "dinosaurs"],
+        labels=[
+            Label(phase="ta", screener="s", value="include"),
+            Label(phase="ta", screener="s", value="maybe"),
+        ],
+    )
+    columns = export_columns([record], _RIS)
+
+    def values(key: str) -> list[str]:
+        return column_values(_column(columns, key), record, _RIS)
+
+    assert values("author_names") == ["LeCun, Yann", "Bengio, Yoshua"]
+    assert values("keywords:None") == ["fossils", "dinosaurs"]
+    assert values("label:ta\x00s") == ["1", "0.5"]
+
+
+def test_column_values__cleaned_author_ids_skip_empty_slots() -> None:
+    record = _record(author_ids=_CLEANED_IDS)
+    column = _ris_column("author_ids:scopus_author_id", [record])
+
+    assert column_values(column, record, _RIS) == ["2", "3"]
+
+
+@pytest.mark.parametrize("value", ["A title", None])
+def test_column_values__single_value_or_none(value: str | None) -> None:
+    record = _record(title=value)
+
+    expected = [value] if value else []
+    assert column_values(_ris_column("title"), record, _RIS) == expected

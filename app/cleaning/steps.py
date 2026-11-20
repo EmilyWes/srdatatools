@@ -93,7 +93,7 @@ PUBLICATION_TYPES = {
     "Erratum": ("errt", "erratum"),
     "Retraction": ("retracted", "retraction"),
 }
-_STANDARD_PUBLICATION_TYPE = {
+STANDARD_PUBLICATION_TYPE = {
     value: standard
     for standard, values in PUBLICATION_TYPES.items()
     for value in values
@@ -438,7 +438,7 @@ def standardize_publication_type(
     if not record.publication_type:
         return record
     key = record.publication_type.strip().lower()
-    standard = _STANDARD_PUBLICATION_TYPE.get(key, record.publication_type)
+    standard = STANDARD_PUBLICATION_TYPE.get(key, record.publication_type)
     return record.model_copy(update={"publication_type": standard})
 
 

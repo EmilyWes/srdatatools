@@ -89,6 +89,13 @@ def _shared_keys(mapping: FieldMapping) -> list[str]:
     return [key for key, row in mapping.rows.items() if counts[row.target] > 1]
 
 
+def render_boxes_row() -> ui.row:
+    """A wrapping row whose boxes all get the width of the widest one."""
+    # Deferred: a once-timer waits for the browser connection before running.
+    ui.timer(0, lambda: ui.run_javascript(_EQUAL_WIDTH_JS), once=True)
+    return ui.row().classes(f"{_BOXES_CLASS} w-full items-start gap-3 pl-3")
+
+
 def render_box_frame(title: str) -> Element:
     """A titled box whose grid lines up each label with its control."""
     with ui.element("fieldset").classes(_BOX_CLASSES):
@@ -381,9 +388,7 @@ def render_quirks_overview(
     ui.add_css(FIELD_CSS)
     container.clear()
     with container, ui.column().classes("gap-1 w-full"):
-        # Deferred: a once-timer waits for the browser connection before running.
-        ui.timer(0, lambda: ui.run_javascript(_EQUAL_WIDTH_JS), once=True)
-        with ui.row().classes(f"{_BOXES_CLASS} w-full items-start gap-3 pl-3"):
+        with render_boxes_row():
             for box in boxes:
                 screen.render_box(box, shown)
         if not screen.readonly:

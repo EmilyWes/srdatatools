@@ -62,8 +62,14 @@ def test_write_csv__given_columns_in_order_with_quoting(tmp_path: Path) -> None:
     )
 
 
-def test_write_csv__bom_by_default(tmp_path: Path) -> None:
+def test_write_csv__no_bom_by_default(tmp_path: Path) -> None:
     content = _write(tmp_path, {"doi": "DOI"}, ExportOptions())
+
+    assert content.startswith(b"DOI")
+
+
+def test_write_csv__bom_encoding_option(tmp_path: Path) -> None:
+    content = _write(tmp_path, {"doi": "DOI"}, ExportOptions(encoding="utf-8-sig"))
 
     assert content.startswith(b"\xef\xbb\xbfDOI")
 

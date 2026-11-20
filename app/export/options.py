@@ -12,13 +12,14 @@ _FOLDER_KEY = "export_folder"
 _DEFAULT_STEM = "library"
 
 
-ExportFileType = Literal["csv", "tsv", "xlsx"]
+ExportFileType = Literal["csv", "tsv", "xlsx", "ris"]
 
 
 class ExportOptions(BaseModel):
     file_type: ExportFileType = "csv"
     delimiter: Literal[",", ";", "\t"] = ","
-    encoding: Literal["utf-8-sig", "utf-8"] = "utf-8-sig"
+    encoding: Literal["utf-8-sig", "utf-8"] = "utf-8"
+    ris_encoding: Literal["utf-8-sig", "utf-8"] = "utf-8"
     label_format: LabelFormat = "numbers"
     line_breaks: Literal["keep", "space"] = "keep"
     # Python's csv module rejects longer fields by default, and so do the tools
@@ -26,6 +27,9 @@ class ExportOptions(BaseModel):
     max_length: int = Field(default=131_072, ge=1)
     # Excel holds at most 32.767 characters per cell.
     excel_max_length: int = Field(default=32_767, ge=1, le=32_767)
+    one_line_per_value: bool = True
+    split_pages: bool = True
+    cleaned_dates_only: bool = False
     empty_columns: bool = False
     ignored_columns: bool = False
     original_data: bool = False

@@ -64,16 +64,20 @@ def author_id_keys(value: str | None) -> list[str]:
     )
 
 
-def author_ids_for_key(value: str | None, key: str, delimiter: str) -> str:
+def author_ids_per_slot(value: str | None, key: str) -> list[str]:
     """Unsplit ids as stored, or cleaned ids with one slot per author even when
     no author has that key (an author's ids of one key joined with ID_JOINER)."""
     unsplit = parse_unsplit_author_ids(value)
     if unsplit:
-        return delimiter.join(ids for k, ids in unsplit if k == key)
-    return delimiter.join(
+        return [ids for k, ids in unsplit if k == key]
+    return [
         ID_JOINER.join(id_ for k, id_ in map(_split_author_id, slot) if k == key)
         for slot in parse_author_ids(value)
-    )
+    ]
+
+
+def author_ids_for_key(value: str | None, key: str, delimiter: str) -> str:
+    return delimiter.join(author_ids_per_slot(value, key))
 
 
 def merge_author_ids(existing: AuthorIds, new: AuthorIds, source: str) -> AuthorIds:
