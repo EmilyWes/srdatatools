@@ -1,4 +1,4 @@
-from app.cleaning.quality import problem_columns, quality_issues
+from app.gui.library.quality import problem_columns, quality_issues
 
 
 def test_quality_issues__none_for_a_clean_record() -> None:

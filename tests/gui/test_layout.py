@@ -1,6 +1,6 @@
 from nicegui import ui
 
-from app.gui.layout import shell
+from app.gui.general.layout import shell
 
 
 def test_shell__builds_without_raising() -> None:

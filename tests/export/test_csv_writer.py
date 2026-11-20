@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from app.export.columns import ExportColumn, ExportRecord, export_columns
-from app.export.csv_ import write_csv
-from app.export.options import ExportOptions
+from app.gui.export.columns import ExportColumn, ExportRecord, export_columns
+from app.gui.export.csv_ import write_csv
+from app.gui.export.options import ExportOptions
 from app.models.record import Record
 from app.parsers.csv_ import parse_csv_text, suggest_mapping
 

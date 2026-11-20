@@ -2,11 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from app.cleaning.steps import PUBLICATION_TYPES
-from app.export.columns import ExportRecord, export_columns
-from app.export.options import ExportOptions
-from app.export.ris import write_ris
-from app.export.ris_tags import (
+from app.gui.cleaning.steps import PUBLICATION_TYPES
+from app.gui.export.columns import ExportRecord, export_columns
+from app.gui.export.options import ExportOptions
+from app.gui.export.ris import write_ris
+from app.gui.export.ris_tags import (
     CURATED_TAGS,
     RIS_TAGS,
     TAG_PATTERN,

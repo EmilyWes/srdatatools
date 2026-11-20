@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from app.cleaning.options import CleaningOptions
-from app.cleaning.steps import CleaningContext, clean_record, file_separators
+from app.gui.cleaning.options import CleaningOptions
+from app.gui.cleaning.steps import CleaningContext, clean_record, file_separators
 from app.models.record import Record
 from app.parsers.authors import AUTHOR_JOINER, parse_author_ids
 from app.parsers.bibtex import (

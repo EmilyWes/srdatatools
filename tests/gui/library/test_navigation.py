@@ -5,7 +5,7 @@ import pytest
 from nicegui import background_tasks, core, ui
 
 from app.db.models import SourceFile
-from app.gui.layout import shell
+from app.gui.general.layout import shell
 from app.gui.library.navigation import LeftPanelNav, render_left_panel
 from tests.gui.clicks import click_and_wait
 

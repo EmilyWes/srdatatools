@@ -15,7 +15,7 @@ from nicegui.element import Element
 from nicegui.events import GenericEventArguments
 from sqlalchemy.orm import Session
 
-from app.cleaning.quality import QUALITY_FIELDS, quality_issues
+from app.gui.cleaning.quality import QUALITY_FIELDS, quality_issues
 from app.db.queries import (
     list_author_id_keys,
     list_keyword_prefixes,
@@ -25,7 +25,7 @@ from app.db.queries import (
     list_record_sources,
 )
 from app.db.settings import delete_setting, get_setting, set_setting
-from app.gui.format import (
+from app.helpers.format import (
     DISPLAY_SEPARATOR,
     LabelFormat,
     author_id_key,
@@ -41,7 +41,7 @@ from app.gui.format import (
     label_text,
     source_label,
 )
-from app.gui.quirks_overview import render_box_frame
+from app.helpers.quirks_overview import render_box_frame
 from app.models.record import publication_year
 from app.parsers.authors import AUTHOR_JOINER, author_ids_for_key
 from app.parsers.mapping import split_keyword

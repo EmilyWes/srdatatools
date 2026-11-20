@@ -1,4 +1,4 @@
-﻿import re
+﻿﻿import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -8,9 +8,9 @@ from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE, Cell
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet._write_only import WriteOnlyWorksheet
 
-from app.export.columns import ExportColumn, ExportRecord, column_value
-from app.export.csv_ import line_breaks
-from app.export.options import ExportOptions
+from app.gui.export.columns import ExportColumn, ExportRecord, column_value
+from app.gui.export.csv_ import line_breaks
+from app.gui.export.options import ExportOptions
 
 _SHEET_NAME = "Records"
 # Excel keeps 15 significant digits, so longer numbers would be rounded.

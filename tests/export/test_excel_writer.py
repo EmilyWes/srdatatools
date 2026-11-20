@@ -3,9 +3,9 @@ from pathlib import Path
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.export.columns import ExportColumn, ExportRecord, export_columns
-from app.export.excel import write_excel
-from app.export.options import ExportOptions
+from app.gui.export.columns import ExportColumn, ExportRecord, export_columns
+from app.gui.export.excel import write_excel
+from app.gui.export.options import ExportOptions
 from app.models.record import Record
 from app.parsers.csv_ import suggest_mapping
 from app.parsers.excel import parse_excel_file

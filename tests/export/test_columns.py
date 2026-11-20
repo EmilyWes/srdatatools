@@ -2,7 +2,7 @@ from dataclasses import replace
 
 import pytest
 
-from app.export.columns import (
+from app.gui.export.columns import (
     AuthorIdKeyColumn,
     DateColumn,
     ExportColumn,
@@ -19,7 +19,7 @@ from app.export.columns import (
     export_columns,
     fill_count,
 )
-from app.export.options import ExportOptions
+from app.gui.export.options import ExportOptions
 from app.models.record import Label, Record
 
 _OPTIONS = ExportOptions(empty_columns=True)

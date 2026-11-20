@@ -6,8 +6,8 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import ActivityLog
-from app.gui.format import format_count
-from app.gui.theme import UU_GREEN, UU_ORANGE
+from app.helpers.format import format_count
+from app.helpers.theme import UU_GREEN, UU_ORANGE
 
 _ACTIONS = {
     "Cleaning": "cleaning_services",

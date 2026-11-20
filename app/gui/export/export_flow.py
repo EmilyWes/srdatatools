@@ -8,7 +8,7 @@ from nicegui import app, ui
 from nicegui.element import Element
 from webview import FileDialog
 
-from app.export.columns import (
+from app.gui.export.columns import (
     NOTE_TAG,
     AuthorIdKeyColumn,
     DateColumn,
@@ -22,10 +22,10 @@ from app.export.columns import (
     export_columns,
     fill_count,
 )
-from app.export.options import ExportFileType, ExportOptions, default_path
-from app.export.ris_tags import CURATED_TAGS, RIS_TAGS, TAG_PATTERN
-from app.gui.format import format_count
-from app.gui.import_flow import (
+from app.gui.export.options import ExportFileType, ExportOptions, default_path
+from app.gui.export.ris_tags import CURATED_TAGS, RIS_TAGS, TAG_PATTERN
+from app.helpers.format import format_count
+from app.gui.import.import_flow import (
     BUTTON_PROPS,
     FILE_LABEL_CLASSES,
     GRID_CLASSES,
@@ -33,8 +33,8 @@ from app.gui.import_flow import (
     SELECT_CLASSES,
     SELECT_PROPS,
 )
-from app.gui.mapping_table import ROW_FIELD_CSS, fill_color
-from app.gui.quirks_overview import (
+from app.helpers.mapping_table import ROW_FIELD_CSS, fill_color
+from app.helpers.quirks_overview import (
     FIELD_CSS,
     render_box_frame,
     render_boxes_row,

@@ -1,14 +1,14 @@
 from collections.abc import Sequence
 from pathlib import Path
 
-from app.export.columns import (
+from app.gui.export.columns import (
     NOTE_TAG,
     ExportColumn,
     ExportRecord,
     column_value,
     column_values,
 )
-from app.export.options import ExportOptions
+from app.gui.export.options import ExportOptions
 
 _END_LINE = "ER  - \n\n"
 

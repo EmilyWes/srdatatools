@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import Base
 from app.db.settings import set_setting
-from app.export.options import (
+from app.gui.export.options import (
     ExportOptions,
     default_path,
     load_folder,

@@ -6,11 +6,11 @@ from nicegui import ui
 from nicegui.element import Element
 from sqlalchemy.orm import Session
 
-from app.cleaning.quality import CHECKS, problem_columns
+from app.gui.cleaning.quality import CHECKS, problem_columns
 from app.db.settings import delete_setting, get_setting, set_setting
-from app.gui.format import format_count, keyword_key, label_key
-from app.gui.mapping_table import fill_color
-from app.gui.theme import (
+from app.helpers.format import format_count, keyword_key, label_key
+from app.helpers.mapping_table import fill_color
+from app.helpers.theme import (
     CHART_COLORS,
     COMPLETE_COLOR,
     MULTIPLE_COLOR,

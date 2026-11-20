@@ -10,13 +10,13 @@ from openpyxl import load_workbook
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
-import app.gui.home as home_module
+import app.gui.general.home as home_module
 import app.main
 from app.db.models import ActivityLog, Base, Record, RecordSource, SourceFile
-from app.gui.action_panel import ActionPanel
-from app.gui.format import author_id_key
-from app.gui.home import home
-from app.gui.layout import ShellPanes
+from app.gui.general.action_panel import ActionPanel
+from app.helpers.format import author_id_key
+from app.gui.general.home import home
+from app.gui.general.layout import ShellPanes
 from app.gui.library.dashboard import save_hidden
 from app.gui.library.navigation import LeftPanelNav
 from app.gui.library.record_table import load_columns

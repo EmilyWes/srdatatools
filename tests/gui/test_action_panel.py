@@ -5,8 +5,8 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import ActivityLog
-from app.gui.action_panel import ActionPanel, render_right_panel
-from app.gui.layout import shell
+from app.gui.general.action_panel import ActionPanel, render_right_panel
+from app.gui.general.layout import shell
 from tests.gui.clicks import click_and_wait
 
 

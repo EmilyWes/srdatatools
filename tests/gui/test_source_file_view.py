@@ -7,8 +7,8 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import SourceFile
-from app.gui.layout import shell
-from app.gui.source_file_view import render_source_file_view
+from app.gui.general.layout import shell
+from app.gui.other.source_file_view import render_source_file_view
 from app.parsers.common import FileSummary
 from tests.gui.clicks import click_and_wait
 from tests.mappings import mapping_of

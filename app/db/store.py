@@ -6,8 +6,8 @@ from typing import Any, cast
 from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.cleaning.options import CleaningOptions
-from app.cleaning.steps import (
+from app.gui.cleaning.options import CleaningOptions
+from app.gui.cleaning.steps import (
     STEP_NAMES,
     CleaningContext,
     clean_record,

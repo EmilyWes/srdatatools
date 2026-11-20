@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from nicegui import ui
 from nicegui.element import Element
 
-from app.cleaning.options import CLEANING_BOXES, CleaningOptions
-from app.gui.export_flow import records_count
-from app.gui.import_flow import GRID_CLASSES, GRID_COLUMNS
-from app.gui.quirks_overview import QuirksScreen, render_quirks_overview
+from app.gui.cleaning.options import CLEANING_BOXES, CleaningOptions
+from app.gui.export.export_flow import records_count
+from app.gui.import.import_flow import GRID_CLASSES, GRID_COLUMNS
+from app.helpers.quirks_overview import QuirksScreen, render_quirks_overview
 
 OnClean = Callable[[CleaningOptions], Awaitable[None] | None]
 

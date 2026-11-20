@@ -1,7 +1,7 @@
 import pytest
 
-from app.cleaning.options import CleaningOptions
-from app.cleaning.steps import (
+from app.gui.cleaning.options import CleaningOptions
+from app.gui.cleaning.steps import (
     CleaningContext,
     citation_parts,
     clean_date,

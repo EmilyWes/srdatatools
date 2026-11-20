@@ -6,8 +6,8 @@ from typing import TypeVar
 import pytest
 from nicegui import ui
 
-from app.gui.busy import run_busy
-from app.gui.layout import shell
+from app.helpers.busy import run_busy
+from app.gui.general.layout import shell
 
 T = TypeVar("T")
 

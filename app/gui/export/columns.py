@@ -3,9 +3,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Literal
 
-from app.export.options import ExportOptions
-from app.export.ris_tags import TAG_PATTERN, ris_type
-from app.gui.format import DISPLAY_SEPARATOR, label_text, source_label
+from app.gui.export.options import ExportOptions
+from app.gui.export.ris_tags import TAG_PATTERN, ris_type
+from app.helpers.format import DISPLAY_SEPARATOR, label_text, source_label
 from app.models.record import CLEANED_DATE, Record
 from app.parsers.authors import (
     AUTHOR_JOINER,

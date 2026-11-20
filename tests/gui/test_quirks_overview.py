@@ -1,8 +1,8 @@
 from nicegui import ui
 from nicegui.element import Element
 
-from app.gui.layout import shell
-from app.gui.quirks_overview import (
+from app.gui.general.layout import shell
+from app.helpers.quirks_overview import (
     QuirksScreen,
     render_quirks_overview,
     render_view_toggle,

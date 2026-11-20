@@ -5,10 +5,10 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import SourceFile
-from app.gui.format import format_count, sources_label
-from app.gui.import_flow import type_label
-from app.gui.mapping_table import render_mapping_table
-from app.gui.quirks_overview import render_quirks_overview, render_view_toggle
+from app.helpers.format import format_count, sources_label
+from app.gui.import.import_flow import type_label
+from app.helpers.mapping_table import render_mapping_table
+from app.helpers.quirks_overview import render_quirks_overview, render_view_toggle
 from app.parsers.common import FileSummary, FileType
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import (

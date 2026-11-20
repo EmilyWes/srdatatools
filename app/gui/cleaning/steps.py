@@ -3,7 +3,7 @@ import string
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 
-from app.cleaning.options import CleaningOptions
+from app.gui.cleaning.options import CleaningOptions
 from app.models.record import PartialDate, Record
 from app.parsers.authors import (
     AUTHOR_JOINER,

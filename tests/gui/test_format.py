@@ -1,4 +1,4 @@
-from app.gui.format import (
+from app.helpers.format import (
     author_id_key,
     author_id_name,
     format_count,

@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from app.db.settings import delete_setting, get_setting, set_setting
-from app.gui.format import LabelFormat
+from app.helpers.format import LabelFormat
 
 _OPTIONS_KEY = "export_options"
 _FOLDER_KEY = "export_folder"

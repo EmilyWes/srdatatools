@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from nicegui import ui
 from nicegui.element import Element
 
-from app.gui.theme import apply_theme
+from app.helpers.theme import apply_theme
 
 _SIDE_CLASSES = "w-60 shrink-0 surface-low outline-variant"
 

@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.cleaning.options import CleaningOptions
+from app.gui.cleaning.options import CleaningOptions
 from app.db.models import (
     ActivityLog,
     AppSetting,

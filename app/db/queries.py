@@ -5,9 +5,9 @@ from typing import Any
 from sqlalchemy import JSON, ColumnElement, String, and_, case, cast, func, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
-from app.cleaning.quality import CHECKS, QUALITY_FIELDS, quality_issues
+from app.gui.library.quality import CHECKS, QUALITY_FIELDS, quality_issues
 from app.db.models import ActivityLog, Label, Record, RecordSource, SourceFile
-from app.export.columns import ExportRecord, ExportSource
+from app.gui.export.columns import ExportRecord, ExportSource
 from app.models.record import Label as LabelSchema
 from app.models.record import Record as RecordSchema
 from app.models.record import publication_year

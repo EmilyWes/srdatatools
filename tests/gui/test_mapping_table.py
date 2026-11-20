@@ -5,8 +5,8 @@ from nicegui import ui
 from nicegui.elements.label import Label
 from nicegui.elements.tooltip import Tooltip
 
-from app.gui.layout import shell
-from app.gui.mapping_table import (
+from app.gui.general.layout import shell
+from app.helpers.mapping_table import (
     MappingScreen,
     _input_width_ch,
     render_mapping_table,

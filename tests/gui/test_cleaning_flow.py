@@ -2,9 +2,9 @@ import pytest
 from nicegui import ui
 from nicegui.element import Element
 
-from app.cleaning.options import CleaningOptions
-from app.gui.cleaning_flow import CleaningView, render_cleaning_view
-from app.gui.layout import shell
+from app.gui.cleaning.options import CleaningOptions
+from app.gui.cleaning.cleaning_flow import CleaningView, render_cleaning_view
+from app.gui.general.layout import shell
 from tests.gui.clicks import click_and_wait
 
 _ONE_EMPTY = CleaningOptions(empty_values=["[Not Available]."])

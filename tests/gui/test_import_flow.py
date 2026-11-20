@@ -13,8 +13,8 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import ActivityLog, Base, Record
-from app.gui import import_flow
-from app.gui.import_flow import (
+from app.gui.import import import_flow
+from app.gui.import.import_flow import (
     ImportView,
     common_detection,
     import_file,
@@ -23,8 +23,8 @@ from app.gui.import_flow import (
     render_import_view,
     render_mapping,
 )
-from app.gui.layout import shell
-from app.gui.mapping_table import MappingScreen
+from app.gui.general.layout import shell
+from app.helpers.mapping_table import MappingScreen
 from app.parsers.common import FileSummary, FileType
 from app.parsers.mapping import AuthorsRow, FieldMapping
 from app.parsers.profiles.overview import (

@@ -4,9 +4,9 @@ from typing import Any
 
 from nicegui import ui
 
-from app.cleaning.options import CleaningOptions
-from app.cleaning.options import load_options as load_cleaning_options
-from app.cleaning.options import save_options as save_cleaning_options
+from app.gui.cleaning.options import CleaningOptions
+from app.gui.cleaning.options import load_options as load_cleaning_options
+from app.gui.cleaning.options import save_options as save_cleaning_options
 from app.db.activity_log import (
     clear_activity_log,
     log_cleaning,
@@ -41,10 +41,10 @@ from app.db.store import (
     delete_records,
     remove_source_file,
 )
-from app.export.columns import ExportColumn, ExportRecord
-from app.export.csv_ import write_csv
-from app.export.excel import write_excel
-from app.export.options import (
+from app.gui.export.columns import ExportColumn, ExportRecord
+from app.gui.export.csv_ import write_csv
+from app.gui.export.excel import write_excel
+from app.gui.export.options import (
     ExportOptions,
     default_path,
     load_folder,
@@ -53,15 +53,15 @@ from app.export.options import (
     save_folder,
     save_options,
 )
-from app.export.ris import write_ris
-from app.gui.about import render_about_view, render_help_view
-from app.gui.action_panel import render_right_panel
-from app.gui.busy import run_busy
-from app.gui.cleaning_flow import render_cleaning_view
-from app.gui.export_flow import render_export_view
-from app.gui.format import format_count
+from app.gui.export.ris import write_ris
+from app.gui.other.about import render_about_view, render_help_view
+from app.gui.general.action_panel import render_right_panel
+from app.helpers.busy import run_busy
+from app.gui.cleaning.cleaning_flow import render_cleaning_view
+from app.gui.export.export_flow import render_export_view
+from app.helpers.format import format_count
 from app.gui.import_flow import import_file, render_import_view
-from app.gui.layout import shell
+from app.gui.general.layout import shell
 from app.gui.library.dashboard import (
     COMPLETENESS_FIELDS,
     dashboard_items,
@@ -89,7 +89,7 @@ from app.gui.library.record_table import (
     save_columns,
     save_label_format,
 )
-from app.gui.source_file_view import render_source_file_view
+from app.gui.other.source_file_view import render_source_file_view
 from app.parsers.common import FileSummary, FileType
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import ParsingChoices
