@@ -43,6 +43,7 @@ from app.db.store import (
 )
 from app.export.columns import ExportColumn, ExportRecord
 from app.export.csv_ import write_csv
+from app.export.excel import write_excel
 from app.export.options import (
     ExportOptions,
     default_path,
@@ -356,20 +357,25 @@ def home() -> None:
         records: list[ExportRecord],
         options: ExportOptions,
     ) -> None:
-        def write() -> tuple[int, str | None]:
+        excel = options.file_type == "xlsx"
+
+        def write() -> tuple[int, int, str | None]:
             try:
-                cut = write_csv(path, columns, records, options)
+                if excel:
+                    cut, removed = write_excel(path, columns, records, options)
+                else:
+                    cut, removed = write_csv(path, columns, records, options), 0
             except OSError as exc:
                 logger.warning("Could not export to %s", path, exc_info=True)
                 with session_scope(_engine) as session:
                     log_export_failed(session, path.name, str(exc))
-                return 0, str(exc)
+                return 0, 0, str(exc)
             with session_scope(_engine) as session:
-                log_export(session, path.name, len(records), cut)
+                log_export(session, path.name, len(records), cut, removed)
                 save_folder(session, path.parent)
-            return cut, None
+            return cut, removed, None
 
-        cut, error = await run_busy(f"Exporting to {path.name}…", write)
+        cut, removed, error = await run_busy(f"Exporting to {path.name}…", write)
         if error is not None:
             with panes.middle:
                 ui.notify(f"Could not export to {path.name}: {error}", type="negative")
@@ -378,12 +384,16 @@ def home() -> None:
         noun = "record" if len(records) == 1 else "records"
         message = f"Exported {format_count(len(records))} {noun} to {path.name}"
         if cut:
+            limit = options.excel_max_length if excel else options.max_length
             message += (
-                f"; {format_count(cut)} values cut to"
-                f" {format_count(options.max_length)} characters"
+                f"; {format_count(cut)} values cut to {format_count(limit)} characters"
+            )
+        if removed:
+            message += (
+                f"; {format_count(removed)} values with control characters removed"
             )
         with panes.middle:
-            ui.notify(message, type="warning" if cut else "positive")
+            ui.notify(message, type="warning" if cut or removed else "positive")
         refresh()
 
     def save_export_options(options: ExportOptions) -> None:

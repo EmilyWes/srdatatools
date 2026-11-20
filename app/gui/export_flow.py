@@ -43,8 +43,10 @@ OnExport = Callable[
 _FILE_TYPES: dict[ExportFileType, str] = {
     "csv": "CSV files (*.csv)",
     "tsv": "TSV files (*.tsv)",
+    "xlsx": "Excel files (*.xlsx)",
 }
-_TYPE_OPTIONS = {"csv": "CSV", "tsv": "TSV"}
+_TYPE_OPTIONS = {"csv": "CSV", "tsv": "TSV", "xlsx": "Excel"}
+_EXCEL_MAX_LENGTH = 32_767
 _NO_RECORDS = "no records to export"
 _NO_COLUMNS = "no columns selected"
 _UNCHECKED_CLASS = "opacity-50"
@@ -111,6 +113,7 @@ class ExportView:
         default_factory=dict
     )
     mapping: ui.column | None = None
+    option_boxes: Element | None = None
     path_label: ui.label | None = None
     path_chosen: bool = False
     file_type_select: ui.select | None = None
@@ -309,9 +312,9 @@ class ExportView:
         self._sync_header_checkbox()
 
     def _set_option(self, key: str, value: Any) -> None:
-        if key == "max_length":
+        if key in ("max_length", "excel_max_length"):
             # An emptied box falls back to the default.
-            value = int(value) if value else ExportOptions().max_length
+            value = int(value) if value else getattr(ExportOptions(), key)
         self.options = self.options.model_copy(update={key: value})
         self._refresh_option_colors()
         if key == "file_type":
@@ -332,7 +335,10 @@ class ExportView:
         else:
             self.path = default_path(self.path.parent, file_type)
         self._show_path()
-        self.option_widgets["delimiter"].value = "	" if file_type == "tsv" else ","
+        if file_type != "xlsx":
+            delimiter = "\t" if file_type == "tsv" else ","
+            self.options = self.options.model_copy(update={"delimiter": delimiter})
+        self._render_option_boxes()
 
     def _refresh_option_colors(self) -> None:
         defaults = ExportOptions()
@@ -352,7 +358,12 @@ class ExportView:
             ignored.set_enabled(not self.options.original_data)
 
     def _box_item(
-        self, key: str, label: str, hover: str, choices: dict[str, str] | None = None
+        self,
+        key: str,
+        label: str,
+        hover: str,
+        choices: dict[str, str] | None = None,
+        maximum: int | None = None,
     ) -> None:
         with ui.label(label).classes("text-xs"):
             ui.tooltip(hover).classes("max-w-sm text-xs")
@@ -361,7 +372,7 @@ class ExportView:
         if isinstance(value, bool):
             widget = ui.checkbox(value=value).props("dense keep-color size=32px")
         elif isinstance(value, int):
-            widget = ui.number(value=value, min=1, precision=0)
+            widget = ui.number(value=value, min=1, max=maximum, precision=0)
             widget.classes(_BOX_FIELD_CLASSES).props("dense outlined")
         else:
             widget = ui.select(choices or {}, value=value)
@@ -369,33 +380,46 @@ class ExportView:
         widget.on_value_change(lambda e: self._set_option(key, e.value))
         self.option_widgets[key] = widget
 
-    def _render_option_boxes(self, container: Element) -> None:
+    def _render_option_boxes(self) -> None:
+        """Rendered again on a File type change, as Excel shows other File options."""
+        assert self.option_boxes is not None
+        excel = self.options.file_type == "xlsx"
         self.option_widgets = {}
-        container.clear()
-        with container, ui.column().classes("gap-1 w-full"):
+        self.option_boxes.clear()
+        with self.option_boxes, ui.column().classes("gap-1 w-full"):
             with ui.row().classes("w-full items-start gap-3 pl-3"):
                 with render_box_frame("File"):
-                    self._box_item(
-                        "delimiter",
-                        "Delimiter",
-                        "The character between the values in a row.",
-                        _DELIMITERS,
-                    )
-                    self._box_item(
-                        "encoding",
-                        "Encoding",
-                        "With a BOM, Excel shows accented characters correctly"
-                        " when it opens the file.",
-                        _ENCODINGS,
-                    )
-                    self._box_item(
-                        "max_length",
-                        "Maximum length",
-                        "Longest value written, in characters; longer values are"
-                        " cut. 131.072 is the default limit of Python's CSV reader,"
-                        " which many tools use; Excel holds at most 32.767"
-                        " characters per cell.",
-                    )
+                    if excel:
+                        self._box_item(
+                            "excel_max_length",
+                            "Maximum length",
+                            "Longest value written, in characters; longer values"
+                            " are cut. Excel holds at most 32.767 characters per"
+                            " cell.",
+                            maximum=_EXCEL_MAX_LENGTH,
+                        )
+                    else:
+                        self._box_item(
+                            "delimiter",
+                            "Delimiter",
+                            "The character between the values in a row.",
+                            _DELIMITERS,
+                        )
+                        self._box_item(
+                            "encoding",
+                            "Encoding",
+                            "With a BOM, Excel shows accented characters correctly"
+                            " when it opens the file.",
+                            _ENCODINGS,
+                        )
+                        self._box_item(
+                            "max_length",
+                            "Maximum length",
+                            "Longest value written, in characters; longer values"
+                            " are cut. 131.072 is the default limit of Python's CSV"
+                            " reader, which many tools use; Excel holds at most"
+                            " 32.767 characters per cell.",
+                        )
                 with render_box_frame("Values"):
                     self._box_item(
                         "label_format",
@@ -408,7 +432,8 @@ class ExportView:
                         "line_breaks",
                         "Line breaks",
                         "Line breaks inside a value (e.g. an abstract) are kept"
-                        " within quotes, or replaced with a space.",
+                        + (" in the cell" if excel else " within quotes")
+                        + ", or replaced with a space.",
                         _LINE_BREAKS,
                     )
                 with render_box_frame("Column selection"):
@@ -437,10 +462,14 @@ class ExportView:
         self._refresh_option_colors()
 
     def _restore_options(self) -> None:
-        for key, widget in self.option_widgets.items():
-            widget.value = getattr(ExportOptions(), key)
+        """Resets the options model itself, as the File options of the other file
+        types have no widgets."""
+        self.options = ExportOptions()
         assert self.file_type_select is not None
-        self.file_type_select.value = ExportOptions().file_type
+        self.file_type_select.value = self.options.file_type
+        self._change_file_type(self.options.file_type)
+        self._rebuild_columns()
+        self._render_mapping()
         if self.on_restore_options is not None:
             self.on_restore_options()
 
@@ -512,7 +541,8 @@ class ExportView:
                 views = render_view_toggle(parsing_label="Options")
                 self.mapping = views.mapping
                 self._render_mapping()
-                self._render_option_boxes(views.parsing)
+                self.option_boxes = views.parsing
+                self._render_option_boxes()
                 self.export_button = ui.button("Export", on_click=self._export).props(
                     "dense"
                 )
