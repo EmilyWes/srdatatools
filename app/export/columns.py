@@ -4,7 +4,7 @@ from dataclasses import dataclass, field, replace
 from typing import Literal
 
 from app.export.options import ExportOptions
-from app.export.ris import TAG_PATTERN, ris_type
+from app.export.ris_tags import TAG_PATTERN, ris_type
 from app.gui.format import DISPLAY_SEPARATOR, label_text, source_label
 from app.models.record import CLEANED_DATE, Record
 from app.parsers.authors import (
@@ -410,6 +410,9 @@ def column_values(
         values = author_ids_per_slot(record.author_ids, column.id_key)
     elif isinstance(column, LabelColumn):
         values = _label_texts(column, record, options)
+    elif isinstance(column, ScalarColumn) and column.field == "notes":
+        # Repeated RIS N1 lines are stored as one value, a line each.
+        values = (record.notes or "").splitlines()
     else:
         values = [column_value(column, export, options)]
     return [value for value in values if value]
