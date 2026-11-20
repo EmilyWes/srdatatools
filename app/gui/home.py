@@ -53,6 +53,7 @@ from app.export.options import (
     save_folder,
     save_options,
 )
+from app.export.ris import write_ris
 from app.gui.about import render_about_view, render_help_view
 from app.gui.action_panel import render_right_panel
 from app.gui.busy import run_busy
@@ -363,6 +364,9 @@ def home() -> None:
             try:
                 if excel:
                     cut, removed = write_excel(path, columns, records, options)
+                elif options.file_type == "ris":
+                    write_ris(path, columns, records, options)
+                    cut, removed = 0, 0
                 else:
                     cut, removed = write_csv(path, columns, records, options), 0
             except OSError as exc:

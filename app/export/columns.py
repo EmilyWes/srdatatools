@@ -297,22 +297,25 @@ def export_columns(
     return [column for column in columns if fill_count(column, records, options)]
 
 
+def default_note_name(column: ExportColumn) -> str:
+    return column.raw_key if isinstance(column, RawColumn) else column.label
+
+
 def _ris_column(column: ExportColumn) -> ExportColumn:
     """A row without a tag of its own goes to N1, its line starting with its name."""
     if isinstance(column, KeywordsColumn):
         return replace(column, name=_KEYWORD_TAG)
     if column.key in _RIS_TAGS:
         return replace(column, name=_RIS_TAGS[column.key])
+    note_name = default_note_name(column)
     if isinstance(column, RawColumn):
         if TAG_PATTERN.fullmatch(column.raw_key):
             return replace(column, name=column.raw_key)
-        return replace(column, name=NOTE_TAG, note_name=column.raw_key)
+        return replace(column, name=NOTE_TAG, note_name=note_name)
     checked = not (
         isinstance(column, AuthorIdKeyColumn) or column.key in _UNCHECKED_IN_RIS
     )
-    return replace(
-        column, name=NOTE_TAG, note_name=column.label, default_checked=checked
-    )
+    return replace(column, name=NOTE_TAG, note_name=note_name, default_checked=checked)
 
 
 def _ris_columns(

@@ -667,6 +667,24 @@ def test_home__export_writes_csv_logs_notifies_and_shows_dashboard(
     assert len(navs) == 2
 
 
+def test_home__export_writes_ris(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _add_source_file_with_record(engine)
+    notifications = _capture_notifications(monkeypatch)
+    [view] = _open_export(monkeypatch)
+    view.file_type_select.value = "ris"
+    view.path = tmp_path / "library.ris"
+
+    click_and_wait(view.export_button, monkeypatch)
+
+    lines = (tmp_path / "library.ris").read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "TY  - GEN"
+    assert "TI  - A title" in lines
+    assert lines[-2:] == ["ER  - ", ""]
+    assert notifications == ["Exported 1 record to library.ris"]
+
+
 def test_home__next_export_suggests_free_name_in_last_folder(
     engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

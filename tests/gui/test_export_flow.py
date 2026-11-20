@@ -7,7 +7,7 @@ from nicegui import ui
 from nicegui.element import Element
 from nicegui.elements.tooltip import Tooltip
 
-from app.export.columns import ExportColumn, ExportRecord, ExportSource
+from app.export.columns import ExportColumn, ExportRecord, ExportSource, RisTypeColumn
 from app.export.options import ExportOptions
 from app.gui import export_flow
 from app.gui.export_flow import ExportView, pick_save_path, render_export_view
@@ -131,7 +131,9 @@ def test_render_export_view__starts_retracted() -> None:
 def test_render_export_view__one_row_per_column_with_default_names() -> None:
     view = _view()
 
-    assert [row.name.value for row in view.rows] == [c.name for c in view.columns]
+    assert [_row(view, c.key).name.value for c in view.columns] == [
+        c.name for c in view.columns
+    ]
     assert _row(view, "title").name.value == "Title"
 
 
@@ -483,3 +485,216 @@ def test_export_view__maximum_length_box_sets_option_and_empty_restores_default(
 
     view.option_widgets["max_length"].value = None
     assert view.options.max_length == 131_072
+
+
+_RIS = ExportOptions(file_type="ris")
+
+
+def _ris_view(options: ExportOptions = _RIS, **callbacks: Any) -> ExportView:
+    return _view(options=options, **callbacks)
+
+
+def _type_tag(row: Any, typed: str) -> None:
+    """As NiceGUI does for a value typed into the select."""
+    row.name.set_options({**row.name.options, typed: typed})
+    row.name.value = typed
+
+
+def test_export_view__ris_rows_have_tag_selects_with_default_tags() -> None:
+    view = _ris_view()
+
+    title = _row(view, "title")
+    assert isinstance(title.name, ui.select)
+    assert title.name.value == "TI"
+    assert isinstance(title.name.options, dict)
+    assert title.name.options["TI"] == "TI — Title"
+
+
+def test_export_view__ris_type_row_first_fixed_and_locked() -> None:
+    view = _ris_view()
+
+    row = view.rows[0]
+    assert isinstance(row.column, RisTypeColumn)
+    assert row.name is None
+    assert row.checkbox.value is True
+    assert row.checkbox.enabled is False
+
+
+def test_export_view__ris_rows_without_a_tag_start_unchecked() -> None:
+    view = _ris_view()
+
+    assert _row(view, "sources").checkbox.value is False
+    assert _row(view, "title").checkbox.value is True
+
+
+def test_export_view__switching_to_and_from_ris_resets_names() -> None:
+    view = _view()
+    assert view.file_type_select is not None
+    _row(view, "title").name.value = "My title"
+
+    view.file_type_select.value = "ris"
+    assert _row(view, "title").name.value == "TI"
+    _type_tag(_row(view, "title"), "T1")
+    view.file_type_select.value = "csv"
+
+    assert _row(view, "title").name.value == "Title"
+    assert _row(view, "sources").checkbox.value is True
+
+
+def test_export_view__ris_typed_tag_is_uppercased() -> None:
+    view = _ris_view()
+    row = _row(view, "title")
+
+    _type_tag(row, "t1")
+
+    assert row.name.value == "T1"
+    assert row.column.name == "T1"
+    assert "t1" not in row.name.options
+    assert row.name.props["bg-color"] == "blue-2"
+
+
+def test_export_view__ris_typed_known_tag_keeps_its_label() -> None:
+    view = _ris_view()
+    row = _row(view, "title")
+
+    _type_tag(row, "AB")
+
+    assert row.name.options["AB"] == "AB — Abstract"
+
+
+def test_export_view__ris_custom_tag_accepted() -> None:
+    view = _ris_view()
+    row = _row(view, "title")
+
+    _type_tag(row, "Z9")
+
+    assert row.column.name == "Z9"
+    assert row.name.options["Z9"] == "Z9"
+    assert view.export_button is not None
+    assert view.export_button.enabled is True
+
+
+def test_export_view__ris_invalid_tag_turns_red_and_disables_export() -> None:
+    view = _ris_view()
+    row = _row(view, "title")
+
+    _type_tag(row, "title")
+
+    assert row.name.props["bg-color"] == "red-2"
+    assert view.export_button is not None
+    assert view.export_button.enabled is False
+    assert _tooltip(view.export_button) == "invalid tag for: Title"
+
+    row.checkbox.value = False
+
+    assert view.export_button.enabled is True
+
+
+def test_export_view__ris_shared_tag_gets_warning_colour_and_hover() -> None:
+    view = _ris_view()
+    title, doi = _row(view, "title"), _row(view, "doi")
+
+    _type_tag(doi, "TI")
+
+    assert title.name.props["bg-color"] == "amber-2"
+    assert doi.name.props["bg-color"] == "amber-2"
+    assert title.shared_tooltip.text == "Also used by: DOI"
+    assert title.shared_tooltip.visible is True
+
+    doi.checkbox.value = False
+
+    assert "bg-color" not in title.name.props
+    assert title.shared_tooltip.visible is False
+
+
+def test_export_view__ris_n1_rows_not_marked_as_shared() -> None:
+    view = _ris_view()
+
+    _type_tag(_row(view, "title"), "N1")
+    _type_tag(_row(view, "doi"), "N1")
+
+    assert _row(view, "title").name.props["bg-color"] == "blue-2"
+
+
+def _option_inputs(row: Any) -> list[ui.input]:
+    return [e for e in row.options.descendants() if isinstance(e, ui.input)]
+
+
+def test_export_view__ris_n1_shows_name_box_starting_at_field_name() -> None:
+    view = _ris_view()
+    row = _row(view, "title")
+
+    _type_tag(row, "N1")
+
+    [name] = _option_inputs(row)
+    assert name.value == "Title"
+    name.value = ""
+    assert row.column.note_name == ""
+
+    _type_tag(row, "TI")
+
+    assert _option_inputs(row) == []
+
+
+def test_export_view__ris_one_line_per_value_hides_delimiter() -> None:
+    view = _ris_view()
+    assert _option_inputs(_row(view, "author_names")) == []
+
+    view.option_widgets["one_line_per_value"].value = False
+
+    [delimiter] = _option_inputs(_row(view, "author_names"))
+    assert delimiter.value == "; "
+
+
+def test_export_view__ris_date_rows_have_no_part_option() -> None:
+    view = _ris_view(ExportOptions(file_type="ris", empty_columns=True))
+
+    assert list(_row(view, "date").options.descendants()) == []
+    assert _row(view, "date:year").name.value == "PY"
+
+
+def test_export_view__ris_split_pages_option_rebuilds_rows() -> None:
+    view = _ris_view(ExportOptions(file_type="ris", empty_columns=True))
+    assert _row(view, "pages:end").name.value == "EP"
+
+    view.option_widgets["split_pages"].value = False
+
+    keys = [row.column.key for row in view.rows]
+    assert "pages:end" not in keys
+    assert _row(view, "pages").name.value == "SP"
+
+
+def test_export_view__ris_options_hide_tabular_settings() -> None:
+    view = _ris_view()
+
+    assert {
+        "ris_encoding",
+        "label_format",
+        "one_line_per_value",
+        "split_pages",
+        "cleaned_dates_only",
+    } <= view.option_widgets.keys()
+    assert not {"delimiter", "encoding", "max_length", "line_breaks"} & (
+        view.option_widgets.keys()
+    )
+
+
+def test_export_view__ris_header_checkbox_leaves_type_row_checked() -> None:
+    view = _ris_view()
+    assert view.header_checkbox is not None
+
+    view.header_checkbox.value = False
+
+    assert view.rows[0].checkbox.value is True
+    assert view.header_checkbox.value is False
+    assert view.export_button is not None
+    assert _tooltip(view.export_button) == "no columns selected"
+
+
+def test_pick_save_path__ris_filter(monkeypatch: pytest.MonkeyPatch) -> None:
+    window = _FakeWindow(None)
+    monkeypatch.setattr(export_flow.app.native, "main_window", window)
+
+    asyncio.run(pick_save_path(Path("library.ris"), "ris"))
+
+    assert window.kwargs["file_types"] == ("RIS files (*.ris)",)
