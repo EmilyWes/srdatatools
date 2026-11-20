@@ -57,6 +57,7 @@ def test_load_folder__documents_when_saved_folder_is_gone(
 def test_default_path__library_when_free(tmp_path: Path) -> None:
     assert default_path(tmp_path, "csv") == tmp_path / "library.csv"
     assert default_path(tmp_path, "tsv") == tmp_path / "library.tsv"
+    assert default_path(tmp_path, "xlsx") == tmp_path / "library.xlsx"
 
 
 def test_default_path__numbers_past_existing_files(tmp_path: Path) -> None:
@@ -72,7 +73,13 @@ def test_load_options__defaults_when_unset(session: Session) -> None:
 
 
 def test_save_options__round_trips(session: Session) -> None:
-    options = ExportOptions(delimiter="\t", encoding="utf-8", original_data=True)
+    options = ExportOptions(
+        file_type="xlsx",
+        delimiter="\t",
+        encoding="utf-8",
+        excel_max_length=1_000,
+        original_data=True,
+    )
 
     save_options(session, options)
     session.commit()
@@ -97,3 +104,18 @@ def test_load_options__defaults_when_stored_value_is_invalid(session: Session) -
 
 def test_load_options__defaults_to_pythons_csv_field_limit(session: Session) -> None:
     assert load_options(session).max_length == 131_072
+
+
+def test_load_options__excel_length_defaults_to_excels_cell_limit(
+    session: Session,
+) -> None:
+    assert load_options(session).excel_max_length == 32_767
+
+
+def test_load_options__defaults_when_excel_length_over_cell_limit(
+    session: Session,
+) -> None:
+    set_setting(session, "export_options", '{"excel_max_length": 32768}')
+    session.commit()
+
+    assert load_options(session) == ExportOptions()
