@@ -6,15 +6,15 @@ from typing import Any, cast
 from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.cleaning.options import CleaningOptions
-from app.cleaning.steps import (
+from app.db.models import Label, Record, RecordSource, SourceFile
+from app.db.queries import record_schema
+from app.gui.cleaning.options import CleaningOptions
+from app.gui.cleaning.steps import (
     STEP_NAMES,
     CleaningContext,
     clean_record,
     file_separators,
 )
-from app.db.models import Label, Record, RecordSource, SourceFile
-from app.db.queries import record_schema
 from app.models.record import Record as RecordSchema
 from app.parsers.mapping import FieldMapping
 

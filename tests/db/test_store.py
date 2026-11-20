@@ -6,7 +6,6 @@ import pytest
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.cleaning.options import CleaningOptions
 from app.db.models import (
     ActivityLog,
     AppSetting,
@@ -23,6 +22,7 @@ from app.db.store import (
     remove_source_file,
     store_parsed_rows,
 )
+from app.gui.cleaning.options import CleaningOptions
 from app.models.record import Label as LabelSchema
 from app.models.record import Record as RecordSchema
 from app.parsers.mapping import FieldMapping

@@ -5,7 +5,7 @@ from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.db.models import ActivityLog, SourceFile
-from app.gui.format import format_count
+from app.helpers.format import format_count
 
 
 def log_import(session: Session, source_file: SourceFile) -> ActivityLog:

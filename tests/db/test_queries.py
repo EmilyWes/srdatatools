@@ -270,7 +270,7 @@ def test_count_data_quality__unparsed_dates(session: Session) -> None:
     ("names", "ids", "misaligned"),
     [
         ("A|B", "x:1|x:2", False),
-        ("A|B", "x:1", False),
+        ("A|B", "x:1", True),
         ("A|B", "x:1|x:2|x:3", True),
         (None, "x:1", True),
         ("A|B", "x:[1;2]", True),

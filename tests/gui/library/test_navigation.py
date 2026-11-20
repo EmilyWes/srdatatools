@@ -1,0 +1,282 @@
+import asyncio
+import datetime
+
+import pytest
+from nicegui import background_tasks, core, ui
+
+from app.db.models import SourceFile
+from app.gui.general.layout import shell
+from app.gui.library.navigation import LeftPanelNav, render_left_panel
+from tests.gui.clicks import click_and_wait
+
+_SELECTED_CLASS = "bg-secondary"
+
+
+def _source_file(id_: int, filename: str) -> SourceFile:
+    return SourceFile(
+        id=id_,
+        filename=filename,
+        path=None,
+        format="csv",
+        imported_at=datetime.datetime(2026, 1, 1),
+        row_count=1,
+    )
+
+
+def test_render_left_panel__builds_without_raising() -> None:
+    panes = shell()
+
+    render_left_panel(panes.left, [])
+
+
+def test_render_left_panel__adds_import_and_library_with_no_source_files() -> None:
+    panes = shell()
+
+    nav = render_left_panel(panes.left, [])
+
+    # Import, separator, "Library" label, Dashboard, Table row, space, About/Help
+    assert len(panes.left.default_slot.children) == 7
+    assert list(nav.buttons) == [
+        "import",
+        "library:dashboard",
+        "library:table",
+        "about",
+        "help",
+    ]
+
+
+def test_render_left_panel__adds_one_entry_per_source_file() -> None:
+    panes = shell()
+    source_files = [
+        _source_file(1, "pubmed_export.nbib"),
+        _source_file(2, "scopus_export.csv"),
+    ]
+
+    nav = render_left_panel(panes.left, source_files)
+
+    # Import, sep, "Library" label, Dashboard, Table row, sep, "Imported files" label,
+    # scrolling list with source_file:1 and source_file:2, About/Help
+    assert len(panes.left.default_slot.children) == 9
+    file_list = panes.left.default_slot.children[-2]
+    assert len(file_list.default_slot.children) == 2
+    assert {"flex-grow", "overflow-y-auto"} <= set(file_list.classes)
+    assert list(nav.buttons) == [
+        "import",
+        "library:dashboard",
+        "library:table",
+        "source_file:1",
+        "source_file:2",
+        "about",
+        "help",
+    ]
+
+
+def test_render_left_panel__select_highlights_entry() -> None:
+    panes = shell()
+    source_files = [_source_file(1, "pubmed_export.nbib")]
+    nav = render_left_panel(panes.left, source_files)
+
+    nav.select("source_file:1")
+
+    assert nav.selected_key == "source_file:1"
+    assert _SELECTED_CLASS in nav.buttons["source_file:1"].classes
+
+
+def test_render_left_panel__selecting_source_file_calls_on_source_file() -> None:
+    panes = shell()
+    source_files = [_source_file(7, "pubmed_export.nbib")]
+    selected: list[int] = []
+    nav = render_left_panel(panes.left, source_files, on_source_file=selected.append)
+
+    nav.select("source_file:7")
+
+    assert selected == [7]
+
+
+def test_render_left_panel__switching_selection_removes_previous_highlight() -> None:
+    panes = shell()
+    source_files = [_source_file(1, "pubmed_export.nbib")]
+    nav = render_left_panel(panes.left, source_files)
+
+    nav.select("library:dashboard")
+    nav.select("source_file:1")
+
+    assert _SELECTED_CLASS not in nav.buttons["library:dashboard"].classes
+    assert _SELECTED_CLASS in nav.buttons["source_file:1"].classes
+
+
+def test_render_left_panel__clicking_import_selects_it() -> None:
+    panes = shell()
+    nav = render_left_panel(panes.left, [])
+
+    import_button = panes.left.default_slot.children[0]
+    click_listener = next(iter(import_button._event_listeners.values()))
+    assert click_listener.handler is not None
+    click_listener.handler(None)
+
+    assert nav.selected_key == "import"
+    assert _SELECTED_CLASS in nav.buttons["import"].classes
+
+
+def test_render_left_panel__clicking_import_deselects_previous_selection() -> None:
+    panes = shell()
+    source_files = [_source_file(1, "pubmed_export.nbib")]
+    nav = render_left_panel(panes.left, source_files)
+    nav.select("source_file:1")
+
+    import_button = panes.left.default_slot.children[0]
+    click_listener = next(iter(import_button._event_listeners.values()))
+    assert click_listener.handler is not None
+    click_listener.handler(None)
+
+    assert nav.selected_key == "import"
+    assert _SELECTED_CLASS not in nav.buttons["source_file:1"].classes
+    assert _SELECTED_CLASS in nav.buttons["import"].classes
+
+
+def test_render_left_panel__import_button_uses_on_import_callback_when_given(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    panes = shell()
+    calls: list[None] = []
+
+    async def on_import() -> None:
+        calls.append(None)
+
+    nav = render_left_panel(panes.left, [], on_import=on_import)
+    import_button = panes.left.default_slot.children[0]
+    click_listener = next(iter(import_button._event_listeners.values()))
+    assert click_listener.handler is not None
+
+    async def click_and_wait() -> None:
+        monkeypatch.setattr(core, "loop", asyncio.get_running_loop())
+        before = set(background_tasks.running_tasks)
+        click_listener.handler(None)  # type: ignore[misc]
+        scheduled = set(background_tasks.running_tasks) - before
+        await asyncio.gather(*scheduled)
+
+    asyncio.run(click_and_wait())
+
+    assert calls == [None]
+    assert nav.selected_key == "import"  # import button is highlighted while busy
+
+
+def test_render_left_panel__clear_selection_removes_highlight() -> None:
+    panes = shell()
+    nav = render_left_panel(panes.left, [])
+    nav.select("library:dashboard")
+
+    nav.clear_selection()
+
+    assert nav.selected_key is None
+    assert _SELECTED_CLASS not in nav.buttons["library:dashboard"].classes
+
+
+def _click(button: ui.button) -> None:
+    click_listener = next(iter(button._event_listeners.values()))
+    assert click_listener.handler is not None
+    click_listener.handler(None)
+
+
+def _gear(nav: LeftPanelNav, key: str) -> ui.button:
+    row = nav.buttons[key].parent_slot
+    assert row is not None
+    return [c for c in row.children if isinstance(c, ui.button)][1]
+
+
+def test_render_left_panel__library_heading_above_dashboard_and_table() -> None:
+    panes = shell()
+
+    render_left_panel(panes.left, [])
+
+    heading = panes.left.default_slot.children[2]
+    assert isinstance(heading, ui.label)
+    assert heading.text == "Library"
+
+
+def test_render_left_panel__selecting_dashboard_and_table_calls_their_views() -> None:
+    panes = shell()
+    calls: list[str] = []
+    nav = render_left_panel(
+        panes.left,
+        [],
+        on_dashboard=lambda: calls.append("dashboard"),
+        on_table=lambda: calls.append("table"),
+    )
+
+    _click(nav.buttons["library:dashboard"])
+    _click(nav.buttons["library:table"])
+
+    assert calls == ["dashboard", "table"]
+    assert nav.selected_key == "library:table"
+
+
+def test_render_left_panel__clicking_table_awaits_async_view(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    panes = shell()
+    calls: list[str] = []
+
+    async def show_table() -> None:
+        calls.append("table")
+
+    nav = render_left_panel(panes.left, [], on_table=show_table)
+
+    click_and_wait(nav.buttons["library:table"], monkeypatch)
+
+    assert calls == ["table"]
+
+
+def test_render_left_panel__table_gear_opens_settings_with_table_highlighted() -> None:
+    panes = shell()
+    calls: list[str] = []
+    nav = render_left_panel(
+        panes.left,
+        [],
+        on_table=lambda: calls.append("table"),
+        on_table_settings=lambda: calls.append("settings"),
+    )
+    nav.select("library:dashboard")
+
+    _click(_gear(nav, "library:table"))
+
+    assert calls == ["settings"]
+    assert nav.selected_key == "library:table"
+    assert _SELECTED_CLASS in nav.buttons["library:table"].classes
+    assert _SELECTED_CLASS not in nav.buttons["library:dashboard"].classes
+
+
+def test_render_left_panel__dashboard_gear_opens_settings_and_highlights() -> None:
+    panes = shell()
+    calls: list[str] = []
+    nav = render_left_panel(
+        panes.left,
+        [],
+        on_dashboard=lambda: calls.append("dashboard"),
+        on_dashboard_settings=lambda: calls.append("settings"),
+    )
+    nav.select("library:table")
+
+    _click(_gear(nav, "library:dashboard"))
+
+    assert calls == ["settings"]
+    assert nav.selected_key == "library:dashboard"
+    assert _SELECTED_CLASS in nav.buttons["library:dashboard"].classes
+    assert _SELECTED_CLASS not in nav.buttons["library:table"].classes
+
+
+@pytest.mark.parametrize("key", ["about", "help"])
+def test_render_left_panel__about_and_help_open_their_view(key: str) -> None:
+    panes = shell()
+    opened: list[str] = []
+    nav = render_left_panel(
+        panes.left,
+        [],
+        on_about=lambda: opened.append("about"),
+        on_help=lambda: opened.append("help"),
+    )
+
+    nav.select(key)
+
+    assert opened == [key]
+    assert _SELECTED_CLASS in nav.buttons[key].classes

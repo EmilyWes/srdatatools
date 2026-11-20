@@ -8,7 +8,7 @@ from pathlib import Path
 from nicegui import app, native, ui
 
 from app.db.session import default_db_path, project_root, run_migrations
-from app.gui import home  # noqa: F401  (registers the "/" page)
+from app.gui.general import home  # noqa: F401  (registers the "/" page)
 
 if sys.platform == "win32":
     import ctypes

@@ -123,40 +123,46 @@ app/
     settings.py      # app_settings key/value read/write
     activity_log.py  # writes plain-language activity_log rows (for every module that acts)
     migrations/      # Alembic
-  cleaning/
-    steps.py         # cleaning steps and the order they run in, per record
-    options.py       # cleaning options (remembered in app_settings) + their boxes
-    quality.py       # data-quality checks per record, worked out from its fields (not stored), for the dashboard and the table
-  dedup/             # (planned) matching strategies (DOI, fuzzy title+author+year)
-  enrich/            # (planned) OpenAlex client, field-merging logic
-  snowball/          # (planned) reference/citation graph traversal via OpenAlex
-  export/
-    columns.py       # export columns (one per output column) and their cell values
-    options.py       # export options, remembered in app_settings
-    csv_.py          # CSV writer
-    excel.py         # Excel (.xlsx) writer
-    ris.py           # RIS writer
-    ris_tags.py      # RIS tag list and publication type codes
   gui/
-    home.py          # the single page, wires the panes together
-    layout.py        # three-pane shell
-    library_nav.py   # left panel navigation
-    export_flow.py   # export view in the middle panel
-    cleaning_flow.py # cleaning view in the middle panel
-    import_flow.py   # import view in the middle panel + the per-Type parser wiring it imports with
-    library_dashboard.py # Library dashboard stats in the middle panel
-    source_file_view.py # source-file detail view in the middle panel
+    general/
+      home.py        # the single page, wires the panes together
+      layout.py      # three-pane shell
+      action_panel.py # right panel actions + activity log
+    importing/
+      import_flow.py # import view in the middle panel + the per-Type parser wiring it imports with
+    cleaning/
+      cleaning_flow.py # cleaning view in the middle panel
+      steps.py       # cleaning steps and the order they run in, per record
+      options.py     # cleaning options (remembered in app_settings) + their boxes
+    library/
+      navigation.py  # left panel navigation
+      dashboard.py   # Library dashboard stats in the middle panel
+      record_table.py # Library record table + its column settings view
+      quality.py     # data-quality checks per record, worked out from its fields (not stored), for the dashboard and the table
+    dedup/           # (planned) matching strategies (DOI, fuzzy title+author+year)
+    enrich/          # (planned) OpenAlex client, field-merging logic
+    snowball/        # (planned) reference/citation graph traversal via OpenAlex
+    export/
+      export_flow.py # export view in the middle panel
+      columns.py     # export columns (one per output column) and their cell values
+      options.py     # export options, remembered in app_settings
+      csv_.py        # CSV writer
+      excel.py       # Excel (.xlsx) writer
+      ris.py         # RIS writer
+      ris_tags.py    # RIS tag list and publication type codes
+    other/
+      source_file_view.py # source-file detail view in the middle panel
+      about.py       # About view (version, license, third-party licenses) and Help view
+  helpers/
     quirks_overview.py # subject boxes (Parsing and Cleaning views) + the Mapping | Parsing toggle, for the import, source-file, cleaning and export views
-    record_table.py  # Library record table + its column settings view
-    action_panel.py  # right panel actions + activity log
     mapping_table.py # field-mapping table (CSV columns, RIS/NBIB tags, BibTeX fields)
     busy.py          # runs slow work off the event loop, with a spinner dialog if it takes a while
     format.py        # shared count/source formatting and label/keyword setting keys
-    about.py         # About view (version, license, third-party licenses) and Help view
+    theme.py         # Utrecht University colour palette, chart colours and the app-wide CSS theme
   main.py            # launches pywebview + NiceGUI server
 ```
 
-Keeping parsers/dedup/enrich/export as independent modules with a shared internal `Record` schema means each input/output format only needs a thin adapter, and new sources (e.g. Scopus, Web of Science exports) can be added later without touching the rest of the app.
+Keeping parsers, dedup, enrich and the export writers (the last three in `gui/`) as separate modules with a shared internal `Record` schema means each input/output format only needs a thin adapter, and new sources (e.g. Scopus, Web of Science exports) can be added later without touching the rest of the app.
 
 ## Data model
 
