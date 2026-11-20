@@ -62,7 +62,7 @@ from app.gui.export_flow import render_export_view
 from app.gui.format import format_count
 from app.gui.import_flow import import_file, render_import_view
 from app.gui.layout import shell
-from app.gui.library_dashboard import (
+from app.gui.library.dashboard import (
     COMPLETENESS_FIELDS,
     dashboard_items,
     load_hidden,
@@ -71,8 +71,8 @@ from app.gui.library_dashboard import (
     reset_hidden,
     save_hidden,
 )
-from app.gui.library_nav import LeftPanelNav, render_left_panel
-from app.gui.record_table import (
+from app.gui.library.navigation import LeftPanelNav, render_left_panel
+from app.gui.library.record_table import (
     COLUMNS,
     LabelFormat,
     RecordSelection,

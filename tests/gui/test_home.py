@@ -17,9 +17,9 @@ from app.gui.action_panel import ActionPanel
 from app.gui.format import author_id_key
 from app.gui.home import home
 from app.gui.layout import ShellPanes
-from app.gui.library_dashboard import save_hidden
-from app.gui.library_nav import LeftPanelNav
-from app.gui.record_table import load_columns
+from app.gui.library.dashboard import save_hidden
+from app.gui.library.navigation import LeftPanelNav
+from app.gui.library.record_table import load_columns
 from app.parsers.common import FileSummary
 from app.parsers.profiles.overview import default_choices
 from tests.gui.clicks import click_and_wait

@@ -13,7 +13,7 @@ from app.db.models import Base, Label, Record, RecordSource, SourceFile
 from app.db.settings import set_setting
 from app.gui.format import author_id_key, keyword_key, label_key
 from app.gui.layout import shell
-from app.gui.record_table import (
+from app.gui.library.record_table import (
     COLUMNS,
     DEFAULT_COLUMNS,
     LabelFormat,

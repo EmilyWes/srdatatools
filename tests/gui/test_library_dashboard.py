@@ -12,7 +12,7 @@ from app.db.models import Base
 from app.db.settings import set_setting
 from app.gui.format import keyword_key, label_key
 from app.gui.layout import shell
-from app.gui.library_dashboard import (
+from app.gui.library.dashboard import (
     dashboard_items,
     load_hidden,
     render_dashboard_settings,
