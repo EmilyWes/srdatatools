@@ -259,7 +259,7 @@ def test_file_separators__chosen_separator_wins_over_sniffing() -> None:
 
 def test_split_authors__joins_names_and_affiliations_with_bar() -> None:
     record = Record(
-        author_names="Teng, Yu; Han, Li ;",
+        author_names="Teng, Yu; Han, Li",
         author_affiliations="Guangxi, China ; Nanning University",
     )
 
@@ -267,6 +267,18 @@ def test_split_authors__joins_names_and_affiliations_with_bar() -> None:
 
     assert cleaned.author_names == "Teng, Yu|Han, Li"
     assert cleaned.author_affiliations == "Guangxi, China|Nanning University"
+
+
+def test_split_authors__keeps_empty_pieces() -> None:
+    record = Record(
+        author_names="Teng, Yu; ;Han, Li ;",
+        author_affiliations="Guangxi, China ; ; Nanning University",
+    )
+
+    cleaned = split_authors(record, _context(names=";", affiliations=";"), _OPTIONS)
+
+    assert cleaned.author_names == "Teng, Yu||Han, Li|"
+    assert cleaned.author_affiliations == "Guangxi, China||Nanning University"
 
 
 def test_split_authors__value_already_split_is_left_alone() -> None:

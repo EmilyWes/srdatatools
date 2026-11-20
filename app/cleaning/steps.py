@@ -208,8 +208,9 @@ def clear_empty_values(
 def _split(value: str | None, separator: str | None) -> str | None:
     if not value or not separator or AUTHOR_JOINER in value:
         return value
-    pieces = (piece.strip() for piece in value.split(separator))
-    return AUTHOR_JOINER.join(piece for piece in pieces if piece) or None
+    """Empty pieces are kept so positions keep matching the authors."""
+    pieces = [piece.strip() for piece in value.split(separator)]
+    return AUTHOR_JOINER.join(pieces) if any(pieces) else None
 
 
 def _split_ids(value: str | None, separator: str | None) -> str | None:

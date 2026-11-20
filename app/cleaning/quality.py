@@ -34,7 +34,7 @@ def _misaligned_authors(fields: Fields) -> bool:
     if parse_unsplit_author_ids(ids):
         return True
     name_count = len(names.split(AUTHOR_JOINER)) if names else 0
-    return len(parse_author_ids(ids)) > name_count
+    return len(parse_author_ids(ids)) != name_count
 
 
 def _unmapped_publication_type(fields: Fields) -> bool:
