@@ -37,6 +37,7 @@ from app.gui.mapping_table import ROW_FIELD_CSS, fill_color
 from app.gui.quirks_overview import (
     FIELD_CSS,
     render_box_frame,
+    render_boxes_row,
     render_view_toggle,
 )
 
@@ -66,7 +67,11 @@ _OPTION_ROW_CLASSES = "w-full no-wrap items-center gap-1"
 _OPTION_LABEL_CLASSES = "w-10 shrink-0 text-xs text-grey-7"
 _NAME_WIDTH = "width: 24ch"
 _FIELD_WIDTH = "width: 20ch"
-_BOX_FIELD_CLASSES = "quirk-field text-xs w-[7rem]"
+_BOX_FIELD_CLASSES = "quirk-field text-xs"
+_BOX_FIELD_WIDTH = "w-[6.5rem]"
+_WIDE_BOX_FIELD_WIDTH = "w-[9rem]"
+# Controls sit at the right edge of the (equally wide) boxes.
+_BOX_GRID_STYLE = "grid-template-columns: max-content 1fr"
 
 _DATE_PARTS = {"full": "Full date", "year": "Year", "month": "Month", "day": "Day"}
 
@@ -526,6 +531,7 @@ class ExportView:
         hover: str,
         choices: dict[str, str] | None = None,
         maximum: int | None = None,
+        wide: bool = False,
     ) -> None:
         with ui.label(label).classes("text-xs"):
             ui.tooltip(hover).classes("max-w-sm text-xs")
@@ -535,10 +541,14 @@ class ExportView:
             widget = ui.checkbox(value=value).props("dense keep-color size=32px")
         elif isinstance(value, int):
             widget = ui.number(value=value, min=1, max=maximum, precision=0)
-            widget.classes(_BOX_FIELD_CLASSES).props("dense outlined")
+            widget.props("dense outlined")
         else:
             widget = ui.select(choices or {}, value=value)
-            widget.classes(_BOX_FIELD_CLASSES).props("dense options-dense outlined")
+            widget.props("dense options-dense outlined")
+        if not isinstance(widget, ui.checkbox):
+            width = _WIDE_BOX_FIELD_WIDTH if wide else _BOX_FIELD_WIDTH
+            widget.classes(f"{_BOX_FIELD_CLASSES} {width}")
+        widget.classes("justify-self-end")
         widget.on_value_change(lambda e: self._set_option(key, e.value))
         self.option_widgets[key] = widget
 
@@ -550,8 +560,8 @@ class ExportView:
         self.option_widgets = {}
         self.option_boxes.clear()
         with self.option_boxes, ui.column().classes("gap-1 w-full"):
-            with ui.row().classes("w-full items-start gap-3 pl-3"):
-                with render_box_frame("File"):
+            with render_boxes_row():
+                with render_box_frame("File").style(_BOX_GRID_STYLE):
                     if excel:
                         self._box_item(
                             "excel_max_length",
@@ -591,7 +601,7 @@ class ExportView:
                             " reader, which many tools use; Excel holds at most"
                             " 32.767 characters per cell.",
                         )
-                with render_box_frame("Values"):
+                with render_box_frame("Values").style(_BOX_GRID_STYLE):
                     self._box_item(
                         "label_format",
                         "Label values",
@@ -628,8 +638,9 @@ class ExportView:
                             + (" in the cell" if excel else " within quotes")
                             + ", or replaced with a space.",
                             _LINE_BREAKS,
+                            wide=True,
                         )
-                with render_box_frame("Column selection"):
+                with render_box_frame("Column selection").style(_BOX_GRID_STYLE):
                     self._box_item(
                         "empty_columns",
                         "Export empty columns",
