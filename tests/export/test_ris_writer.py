@@ -191,7 +191,7 @@ def test_write_ris__line_breaks_replaced_with_space(tmp_path: Path) -> None:
 
 
 def test_write_ris__round_trips_through_the_ris_importer(tmp_path: Path) -> None:
-    source = _DATA / "scopus" / "scopus_small_261022.ris"
+    source = _DATA / "general" / "scopus_style.ris"
     mapping = suggest_ris_mapping(list(read_ris_tags(source).filled))
     imported = [row.record for row in parse_ris_file(source, mapping).rows]
     records = [ExportRecord(id=i, record=r) for i, r in enumerate(imported, 1)]
@@ -210,8 +210,8 @@ def test_write_ris__round_trips_through_the_ris_importer(tmp_path: Path) -> None
         "volume",
         "issue",
         "pages",
-        "abstract",
         "doi",
+        "issn",
         "keywords",
         "url",
         "notes",
@@ -222,3 +222,6 @@ def test_write_ris__round_trips_through_the_ris_importer(tmp_path: Path) -> None
             f: getattr(before, f) for f in fields
         }
         assert after.publication_type == ris_type(before.publication_type)
+        assert after.abstract == (
+            " ".join(before.abstract.splitlines()) if before.abstract else None
+        )
