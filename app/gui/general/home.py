@@ -42,9 +42,9 @@ from app.gui.export.options import (
     save_options,
 )
 from app.gui.export.ris import write_ris
-from app.gui.general.action_panel import render_right_panel
 from app.gui.general.layout import shell
-from app.gui.general.navigation import LeftPanelNav, render_left_panel
+from app.gui.general.left_panel import LeftPanel, render_left_panel
+from app.gui.general.right_panel import render_right_panel
 from app.gui.importing.import_flow import import_file, render_import_view
 from app.gui.library.dashboard import (
     COMPLETENESS_FIELDS,
@@ -103,7 +103,7 @@ _engine = get_engine()
 @ui.page("/")
 def home() -> None:
     panes = shell()
-    nav: LeftPanelNav | None = None
+    nav: LeftPanel | None = None
     selection = RecordSelection()
 
     def clear_nav_selection() -> None:

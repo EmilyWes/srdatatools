@@ -13,10 +13,10 @@ from sqlalchemy.orm import Session
 import app.gui.general.home as home_module
 import app.main
 from app.db.models import ActivityLog, Base, Record, RecordSource, SourceFile
-from app.gui.general.action_panel import ActionPanel
 from app.gui.general.home import home
 from app.gui.general.layout import ShellPanes
-from app.gui.general.navigation import LeftPanelNav
+from app.gui.general.left_panel import LeftPanel
+from app.gui.general.right_panel import RightPanel
 from app.gui.library.dashboard import save_hidden
 from app.gui.library.record_table import load_columns
 from app.helpers.format import author_id_key
@@ -55,10 +55,10 @@ def test_home__shows_activity_log_entries_in_right_panel(
             )
         )
         session.commit()
-    panels: list[ActionPanel] = []
+    panels: list[RightPanel] = []
     render_right_panel = home_module.render_right_panel
 
-    def capture(*args: Any, **kwargs: Any) -> ActionPanel:
+    def capture(*args: Any, **kwargs: Any) -> RightPanel:
         panel = render_right_panel(*args, **kwargs)
         panels.append(panel)
         return panel
@@ -85,10 +85,10 @@ def test_home__clear_log_empties_db_and_right_panel(
             )
         )
         session.commit()
-    panels: list[ActionPanel] = []
+    panels: list[RightPanel] = []
     render_right_panel = home_module.render_right_panel
 
-    def capture(*args: Any, **kwargs: Any) -> ActionPanel:
+    def capture(*args: Any, **kwargs: Any) -> RightPanel:
         panel = render_right_panel(*args, **kwargs)
         panels.append(panel)
         return panel
@@ -195,11 +195,11 @@ def _add_source_file_with_record(engine: Engine) -> int:
         return source_file.id
 
 
-def _capture_navs(monkeypatch: pytest.MonkeyPatch) -> list[LeftPanelNav]:
-    navs: list[LeftPanelNav] = []
+def _capture_navs(monkeypatch: pytest.MonkeyPatch) -> list[LeftPanel]:
+    navs: list[LeftPanel] = []
     render_left_panel = home_module.render_left_panel
 
-    def capture(*args: Any, **kwargs: Any) -> LeftPanelNav:
+    def capture(*args: Any, **kwargs: Any) -> LeftPanel:
         nav = render_left_panel(*args, **kwargs)
         navs.append(nav)
         return nav
@@ -494,7 +494,7 @@ def test_home__deleting_library_empties_db_logs_and_shows_dashboard(
     on_deletes: list[Any] = []
     render_right_panel = home_module.render_right_panel
 
-    def capture(*args: Any, **kwargs: Any) -> ActionPanel:
+    def capture(*args: Any, **kwargs: Any) -> RightPanel:
         on_deletes.append(kwargs["on_delete_library"])
         return render_right_panel(*args, **kwargs)
 

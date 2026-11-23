@@ -127,8 +127,8 @@ app/
     general/
       home.py        # the single page, wires the panes together
       layout.py      # three-pane shell
-      action_panel.py # right panel actions + activity log
-      navigation.py  # left panel navigation
+      right_panel.py # right panel actions + activity log
+      left_panel.py  # left panel navigation
     importing/
       import_flow.py # import view in the middle panel + the per-Type parser wiring it imports with
     cleaning/

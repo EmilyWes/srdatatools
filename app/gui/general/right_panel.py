@@ -26,7 +26,7 @@ _LOG_CSS = (
 
 
 @dataclass
-class ActionPanel:
+class RightPanel:
     right: Element
     log: ui.column
 
@@ -58,7 +58,7 @@ def render_right_panel(
     on_delete_library: Callable[[], Awaitable[None] | None] | None = None,
     on_export: Callable[[], Awaitable[None] | None] | None = None,
     on_cleaning: Callable[[], Awaitable[None] | None] | None = None,
-) -> ActionPanel:
+) -> RightPanel:
     def show_settings(action: str) -> None:
         if on_settings is not None:
             on_settings()
@@ -141,4 +141,4 @@ def render_right_panel(
                     "unelevated no-caps"
                 )
 
-    return ActionPanel(right=right, log=log)
+    return RightPanel(right=right, log=log)

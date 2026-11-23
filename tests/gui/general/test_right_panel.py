@@ -5,8 +5,8 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import ActivityLog
-from app.gui.general.action_panel import ActionPanel, render_right_panel
 from app.gui.general.layout import shell
+from app.gui.general.right_panel import RightPanel, render_right_panel
 from tests.gui.clicks import click_and_wait
 
 
@@ -32,7 +32,7 @@ def _entry(
     )
 
 
-def _log_labels(actions: ActionPanel) -> list[ui.label]:
+def _log_labels(actions: RightPanel) -> list[ui.label]:
     return [
         child
         for child in actions.log.default_slot.children
@@ -153,7 +153,7 @@ def test_render_right_panel__log_is_empty() -> None:
     assert _log_labels(actions) == []
 
 
-def test_action_panel__show_log_puts_timestamp_on_its_own_line() -> None:
+def test_right_panel__show_log_puts_timestamp_on_its_own_line() -> None:
     panes = shell()
     actions = render_right_panel(panes.right, panes.middle)
 
@@ -170,7 +170,7 @@ def test_action_panel__show_log_puts_timestamp_on_its_own_line() -> None:
     ]
 
 
-def test_action_panel__show_log_colours_entries_by_status() -> None:
+def test_right_panel__show_log_colours_entries_by_status() -> None:
     panes = shell()
     actions = render_right_panel(panes.right, panes.middle)
 
@@ -186,7 +186,7 @@ def test_action_panel__show_log_colours_entries_by_status() -> None:
     assert "log-warning" in warning.classes
 
 
-def test_action_panel__show_log_empty_entries_clears_log() -> None:
+def test_right_panel__show_log_empty_entries_clears_log() -> None:
     panes = shell()
     actions = render_right_panel(panes.right, panes.middle)
     actions.show_log([_entry(datetime.datetime(2026, 1, 1), "Imported 5 records")])
@@ -196,7 +196,7 @@ def test_action_panel__show_log_empty_entries_clears_log() -> None:
     assert _log_labels(actions) == []
 
 
-def test_action_panel__show_log_schedules_scroll_to_bottom() -> None:
+def test_right_panel__show_log_schedules_scroll_to_bottom() -> None:
     panes = shell()
     actions = render_right_panel(panes.right, panes.middle)
 

@@ -6,7 +6,7 @@ from nicegui import background_tasks, core, ui
 
 from app.db.models import SourceFile
 from app.gui.general.layout import shell
-from app.gui.general.navigation import LeftPanelNav, render_left_panel
+from app.gui.general.left_panel import LeftPanel, render_left_panel
 from tests.gui.clicks import click_and_wait
 
 _SELECTED_CLASS = "bg-secondary"
@@ -178,7 +178,7 @@ def _click(button: ui.button) -> None:
     click_listener.handler(None)
 
 
-def _gear(nav: LeftPanelNav, key: str) -> ui.button:
+def _gear(nav: LeftPanel, key: str) -> ui.button:
     row = nav.buttons[key].parent_slot
     assert row is not None
     return [c for c in row.children if isinstance(c, ui.button)][1]

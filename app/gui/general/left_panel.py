@@ -21,7 +21,7 @@ _GEAR_PROPS = "flat dense round size=sm"
 
 
 @dataclass
-class LeftPanelNav:
+class LeftPanel:
     buttons: dict[str, ui.button] = field(default_factory=dict)
     views: dict[str, Callable[[], Awaitable[None] | None]] = field(default_factory=dict)
     selected_key: str | None = None
@@ -53,8 +53,8 @@ def render_left_panel(
     on_source_file: Callable[[int], Awaitable[None] | None] | None = None,
     on_about: Callable[[], Awaitable[None] | None] | None = None,
     on_help: Callable[[], Awaitable[None] | None] | None = None,
-) -> LeftPanelNav:
-    nav = LeftPanelNav()
+) -> LeftPanel:
+    nav = LeftPanel()
     ui.add_css(
         ".source-file-btn { height: auto; min-height: 40px; padding: 6px 12px; }"
         " .source-file-btn .q-btn__content { gap: 8px; flex-wrap: nowrap; }"
