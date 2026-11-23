@@ -1,12 +1,8 @@
 import json
-from collections.abc import Collection
 from typing import Literal
-
-from app.parsers.profiles import PROFILES
 
 # Between the values of a list, wherever one is shown or exported.
 DISPLAY_SEPARATOR = "; "
-_UNKNOWN_SOURCE = "Unknown"
 _LABEL_PREFIX = "label:"
 _KEYWORD_PREFIX = "keywords:"
 _AUTHOR_ID_PREFIX = "author_ids:"
@@ -22,17 +18,6 @@ LabelFormat = Literal["words", "numbers"]
 
 def format_count(count: int) -> str:
     return f"{count:,}".replace(",", ".")
-
-
-def source_label(source: str | None) -> str:
-    if source is None:
-        return _UNKNOWN_SOURCE
-    profile = PROFILES.get(source)
-    return profile.label if profile is not None else source
-
-
-def sources_label(sources: Collection[str]) -> str:
-    return ", ".join(map(source_label, sources)) or _UNKNOWN_SOURCE
 
 
 def label_key(phase: str, screener: str) -> str:

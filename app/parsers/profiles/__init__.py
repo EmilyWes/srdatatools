@@ -15,7 +15,11 @@ __all__ = [
     "FormatProfile",
     "Profile",
     "profile_for",
+    "source_label",
+    "sources_label",
 ]
+
+_UNKNOWN_SOURCE = "Unknown"
 
 # Detected profiles are applied in this order, each on top of the one before.
 # ASReview last: it writes a vendor export back with its own columns added.
@@ -54,3 +58,14 @@ def profile_for(sources: Collection[str], file_type: FileType) -> FormatProfile 
         if key in sources and top is not None:
             profile = _layer(profile, top, default.settings)
     return profile
+
+
+def source_label(source: str | None) -> str:
+    if source is None:
+        return _UNKNOWN_SOURCE
+    profile = PROFILES.get(source)
+    return profile.label if profile is not None else source
+
+
+def sources_label(sources: Collection[str]) -> str:
+    return ", ".join(map(source_label, sources)) or _UNKNOWN_SOURCE

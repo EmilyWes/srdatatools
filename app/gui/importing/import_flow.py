@@ -10,7 +10,6 @@ from app.db.activity_log import log_import
 from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
 from app.helpers.busy import run_busy
-from app.helpers.format import source_label, sources_label
 from app.helpers.mapping_table import ROW_FIELD_CSS, MappingScreen, render_mapping_table
 from app.helpers.quirks_overview import (
     VIEW_MAPPING,
@@ -50,7 +49,7 @@ from app.parsers.nbib import (
     read_nbib_tags,
     suggest_nbib_mapping,
 )
-from app.parsers.profiles import FormatProfile
+from app.parsers.profiles import FormatProfile, source_label, sources_label
 from app.parsers.profiles.overview import (
     ParsingChoices,
     default_choices,

@@ -39,12 +39,12 @@ from app.helpers.format import (
     label_key,
     label_pair,
     label_text,
-    source_label,
 )
 from app.helpers.quirks_overview import render_box_frame
 from app.models.record import publication_year
 from app.parsers.authors import AUTHOR_JOINER, author_ids_for_key
 from app.parsers.mapping import split_keyword
+from app.parsers.profiles import source_label
 
 _COLUMNS_KEY = "table_columns"
 _NUMBER_COLUMNS = {"publication_year"}

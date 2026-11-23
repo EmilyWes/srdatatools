@@ -9,16 +9,7 @@ from app.helpers.format import (
     keyword_prefix,
     label_key,
     label_pair,
-    source_label,
 )
-
-
-def test_source_label__uses_profile_label() -> None:
-    assert source_label("pubmed") == "PubMed"
-
-
-def test_source_label__unknown_for_none() -> None:
-    assert source_label(None) == "Unknown"
 
 
 def test_format_count__dot_thousands_separator() -> None:

@@ -5,7 +5,7 @@ from typing import Literal
 
 from app.gui.export.options import ExportOptions
 from app.gui.export.ris_tags import TAG_PATTERN, ris_type
-from app.helpers.format import DISPLAY_SEPARATOR, label_text, source_label
+from app.helpers.format import DISPLAY_SEPARATOR, label_text
 from app.models.record import CLEANED_DATE, Record
 from app.parsers.authors import (
     AUTHOR_JOINER,
@@ -14,6 +14,7 @@ from app.parsers.authors import (
     author_ids_per_slot,
 )
 from app.parsers.mapping import split_keyword
+from app.parsers.profiles import source_label
 
 DatePart = Literal["full", "year", "month", "day", "ris"]
 PagesPart = Literal["start", "end"]

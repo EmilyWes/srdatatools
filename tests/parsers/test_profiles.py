@@ -1,5 +1,5 @@
 from app.parsers.mapping import Suggest
-from app.parsers.profiles import FormatProfile, _layer, profile_for
+from app.parsers.profiles import FormatProfile, _layer, profile_for, source_label
 from app.parsers.profiles.asreview import ASREVIEW
 from app.parsers.profiles.base import never_matches
 from app.parsers.profiles.default import (
@@ -92,3 +92,11 @@ def test_default_settings__overrides_the_type_default() -> None:
     settings = default_settings("nbib", label_values=(("-1", "exclude"),))
 
     assert settings.label_values == (("-1", "exclude"),)
+
+
+def test_source_label__uses_profile_label() -> None:
+    assert source_label("pubmed") == "PubMed"
+
+
+def test_source_label__unknown_for_none() -> None:
+    assert source_label(None) == "Unknown"

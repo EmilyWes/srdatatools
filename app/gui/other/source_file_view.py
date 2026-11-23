@@ -6,11 +6,12 @@ from nicegui.element import Element
 
 from app.db.models import SourceFile
 from app.gui.importing.import_flow import type_label
-from app.helpers.format import format_count, sources_label
+from app.helpers.format import format_count
 from app.helpers.mapping_table import render_mapping_table
 from app.helpers.quirks_overview import render_quirks_overview, render_view_toggle
 from app.parsers.common import FileSummary, FileType
 from app.parsers.mapping import FieldMapping
+from app.parsers.profiles import sources_label
 from app.parsers.profiles.overview import (
     default_choices,
     load_choices,
