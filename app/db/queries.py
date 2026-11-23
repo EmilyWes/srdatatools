@@ -6,7 +6,6 @@ from sqlalchemy import JSON, ColumnElement, String, and_, case, cast, func, sele
 from sqlalchemy.orm import InstrumentedAttribute, Session, selectinload
 
 from app.db.models import ActivityLog, Label, Record, RecordSource, SourceFile
-from app.gui.export.columns import ExportRecord, ExportSource
 from app.models.record import Label as LabelSchema
 from app.models.record import Record as RecordSchema
 
@@ -159,48 +158,3 @@ def load_records(session: Session, ids: Collection[int] | None = None) -> list[R
     if ids is not None:
         statement = statement.where(Record.id.in_(ids))
     return list(session.scalars(statement))
-
-
-def load_export_records(
-    session: Session, ids: Collection[int] | None = None
-) -> list[ExportRecord]:
-    """`ids` None loads every record. A raw key the file's mapping doesn't list was
-    set to ignore at import."""
-    records_statement = select(Record).order_by(Record.id)
-    sources_statement = (
-        select(RecordSource.record_id, RecordSource.raw_fields, SourceFile)
-        .join(RecordSource.source_file)
-        .order_by(RecordSource.id)
-    )
-    labels_statement = select(Label).order_by(Label.id)
-    if ids is not None:
-        records_statement = records_statement.where(Record.id.in_(ids))
-        sources_statement = sources_statement.where(RecordSource.record_id.in_(ids))
-        labels_statement = labels_statement.where(Label.record_id.in_(ids))
-
-    sources: dict[int, list[ExportSource]] = defaultdict(list)
-    for record_id, raw_fields, source_file in session.execute(sources_statement):
-        mapped = source_file.field_mapping.get("rows", {})
-        sources[record_id].append(
-            ExportSource(
-                vendors=tuple(source_file.sources),
-                filename=source_file.filename,
-                raw_fields=raw_fields,
-                ignored_keys=frozenset(key for key in raw_fields if key not in mapped),
-            )
-        )
-    labels: dict[int, list[LabelSchema]] = defaultdict(list)
-    for label in session.scalars(labels_statement):
-        labels[label.record_id].append(
-            LabelSchema.model_validate(
-                {"phase": label.phase, "screener": label.screener, "value": label.value}
-            )
-        )
-    return [
-        ExportRecord(
-            id=record.id,
-            record=record_schema(record, labels[record.id]),
-            sources=sources[record.id],
-        )
-        for record in session.scalars(records_statement)
-    ]

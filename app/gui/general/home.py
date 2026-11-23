@@ -25,7 +25,6 @@ from app.db.queries import (
     list_label_columns,
     list_record_ids_for_files,
     list_source_files,
-    load_export_records,
 )
 from app.db.session import get_engine, session_scope
 from app.db.store import (
@@ -38,7 +37,7 @@ from app.gui.cleaning.options import CleaningOptions
 from app.gui.cleaning.options import load_options as load_cleaning_options
 from app.gui.cleaning.options import save_options as save_cleaning_options
 from app.gui.cleaning.run import clean_records
-from app.gui.export.columns import ExportColumn, ExportRecord
+from app.gui.export.columns import ExportColumn, ExportRecord, load_export_records
 from app.gui.export.csv_ import write_csv
 from app.gui.export.excel import write_excel
 from app.gui.export.export_flow import render_export_view

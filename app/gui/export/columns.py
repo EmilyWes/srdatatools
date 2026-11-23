@@ -1,12 +1,15 @@
 import re
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Literal
 
+from sqlalchemy.orm import Session
+
+from app.db.queries import load_records, record_schema
 from app.gui.export.options import ExportOptions
 from app.gui.export.ris_tags import TAG_PATTERN, ris_type
 from app.helpers.format import DISPLAY_SEPARATOR, STORAGE_SEPARATOR, label_text
-from app.models.record import CLEANED_DATE, Record
+from app.models.record import CLEANED_DATE, Label, Record
 from app.parsers.authors import (
     author_id_keys,
     author_ids_for_key,
@@ -88,6 +91,41 @@ class ExportRecord:
     id: int
     record: Record
     sources: list[ExportSource] = field(default_factory=list)
+
+
+def load_export_records(
+    session: Session, ids: Collection[int] | None = None
+) -> list[ExportRecord]:
+    """`ids` None loads every record. A raw key the file's mapping doesn't list was
+    set to ignore at import."""
+    exports = []
+    for record in load_records(session, ids):
+        sources = []
+        for source in sorted(record.sources, key=lambda s: s.id):
+            source_file = source.source_file
+            mapped = source_file.field_mapping.get("rows", {})
+            sources.append(
+                ExportSource(
+                    vendors=tuple(source_file.sources),
+                    filename=source_file.filename,
+                    raw_fields=source.raw_fields,
+                    ignored_keys=frozenset(
+                        key for key in source.raw_fields if key not in mapped
+                    ),
+                )
+            )
+        labels = [
+            Label.model_validate(
+                {"phase": label.phase, "screener": label.screener, "value": label.value}
+            )
+            for label in sorted(record.labels, key=lambda label: label.id)
+        ]
+        exports.append(
+            ExportRecord(
+                id=record.id, record=record_schema(record, labels), sources=sources
+            )
+        )
+    return exports
 
 
 @dataclass

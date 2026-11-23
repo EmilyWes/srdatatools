@@ -146,7 +146,7 @@ app/
     snowball/        # (planned) reference/citation graph traversal via OpenAlex
     export/
       export_flow.py # export view in the middle panel
-      columns.py     # export columns (one per output column) and their cell values
+      columns.py     # export columns (one per output column) and their cell values + loading the records to export
       options.py     # export options, remembered in app_settings
       csv_.py        # CSV writer
       excel.py       # Excel (.xlsx) writer
