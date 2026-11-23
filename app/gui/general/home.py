@@ -4,16 +4,7 @@ from typing import Any
 
 from nicegui import ui
 
-from app.db.activity_log import (
-    clear_activity_log,
-    log_cleaning,
-    log_export,
-    log_export_failed,
-    log_import_failed,
-    log_library_deleted,
-    log_records_deleted,
-    log_removal,
-)
+from app.db.activity_log import clear_activity_log
 from app.db.models import SourceFile
 from app.db.queries import (
     count_filled_fields,
@@ -88,6 +79,15 @@ from app.gui.library.stats import (
     count_records_per_year,
 )
 from app.gui.other.about import render_about_view, render_help_view
+from app.gui.other.activity_log import (
+    log_cleaning,
+    log_export,
+    log_export_failed,
+    log_import_failed,
+    log_library_deleted,
+    log_records_deleted,
+    log_removal,
+)
 from app.gui.other.source_file_view import render_source_file_view
 from app.helpers.busy import run_busy
 from app.helpers.format import format_count

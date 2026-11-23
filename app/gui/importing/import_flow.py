@@ -6,9 +6,9 @@ from nicegui import app, ui
 from nicegui.element import Element
 from sqlalchemy.orm import Session
 
-from app.db.activity_log import log_import
 from app.db.models import SourceFile
 from app.db.store import store_parsed_rows
+from app.gui.other.activity_log import log_import
 from app.helpers.busy import run_busy
 from app.helpers.mapping_table import ROW_FIELD_CSS, MappingScreen, render_mapping_table
 from app.helpers.quirks_overview import (

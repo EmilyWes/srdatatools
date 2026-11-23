@@ -121,7 +121,7 @@ app/
     store.py         # writes parsed records to the database, updates and deletes records
     queries.py       # read queries for the GUI
     settings.py      # app_settings key/value read/write
-    activity_log.py  # writes plain-language activity_log rows (for every module that acts)
+    activity_log.py  # adds and clears activity_log rows
     migrations/      # Alembic
   gui/
     general/
@@ -155,6 +155,7 @@ app/
     other/
       source_file_view.py # source-file detail view in the middle panel
       about.py       # About view (version, license, third-party licenses) and Help view
+      activity_log.py # plain-language activity_log messages (for every module that acts)
   helpers/
     quirks_overview.py # subject boxes (Parsing and Cleaning views) + the Mapping | Parsing toggle, for the import, source-file, cleaning and export views
     mapping_table.py # field-mapping table (CSV columns, RIS/NBIB tags, BibTeX fields)
