@@ -154,8 +154,11 @@ def expand_page_range(pages: str) -> str:
     match = _PAGE_RANGE.match(pages)
     if match is None or int(match["end"]) >= int(match["start"]):
         return pages
-    start, end = match["start"], match["end"]
-    return f"{start}-{start[: -len(end)]}{end}"
+    start = match["start"]
+    end = start[: -len(match["end"])] + match["end"]
+    if int(end) < int(start):
+        return pages
+    return f"{start}-{end}"
 
 
 def _counts_as_empty(value: str, options: CleaningOptions) -> bool:

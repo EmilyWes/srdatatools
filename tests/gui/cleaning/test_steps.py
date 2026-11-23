@@ -69,6 +69,7 @@ def _options(**changes: object) -> CleaningOptions:
         ("e123", "e123"),
         ("S12-5", "S12-5"),
         ("512-500", "512-500"),
+        ("516-2", "516-2"),
     ],
 )
 def test_expand_page_range__expands_only_numeric_ranges_ending_lower(
