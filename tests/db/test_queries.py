@@ -32,6 +32,7 @@ from app.db.queries import (
     list_record_sources,
     list_source_files,
     load_export_records,
+    load_records,
 )
 
 
@@ -515,3 +516,38 @@ def test_load_export_records__only_the_given_ids(session: Session) -> None:
     assert [export.record.title for export in result] == ["A", "C"]
     assert all(len(export.sources) == 1 for export in result)
     assert all(len(export.record.labels) == 1 for export in result)
+
+
+def test_load_records__all_by_id_with_sources_and_labels(session: Session) -> None:
+    pubmed = _mapped_file("pubmed.nbib", "pubmed", ["TI"])
+    session.add_all(
+        [
+            Record(id=2, title="B"),
+            Record(
+                id=1,
+                title="A",
+                sources=[RecordSource(source_file=pubmed, raw_fields={"TI": "A"})],
+                labels=[
+                    Label(
+                        source_file=pubmed, phase="ft", screener="s1", value="exclude"
+                    )
+                ],
+            ),
+        ]
+    )
+    session.commit()
+    session.expunge_all()
+
+    first, second = load_records(session)
+    session.close()
+
+    assert (first.title, second.title) == ("A", "B")
+    assert [s.source_file.filename for s in first.sources] == ["pubmed.nbib"]
+    assert [label.value for label in first.labels] == ["exclude"]
+
+
+def test_load_records__only_the_given_ids(session: Session) -> None:
+    session.add_all([Record(id=1, title="A"), Record(id=2, title="B")])
+    session.commit()
+
+    assert [r.title for r in load_records(session, [2])] == ["B"]

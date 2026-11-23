@@ -33,7 +33,6 @@ from app.db.queries import (
 )
 from app.db.session import get_engine, session_scope
 from app.db.store import (
-    clean_records,
     delete_library,
     delete_records,
     remove_source_file,
@@ -42,6 +41,7 @@ from app.gui.cleaning.cleaning_flow import render_cleaning_view
 from app.gui.cleaning.options import CleaningOptions
 from app.gui.cleaning.options import load_options as load_cleaning_options
 from app.gui.cleaning.options import save_options as save_cleaning_options
+from app.gui.cleaning.run import clean_records
 from app.gui.export.columns import ExportColumn, ExportRecord
 from app.gui.export.csv_ import write_csv
 from app.gui.export.excel import write_excel

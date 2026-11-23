@@ -3,7 +3,7 @@ from collections.abc import Collection, Sequence
 from typing import Any
 
 from sqlalchemy import JSON, ColumnElement, String, and_, case, cast, func, select
-from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.orm import InstrumentedAttribute, Session, selectinload
 
 from app.db.models import ActivityLog, Label, Record, RecordSource, SourceFile
 from app.gui.export.columns import ExportRecord, ExportSource
@@ -211,6 +211,21 @@ def record_schema(record: Record, labels: list[LabelSchema]) -> RecordSchema:
         if name != "labels"
     }
     return RecordSchema.model_validate({**fields, "labels": labels})
+
+
+def load_records(session: Session, ids: Collection[int] | None = None) -> list[Record]:
+    """`ids` None loads every record."""
+    statement = (
+        select(Record)
+        .options(
+            selectinload(Record.sources).selectinload(RecordSource.source_file),
+            selectinload(Record.labels),
+        )
+        .order_by(Record.id)
+    )
+    if ids is not None:
+        statement = statement.where(Record.id.in_(ids))
+    return list(session.scalars(statement))
 
 
 def load_export_records(

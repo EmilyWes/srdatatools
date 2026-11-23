@@ -118,7 +118,7 @@ app/
   db/
     models.py        # SQLAlchemy models
     session.py       # engine/session setup, runs Alembic migrations
-    store.py         # writes parsed records to the database, runs cleaning on stored records
+    store.py         # writes parsed records to the database, updates and deletes records
     queries.py       # read queries for the GUI
     settings.py      # app_settings key/value read/write
     activity_log.py  # writes plain-language activity_log rows (for every module that acts)
@@ -133,6 +133,7 @@ app/
     cleaning/
       cleaning_flow.py # cleaning view in the middle panel
       steps.py       # cleaning steps and the order they run in, per record
+      run.py         # runs cleaning over stored records
       options.py     # cleaning options (remembered in app_settings) + their boxes
     library/
       navigation.py  # left panel navigation
