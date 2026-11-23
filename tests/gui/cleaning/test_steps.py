@@ -17,7 +17,6 @@ from app.gui.cleaning.steps import (
     id_from_name,
     pages_set,
     ris_notes,
-    sniff_separator,
     split_authors,
     split_keywords,
     standardize_publication_type,
@@ -218,25 +217,6 @@ def test_drop_trailing__keeps_full_stop_after_short_word(
 
 def test_drop_trailing__without_authors_leaves_record_unchanged() -> None:
     assert drop_trailing(Record(), _NO_CONTEXT, _OPTIONS) == Record()
-
-
-@pytest.mark.parametrize(
-    ("values", "expected"),
-    [
-        (["Teng, Yu; Han, Li", "Doe, J"], ";"),
-        (["Baron, Matthew|Norman, David"], "|"),
-        (["Smith J\nDoe A"], "\n"),
-        (["Smith, John and Doe, Jane"], " and "),
-        (["Romano M, Novacek MJ"], None),
-        ([None, ""], None),
-        (["A; B|C", "D|E"], "|"),
-        (["A; B|C"], "|"),
-    ],
-)
-def test_sniff_separator__picks_the_candidate_in_most_values(
-    values: list[str | None], expected: str | None
-) -> None:
-    assert sniff_separator(values) == expected
 
 
 def test_file_separators__chosen_separator_wins_over_sniffing() -> None:

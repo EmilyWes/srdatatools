@@ -1,9 +1,10 @@
 import re
 import string
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from app.gui.cleaning.options import CleaningOptions
+from app.helpers.functions import sniff_separator
 from app.models.record import PartialDate, Record
 from app.parsers.authors import (
     AUTHOR_JOINER,
@@ -117,38 +118,33 @@ class CleaningContext:
 Step = Callable[[Record, CleaningContext, CleaningOptions], Record]
 
 
-def sniff_separator(values: Iterable[str | None]) -> str | None:
-    """The candidate found in the most values; earlier candidates win ties."""
-    counts = dict.fromkeys(SEPARATOR_CANDIDATES, 0)
-    for value in values:
-        for candidate in SEPARATOR_CANDIDATES:
-            if value and candidate in value:
-                counts[candidate] += 1
-    best = max(counts, key=lambda candidate: counts[candidate])
-    return best if counts[best] else None
-
-
 def file_separators(
     records: Sequence[Record], options: CleaningOptions
 ) -> tuple[str | None, str | None, str | None, str | None]:
     """The names, affiliations, ids and keywords separators for one source file's
     records: the chosen ones, else sniffed from the records."""
     names = options.names_separator or sniff_separator(
-        record.author_names for record in records
+        (record.author_names for record in records), SEPARATOR_CANDIDATES
     )
     affiliations = options.affiliations_separator or sniff_separator(
-        record.author_affiliations for record in records
+        (record.author_affiliations for record in records), SEPARATOR_CANDIDATES
     )
     ids = options.ids_separator or sniff_separator(
-        value
-        for record in records
-        for _, value in parse_unsplit_author_ids(record.author_ids)
+        (
+            value
+            for record in records
+            for _, value in parse_unsplit_author_ids(record.author_ids)
+        ),
+        SEPARATOR_CANDIDATES,
     )
     keywords = options.keywords_separator or sniff_separator(
-        unsplit[1]
-        for record in records
-        for keyword in record.keywords
-        if (unsplit := parse_unsplit_keywords(keyword)) is not None
+        (
+            unsplit[1]
+            for record in records
+            for keyword in record.keywords
+            if (unsplit := parse_unsplit_keywords(keyword)) is not None
+        ),
+        SEPARATOR_CANDIDATES,
     )
     return names, affiliations, ids, keywords
 
