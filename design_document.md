@@ -128,6 +128,7 @@ app/
       home.py        # the single page, wires the panes together
       layout.py      # three-pane shell
       action_panel.py # right panel actions + activity log
+      navigation.py  # left panel navigation
     importing/
       import_flow.py # import view in the middle panel + the per-Type parser wiring it imports with
     cleaning/
@@ -136,7 +137,6 @@ app/
       run.py         # runs cleaning over stored records
       options.py     # cleaning options (remembered in app_settings) + their boxes
     library/
-      navigation.py  # left panel navigation
       dashboard.py   # Library dashboard stats in the middle panel
       record_table.py # Library record table + its column settings view
       quality.py     # data-quality checks per record, worked out from its fields (not stored), for the dashboard and the table

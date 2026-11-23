@@ -6,7 +6,7 @@ from nicegui import background_tasks, core, ui
 
 from app.db.models import SourceFile
 from app.gui.general.layout import shell
-from app.gui.library.navigation import LeftPanelNav, render_left_panel
+from app.gui.general.navigation import LeftPanelNav, render_left_panel
 from tests.gui.clicks import click_and_wait
 
 _SELECTED_CLASS = "bg-secondary"
