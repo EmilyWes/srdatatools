@@ -1,9 +1,10 @@
 import logging
 import re
 
+from app.helpers.format import STORAGE_SEPARATOR
+
 logger = logging.getLogger(__name__)
 
-AUTHOR_JOINER = "|"
 ID_JOINER = ", "
 _ORCID_URL = re.compile(r"^https?://orcid\.org/")
 _UNSPLIT_IDS = re.compile(r"(?:^|, )(?P<key>[^:\[\]]+):\[(?P<value>[^\]]*)\]")
@@ -34,7 +35,7 @@ def format_author_ids(slots: AuthorIds) -> str | None:
     """Empty slots are kept so positions keep matching the authors."""
     if not any(slots):
         return None
-    return AUTHOR_JOINER.join(ID_JOINER.join(dict.fromkeys(slot)) for slot in slots)
+    return STORAGE_SEPARATOR.join(ID_JOINER.join(dict.fromkeys(slot)) for slot in slots)
 
 
 def parse_author_ids(value: str | None) -> AuthorIds:
@@ -42,7 +43,7 @@ def parse_author_ids(value: str | None) -> AuthorIds:
         return []
     return [
         [item for item in piece.split(ID_JOINER) if item]
-        for piece in value.split(AUTHOR_JOINER)
+        for piece in value.split(STORAGE_SEPARATOR)
     ]
 
 

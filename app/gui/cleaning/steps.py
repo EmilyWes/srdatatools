@@ -4,10 +4,10 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from app.gui.cleaning.options import CleaningOptions
+from app.helpers.format import STORAGE_SEPARATOR
 from app.helpers.functions import sniff_separator
 from app.models.record import PartialDate, Record
 from app.parsers.authors import (
-    AUTHOR_JOINER,
     AuthorIds,
     author_id,
     format_author_ids,
@@ -32,7 +32,7 @@ from app.parsers.mapping import (
 
 SCOPUS_AUTHOR_ID_KEY = "scopus_author_id"
 # Comma is left out: it also separates last and first names.
-SEPARATOR_CANDIDATES = (AUTHOR_JOINER, ";", "\n", " and ")
+SEPARATOR_CANDIDATES = (STORAGE_SEPARATOR, ";", "\n", " and ")
 
 _PAGE_RANGE = re.compile(r"^(?P<start>\d+)-(?P<end>\d+)$")
 _TRAILING_ET_AL = re.compile(r"[\s,;|]*\bet al\.$")
@@ -169,7 +169,7 @@ def _counts_as_empty(value: str, options: CleaningOptions) -> bool:
 def _raw_value(key: str, context: CleaningContext) -> str:
     value = (context.raw_fields.get(key) or "").strip()
     if isinstance(context.mapping.rows[key], AuthorsRow):
-        return AUTHOR_JOINER.join(line for line in value.splitlines() if line)
+        return STORAGE_SEPARATOR.join(line for line in value.splitlines() if line)
     return value
 
 
@@ -205,11 +205,11 @@ def clear_empty_values(
 
 
 def _split(value: str | None, separator: str | None) -> str | None:
-    if not value or not separator or AUTHOR_JOINER in value:
+    if not value or not separator or STORAGE_SEPARATOR in value:
         return value
     """Empty pieces are kept so positions keep matching the authors."""
     pieces = [piece.strip() for piece in value.split(separator)]
-    return AUTHOR_JOINER.join(pieces) if any(pieces) else None
+    return STORAGE_SEPARATOR.join(pieces) if any(pieces) else None
 
 
 def _split_ids(value: str | None, separator: str | None) -> str | None:
@@ -285,7 +285,7 @@ def id_from_name(
     names are still cleaned."""
     if not record.author_names:
         return record
-    names = record.author_names.split(AUTHOR_JOINER)
+    names = record.author_names.split(STORAGE_SEPARATOR)
     matches = [_TRAILING_ID.search(name) for name in names]
     if not any(matches):
         return record
@@ -293,7 +293,7 @@ def id_from_name(
     merged = merge_author_ids(
         parse_author_ids(record.author_ids), new_ids, "author names"
     )
-    cleaned = AUTHOR_JOINER.join(_TRAILING_ID.sub("", name) for name in names)
+    cleaned = STORAGE_SEPARATOR.join(_TRAILING_ID.sub("", name) for name in names)
     return record.model_copy(
         update={"author_names": cleaned, "author_ids": format_author_ids(merged)}
     )
@@ -304,8 +304,8 @@ def strip_author_extras(
 ) -> Record:
     if not record.author_names:
         return record
-    names = record.author_names.split(AUTHOR_JOINER)
-    cleaned = AUTHOR_JOINER.join(_TRAILING_BRACKETS.sub("", name) for name in names)
+    names = record.author_names.split(STORAGE_SEPARATOR)
+    cleaned = STORAGE_SEPARATOR.join(_TRAILING_BRACKETS.sub("", name) for name in names)
     return record.model_copy(update={"author_names": cleaned})
 
 
@@ -319,10 +319,10 @@ def strip_affiliation_start(
     separator = options.affiliation_start
     if not record.author_affiliations or not record.author_names or not separator:
         return record
-    names = record.author_names.split(AUTHOR_JOINER)
+    names = record.author_names.split(STORAGE_SEPARATOR)
     kept = []
     for index, affiliation in enumerate(
-        record.author_affiliations.split(AUTHOR_JOINER)
+        record.author_affiliations.split(STORAGE_SEPARATOR)
     ):
         last_name = names[index].split(",")[0].strip() if index < len(names) else ""
         lead, found, rest = affiliation.partition(separator)
@@ -336,7 +336,7 @@ def strip_affiliation_start(
         elif found and rest.strip():
             kept.append(rest.strip())
     return record.model_copy(
-        update={"author_affiliations": AUTHOR_JOINER.join(kept) or None}
+        update={"author_affiliations": STORAGE_SEPARATOR.join(kept) or None}
     )
 
 
@@ -405,7 +405,7 @@ def _clean_issn_isbn(
         return value
     if options.only_one:
         tokens = [_preferred_token(tokens, options.preferred_qualifier)]
-    return AUTHOR_JOINER.join(
+    return STORAGE_SEPARATOR.join(
         token["id"] if options.strip_extras else token[0] for token in tokens
     )
 

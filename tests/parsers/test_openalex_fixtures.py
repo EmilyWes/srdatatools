@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
+from app.helpers.format import STORAGE_SEPARATOR
 from app.models.record import Record
-from app.parsers.authors import AUTHOR_JOINER
 from app.parsers.bibtex import (
     parse_bibtex_file,
     read_bibtex_fields,
@@ -87,7 +87,7 @@ def test_openalex_small__ris_and_bibtex_are_not_detected(suffix: str) -> None:
 
 
 def _names(record: Record) -> list[str]:
-    return (record.author_names or "").split(AUTHOR_JOINER)
+    return (record.author_names or "").split(STORAGE_SEPARATOR)
 
 
 def test_openalex_small_csv__keeps_author_id_columns_unsplit(

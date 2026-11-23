@@ -5,10 +5,9 @@ from typing import Literal
 
 from app.gui.export.options import ExportOptions
 from app.gui.export.ris_tags import TAG_PATTERN, ris_type
-from app.helpers.format import DISPLAY_SEPARATOR, label_text
+from app.helpers.format import DISPLAY_SEPARATOR, STORAGE_SEPARATOR, label_text
 from app.models.record import CLEANED_DATE, Record
 from app.parsers.authors import (
-    AUTHOR_JOINER,
     author_id_keys,
     author_ids_for_key,
     author_ids_per_slot,
@@ -407,7 +406,7 @@ def column_values(
     record = export.record
     values: list[str]
     if isinstance(column, JoinedColumn):
-        values = (getattr(record, column.field) or "").split(AUTHOR_JOINER)
+        values = (getattr(record, column.field) or "").split(STORAGE_SEPARATOR)
     elif isinstance(column, KeywordsColumn):
         values = _keyword_texts(column, record)
     elif isinstance(column, AuthorIdKeyColumn):
@@ -428,7 +427,7 @@ def column_value(
     record = export.record
     if isinstance(column, JoinedColumn):
         value = getattr(record, column.field) or ""
-        return value.replace(AUTHOR_JOINER, column.delimiter)
+        return value.replace(STORAGE_SEPARATOR, column.delimiter)
     if isinstance(column, ScalarColumn):
         value = getattr(record, column.field)
         return "" if value is None else str(value)

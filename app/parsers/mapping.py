@@ -7,9 +7,9 @@ from typing import Annotated, Any, Literal, TypeVar, get_args
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_validator
 
+from app.helpers.format import STORAGE_SEPARATOR
 from app.models.record import Label, LabelValue, PartialDate, Record
 from app.parsers.authors import (
-    AUTHOR_JOINER,
     ID_JOINER,
     AuthorIds,
     format_author_ids,
@@ -494,13 +494,13 @@ def apply_line_mapping(
     settings: ParseSettings,
     author_lines: LineAuthors,
 ) -> Record:
-    """The kept name and affiliation lines are joined with AUTHOR_JOINER; the ids
+    """The kept name and affiliation lines are joined with STORAGE_SEPARATOR; the ids
     come from the lines in order, so each stays with its author line rather than
     being matched by position. Each keyword line is a keyword."""
     author_rows = dict(mapping.rows_of(AuthorsRow))
     kept, author_ids = author_lines(lines, author_rows)
     joined = {
-        tag: AUTHOR_JOINER.join(value for t, value in kept if t == tag)
+        tag: STORAGE_SEPARATOR.join(value for t, value in kept if t == tag)
         for tag, row in author_rows.items()
         if row.role != "ids"
     }

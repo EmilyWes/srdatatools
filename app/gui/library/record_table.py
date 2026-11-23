@@ -27,6 +27,7 @@ from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.library.quality import QUALITY_FIELDS, quality_issues
 from app.helpers.format import (
     DISPLAY_SEPARATOR,
+    STORAGE_SEPARATOR,
     LabelFormat,
     author_id_key,
     author_id_name,
@@ -42,7 +43,7 @@ from app.helpers.format import (
 )
 from app.helpers.quirks_overview import render_box_frame
 from app.models.record import publication_year
-from app.parsers.authors import AUTHOR_JOINER, author_ids_for_key
+from app.parsers.authors import author_ids_for_key
 from app.parsers.mapping import split_keyword
 from app.parsers.profiles import source_label
 
@@ -228,7 +229,7 @@ def row_for(values: Mapping[str, Any]) -> dict[str, Any]:
         if isinstance(value, list):
             value = DISPLAY_SEPARATOR.join(value)
         elif key in _JOINED_FIELDS and value:
-            value = value.replace(AUTHOR_JOINER, DISPLAY_SEPARATOR)
+            value = value.replace(STORAGE_SEPARATOR, DISPLAY_SEPARATOR)
         elif isinstance(value, dict):
             value = DISPLAY_SEPARATOR.join(
                 f"{name}: {id_}" for name, id_ in value.items()

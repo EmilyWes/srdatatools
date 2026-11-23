@@ -3,9 +3,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.gui.cleaning.steps import PUBLICATION_TYPES
+from app.helpers.format import STORAGE_SEPARATOR
 from app.models.record import CLEANED_DATE
 from app.parsers.authors import (
-    AUTHOR_JOINER,
     parse_author_ids,
     parse_unsplit_author_ids,
 )
@@ -33,7 +33,7 @@ def _misaligned_authors(fields: Fields) -> bool:
         return False
     if parse_unsplit_author_ids(ids):
         return True
-    name_count = len(names.split(AUTHOR_JOINER)) if names else 0
+    name_count = len(names.split(STORAGE_SEPARATOR)) if names else 0
     return len(parse_author_ids(ids)) != name_count
 
 

@@ -3,6 +3,8 @@ from typing import Literal
 
 # Between the values of a list, wherever one is shown or exported.
 DISPLAY_SEPARATOR = "; "
+# Between the values of a list, as stored in a record field.
+STORAGE_SEPARATOR = "|"
 _LABEL_PREFIX = "label:"
 _KEYWORD_PREFIX = "keywords:"
 _AUTHOR_ID_PREFIX = "author_ids:"

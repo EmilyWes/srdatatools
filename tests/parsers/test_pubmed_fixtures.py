@@ -2,8 +2,9 @@ from pathlib import Path
 
 import pytest
 
+from app.helpers.format import STORAGE_SEPARATOR
 from app.models.record import Record
-from app.parsers.authors import AUTHOR_JOINER, parse_author_ids
+from app.parsers.authors import parse_author_ids
 from app.parsers.common import FileType, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
 from app.parsers.nbib import parse_nbib_file, read_nbib_tags, suggest_nbib_mapping
@@ -76,7 +77,7 @@ def test_pubmed_small_nbib__book_chapter_uses_book_title_as_journal(
     record = nbib_records["28590685"]
 
     assert record.journal == "Micro-, Meso- and Macro-Dynamics of the Brain"
-    names = (record.author_names or "").split(AUTHOR_JOINER)
+    names = (record.author_names or "").split(STORAGE_SEPARATOR)
     assert len(names) == 11
     assert names[0].startswith("Laurent, ")
     assert (record.author_affiliations or "").startswith(
@@ -88,7 +89,7 @@ def test_pubmed_small_nbib__authors_have_orcids_and_affiliations(
     nbib_records: dict[str, Record],
 ) -> None:
     record = nbib_records["37587301"]
-    names = (record.author_names or "").split(AUTHOR_JOINER)
+    names = (record.author_names or "").split(STORAGE_SEPARATOR)
     ids = parse_author_ids(record.author_ids)
 
     assert len(names) == len(ids) == 9
@@ -96,7 +97,7 @@ def test_pubmed_small_nbib__authors_have_orcids_and_affiliations(
     assert ids[0] == ["orcid:0000-0001-8894-9875"]
     assert ids[2] == []
     assert ids[8] == ["orcid:0000-0002-7017-1652"]
-    affiliations = (record.author_affiliations or "").split(AUTHOR_JOINER)
+    affiliations = (record.author_affiliations or "").split(STORAGE_SEPARATOR)
     assert (
         "Programa de Pós-Graduação em Biodiversidade Animal, Universidade Federal "
         "de Santa Maria, Santa Maria, Brazil. rodrigotmuller@hotmail.com."

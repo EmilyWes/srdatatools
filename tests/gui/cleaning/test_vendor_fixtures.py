@@ -2,8 +2,9 @@ from pathlib import Path
 
 from app.gui.cleaning.options import CleaningOptions
 from app.gui.cleaning.steps import CleaningContext, clean_record, file_separators
+from app.helpers.format import STORAGE_SEPARATOR
 from app.models.record import Record
-from app.parsers.authors import AUTHOR_JOINER, parse_author_ids
+from app.parsers.authors import parse_author_ids
 from app.parsers.bibtex import (
     parse_bibtex_file,
     read_bibtex_fields,
@@ -84,7 +85,7 @@ def test_cleaned_scopus_csv__splits_authors_and_moves_ids_out_of_names() -> None
     record = _by(_cleaned("scopus", ".csv", "csv", options), "eid")[
         "2-s2.0-105050698470"
     ]
-    names = (record.author_names or "").split(AUTHOR_JOINER)
+    names = (record.author_names or "").split(STORAGE_SEPARATOR)
     ids = parse_author_ids(record.author_ids)
 
     assert names[0] == "Oyabu, Shumpei"
@@ -167,7 +168,7 @@ def test_cleaned_openalex_csv__groups_author_ids_and_orcids() -> None:
     }
 
     chicken = records["10.1038/nature03154"]
-    names = (chicken.author_names or "").split(AUTHOR_JOINER)
+    names = (chicken.author_names or "").split(STORAGE_SEPARATOR)
     ids = parse_author_ids(chicken.author_ids)
     assert len(names) == len(ids) == 100
     assert ids[0] == []
