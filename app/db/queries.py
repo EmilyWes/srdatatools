@@ -7,12 +7,8 @@ from sqlalchemy.orm import InstrumentedAttribute, Session, selectinload
 
 from app.db.models import ActivityLog, Label, Record, RecordSource, SourceFile
 from app.gui.export.columns import ExportRecord, ExportSource
-from app.gui.library.quality import CHECKS, QUALITY_FIELDS, quality_issues
 from app.models.record import Label as LabelSchema
 from app.models.record import Record as RecordSchema
-from app.models.record import publication_year
-from app.parsers.authors import author_id_keys
-from app.parsers.mapping import split_keyword
 
 _EMPTY_JSON = ("[]", "{}", "null")
 
@@ -89,24 +85,6 @@ def list_record_ids_for_files(
     return set(session.scalars(statement))
 
 
-def count_records_per_year(session: Session) -> list[tuple[int | None, int]]:
-    counts = Counter(
-        publication_year(date)
-        for date in session.scalars(select(Record.publication_date))
-    )
-    return sorted(counts.items(), key=lambda item: (item[0] is None, item[0] or 0))
-
-
-def count_data_quality(session: Session) -> list[tuple[str, int]]:
-    statement = select(*(getattr(Record, name) for name in QUALITY_FIELDS))
-    counts = Counter(
-        issue
-        for fields in session.execute(statement).mappings()
-        for issue in quality_issues(dict(fields))
-    )
-    return [(name, counts[name]) for name in CHECKS]
-
-
 def count_label_values(session: Session) -> dict[tuple[str, str], dict[str, int]]:
     total = count_records(session)
     labels = list_record_labels(session).values()
@@ -133,51 +111,6 @@ def count_filled_fields(
     columns = [getattr(Record, field) for field in fields]
     statement = select(*(func.count(case((_is_filled(c), 1))) for c in columns))
     return list(zip(fields, session.execute(statement).one(), strict=True))
-
-
-def count_keywords(session: Session) -> dict[str | None, list[tuple[str, int]]]:
-    """Grouped case-insensitively; the first spelling seen is shown."""
-    spellings: dict[tuple[str | None, str], str] = {}
-    counts: dict[str | None, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    for keywords in session.scalars(select(Record.keywords).order_by(Record.id)):
-        seen = set()
-        for keyword in keywords:
-            prefix, text = split_keyword(keyword)
-            key = (prefix, text.casefold())
-            if key in seen:
-                continue
-            seen.add(key)
-            spelling = spellings.setdefault(key, text)
-            counts[prefix][spelling] += 1
-    return {
-        prefix: sorted(texts.items(), key=lambda item: (-item[1], item[0].casefold()))
-        for prefix, texts in counts.items()
-    }
-
-
-def list_keyword_prefixes(session: Session) -> list[str]:
-    return [prefix for prefix in count_keywords(session) if prefix is not None]
-
-
-def list_author_id_keys(session: Session) -> list[str]:
-    values = session.scalars(select(Record.author_ids).order_by(Record.id))
-    return list(dict.fromkeys(key for value in values for key in author_id_keys(value)))
-
-
-def count_publication_types(session: Session) -> list[tuple[str | None, int]]:
-    """Grouped case-insensitively; the first spelling seen is shown. Empty is None."""
-    spellings: dict[str, str] = {}
-    counts: Counter[str | None] = Counter()
-    statement = select(Record.publication_type).order_by(Record.id)
-    for value in session.scalars(statement):
-        if not value:
-            counts[None] += 1
-            continue
-        counts[spellings.setdefault(value.casefold(), value)] += 1
-    return sorted(
-        counts.items(),
-        key=lambda item: (-item[1], item[0] is None, (item[0] or "").casefold()),
-    )
 
 
 def count_records_per_source_file(

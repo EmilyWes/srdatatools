@@ -16,15 +16,11 @@ from app.db.activity_log import (
 )
 from app.db.models import SourceFile
 from app.db.queries import (
-    count_data_quality,
     count_filled_fields,
-    count_keywords,
     count_label_values,
-    count_publication_types,
     count_records,
     count_records_for_file,
     count_records_per_source_file,
-    count_records_per_year,
     list_activity_log,
     list_label_columns,
     list_record_ids_for_files,
@@ -85,6 +81,12 @@ from app.gui.library.record_table import (
     reset_label_format,
     save_columns,
     save_label_format,
+)
+from app.gui.library.stats import (
+    count_data_quality,
+    count_keywords,
+    count_publication_types,
+    count_records_per_year,
 )
 from app.gui.other.about import render_about_view, render_help_view
 from app.gui.other.source_file_view import render_source_file_view

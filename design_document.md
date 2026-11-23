@@ -140,6 +140,7 @@ app/
       dashboard.py   # Library dashboard stats in the middle panel
       record_table.py # Library record table + its column settings view
       quality.py     # data-quality checks per record, worked out from its fields (not stored), for the dashboard and the table
+      stats.py       # library counts for the dashboard and table columns, worked out from stored rows
     dedup/           # (planned) matching strategies (DOI, fuzzy title+author+year)
     enrich/          # (planned) OpenAlex client, field-merging logic
     snowball/        # (planned) reference/citation graph traversal via OpenAlex
