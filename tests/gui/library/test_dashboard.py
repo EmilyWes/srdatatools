@@ -513,22 +513,53 @@ def test_render_dashboard_settings__restore_and_back_buttons_call_back() -> None
     assert calls == ["restore", "back"]
 
 
-def test_render_library_dashboard__pies_have_truncated_legend_top_right() -> None:
+def test_render_library_dashboard__pies_have_no_legend() -> None:
     panes = shell()
 
     _render(panes.middle, {"completeness", "per_year"})
 
     for chart in _charts(panes.middle):
-        legend = chart.options["legend"]
-        assert (legend["orient"], legend["right"], legend["top"]) == (
-            "vertical",
-            0,
-            0,
-        )
-        assert legend["textStyle"]["overflow"] == "truncate"
-        assert legend["tooltip"]["show"] is True
-        assert chart.options["series"][0]["label"]["show"] is False
+        assert "legend" not in chart.options
+        assert chart.options["series"][0]["label"]["position"] == "inside"
         assert chart.options["series"][0]["minAngle"] == 5
+
+
+def _render_types(middle: Element, types: list[tuple[str | None, int]]) -> None:
+    render_library_dashboard(
+        middle,
+        200,
+        [],
+        [],
+        [],
+        types,
+        ([], 0),
+        {},
+        {},
+        {"completeness", "per_year", "source_files"},
+    )
+
+
+def test_render_library_dashboard__pie_labels_are_abbreviations() -> None:
+    panes = shell()
+
+    _render_types(
+        panes.middle,
+        [("Journal article", 5), ("Book chapter", 3), ("JOUR", 2), (None, 1)],
+    )
+
+    labels = [
+        item["label"]["formatter"] for item in _series_data(_charts(panes.middle)[0])
+    ]
+    assert labels == ["JA", "BC", "JO", "?"]
+
+
+def test_render_library_dashboard__pie_hides_label_on_small_slice() -> None:
+    panes = shell()
+
+    _render_types(panes.middle, [("Journal article", 97), ("Book chapter", 3)])
+
+    shown = [item["label"]["show"] for item in _series_data(_charts(panes.middle)[0])]
+    assert shown == [True, False]
 
 
 def test_render_library_dashboard__boxes_in_evenly_spaced_grid_with_frames() -> None:
