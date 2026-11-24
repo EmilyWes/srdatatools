@@ -3,6 +3,7 @@ import pytest
 from app.gui.cleaning.options import CleaningOptions
 from app.gui.cleaning.steps import (
     CleaningContext,
+    _parse_date_string,
     citation_parts,
     clean_date,
     clean_issn_isbn,
@@ -380,6 +381,102 @@ def test_split_keywords__without_separator_the_value_is_one_keyword() -> None:
     record = Record(keywords={"": ["fossils; dinosaurs"]})
 
     assert split_keywords(record, _context(), _OPTIONS) == record
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2020///", (2020, None, None)),
+        ("2020/05//", (2020, 5, None)),
+        ("2020/05/14/", (2020, 5, 14)),
+        ("2020/05/14/Spring", (2020, 5, 14)),
+        ("2020///Spring", (2020, None, None)),
+        ("2020 May 14", (2020, 5, 14)),
+        ("2020 May", (2020, 5, None)),
+        ("2020 Jan-Feb", (2020, 1, None)),
+        ("2020 Oct 3", (2020, 10, 3)),
+    ],
+)
+def test__parse_date_string__reads_ris_and_nbib_dates(
+    value: str, expected: tuple[int, int | None, int | None]
+) -> None:
+    date = _parse_date_string(value)
+
+    assert date is not None
+    assert (date.year, date.month, date.day) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("1994//", (1994, None, None)),
+        ("1994/03/", (1994, 3, None)),
+        ("1994/Mar/", (1994, 3, None)),
+        ("1994/3/5", (1994, 3, 5)),
+        ("2020/03/04", (2020, 3, 4)),
+    ],
+)
+def test__parse_date_string__reads_joined_date_parts(
+    value: str, expected: tuple[int, int | None, int | None]
+) -> None:
+    date = _parse_date_string(value, "us")
+
+    assert date is not None
+    assert (date.year, date.month, date.day) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("14/05/2020", (2020, 5, 14)),
+        ("05/14/2020", (2020, 5, 14)),
+        ("3.4.2020", (2020, 4, 3)),
+        ("03-04-2020", (2020, 4, 3)),
+        ("12 March 2020", (2020, 3, 12)),
+        ("12 Mar. 2020", (2020, 3, 12)),
+        ("March 12, 2020", (2020, 3, 12)),
+        ("Oct2021", (2021, 10, None)),
+        ("Oct 2021", (2021, 10, None)),
+        ("October 2021", (2021, 10, None)),
+        ("Fall2013", (2013, None, None)),
+        ("autumn 2013", (2013, None, None)),
+    ],
+)
+def test__parse_date_string__reads_day_month_and_named_forms(
+    value: str, expected: tuple[int, int | None, int | None]
+) -> None:
+    date = _parse_date_string(value)
+
+    assert date is not None
+    assert (date.year, date.month, date.day) == expected
+
+
+def test__parse_date_string__ambiguous_numeric_date_defaults_to_eu_order() -> None:
+    date = _parse_date_string("03/04/2020")
+
+    assert date is not None
+    assert (date.month, date.day) == (4, 3)
+
+
+def test__parse_date_string__ambiguous_numeric_date_uses_us_order() -> None:
+    date = _parse_date_string("03/04/2020", "us")
+
+    assert date is not None
+    assert (date.month, date.day) == (3, 4)
+
+
+def test__parse_date_string__unambiguous_numeric_date_ignores_order() -> None:
+    date = _parse_date_string("14/05/2020", "us")
+
+    assert date is not None
+    assert (date.month, date.day) == (5, 14)
+
+
+@pytest.mark.parametrize("value", ["13/14/2020", "03/04-2020"])
+def test__parse_date_string__rejects_impossible_or_mixed_numeric_date(
+    value: str,
+) -> None:
+    assert _parse_date_string(value) is None
 
 
 @pytest.mark.parametrize(

@@ -1,9 +1,12 @@
+import logging
 import re
 import string
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
-from app.gui.cleaning.options import CleaningOptions
+from pydantic import ValidationError
+
+from app.gui.cleaning.options import CleaningOptions, DateOrder
 from app.helpers.functions import sniff_separator
 from app.models.record import PartialDate, Record
 from app.parsers.authors import AuthorIds, clean_author_id, merge_author_ids
@@ -17,8 +20,9 @@ from app.parsers.mapping import (
     FieldMapping,
     ScalarRow,
     ordered_mapping,
-    parse_date_string,
 )
+
+logger = logging.getLogger(__name__)
 
 SCOPUS_AUTHOR_ID_KEY = "scopus_author_id"
 # Comma is left out: it also separates last and first names.
@@ -33,6 +37,46 @@ _DIGITS = re.compile(r"\d+")
 _TRAILING_NON_NAME = ".,;:…" + string.whitespace
 _ENDS_IN_WORD = re.compile(r"[^\W\d_]{3}$")
 _INITIALS = re.compile(r"(?:[\s.\-]+[^\W\d_]{1,3})*\.?")
+_MONTH_ABBREVIATIONS = {
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+}
+
+_DATE_PATTERNS = [
+    re.compile(r"^(?P<year>\d{4})$"),
+    re.compile(r"^(?P<year>\d{4})-(?P<month>\d{1,2})$"),
+    re.compile(r"^(?P<year>\d{4})-(?P<month>\d{1,2})-(?P<day>\d{1,2})$"),
+    # Also the stored YYYY/MM/DD, where any part after the year may be empty.
+    re.compile(
+        r"^(?P<year>\d{4})/(?P<month>\d{1,2}|[A-Za-z]{3,9})?/(?P<day>\d{1,2})?$"
+    ),
+    # RIS: YYYY/MM/DD/other, where every part after the year may be empty
+    re.compile(r"^(?P<year>\d{4})/(?P<month>\d{1,2})?/(?P<day>\d{1,2})?/.*$"),
+    # NBIB: YYYY Mon, YYYY Mon DD, YYYY Mon-Mon (a month range keeps its first month)
+    re.compile(
+        r"^(?P<year>\d{4}) (?P<month>[A-Za-z]{3,9})(?:-[A-Za-z]{3,9})?"
+        r"(?: (?P<day>\d{1,2}))?$"
+    ),
+    re.compile(r"^(?P<day>\d{1,2}) (?P<month>[A-Za-z]{3,9})\.? (?P<year>\d{4})$"),
+    re.compile(r"^(?P<month>[A-Za-z]{3,9})\.? (?P<day>\d{1,2}), (?P<year>\d{4})$"),
+    # A season names no month: which months it covers depends on the hemisphere.
+    re.compile(r"^(?:spring|summer|fall|autumn|winter) ?(?P<year>\d{4})$", re.I),
+    re.compile(r"^(?P<month>[A-Za-z]{3,9})\.? ?(?P<year>\d{4})$"),
+]
+_NUMERIC_DATE = re.compile(
+    r"^(?P<first>\d{1,2})(?P<sep>[/.-])(?P<second>\d{1,2})(?P=sep)(?P<year>\d{4})$"
+)
+_MAX_MONTH = 12
 # Only the plain form: ;volume(issue):pages followed by a full stop.
 _CITATION_PARTS = re.compile(
     r";(?P<volume>\d+)\((?P<issue>\d+)\):(?P<pages>\d+(?:-\d+)?)\.(?:\s|$)"
@@ -247,6 +291,63 @@ def split_keywords(
     return record.model_copy(update={"keywords": keywords})
 
 
+def _parse_month(value: str | None) -> int | None:
+    if value is None or not value.strip():
+        return None
+    stripped = value.strip()
+    if stripped.isdigit():
+        return int(stripped)
+    abbreviation = stripped[:3].lower()
+    if abbreviation in _MONTH_ABBREVIATIONS:
+        return _MONTH_ABBREVIATIONS[abbreviation]
+    logger.warning("Could not parse month value %r", value)
+    return None
+
+
+def _build_partial_date(
+    year: int | None, month: int | None, day: int | None
+) -> PartialDate | None:
+    if year is None and month is None and day is None:
+        return None
+    try:
+        return PartialDate(year=year, month=month, day=day)
+    except ValidationError:
+        logger.warning("Dropping day %r because month is missing", day)
+        return PartialDate(year=year, month=month, day=None)
+
+
+def _parse_numeric_date(match: re.Match[str], order: DateOrder) -> PartialDate | None:
+    """The order only decides when both numbers could be the month."""
+    first, second = int(match["first"]), int(match["second"])
+    if first > _MAX_MONTH and second > _MAX_MONTH:
+        logger.warning("Could not parse date value %r", match.string)
+        return None
+    if first > _MAX_MONTH or (second <= _MAX_MONTH and order == "eu"):
+        day, month = first, second
+    else:
+        month, day = first, second
+    return _build_partial_date(int(match["year"]), month, day)
+
+
+def _parse_date_string(value: str, order: DateOrder = "eu") -> PartialDate | None:
+    stripped = value.strip()
+    numeric = _NUMERIC_DATE.match(stripped)
+    if numeric is not None:
+        return _parse_numeric_date(numeric, order)
+    for pattern in _DATE_PATTERNS:
+        match = pattern.match(stripped)
+        if match is None:
+            continue
+        parts = match.groupdict()
+        return _build_partial_date(
+            year=int(parts["year"]),
+            month=_parse_month(parts.get("month")),
+            day=int(parts["day"]) if parts.get("day") else None,
+        )
+    logger.warning("Could not parse date value %r", value)
+    return None
+
+
 def _format_date(date: PartialDate) -> str:
     parts = (
         (date.year, 4),
@@ -261,7 +362,7 @@ def clean_date(
 ) -> Record:
     if not record.publication_date:
         return record
-    date = parse_date_string(record.publication_date, options.date_order)
+    date = _parse_date_string(record.publication_date, options.date_order)
     if date is None:
         return record
     return record.model_copy(update={"publication_date": _format_date(date)})

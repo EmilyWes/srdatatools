@@ -1,9 +1,12 @@
+from typing import Literal
+
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from app.db.settings import delete_setting, get_setting, set_setting
-from app.parsers.mapping import DateOrder
 from app.parsers.profiles.overview import OptionBox, OptionItem, OptionList
+
+DateOrder = Literal["eu", "us"]
 
 _OPTIONS_KEY = "cleaning_options"
 
