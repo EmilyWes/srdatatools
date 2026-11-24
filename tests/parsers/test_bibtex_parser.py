@@ -485,7 +485,7 @@ def test_parse_bibtex_file__reads_scopus_export() -> None:
     assert olsen.volume == "77"
     assert olsen.pages == "19-65"
     assert olsen.doi == "10.1130/2026.0077(02)"
-    assert olsen.issn == "23330937"
+    assert olsen.issn == ["23330937"]
     assert olsen.language == "English"
     assert olsen.notes == "Cited by: 0"
 

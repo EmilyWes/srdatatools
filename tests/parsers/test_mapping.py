@@ -199,7 +199,7 @@ _SN = mapping_of({"SN": "issn_isbn"})
 def test_apply_mapping__issn_isbn_routes_issn(value: str) -> None:
     record = apply_mapping({"SN": value}, _SN)
 
-    assert (record.issn, record.isbn) == (value, None)
+    assert (record.issn, record.isbn) == ([value], [])
 
 
 @pytest.mark.parametrize(
@@ -209,13 +209,13 @@ def test_apply_mapping__issn_isbn_routes_issn(value: str) -> None:
 def test_apply_mapping__issn_isbn_routes_isbn(value: str) -> None:
     record = apply_mapping({"SN": value}, _SN)
 
-    assert (record.issn, record.isbn) == (None, value)
+    assert (record.issn, record.isbn) == ([], [value])
 
 
 def test_apply_mapping__issn_isbn_keeps_the_whole_value() -> None:
     value = "1234-5678 (electronic), 9123-4567 (print)"
 
-    assert apply_mapping({"SN": value}, _SN).issn == value
+    assert apply_mapping({"SN": value}, _SN).issn == [value]
 
 
 def test_apply_mapping__issn_isbn_auto_goes_by_first_valid_number() -> None:
@@ -223,7 +223,7 @@ def test_apply_mapping__issn_isbn_auto_goes_by_first_valid_number() -> None:
 
     record = apply_mapping({"SN": value}, _SN)
 
-    assert (record.issn, record.isbn) == (None, value)
+    assert (record.issn, record.isbn) == ([], [value])
 
 
 def test_apply_mapping__issn_isbn_unrecognised_value_goes_to_issn_and_warns(
@@ -232,14 +232,14 @@ def test_apply_mapping__issn_isbn_unrecognised_value_goes_to_issn_and_warns(
     with caplog.at_level("WARNING"):
         record = apply_mapping({"SN": "12345"}, _SN)
 
-    assert (record.issn, record.isbn) == ("12345", None)
+    assert (record.issn, record.isbn) == (["12345"], [])
     assert "12345" in caplog.text
 
 
 def test_apply_mapping__issn_isbn_empty_value_sets_nothing() -> None:
     record = apply_mapping({"SN": "  "}, _SN)
 
-    assert (record.issn, record.isbn) == (None, None)
+    assert (record.issn, record.isbn) == ([], [])
 
 
 @pytest.mark.parametrize("kind", ["issn", "isbn"])
@@ -247,7 +247,7 @@ def test_apply_mapping__fixed_kind_keeps_the_whole_value(kind: str) -> None:
     mapping = mapping_of({"X": Suggest("issn_isbn", {"kind": kind})})
     value = "12345; 9783161484100; 1234-5678"
 
-    assert getattr(apply_mapping({"X": value}, mapping), kind) == value
+    assert getattr(apply_mapping({"X": value}, mapping), kind) == [value]
 
 
 def test_apply_mapping__first_full_date_is_copied_as_it_is() -> None:

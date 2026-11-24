@@ -52,8 +52,8 @@ class Record(BaseModel):
     pages: str | None = None
     doi: str | None = None
     pmid: str | None = None
-    issn: str | None = None
-    isbn: str | None = None
+    issn: list[str] = Field(default_factory=list)
+    isbn: list[str] = Field(default_factory=list)
     other_ids: dict[str, str] = Field(default_factory=dict)
     publication_type: str | None = None
     # Prefix ("" for none) -> keywords.

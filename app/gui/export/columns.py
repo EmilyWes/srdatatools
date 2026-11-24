@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.db.record import load_records, record_schema
 from app.gui.export.options import ExportOptions
 from app.gui.export.ris_tags import TAG_PATTERN, ris_type
-from app.helpers.format import DISPLAY_SEPARATOR, STORAGE_SEPARATOR, label_text
+from app.helpers.format import DISPLAY_SEPARATOR, label_text
 from app.models.record import CLEANED_DATE, Label, Record
 from app.parsers.authors import ids_of_key
 from app.parsers.profiles import source_label
@@ -418,11 +418,8 @@ def _keyword_texts(column: KeywordsColumn, record: Record) -> list[str]:
 
 
 def _joined_values(column: JoinedColumn, record: Record) -> list[str]:
-    """Authors are a list; ISSN and ISBN values are joined with STORAGE_SEPARATOR."""
-    value: list[str] | str | None = getattr(record, column.field)
-    if isinstance(value, list):
-        return value
-    return (value or "").split(STORAGE_SEPARATOR)
+    values: list[str] = getattr(record, column.field)
+    return values
 
 
 def _label_texts(

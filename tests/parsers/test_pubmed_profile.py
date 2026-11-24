@@ -71,7 +71,7 @@ def test_pubmed_nbib__leaves_ordinary_record_unchanged() -> None:
     assert record.title == "Some Paper."
     assert record.pages == "589-594"
     assert record.publication_type == "Letter"
-    assert record.isbn == "978-3-319-28801-7"
+    assert record.isbn == ["978-3-319-28801-7"]
 
 
 def test_pubmed_csv__suggests_exact_journal_and_nbib_id_keys() -> None:

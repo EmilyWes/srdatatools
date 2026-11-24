@@ -26,8 +26,8 @@ class Record(Base):
     pages: Mapped[str | None]
     doi: Mapped[str | None] = mapped_column(index=True)
     pmid: Mapped[str | None] = mapped_column(index=True)
-    issn: Mapped[str | None]
-    isbn: Mapped[str | None]
+    issn: Mapped[list[str]] = mapped_column(JSON, default=list)
+    isbn: Mapped[list[str]] = mapped_column(JSON, default=list)
     other_ids: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
     publication_type: Mapped[str | None]
     keywords: Mapped[dict[str, list[str]]] = mapped_column(JSON, default=dict)

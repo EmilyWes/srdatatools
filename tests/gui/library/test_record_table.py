@@ -133,7 +133,7 @@ def test_row_for__separates_joined_values_with_semicolon() -> None:
         {
             "author_names": ["Smith, J", "Doe, A"],
             "author_affiliations": [],
-            "issn": "1234-5678|8765-4321",
+            "issn": ["1234-5678", "8765-4321"],
         }
     )
 

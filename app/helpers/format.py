@@ -3,8 +3,6 @@ from typing import Literal
 
 # Between the values of a list, wherever one is shown or exported.
 DISPLAY_SEPARATOR = "; "
-# Between the values of a list, as stored in a record field.
-STORAGE_SEPARATOR = "|"
 # The second column is fixed to the dropdown width (w-32) so a long file name
 # overflows to the right instead of moving the button and dropdowns.
 GRID_COLUMNS = "max-content 8rem"

@@ -111,9 +111,9 @@ def test_cleaned_scopus_ris__reads_eid_and_conference_name_from_notes() -> None:
     records = _by(_cleaned("scopus", ".ris", "ris"), "eid")
 
     hummingbird = records["2-s2.0-85081690252"]
-    assert hummingbird.issn == "00280836"
+    assert hummingbird.issn == ["00280836"]
     conference = records["2-s2.0-105040180364"]
-    assert conference.isbn == "979-840072171-7"
+    assert conference.isbn == ["979-840072171-7"]
     assert conference.conference_name == (
         "5th International Conference on Computer, Artificial Intelligence and "
         "Control Engineering, CAICE 2026"
@@ -145,7 +145,7 @@ def test_cleaned_pubmed_nbib__applies_the_defaults() -> None:
         "créneau de la FDA…."
     )
     assert records["11523304"].pages == "521-522"
-    assert records["28590685"].isbn == "978-3-319-28801-7"
+    assert records["28590685"].isbn == ["978-3-319-28801-7"]
     assert records["28590685"].publication_type == "Review"
 
 
@@ -184,4 +184,4 @@ def test_cleaned_openalex_csv__strips_pmid_and_keeps_one_issn() -> None:
     ]
 
     assert dinosaur.pmid == "28332513"
-    assert dinosaur.issn == "0028-0836"
+    assert dinosaur.issn == ["0028-0836"]

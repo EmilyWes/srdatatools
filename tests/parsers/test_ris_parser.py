@@ -400,8 +400,16 @@ def test_parse_ris_text__sn_routes_to_issn_or_isbn_by_value() -> None:
 
     journal, book = (row.record for row in parse_ris_text(text, mapping).rows)
 
-    assert (journal.issn, journal.isbn) == ("1234-5678", None)
-    assert (book.issn, book.isbn) == (None, "978-3-16-148410-0")
+    assert (journal.issn, journal.isbn) == (["1234-5678"], [])
+    assert (book.issn, book.isbn) == ([], ["978-3-16-148410-0"])
+
+
+def test_parse_ris_text__sn_lines_are_an_item_each() -> None:
+    text = "TY  - JOUR\nSN  - 1234-5678\nSN  - 8765-4321\nER  - \n"
+
+    [row] = parse_ris_text(text, suggest_ris_mapping(["SN"])).rows
+
+    assert row.record.issn == ["1234-5678", "8765-4321"]
 
 
 def test_parse_ris_file__default_mapping_on_realistic_export() -> None:

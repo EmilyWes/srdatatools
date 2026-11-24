@@ -298,11 +298,11 @@ def test_parse_nbib_text__isbn_tag_fills_isbn() -> None:
 
     record = parse_nbib_text(text, mapping, _NBIB_SETTINGS).rows[0].record
 
-    assert record.issn == "1234-5678 (Print)"
-    assert record.isbn == "978-3-16-148410-0"
+    assert record.issn == ["1234-5678 (Print)"]
+    assert record.isbn == ["978-3-16-148410-0"]
 
 
-def _parse_issn(text: str) -> str | None:
+def _parse_issn(text: str) -> list[str]:
     result = parse_nbib_text(text, suggest_nbib_mapping(["IS"]), _NBIB_SETTINGS)
     return result.rows[0].record.issn
 
@@ -316,7 +316,13 @@ def test_parse_nbib_text__is_raw_fields_keep_qualifiers() -> None:
 
 
 def test_parse_nbib_text__is_without_qualifier_unchanged() -> None:
-    assert _parse_issn("PMID- 1\nIS  - 1234-5678\n") == "1234-5678"
+    assert _parse_issn("PMID- 1\nIS  - 1234-5678\n") == ["1234-5678"]
+
+
+def test_parse_nbib_text__is_lines_are_an_item_each() -> None:
+    text = "PMID- 1\nIS  - 1234-5678 (Print)\nIS  - 8765-4321 (Electronic)\n"
+
+    assert _parse_issn(text) == ["1234-5678 (Print)", "8765-4321 (Electronic)"]
 
 
 def test_suggest_nbib_mapping__leaves_unknown_tags_unmapped() -> None:
@@ -336,7 +342,7 @@ def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
     assert first.pages == "100-110"
     assert first.doi == "10.1016/j.jbi.2020.1"
     assert first.other_ids == {"pmcid": "PMC7000001"}
-    assert first.issn == "1532-0480 (Electronic)"
+    assert first.issn == ["1532-0480 (Electronic)"]
     assert first.publication_date == "2020 May 14"
     assert second.keywords == {"MeSH": ["Humans", "Review Literature as Topic"]}
     assert second.publication_date == "2019 Jan-Feb"
@@ -678,7 +684,7 @@ def test_parse_nbib_record__keeps_is_qualifier() -> None:
 
     row = parse_nbib_record([("IS", "1234-5678 (Print)")], mapping, _NBIB_SETTINGS)
 
-    assert row.record.issn == "1234-5678 (Print)"
+    assert row.record.issn == ["1234-5678 (Print)"]
     assert row.raw_fields == {"IS": "1234-5678 (Print)"}
 
 

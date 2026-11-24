@@ -104,7 +104,7 @@ def test_openalex_small_csv__keeps_values_as_in_the_file(
 ) -> None:
     dinosaur = csv_records[_DINOSAUR_DOI]
     assert dinosaur.pmid == "https://pubmed.ncbi.nlm.nih.gov/28332513"
-    assert dinosaur.issn == "0028-0836|1476-4687"
+    assert dinosaur.issn == ["0028-0836|1476-4687"]
     assert dinosaur.journal == "Nature"
     assert dinosaur.publication_type == "article"
     assert dinosaur.other_ids == {"openalex": "W2601753892"}

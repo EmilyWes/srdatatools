@@ -89,7 +89,7 @@ def test_column_value__authors_delimiter_option() -> None:
 
 
 def test_column_value__issn_isbn_delimiter_option() -> None:
-    record = _record(issn="1234-5678|8765-4321", isbn="9783161484100")
+    record = _record(issn=["1234-5678", "8765-4321"], isbn=["9783161484100"])
     column = JoinedColumn(key="i", label="", name="", field="issn", delimiter=" / ")
 
     assert _value(record, "issn") == "1234-5678; 8765-4321"

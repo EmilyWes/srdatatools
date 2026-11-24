@@ -56,7 +56,7 @@ def test_pubmed_small_nbib__keeps_values_as_in_the_file(
     assert nbib_records["27869079"].title == "[Not Available]."
     assert nbib_records["11523304"].pages == "521-2"
     assert nbib_records["11523304"].doi is None
-    assert nbib_records["28590685"].isbn == "978-3-319-28801-7\n978-3-319-28802-4"
+    assert nbib_records["28590685"].isbn == ["978-3-319-28801-7", "978-3-319-28802-4"]
     assert nbib_records["28590685"].publication_type == "Review\nBook Chapter"
 
 

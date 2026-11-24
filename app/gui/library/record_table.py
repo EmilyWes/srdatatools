@@ -23,7 +23,6 @@ from app.gui.library.quality import QUALITY_FIELDS, quality_issues
 from app.gui.library.stats import list_author_id_keys, list_keyword_prefixes
 from app.helpers.format import (
     DISPLAY_SEPARATOR,
-    STORAGE_SEPARATOR,
     LabelFormat,
     author_id_key,
     author_id_name,
@@ -92,7 +91,6 @@ COLUMNS: dict[str, str] = {
 # Columns worked out from other fields rather than read from one.
 _DERIVED_COLUMNS = ("sources", "keywords", "publication_year", "data_quality")
 DEFAULT_COLUMNS = ["doi", "title", "author_names"]
-_JOINED_FIELDS = frozenset({"issn", "isbn"})
 _QUALITY_FILTER_STATE: dict[str, Any] = {
     "filter": {
         "filterModel": {"data_quality": {"filterType": "text", "type": "notBlank"}}
@@ -223,8 +221,6 @@ def row_for(values: Mapping[str, Any]) -> dict[str, Any]:
     for key, value in values.items():
         if isinstance(value, list):
             value = DISPLAY_SEPARATOR.join(value)
-        elif key in _JOINED_FIELDS and value:
-            value = value.replace(STORAGE_SEPARATOR, DISPLAY_SEPARATOR)
         elif isinstance(value, dict):
             value = DISPLAY_SEPARATOR.join(
                 f"{name}: {id_}" for name, id_ in value.items()

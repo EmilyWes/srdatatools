@@ -109,11 +109,11 @@ def test_scopus_small_ris__keeps_values_as_in_the_file(
 ) -> None:
     hummingbird = ris_records[_HUMMINGBIRD_EID]
     assert hummingbird.pmid == "32161388"
-    assert hummingbird.issn == "00280836 (ISSN)"
+    assert hummingbird.issn == ["00280836 (ISSN)"]
     assert hummingbird.publication_type == "Retracted"
     conference = ris_records[_CONFERENCE_EID]
-    assert conference.isbn == "979-840072171-7 (ISBN)"
-    assert conference.issn is None
+    assert conference.isbn == ["979-840072171-7 (ISBN)"]
+    assert conference.issn == []
     assert conference.conference_name is None
 
 

@@ -416,7 +416,7 @@ def apply_mapping(
         if isinstance(row, ScalarRow):
             values.setdefault(row.target, value)
         elif isinstance(row, IssnIsbnRow):
-            values.setdefault(_classify_issn_isbn(row, value), value)
+            values.setdefault(_classify_issn_isbn(row, value), [value])
         elif isinstance(row, OtherIdRow):
             other_ids[row.key] = value
         elif isinstance(row, KeywordsRow):
@@ -468,7 +468,7 @@ def apply_line_mapping(
 ) -> Record:
     """Each kept name and affiliation line is one author's; the ids come from the
     lines in order, so each stays with its author line rather than being matched
-    by position. Each keyword line is a keyword."""
+    by position. Each keyword, ISSN and ISBN line is a value of its own."""
     author_rows = dict(mapping.rows_of(AuthorsRow))
     kept, slots = author_lines(lines, author_rows)
     split_authors = {
@@ -481,17 +481,24 @@ def apply_line_mapping(
         for line in (raw_fields.get(key) or "").splitlines():
             if line.strip():
                 keywords.setdefault(row.prefix, []).append(line.strip())
+    issn_isbn: dict[str, list[str]] = {}
+    ordered = ordered_mapping(mapping, settings.use_first)
+    for key, issn_row in ordered.rows_of(IssnIsbnRow):
+        value = raw_fields.get(key) or ""
+        items = [line.strip() for line in value.splitlines() if line.strip()]
+        if items:
+            issn_isbn.setdefault(_classify_issn_isbn(issn_row, value), items)
     rest = {
         key: row
         for key, row in mapping.rows.items()
-        if not isinstance(row, KeywordsRow)
+        if not isinstance(row, KeywordsRow | IssnIsbnRow)
         and not (isinstance(row, AuthorsRow) and row.role == "ids")
     }
     record = apply_mapping(
         raw_fields, mapping.model_copy(update={"rows": rest}), settings, split_authors
     )
     return record.model_copy(
-        update={"author_ids": ids_by_key(slots), "keywords": keywords}
+        update={"author_ids": ids_by_key(slots), "keywords": keywords, **issn_isbn}
     )
 
 

@@ -4,7 +4,6 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from app.gui.cleaning.options import CleaningOptions
-from app.helpers.format import STORAGE_SEPARATOR
 from app.helpers.functions import sniff_separator
 from app.models.record import PartialDate, Record
 from app.parsers.authors import AuthorIds, clean_author_id, merge_author_ids
@@ -23,7 +22,7 @@ from app.parsers.mapping import (
 
 SCOPUS_AUTHOR_ID_KEY = "scopus_author_id"
 # Comma is left out: it also separates last and first names.
-SEPARATOR_CANDIDATES = (STORAGE_SEPARATOR, ";", "\n", " and ")
+SEPARATOR_CANDIDATES = ("|", ";", "\n", " and ")
 
 _PAGE_RANGE = re.compile(r"^(?P<start>\d+)-(?P<end>\d+)$")
 _TRAILING_ET_AL = re.compile(r"[\s,;|]*\bet al\.$")
@@ -379,29 +378,26 @@ def _preferred_token(tokens: list[re.Match[str]], preferred: str) -> re.Match[st
 
 
 def _clean_issn_isbn(
-    value: str | None, lengths: tuple[int, ...], options: CleaningOptions
-) -> str | None:
-    if not value:
-        return value
+    values: list[str], lengths: tuple[int, ...], options: CleaningOptions
+) -> list[str]:
     tokens = [
         token
+        for value in values
         for token in ISSN_ISBN_TOKEN.finditer(value)
         if len(token["id"].replace("-", "")) in lengths
     ]
     if not tokens:
-        return value
+        return values
     if options.only_one:
         tokens = [_preferred_token(tokens, options.preferred_qualifier)]
-    return STORAGE_SEPARATOR.join(
-        token["id"] if options.strip_extras else token[0] for token in tokens
-    )
+    return [token["id"] if options.strip_extras else token[0] for token in tokens]
 
 
 def clean_issn_isbn(
     record: Record, context: CleaningContext, options: CleaningOptions
 ) -> Record:
     """The issn field keeps ISSN-length numbers and the isbn field ISBN-length
-    ones; a value with none of them is kept as it is."""
+    ones; values with none of them are kept as they are."""
     return record.model_copy(
         update={
             "issn": _clean_issn_isbn(record.issn, (ISSN_LENGTH,), options),
