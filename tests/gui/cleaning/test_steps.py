@@ -254,6 +254,28 @@ def test_get_separators__sniffs_over_every_value() -> None:
     assert get_separators(records, _OPTIONS)[2] == ";"
 
 
+def test_get_separators__sniffs_comma_only_for_ids_and_keywords() -> None:
+    records = [
+        Record(
+            author_names=["Teng, Yu"],
+            author_affiliations=["Dept. of Surgery, Guangxi University, China"],
+            author_ids={"orcid": ["0000-0002-1825-0097, 0000-0001-5109-3700"]},
+            keywords={"Keywords": ["Medicine, Computer science, Biology"]},
+        )
+    ]
+
+    assert get_separators(records, _OPTIONS) == (None, None, ",", ",")
+
+
+def test_get_separators__comma_loses_ties() -> None:
+    records = [
+        Record(keywords={"Author": ["Neoplasms, Experimental"]}),
+        Record(keywords={"Author": ["Humans; Adult"]}),
+    ]
+
+    assert get_separators(records, _OPTIONS)[3] == ";"
+
+
 def test_split_authors__splits_names_and_affiliations() -> None:
     record = Record(
         author_names=["Teng, Yu; Han, Li"],

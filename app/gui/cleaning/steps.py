@@ -25,8 +25,11 @@ from app.parsers.mapping import (
 logger = logging.getLogger(__name__)
 
 SCOPUS_AUTHOR_ID_KEY = "scopus_author_id"
-# Comma is left out: it also separates last and first names.
+# Comma is left out: it also separates last and first names, and the parts of an
+# affiliation.
 SEPARATOR_CANDIDATES = ("|", ";", "\n", " and ")
+# Comma last, so it loses ties to a keyword that only contains one.
+COMMA_SEPARATOR_CANDIDATES = (*SEPARATOR_CANDIDATES, ",")
 
 _PAGE_RANGE = re.compile(r"^(?P<start>\d+)-(?P<end>\d+)$")
 _TRAILING_ET_AL = re.compile(r"[\s,;|]*\bet al\.$")
@@ -173,7 +176,7 @@ def get_separators(
             for values in record.author_ids.values()
             for value in values
         ),
-        SEPARATOR_CANDIDATES,
+        COMMA_SEPARATOR_CANDIDATES,
     )
     keywords = options.keywords_separator or sniff_separator(
         (
@@ -182,7 +185,7 @@ def get_separators(
             for values in record.keywords.values()
             for keyword in values
         ),
-        SEPARATOR_CANDIDATES,
+        COMMA_SEPARATOR_CANDIDATES,
     )
     return names, affiliations, ids, keywords
 

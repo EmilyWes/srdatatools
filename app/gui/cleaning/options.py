@@ -132,8 +132,8 @@ _AUTHORS = OptionBox(
             "ids_separator",
             "IDs separator",
             "What separates the author IDs in an imported column, e.g. Scopus's"
-            " Author(s) ID. Leave empty to detect it per imported file, as for"
-            " the names.",
+            " Author(s) ID. Leave empty to detect it per imported file (|, ;, a"
+            " line break, ' and ' or a comma).",
             "text",
             enabled_by="split_authors",
         ),
@@ -180,7 +180,8 @@ _KEYWORDS = OptionBox(
             "keywords_separator",
             "Keywords separator",
             "What separates the keywords in the imported value. Leave empty to"
-            " detect it per imported file, as for the author names.",
+            " detect it per imported file (|, ;, a line break, ' and ' or a"
+            " comma).",
             "text",
             enabled_by="split_keywords",
         ),
