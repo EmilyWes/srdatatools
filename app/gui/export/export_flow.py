@@ -32,7 +32,7 @@ from app.gui.importing.import_flow import (
 )
 from app.helpers.format import GRID_CLASSES, GRID_COLUMNS, format_count
 from app.helpers.mapping_table import ROW_FIELD_CSS, fill_color
-from app.helpers.quirks_overview import (
+from app.helpers.options_overview import (
     FIELD_CSS,
     render_box_frame,
     render_boxes_row,
@@ -65,7 +65,7 @@ _OPTION_ROW_CLASSES = "w-full no-wrap items-center gap-1"
 _OPTION_LABEL_CLASSES = "w-10 shrink-0 text-xs text-grey-7"
 _NAME_WIDTH = "width: 24ch"
 _FIELD_WIDTH = "width: 20ch"
-_BOX_FIELD_CLASSES = "quirk-field text-xs"
+_BOX_FIELD_CLASSES = "option-field text-xs"
 _BOX_FIELD_WIDTH = "w-[6.5rem]"
 _WIDE_BOX_FIELD_WIDTH = "w-[9rem]"
 # Controls sit at the right edge of the (equally wide) boxes.

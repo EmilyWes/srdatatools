@@ -18,7 +18,7 @@ from app.parsers.common import (
 )
 from app.parsers.csv_ import parse_csv_record
 from app.parsers.mapping import FieldMapping
-from app.parsers.quirks import NO_QUIRKS, ParseSettings
+from app.parsers.parse_settings import DEFAULT_SETTINGS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ def parse_excel_file(
     path: Path,
     mapping: FieldMapping,
     sheet: str | None = None,
-    settings: ParseSettings = NO_QUIRKS,
+    settings: ParseSettings = DEFAULT_SETTINGS,
 ) -> ParseResult:
     headers, data_rows = _sheet_rows(path, sheet)
 

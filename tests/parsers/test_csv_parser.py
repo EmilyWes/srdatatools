@@ -27,7 +27,7 @@ from app.parsers.mapping import (
     ScalarRow,
     Suggest,
 )
-from app.parsers.quirks import ParseSettings
+from app.parsers.parse_settings import ParseSettings
 from tests.mappings import mapping_of, targets_of
 from tests.vendor_data import vendor_file
 

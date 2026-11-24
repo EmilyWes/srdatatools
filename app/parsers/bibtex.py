@@ -25,7 +25,7 @@ from app.parsers.mapping import (
     override_aliases,
 )
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
-from app.parsers.quirks import NO_QUIRKS, ParseSettings
+from app.parsers.parse_settings import DEFAULT_SETTINGS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +243,7 @@ def _author_lines(value: str) -> str:
 def parse_bibtex_record(
     lines: list[tuple[str, str]],
     mapping: FieldMapping,
-    settings: ParseSettings = NO_QUIRKS,
+    settings: ParseSettings = DEFAULT_SETTINGS,
 ) -> ParsedRow:
     raw_fields = dict(lines)
     cleaned = {key: clean_value(key, value) for key, value in raw_fields.items()}
@@ -255,7 +255,7 @@ def parse_bibtex_record(
 
 
 def parse_bibtex_text(
-    text: str, mapping: FieldMapping, settings: ParseSettings = NO_QUIRKS
+    text: str, mapping: FieldMapping, settings: ParseSettings = DEFAULT_SETTINGS
 ) -> ParseResult:
     rows: list[ParsedRow] = []
     skipped: list[SkippedRow] = []
@@ -276,7 +276,7 @@ def parse_bibtex_text(
 
 
 def parse_bibtex_file(
-    path: Path, mapping: FieldMapping, settings: ParseSettings = NO_QUIRKS
+    path: Path, mapping: FieldMapping, settings: ParseSettings = DEFAULT_SETTINGS
 ) -> ParseResult:
     return parse_bibtex_text(decode_file(path), mapping, settings)
 

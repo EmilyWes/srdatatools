@@ -3,14 +3,14 @@ import pytest
 from app.parsers.common import FileType
 from app.parsers.profiles import PROFILES, profile_for
 from app.parsers.profiles.overview import (
+    OptionItem,
+    OptionList,
     ParsingChoices,
-    QuirkItem,
-    QuirkList,
     default_choices,
     dump_choices,
     load_choices,
+    option_boxes,
     profile_with,
-    quirk_boxes,
 )
 
 _ALL_TYPES = ("ris", "nbib", "csv", "tsv", "excel", "bibtex")
@@ -19,15 +19,15 @@ _ALL_TYPES = ("ris", "nbib", "csv", "tsv", "excel", "bibtex")
 def _keys(file_type: FileType) -> list[str]:
     return [
         item.key
-        for box in quirk_boxes(file_type, "Type")
+        for box in option_boxes(file_type, "Type")
         for item in box.items
-        if isinstance(item, QuirkItem)
+        if isinstance(item, OptionItem)
     ]
 
 
 def _type_box_keys(file_type: FileType) -> list[str]:
-    box = quirk_boxes(file_type, "Type")[-1]
-    return [item.key for item in box.items if isinstance(item, QuirkItem)]
+    box = option_boxes(file_type, "Type")[-1]
+    return [item.key for item in box.items if isinstance(item, OptionItem)]
 
 
 def _with(
@@ -51,46 +51,46 @@ def test_profile_with__defaults_reproduce_the_profile(
     )
 
 
-def test_quirk_boxes__titles_in_order_ending_with_the_type_label() -> None:
-    titles = [box.title for box in quirk_boxes("ris", "RIS")]
+def test_option_boxes__titles_in_order_ending_with_the_type_label() -> None:
+    titles = [box.title for box in option_boxes("ris", "RIS")]
 
     assert titles == ["Labeling", "Ordering", "RIS"]
 
 
 @pytest.mark.parametrize("file_type", ["nbib", "excel"])
-def test_quirk_boxes__type_without_items_has_no_box(file_type: FileType) -> None:
-    titles = [box.title for box in quirk_boxes(file_type, "Type")]
+def test_option_boxes__type_without_items_has_no_box(file_type: FileType) -> None:
+    titles = [box.title for box in option_boxes(file_type, "Type")]
 
     assert titles == ["Labeling", "Ordering"]
 
 
 @pytest.mark.parametrize("file_type", _ALL_TYPES)
-def test_quirk_boxes__every_control_key_is_a_choice(file_type: FileType) -> None:
-    for box in quirk_boxes(file_type, "Type"):
+def test_option_boxes__every_control_key_is_a_choice(file_type: FileType) -> None:
+    for box in option_boxes(file_type, "Type"):
         for item in box.items:
             key = item.key
-            if isinstance(item, QuirkItem) and item.control == "note":
+            if isinstance(item, OptionItem) and item.control == "note":
                 continue
             assert key in ParsingChoices.model_fields
 
 
-def test_quirk_boxes__ordering_is_a_list() -> None:
-    boxes = {box.title: box for box in quirk_boxes("csv", "CSV")}
+def test_option_boxes__ordering_is_a_list() -> None:
+    boxes = {box.title: box for box in option_boxes("csv", "CSV")}
 
     [order] = boxes["Ordering"].items
 
-    assert isinstance(order, QuirkList)
+    assert isinstance(order, OptionList)
     assert [(p.label, p.control) for p in order.parts] == [("Use first", "select")]
 
 
-def test_quirk_boxes__type_box_per_type() -> None:
+def test_option_boxes__type_box_per_type() -> None:
     assert _type_box_keys("csv") == ["field_size_limit"]
     assert _type_box_keys("tsv") == ["field_size_limit"]
     assert _type_box_keys("ris") == ["ris.author_details", "ris.outside_text"]
     assert _type_box_keys("bibtex") == ["bibtex.key_continuation"]
 
 
-def test_quirk_boxes__type_specific_items_only_in_their_type() -> None:
+def test_option_boxes__type_specific_items_only_in_their_type() -> None:
     assert "field_size_limit" not in _keys("excel")
     assert "ris.outside_text" not in _keys("bibtex")
 

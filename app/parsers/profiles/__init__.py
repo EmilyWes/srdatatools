@@ -2,13 +2,13 @@ from collections.abc import Collection
 from dataclasses import fields, replace
 
 from app.parsers.common import FileType
+from app.parsers.parse_settings import ParseSettings
 from app.parsers.profiles.asreview import ASREVIEW
 from app.parsers.profiles.base import FormatProfile, Profile
 from app.parsers.profiles.default import DEFAULT_PROFILES
 from app.parsers.profiles.openalex import OPENALEX
 from app.parsers.profiles.pubmed import PUBMED
 from app.parsers.profiles.scopus import SCOPUS
-from app.parsers.quirks import ParseSettings
 
 __all__ = [
     "PROFILES",

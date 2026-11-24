@@ -1,4 +1,5 @@
 from app.parsers.mapping import Suggest
+from app.parsers.parse_settings import DEFAULT_SETTINGS, ParseSettings
 from app.parsers.profiles import FormatProfile, _layer, profile_for, source_label
 from app.parsers.profiles.asreview import ASREVIEW
 from app.parsers.profiles.base import never_matches
@@ -7,13 +8,12 @@ from app.parsers.profiles.default import (
     default_settings,
 )
 from app.parsers.profiles.pubmed import PUBMED
-from app.parsers.quirks import NO_QUIRKS, ParseSettings
 
 
 def _format_profile(
     suggestions: dict[str, Suggest] | None = None,
     ignored_keys: frozenset[str] = frozenset(),
-    settings: ParseSettings = NO_QUIRKS,
+    settings: ParseSettings = DEFAULT_SETTINGS,
 ) -> FormatProfile:
     return FormatProfile(suggestions or {}, never_matches, settings, ignored_keys)
 

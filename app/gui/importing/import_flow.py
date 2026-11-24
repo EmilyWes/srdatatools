@@ -12,12 +12,12 @@ from app.gui.other.activity_log import log_import
 from app.helpers.busy import run_busy
 from app.helpers.format import GRID_CLASSES, GRID_COLUMNS
 from app.helpers.mapping_table import ROW_FIELD_CSS, MappingScreen, render_mapping_table
-from app.helpers.quirks_overview import (
+from app.helpers.options_overview import (
     VIEW_MAPPING,
     VIEW_PARSING,
     MappingParsingViews,
-    QuirksScreen,
-    render_quirks_overview,
+    OptionsScreen,
+    render_options_overview,
     render_view_toggle,
 )
 from app.parsers.bibtex import (
@@ -50,15 +50,15 @@ from app.parsers.nbib import (
     read_nbib_tags,
     suggest_nbib_mapping,
 )
+from app.parsers.parse_settings import ParseSettings
 from app.parsers.profiles import FormatProfile, source_label, sources_label
 from app.parsers.profiles.overview import (
     ParsingChoices,
     default_choices,
     dump_choices,
+    option_boxes,
     profile_with,
-    quirk_boxes,
 )
-from app.parsers.quirks import ParseSettings
 from app.parsers.ris import (
     parse_ris_file,
     read_ris_tags,
@@ -245,7 +245,7 @@ def import_file(
         file_type, sources, summary
     ).model_dump()
     source_file.file_summary = asdict(summary)
-    source_file.quirk_choices = dump_choices(
+    source_file.option_choices = dump_choices(
         choices or default_choices(file_type, sources)
     )
     log_import(session, source_file)
@@ -279,7 +279,7 @@ class ImportView:
     sheet: str | None = None
     view: str | None = VIEW_MAPPING
     mapping_screen: MappingScreen | None = None
-    quirks_screen: QuirksScreen[ParsingChoices] | None = None
+    options_screen: OptionsScreen[ParsingChoices] | None = None
     views: MappingParsingViews | None = None
     import_button: ui.button | None = None
     import_clean_button: ui.button | None = None
@@ -367,7 +367,7 @@ class ImportView:
     def _import(self, clean: bool = False) -> Awaitable[None] | None:
         assert self.paths
         assert self.mapping_screen is not None
-        assert self.quirks_screen is not None
+        assert self.options_screen is not None
         assert is_file_type(self.file_type)
         return self.on_import(
             list(zip(self.paths, self.summaries, strict=True)),
@@ -375,7 +375,7 @@ class ImportView:
             self.mapping_screen.current_mapping(),
             self.sources,
             self.sheet,
-            self.quirks_screen.current_choices(),
+            self.options_screen.current_choices(),
             clean,
         )
 
@@ -388,15 +388,15 @@ class ImportView:
     def _on_view(self, view: str | None) -> None:
         """Parsing refreshes from the mapping's edits when it is shown."""
         self.view = view
-        if view == VIEW_PARSING and self.quirks_screen is not None:
-            self.quirks_screen.refresh_ordering()
+        if view == VIEW_PARSING and self.options_screen is not None:
+            self.options_screen.refresh_ordering()
 
     def _render_mapping_and_parsing(
         self, views: MappingParsingViews, file_type: FileType
     ) -> None:
-        quirks_screen = render_quirks_overview(
+        options_screen = render_options_overview(
             views.parsing,
-            quirk_boxes(file_type, type_label(file_type)),
+            option_boxes(file_type, type_label(file_type)),
             default_choices(file_type, self.sources),
             current_mapping=self._current_mapping,
         )
@@ -410,7 +410,7 @@ class ImportView:
         if mapping_screen is None:
             views.parsing.clear()
             return
-        self.mapping_screen, self.quirks_screen = mapping_screen, quirks_screen
+        self.mapping_screen, self.options_screen = mapping_screen, options_screen
         self.views = views
         self._on_view(self.view)
 
@@ -481,7 +481,7 @@ class ImportView:
                         )
                         sheet_select.on_value_change(lambda e: self._set_sheet(e.value))
 
-                self.mapping_screen = self.quirks_screen = None
+                self.mapping_screen = self.options_screen = None
                 self.views = None
                 can_render = bool(self.paths and self.summaries) and type_known
                 has_samples = bool(merge_summaries(self.summaries).samples)

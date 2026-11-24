@@ -23,7 +23,7 @@ from app.parsers.mapping import (
     override_aliases,
 )
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
-from app.parsers.quirks import NO_QUIRKS, ParseSettings
+from app.parsers.parse_settings import DEFAULT_SETTINGS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ def _author_lines(
 def parse_ris_record(
     lines: list[tuple[str, str]],
     mapping: FieldMapping,
-    settings: ParseSettings = NO_QUIRKS,
+    settings: ParseSettings = DEFAULT_SETTINGS,
 ) -> ParsedRow:
     raw_fields = join_tag_lines(lines)
     record = apply_line_mapping(lines, raw_fields, mapping, settings, _author_lines)
@@ -101,7 +101,7 @@ def parse_ris_record(
 
 
 def parse_ris_text(
-    text: str, mapping: FieldMapping, settings: ParseSettings = NO_QUIRKS
+    text: str, mapping: FieldMapping, settings: ParseSettings = DEFAULT_SETTINGS
 ) -> ParseResult:
     rows: list[ParsedRow] = []
     skipped: list[SkippedRow] = []
@@ -153,7 +153,7 @@ def parse_ris_text(
 
 
 def parse_ris_file(
-    path: Path, mapping: FieldMapping, settings: ParseSettings = NO_QUIRKS
+    path: Path, mapping: FieldMapping, settings: ParseSettings = DEFAULT_SETTINGS
 ) -> ParseResult:
     return parse_ris_text(decode_file(path), mapping, settings)
 

@@ -10,7 +10,7 @@ from app.parsers import csv_
 from app.parsers.common import SkippedRow
 from app.parsers.excel import parse_excel_file, read_excel_headers, read_excel_sheets
 from app.parsers.mapping import FieldMapping, Suggest
-from app.parsers.quirks import ParseSettings
+from app.parsers.parse_settings import ParseSettings
 from tests.mappings import mapping_of
 
 

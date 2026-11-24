@@ -37,7 +37,7 @@ from app.helpers.format import (
     label_pair,
     label_text,
 )
-from app.helpers.quirks_overview import render_box_frame
+from app.helpers.options_overview import render_box_frame
 from app.models.record import publication_year
 from app.parsers.authors import author_ids_for_key
 from app.parsers.mapping import split_keyword

@@ -250,8 +250,8 @@ def test_import_file__saves_every_parsing_choice(
         choices=choices,
     )
 
-    assert set(source_file.quirk_choices) == set(ParsingChoices.model_fields)
-    assert load_choices(source_file.quirk_choices, "csv", ()) == choices
+    assert set(source_file.option_choices) == set(ParsingChoices.model_fields)
+    assert load_choices(source_file.option_choices, "csv", ()) == choices
 
 
 def test_import_file__without_choices_saves_the_profile_defaults(
@@ -268,7 +268,7 @@ def test_import_file__without_choices_saves_the_profile_defaults(
         _summary("csv", csv_path),
     )
 
-    stored = load_choices(source_file.quirk_choices, "csv", ())
+    stored = load_choices(source_file.option_choices, "csv", ())
     assert stored == default_choices("csv", ())
 
 
@@ -1362,8 +1362,8 @@ def test_render_import_view__import_passes_parsing_choices(
     view, _ = _nbib_view(
         monkeypatch, tmp_path, lambda f, t, m, s, sh, q, c: calls.append(q)
     )
-    assert view.quirks_screen is not None
-    view.quirks_screen.set_value("label_maybe", "?!")
+    assert view.options_screen is not None
+    view.options_screen.set_value("label_maybe", "?!")
 
     view._import()
 
@@ -1376,13 +1376,13 @@ def test_render_import_view__ordering_offers_keys_sharing_a_target(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     view, middle = _nbib_view(monkeypatch, tmp_path)
-    assert view.mapping_screen is not None and view.quirks_screen is not None
+    assert view.mapping_screen is not None and view.options_screen is not None
     view.mapping_screen.set_target("TA", "journal")
     view.mapping_screen.set_target("JT", "journal")
 
     _toggle(middle).value = "parsing"
 
-    [select] = view.quirks_screen.order_rows
+    [select] = view.options_screen.order_rows
     assert {"TA", "JT"} <= set(select.options)
     assert "PG" not in select.options
 

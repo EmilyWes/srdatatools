@@ -18,4 +18,4 @@ class ParseSettings:
         return dict(self.label_values)
 
 
-NO_QUIRKS = ParseSettings()
+DEFAULT_SETTINGS = ParseSettings()

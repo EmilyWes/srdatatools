@@ -15,7 +15,7 @@ from tests.mappings import mapping_of
 
 
 def _source_file(
-    skipped_rows: list[dict[str, Any]], quirk_choices: dict[str, Any]
+    skipped_rows: list[dict[str, Any]], option_choices: dict[str, Any]
 ) -> SourceFile:
     return SourceFile(
         filename="pubmed.nbib",
@@ -30,7 +30,7 @@ def _source_file(
         file_summary=asdict(
             FileSummary({"TI": "A title", "AB": "An abstract"}, {"TI": 3, "AB": 2}, 3)
         ),
-        quirk_choices=quirk_choices,
+        option_choices=option_choices,
     )
 
 
@@ -73,13 +73,13 @@ def _click(element: ui.button) -> None:
 
 def _render(
     skipped_rows: list[dict[str, Any]] | None = None,
-    quirk_choices: dict[str, Any] | None = None,
+    option_choices: dict[str, Any] | None = None,
 ) -> tuple[Element, list[None]]:
     panes = shell()
     removed: list[None] = []
     render_source_file_view(
         panes.middle,
-        _source_file(skipped_rows or [], quirk_choices or {}),
+        _source_file(skipped_rows or [], option_choices or {}),
         records_in_library=3,
         on_remove=lambda: removed.append(None),
     )
@@ -235,7 +235,7 @@ def test_render_source_file_view__toggle_switches_between_mapping_and_parsing() 
 
 
 def test_render_source_file_view__parsing_shows_stored_choices_readonly() -> None:
-    middle, _ = _render(quirk_choices={"label_maybe": "?!", "drop_et_al": False})
+    middle, _ = _render(option_choices={"label_maybe": "?!", "drop_et_al": False})
 
     inputs = {
         e.value: e for e in middle.descendants() if isinstance(e, ui.input) and e.value

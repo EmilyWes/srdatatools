@@ -21,8 +21,8 @@ from app.parsers.nbib import (
     read_nbib_tags,
     suggest_nbib_mapping,
 )
+from app.parsers.parse_settings import ParseSettings
 from app.parsers.profiles.default import DEFAULT_PROFILES
-from app.parsers.quirks import ParseSettings
 from tests.mappings import mapping_of, targets_of
 
 _NBIB_SETTINGS = DEFAULT_PROFILES["nbib"].settings

@@ -14,8 +14,8 @@ from app.parsers.mapping import (
     PagesRow,
     Suggest,
 )
+from app.parsers.parse_settings import ParseSettings
 from app.parsers.profiles.default import DEFAULT_PROFILES
-from app.parsers.quirks import ParseSettings
 from app.parsers.ris import (
     parse_ris_file,
     parse_ris_record,

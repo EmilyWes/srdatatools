@@ -10,25 +10,25 @@ from pydantic import BaseModel
 
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import (
-    QuirkBox,
-    QuirkItem,
-    QuirkList,
+    OptionBox,
+    OptionItem,
+    OptionList,
 )
 
 _CHANGED_BG_COLOR = "blue-2"
 _CHANGED_CHECKBOX_COLOR = "blue"
 # Dense boxes no taller than a line of text-sm (20px).
 FIELD_CSS = """
-.quirk-field .q-field__control, .quirk-field .q-field__marginal {
+.option-field .q-field__control, .option-field .q-field__marginal {
     min-height: 20px;
     height: 20px;
     align-items: center;
 }
-.quirk-field .q-field__control-container {
+.option-field .q-field__control-container {
     padding-top: 0;
     align-items: center;
 }
-.quirk-field .q-field__native, .quirk-field .q-field__input {
+.option-field .q-field__native, .option-field .q-field__input {
     padding: 0;
     min-height: 0;
 }
@@ -37,22 +37,22 @@ FIELD_CSS = """
 _GRID_STYLE = "grid-template-columns: max-content auto"
 _GRID_CLASSES = "grid items-center gap-x-3 gap-y-1"
 _CHECKBOX_SIZE = "32px"
-_FIELD_CLASSES = "quirk-field text-xs"
+_FIELD_CLASSES = "option-field text-xs"
 _FIELD_WIDTH = "w-[5.5rem]"
 _WIDE_FIELD_WIDTH = "w-[7rem]"
 _TOOLTIP_CLASSES = "max-w-sm text-xs"
 _NOTE_CLASSES = "col-span-2 text-xs text-grey-6"
-_BOXES_CLASS = "quirk-boxes"
-_BOX_CLASSES = "quirk-box w-fit border outline-variant rounded-xl px-3 pb-2"
+_BOXES_CLASS = "option-boxes"
+_BOX_CLASSES = "option-box w-fit border outline-variant rounded-xl px-3 pb-2"
 # CSS can't give wrapping boxes the width of the widest one, so a script does:
 # again whenever rows change, and when the hidden Parsing view is shown (hidden
 # boxes measure 0). Run, not added to the head: a script added late never runs.
 _EQUAL_WIDTH_JS = """
 (() => {
-  if (window.quirkBoxesWatched) return;
-  window.quirkBoxesWatched = true;
+  if (window.optionBoxesWatched) return;
+  window.optionBoxesWatched = true;
   const equalize = (row) => {
-    const boxes = [...row.querySelectorAll(":scope > .quirk-box")];
+    const boxes = [...row.querySelectorAll(":scope > .option-box")];
     boxes.forEach((box) => (box.style.width = ""));
     const width = Math.max(...boxes.map((box) => box.offsetWidth));
     if (width > 0) boxes.forEach((box) => (box.style.width = `${width}px`));
@@ -62,7 +62,7 @@ _EQUAL_WIDTH_JS = """
     entries.forEach((entry) => equalize(entry.target))
   );
   const scan = () =>
-    document.querySelectorAll(".quirk-boxes").forEach((row) => {
+    document.querySelectorAll(".option-boxes").forEach((row) => {
       if (!watched.has(row)) {
         watched.add(row);
         resize.observe(row);
@@ -105,7 +105,7 @@ def render_box_frame(title: str) -> Element:
 
 
 @dataclass
-class QuirksScreen(Generic[_M]):
+class OptionsScreen(Generic[_M]):
     readonly: bool
     defaults: _M
     current_mapping: Callable[[], FieldMapping] | None = None
@@ -115,7 +115,7 @@ class QuirksScreen(Generic[_M]):
     empty_rows: list[ui.input] = field(default_factory=list)
     order_rows: list[ui.select] = field(default_factory=list)
     lists: dict[str, Element] = field(default_factory=dict)
-    parts: dict[str, tuple[QuirkItem, ...]] = field(default_factory=dict)
+    parts: dict[str, tuple[OptionItem, ...]] = field(default_factory=dict)
 
     def _value(self, key: str) -> Any:
         widget = self.widgets[key]
@@ -173,11 +173,11 @@ class QuirksScreen(Generic[_M]):
                 widget.props("readonly")
         return widget
 
-    def _label(self, item: QuirkItem) -> None:
+    def _label(self, item: OptionItem) -> None:
         with ui.label(item.label).classes("text-xs"):
             ui.tooltip(item.hover).classes(_TOOLTIP_CLASSES)
 
-    def _render_item(self, item: QuirkItem, value: Any) -> None:
+    def _render_item(self, item: OptionItem, value: Any) -> None:
         if item.control == "note":
             with ui.label(item.label).classes(_NOTE_CLASSES):
                 ui.tooltip(item.hover).classes(_TOOLTIP_CLASSES)
@@ -196,7 +196,7 @@ class QuirksScreen(Generic[_M]):
         widget.on_value_change(lambda _e: self._refresh_color(item.key))
         self._refresh_color(item.key)
 
-    def _wire_enabled_by(self, item: QuirkItem) -> None:
+    def _wire_enabled_by(self, item: OptionItem) -> None:
         if item.enabled_by is None or item.key not in self.widgets:
             return
         widget, toggle = self.widgets[item.key], self.widgets[item.enabled_by]
@@ -288,7 +288,7 @@ class QuirksScreen(Generic[_M]):
         del self.use_first[index]
         self.refresh_ordering()
 
-    def _render_list(self, item: QuirkList) -> None:
+    def _render_list(self, item: OptionList) -> None:
         self.parts[item.key] = item.parts
         self.lists[item.key] = (
             ui.element("div").classes(f"{_GRID_CLASSES} col-span-2").style(_GRID_STYLE)
@@ -298,15 +298,15 @@ class QuirksScreen(Generic[_M]):
         else:
             self.refresh_ordering()
 
-    def render_box(self, box: QuirkBox, chosen: BaseModel) -> None:
+    def render_box(self, box: OptionBox, chosen: BaseModel) -> None:
         with render_box_frame(box.title):
             for item in box.items:
-                if isinstance(item, QuirkList):
+                if isinstance(item, OptionList):
                     self._render_list(item)
                 else:
                     self._render_item(item, getattr(chosen, item.key, None))
         for item in box.items:
-            if isinstance(item, QuirkItem):
+            if isinstance(item, OptionItem):
                 self._wire_enabled_by(item)
 
 
@@ -366,19 +366,19 @@ def render_view_toggle(
     return views
 
 
-def render_quirks_overview(
+def render_options_overview(
     container: Element,
-    boxes: list[QuirkBox],
+    boxes: list[OptionBox],
     defaults: _M,
     chosen: _M | None = None,
     current_mapping: Callable[[], FieldMapping] | None = None,
     start: _M | None = None,
-) -> QuirksScreen[_M]:
+) -> OptionsScreen[_M]:
     """`chosen` shows a stored import's choices read-only; `start` opens editable
     on other values than the defaults."""
     shown = chosen or start or defaults
     lists = shown.model_dump()
-    screen = QuirksScreen(
+    screen = OptionsScreen(
         readonly=chosen is not None,
         defaults=defaults,
         current_mapping=current_mapping,

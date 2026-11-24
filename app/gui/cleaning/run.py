@@ -35,7 +35,7 @@ def _context(
     return CleaningContext(
         raw_fields=source.raw_fields,
         mapping=FieldMapping.model_validate(source_file.field_mapping),
-        use_first=tuple(source_file.quirk_choices.get("use_first", [])),
+        use_first=tuple(source_file.option_choices.get("use_first", [])),
         names_separator=separators[0],
         affiliations_separator=separators[1],
         ids_separator=separators[2],

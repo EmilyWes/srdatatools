@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from app.parsers.common import FileType
 from app.parsers.mapping import Suggest
-from app.parsers.quirks import ParseSettings
+from app.parsers.parse_settings import ParseSettings
 
 MatchesText = Callable[[str], bool]
 

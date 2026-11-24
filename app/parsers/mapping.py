@@ -15,7 +15,7 @@ from app.parsers.authors import (
     format_author_ids,
     unsplit_author_ids,
 )
-from app.parsers.quirks import NO_QUIRKS, ParseSettings
+from app.parsers.parse_settings import DEFAULT_SETTINGS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +297,9 @@ def _label_for_line(line: str, settings: ParseSettings) -> LabelValue | None:
     return _LABEL_SPELLINGS.get(normalized)
 
 
-def normalize_label(value: str, settings: ParseSettings = NO_QUIRKS) -> LabelValue:
+def normalize_label(
+    value: str, settings: ParseSettings = DEFAULT_SETTINGS
+) -> LabelValue:
     """In a multi-line value (RIS N1 notes) the first line that is a label wins;
     the other lines are usually unrelated notes, so none matching is unlabeled."""
     lines = [line for line in value.splitlines() if line.strip()]
@@ -426,7 +428,7 @@ def ordered_mapping(mapping: FieldMapping, use_first: tuple[str, ...]) -> FieldM
 def apply_mapping(
     raw_fields: dict[str, str],
     mapping: FieldMapping,
-    settings: ParseSettings = NO_QUIRKS,
+    settings: ParseSettings = DEFAULT_SETTINGS,
 ) -> Record:
     mapping = ordered_mapping(mapping, settings.use_first)
     values: dict[str, Any] = {}

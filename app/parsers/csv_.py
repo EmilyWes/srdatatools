@@ -21,7 +21,7 @@ from app.parsers.mapping import (
     override_aliases,
 )
 from app.parsers.mapping import suggest_mapping as _suggest_mapping
-from app.parsers.quirks import NO_QUIRKS, ParseSettings
+from app.parsers.parse_settings import DEFAULT_SETTINGS, ParseSettings
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +148,7 @@ def _dialect(text: str, delimiter: str | None) -> type[csv.Dialect] | csv.Dialec
 def parse_csv_record(
     raw_fields: dict[str, str],
     mapping: FieldMapping,
-    settings: ParseSettings = NO_QUIRKS,
+    settings: ParseSettings = DEFAULT_SETTINGS,
 ) -> ParsedRow:
     record = apply_mapping(raw_fields, mapping, settings)
     return ParsedRow(record=record, raw_fields=raw_fields)
@@ -158,7 +158,7 @@ def parse_csv_text(
     text: str,
     mapping: FieldMapping,
     delimiter: str | None = None,
-    settings: ParseSettings = NO_QUIRKS,
+    settings: ParseSettings = DEFAULT_SETTINGS,
 ) -> ParseResult:
     csv.field_size_limit(settings.csv_field_size_limit)
     dialect = _dialect(text, delimiter)
@@ -211,13 +211,13 @@ def parse_csv_file(
     path: Path,
     mapping: FieldMapping,
     delimiter: str | None = None,
-    settings: ParseSettings = NO_QUIRKS,
+    settings: ParseSettings = DEFAULT_SETTINGS,
 ) -> ParseResult:
     return parse_csv_text(decode_file(path), mapping, delimiter, settings)
 
 
 def read_csv_headers(
-    path: Path, delimiter: str | None = None, settings: ParseSettings = NO_QUIRKS
+    path: Path, delimiter: str | None = None, settings: ParseSettings = DEFAULT_SETTINGS
 ) -> FileSummary:
     csv.field_size_limit(settings.csv_field_size_limit)
     text = decode_file(path)

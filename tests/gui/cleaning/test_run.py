@@ -41,7 +41,7 @@ def _store(
         session, filename="x.csv", path=None, format="csv", parsed_rows=rows
     )
     source_file.field_mapping = (mapping or FieldMapping()).model_dump()
-    source_file.quirk_choices = {"use_first": list(use_first)}
+    source_file.option_choices = {"use_first": list(use_first)}
     session.commit()
     return source_file
 

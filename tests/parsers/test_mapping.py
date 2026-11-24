@@ -27,7 +27,7 @@ from app.parsers.mapping import (
     tag_keyword,
     unsplit_keywords,
 )
-from app.parsers.quirks import ParseSettings
+from app.parsers.parse_settings import ParseSettings
 from tests.mappings import mapping_of, targets_of
 
 

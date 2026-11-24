@@ -33,7 +33,7 @@ class ParsingChoices(BaseModel):
 
 
 @dataclass(frozen=True)
-class QuirkItem:
+class OptionItem:
     key: str
     label: str
     hover: str
@@ -44,24 +44,24 @@ class QuirkItem:
 
 
 @dataclass(frozen=True)
-class QuirkList:
+class OptionList:
     """Repeating entries; the GUI supplies the select's options."""
 
     key: Literal["empty_values", "use_first"]
-    parts: tuple[QuirkItem, ...]
+    parts: tuple[OptionItem, ...]
 
 
 @dataclass(frozen=True)
-class QuirkBox:
+class OptionBox:
     title: str
-    items: tuple[QuirkItem | QuirkList, ...]
+    items: tuple[OptionItem | OptionList, ...]
 
 
-_LABELING = QuirkBox(
+_LABELING = OptionBox(
     "Labeling",
     (
         *(
-            QuirkItem(
+            OptionItem(
                 key,
                 decision.capitalize(),
                 f"Label values that mean {decision}, besides the built-in"
@@ -73,13 +73,13 @@ _LABELING = QuirkBox(
         ),
     ),
 )
-_ORDERING = QuirkBox(
+_ORDERING = OptionBox(
     "Ordering",
     (
-        QuirkList(
+        OptionList(
             "use_first",
             (
-                QuirkItem(
+                OptionItem(
                     "column",
                     "Use first",
                     "If several input columns map to the same field, use this"
@@ -90,14 +90,14 @@ _ORDERING = QuirkBox(
         ),
     ),
 )
-_FIELD_SIZE = QuirkItem(
+_FIELD_SIZE = OptionItem(
     "field_size_limit",
     "Field-size limit",
     "Longest cell the CSV reader accepts, in characters; a longer cell stops"
     " the file from being read.",
     "number",
 )
-_RIS_AUTHOR_DETAILS = QuirkItem(
+_RIS_AUTHOR_DETAILS = OptionItem(
     "ris.author_details",
     "Author handling",
     "Author name and affiliation lines are joined with |. An author ID line only"
@@ -105,14 +105,14 @@ _RIS_AUTHOR_DETAILS = QuirkItem(
     " between); any other tag in between ends that author.",
     "note",
 )
-_RIS_OUTSIDE_TEXT = QuirkItem(
+_RIS_OUTSIDE_TEXT = OptionItem(
     "ris.outside_text",
     "Text outside records",
     "Lines between an ER and the next record's first tag are ignored, such as"
     " ASReview's record numbers (1., 2., …).",
     "note",
 )
-_KEY_CONTINUATION = QuirkItem(
+_KEY_CONTINUATION = OptionItem(
     "bibtex.key_continuation",
     "Citation keys with commas",
     "Scopus builds keys from page numbers (Wong200922,24); the text after the"
@@ -121,8 +121,8 @@ _KEY_CONTINUATION = QuirkItem(
 )
 
 
-def _type_items(file_type: FileType) -> tuple[QuirkItem, ...]:
-    items: list[QuirkItem] = []
+def _type_items(file_type: FileType) -> tuple[OptionItem, ...]:
+    items: list[OptionItem] = []
     if file_type in _FIELD_SIZE_TYPES:
         items.append(_FIELD_SIZE)
     if file_type == "ris":
@@ -132,10 +132,10 @@ def _type_items(file_type: FileType) -> tuple[QuirkItem, ...]:
     return tuple(items)
 
 
-def quirk_boxes(file_type: FileType, type_label: str) -> list[QuirkBox]:
+def option_boxes(file_type: FileType, type_label: str) -> list[OptionBox]:
     """A Type with nothing of its own gets no box."""
     type_items = _type_items(file_type)
-    type_box = [QuirkBox(type_label, type_items)] if type_items else []
+    type_box = [OptionBox(type_label, type_items)] if type_items else []
     return [_LABELING, _ORDERING, *type_box]
 
 

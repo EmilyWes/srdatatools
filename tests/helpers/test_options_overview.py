@@ -2,9 +2,9 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.gui.general.layout import shell
-from app.helpers.quirks_overview import (
-    QuirksScreen,
-    render_quirks_overview,
+from app.helpers.options_overview import (
+    OptionsScreen,
+    render_options_overview,
     render_view_toggle,
 )
 from app.parsers.common import FileType
@@ -12,7 +12,7 @@ from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import (
     ParsingChoices,
     default_choices,
-    quirk_boxes,
+    option_boxes,
 )
 from tests.mappings import mapping_of
 
@@ -23,10 +23,10 @@ def _render(
     chosen: ParsingChoices | None = None,
     mapping: FieldMapping | None = None,
     middle: Element | None = None,
-) -> QuirksScreen:
-    return render_quirks_overview(
+) -> OptionsScreen:
+    return render_options_overview(
         middle or shell().middle,
-        quirk_boxes(file_type, file_type.upper()),
+        option_boxes(file_type, file_type.upper()),
         default_choices(file_type, sources),
         chosen,
         (lambda: mapping) if mapping is not None else None,
@@ -57,13 +57,13 @@ def _buttons(middle: Element, icon: str) -> list[ui.button]:
     ]
 
 
-def test_render_quirks_overview__defaults_give_the_profile_defaults() -> None:
+def test_render_options_overview__defaults_give_the_profile_defaults() -> None:
     screen = _render(sources=("scopus",))
 
     assert screen.current_choices() == default_choices("csv", ("scopus",))
 
 
-def test_render_quirks_overview__boxes_in_order_with_title_in_the_border() -> None:
+def test_render_options_overview__boxes_in_order_with_title_in_the_border() -> None:
     middle = shell().middle
 
     _render("ris", middle=middle)
@@ -79,18 +79,18 @@ def test_render_quirks_overview__boxes_in_order_with_title_in_the_border() -> No
     assert all("border" in box.classes for box in boxes)
 
 
-def test_render_quirks_overview__boxes_are_marked_for_equal_widths() -> None:
+def test_render_options_overview__boxes_are_marked_for_equal_widths() -> None:
     middle = shell().middle
 
     _render(middle=middle)
 
     boxes = [e for e in middle.descendants() if e.tag == "fieldset"]
     rows = {box.parent_slot.parent for box in boxes if box.parent_slot}
-    assert all("quirk-box" in box.classes for box in boxes)
-    assert [("quirk-boxes" in row.classes) for row in rows] == [True]
+    assert all("option-box" in box.classes for box in boxes)
+    assert [("option-boxes" in row.classes) for row in rows] == [True]
 
 
-def test_render_quirks_overview__label_hover_shows_the_explanation() -> None:
+def test_render_options_overview__label_hover_shows_the_explanation() -> None:
     middle = shell().middle
 
     _render(middle=middle)
@@ -98,7 +98,7 @@ def test_render_quirks_overview__label_hover_shows_the_explanation() -> None:
     assert _tooltip(_label(middle, "Field-size limit")).startswith("Longest cell")
 
 
-def test_render_quirks_overview__note_is_grey_text_without_control() -> None:
+def test_render_options_overview__note_is_grey_text_without_control() -> None:
     middle = shell().middle
 
     screen = _render("ris", middle=middle)
@@ -109,12 +109,12 @@ def test_render_quirks_overview__note_is_grey_text_without_control() -> None:
     assert "ris.author_details" not in screen.widgets
 
 
-def test_render_quirks_overview__field_size_only_for_csv_and_tsv() -> None:
+def test_render_options_overview__field_size_only_for_csv_and_tsv() -> None:
     assert "field_size_limit" in _render("tsv").widgets
     assert "field_size_limit" not in _render("excel").widgets
 
 
-def test_render_quirks_overview__text_box_is_prefilled_and_tinted_when_changed() -> (
+def test_render_options_overview__text_box_is_prefilled_and_tinted_when_changed() -> (
     None
 ):
     screen = _render("ris", sources=("asreview",))
@@ -128,7 +128,7 @@ def test_render_quirks_overview__text_box_is_prefilled_and_tinted_when_changed()
     assert screen.current_choices().label_include == ""
 
 
-def test_render_quirks_overview__labeling_box_has_a_text_box_per_decision() -> None:
+def test_render_options_overview__labeling_box_has_a_text_box_per_decision() -> None:
     middle = shell().middle
     screen = _render(middle=middle)
 
@@ -141,7 +141,7 @@ def test_render_quirks_overview__labeling_box_has_a_text_box_per_decision() -> N
     assert screen.current_choices().label_include == "asreview_relevant"
 
 
-def test_render_quirks_overview__field_size_limit_is_numeric() -> None:
+def test_render_options_overview__field_size_limit_is_numeric() -> None:
     screen = _render()
 
     screen.set_value("field_size_limit", 500)
@@ -149,7 +149,7 @@ def test_render_quirks_overview__field_size_limit_is_numeric() -> None:
     assert screen.current_choices().field_size_limit == 500
 
 
-def test_render_quirks_overview__ordering_offers_keys_sharing_a_target() -> None:
+def test_render_options_overview__ordering_offers_keys_sharing_a_target() -> None:
     mapping = mapping_of({"TI": "title", "TT": "title", "PG": "pages"})
 
     screen = _render(mapping=mapping)
@@ -158,7 +158,7 @@ def test_render_quirks_overview__ordering_offers_keys_sharing_a_target() -> None
     assert select.options == ["TI", "TT"]
 
 
-def test_render_quirks_overview__ordering_picks_in_listed_order() -> None:
+def test_render_options_overview__ordering_picks_in_listed_order() -> None:
     mapping = mapping_of({"TI": "title", "TT": "title", "AB": "title"})
     screen = _render(mapping=mapping)
 
@@ -169,7 +169,7 @@ def test_render_quirks_overview__ordering_picks_in_listed_order() -> None:
     assert screen.order_rows[2].options == ["TI"]
 
 
-def test_render_quirks_overview__stale_ordering_pick_is_kept() -> None:
+def test_render_options_overview__stale_ordering_pick_is_kept() -> None:
     screen = _render(mapping=mapping_of({"TI": "title", "TT": "title"}))
     screen.order_rows[0].value = "TT"
     screen.current_mapping = lambda: mapping_of({"TI": "title", "TT": "journal"})
@@ -180,7 +180,7 @@ def test_render_quirks_overview__stale_ordering_pick_is_kept() -> None:
     assert screen.current_choices().use_first == ["TT"]
 
 
-def test_render_quirks_overview__restore_defaults_resets_every_choice() -> None:
+def test_render_options_overview__restore_defaults_resets_every_choice() -> None:
     screen = _render(
         sources=("scopus",), mapping=mapping_of({"A": "title", "B": "title"})
     )
@@ -195,7 +195,7 @@ def test_render_quirks_overview__restore_defaults_resets_every_choice() -> None:
     assert len(screen.order_rows) == 1
 
 
-def test_render_quirks_overview__restore_defaults_button_only_when_editable() -> None:
+def test_render_options_overview__restore_defaults_button_only_when_editable() -> None:
     editable = shell().middle
     _render(middle=editable)
     readonly = shell().middle
@@ -208,7 +208,7 @@ def test_render_quirks_overview__restore_defaults_button_only_when_editable() ->
     assert texts(readonly) == []
 
 
-def test_render_quirks_overview__chosen_is_read_only_and_shows_stored_values() -> None:
+def test_render_options_overview__chosen_is_read_only_and_shows_stored_values() -> None:
     chosen = default_choices("csv", ()).model_copy(
         update={"label_maybe": "?!", "use_first": ["TT"]}
     )
@@ -221,7 +221,7 @@ def test_render_quirks_overview__chosen_is_read_only_and_shows_stored_values() -
     assert screen.current_choices() == chosen
 
 
-def test_render_quirks_overview__label_boxes_are_wide() -> None:
+def test_render_options_overview__label_boxes_are_wide() -> None:
     screen = _render()
 
     assert "w-[7rem]" in screen.widgets["label_include"].classes

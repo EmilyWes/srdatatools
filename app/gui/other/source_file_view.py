@@ -8,14 +8,14 @@ from app.db.models import SourceFile
 from app.gui.importing.import_flow import type_label
 from app.helpers.format import format_count
 from app.helpers.mapping_table import render_mapping_table
-from app.helpers.quirks_overview import render_quirks_overview, render_view_toggle
+from app.helpers.options_overview import render_options_overview, render_view_toggle
 from app.parsers.common import FileSummary, FileType
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles import sources_label
 from app.parsers.profiles.overview import (
     default_choices,
     load_choices,
-    quirk_boxes,
+    option_boxes,
 )
 
 
@@ -98,16 +98,16 @@ def render_source_file_view(
                 views = render_view_toggle()
                 summary = FileSummary(**source_file.file_summary)
                 sources = source_file.sources
-                choices = load_choices(source_file.quirk_choices, file_type, sources)
+                choices = load_choices(source_file.option_choices, file_type, sources)
                 render_mapping_table(
                     views.mapping,
                     summary,
                     FieldMapping.model_validate(source_file.suggested_mapping),
                     chosen=FieldMapping.model_validate(source_file.field_mapping),
                 )
-                render_quirks_overview(
+                render_options_overview(
                     views.parsing,
-                    quirk_boxes(file_type, type_label(file_type)),
+                    option_boxes(file_type, type_label(file_type)),
                     default_choices(file_type, sources),
                     chosen=choices,
                 )

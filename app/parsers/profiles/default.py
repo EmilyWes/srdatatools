@@ -2,8 +2,8 @@ from dataclasses import replace
 from typing import Any
 
 from app.parsers.common import FILE_TYPES, FileType
+from app.parsers.parse_settings import ParseSettings
 from app.parsers.profiles.base import FormatProfile, never_matches
-from app.parsers.quirks import ParseSettings
 
 DEFAULT_PROFILES: dict[FileType, FormatProfile] = {
     file_type: FormatProfile(

@@ -72,7 +72,7 @@ def upgrade() -> None:
         sa.Column("field_mapping", sa.JSON(), nullable=False),
         sa.Column("suggested_mapping", sa.JSON(), nullable=False),
         sa.Column("file_summary", sa.JSON(), nullable=False),
-        sa.Column("quirk_choices", sa.JSON(), nullable=False),
+        sa.Column("option_choices", sa.JSON(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
