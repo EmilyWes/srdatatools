@@ -109,7 +109,7 @@ class CleaningContext:
 Step = Callable[[Record, CleaningContext, CleaningOptions], Record]
 
 
-def file_separators(
+def get_separators(
     records: Sequence[Record], options: CleaningOptions
 ) -> tuple[str | None, str | None, str | None, str | None]:
     """The names, affiliations, ids and keywords separators for one source file's

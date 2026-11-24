@@ -11,7 +11,7 @@ from app.gui.cleaning.steps import (
     STEP_NAMES,
     CleaningContext,
     clean_record,
-    file_separators,
+    get_separators,
 )
 from app.models.record import Record as RecordSchema
 from app.parsers.mapping import FieldMapping
@@ -65,7 +65,7 @@ def clean_records(
         source = sources[record.id]
         per_file[source.source_file_id if source else None].append(schemas[record.id])
     separators = {
-        file_id: file_separators(file_schemas, options)
+        file_id: get_separators(file_schemas, options)
         for file_id, file_schemas in per_file.items()
     }
 

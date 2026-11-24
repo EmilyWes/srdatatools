@@ -12,8 +12,8 @@ from app.gui.cleaning.steps import (
     drop_trailing,
     eid_from_url,
     expand_page_range,
-    file_separators,
     first_publication_type,
+    get_separators,
     id_from_name,
     pages_set,
     ris_notes,
@@ -226,7 +226,7 @@ def test_drop_trailing__without_authors_leaves_record_unchanged() -> None:
     assert drop_trailing(Record(), _NO_CONTEXT, _OPTIONS) == Record()
 
 
-def test_file_separators__chosen_separator_wins_over_sniffing() -> None:
+def test_get_separators__chosen_separator_wins_over_sniffing() -> None:
     records = [
         Record(
             author_names=["A; B"],
@@ -236,7 +236,7 @@ def test_file_separators__chosen_separator_wins_over_sniffing() -> None:
         )
     ]
 
-    assert file_separators(records, _options(names_separator=",")) == (
+    assert get_separators(records, _options(names_separator=",")) == (
         ",",
         ";",
         "|",
@@ -244,13 +244,13 @@ def test_file_separators__chosen_separator_wins_over_sniffing() -> None:
     )
 
 
-def test_file_separators__sniffs_over_every_value() -> None:
+def test_get_separators__sniffs_over_every_value() -> None:
     records = [
         Record(author_ids={"a": ["1|2"], "b": ["3; 4"]}),
         Record(author_ids={"b": ["5; 6"]}),
     ]
 
-    assert file_separators(records, _OPTIONS)[2] == ";"
+    assert get_separators(records, _OPTIONS)[2] == ";"
 
 
 def test_split_authors__splits_names_and_affiliations() -> None:

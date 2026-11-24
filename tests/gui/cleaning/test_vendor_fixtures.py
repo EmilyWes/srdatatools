@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from app.gui.cleaning.options import CleaningOptions
-from app.gui.cleaning.steps import CleaningContext, clean_record, file_separators
+from app.gui.cleaning.steps import CleaningContext, clean_record, get_separators
 from app.models.record import Record
 from app.parsers.bibtex import (
     parse_bibtex_file,
@@ -54,7 +54,7 @@ def _cleaned(
     else:
         result = parse_bibtex_file(path, mapping, settings)
     records = [row.record for row in result.rows]
-    names, affiliations, ids, keywords = file_separators(records, options)
+    names, affiliations, ids, keywords = get_separators(records, options)
     return [
         clean_record(
             row.record,
