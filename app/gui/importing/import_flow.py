@@ -10,6 +10,7 @@ from app.db.general import store_parsed_rows
 from app.db.models import SourceFile
 from app.gui.other.activity_log import log_import
 from app.helpers.busy import run_busy
+from app.helpers.format import GRID_CLASSES, GRID_COLUMNS
 from app.helpers.mapping_table import ROW_FIELD_CSS, MappingScreen, render_mapping_table
 from app.helpers.quirks_overview import (
     VIEW_MAPPING,
@@ -81,10 +82,6 @@ _MIXED_WARNING = (
 )
 _EXCEL_SINGLE_FILE = "Excel import takes one file at a time"
 
-# The second column is fixed to the dropdown width (w-32) so a long file name
-# overflows to the right instead of moving the button and dropdowns.
-GRID_COLUMNS = "max-content 8rem"
-GRID_CLASSES = "items-center justify-items-start gap-x-1 gap-y-2"
 CELL_ROW_CLASSES = "items-center gap-2 no-wrap"
 FILE_LABEL_CLASSES = "text-sm whitespace-nowrap"
 SELECT_PROPS = "dense outlined options-dense popup-content-class=text-xs"

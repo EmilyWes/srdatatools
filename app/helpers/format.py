@@ -5,6 +5,10 @@ from typing import Literal
 DISPLAY_SEPARATOR = "; "
 # Between the values of a list, as stored in a record field.
 STORAGE_SEPARATOR = "|"
+# The second column is fixed to the dropdown width (w-32) so a long file name
+# overflows to the right instead of moving the button and dropdowns.
+GRID_COLUMNS = "max-content 8rem"
+GRID_CLASSES = "items-center justify-items-start gap-x-1 gap-y-2"
 _LABEL_PREFIX = "label:"
 _KEYWORD_PREFIX = "keywords:"
 _AUTHOR_ID_PREFIX = "author_ids:"
@@ -20,6 +24,12 @@ LabelFormat = Literal["words", "numbers"]
 
 def format_count(count: int) -> str:
     return f"{count:,}".replace(",", ".")
+
+
+def records_count(count: int, selected: bool) -> str:
+    if selected:
+        return f"{format_count(count)} (selected)"
+    return format_count(count)
 
 
 def label_key(phase: str, screener: str) -> str:

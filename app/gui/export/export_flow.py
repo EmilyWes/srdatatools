@@ -27,12 +27,10 @@ from app.gui.export.ris_tags import CURATED_TAGS, RIS_TAGS, TAG_PATTERN
 from app.gui.importing.import_flow import (
     BUTTON_PROPS,
     FILE_LABEL_CLASSES,
-    GRID_CLASSES,
-    GRID_COLUMNS,
     SELECT_CLASSES,
     SELECT_PROPS,
 )
-from app.helpers.format import format_count
+from app.helpers.format import GRID_CLASSES, GRID_COLUMNS, format_count
 from app.helpers.mapping_table import ROW_FIELD_CSS, fill_color
 from app.helpers.quirks_overview import (
     FIELD_CSS,
@@ -121,12 +119,6 @@ async def pick_save_path(suggested: Path, file_type: ExportFileType) -> Path | N
         file_types=(_FILE_TYPES[file_type],),
     )
     return Path(selected[0]) if selected else None
-
-
-def records_count(count: int, selected: bool) -> str:
-    if selected:
-        return f"{format_count(count)} (selected)"
-    return format_count(count)
 
 
 @dataclass
