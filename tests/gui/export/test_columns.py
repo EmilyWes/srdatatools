@@ -71,8 +71,8 @@ def _value(record: ExportRecord, key: str, options: ExportOptions = _OPTIONS) ->
 
 def test_column_value__author_fields_are_separated_by_semicolon() -> None:
     record = _record(
-        author_names="LeCun, Yann|Bengio, Yoshua",
-        author_affiliations="NYU|Mila",
+        author_names=["LeCun, Yann", "Bengio, Yoshua"],
+        author_affiliations=["NYU", "Mila"],
     )
 
     assert _value(record, "author_names") == "LeCun, Yann; Bengio, Yoshua"
@@ -80,7 +80,7 @@ def test_column_value__author_fields_are_separated_by_semicolon() -> None:
 
 
 def test_column_value__authors_delimiter_option() -> None:
-    record = _record(author_names="LeCun, Yann|Bengio, Yoshua")
+    record = _record(author_names=["LeCun, Yann", "Bengio, Yoshua"])
     column = JoinedColumn(
         key="a", label="", name="", field="author_names", delimiter=" / "
     )
@@ -107,10 +107,10 @@ def test_export_columns__author_columns_follow_title() -> None:
     ]
 
 
-_UNSPLIT_IDS = "orcid:[0000-1; 0000-2], scopus_author_id:[11; 22]"
+_UNSPLIT_IDS = {"orcid": ["0000-1; 0000-2"], "scopus_author_id": ["11; 22"]}
 
 
-_CLEANED_IDS = "orcid:1, scopus_author_id:2||scopus_author_id:3"
+_CLEANED_IDS = {"orcid": ["1", "", ""], "scopus_author_id": ["2", "", "3"]}
 
 
 def test_export_columns__author_id_keys_follow_authors() -> None:
@@ -140,7 +140,10 @@ def test_column_value__cleaned_author_ids_one_slot_per_author() -> None:
 
 
 def test_column_value__cleaned_author_ids_slots_for_key_of_other_records() -> None:
-    records = [_record(author_ids="orcid:1"), _record(author_ids="pmid:7|pmid:8")]
+    records = [
+        _record(author_ids={"orcid": ["1"]}),
+        _record(author_ids={"pmid": ["7", "8"]}),
+    ]
     columns = export_columns(records, _OPTIONS)
 
     assert column_value(_column(columns, "author_ids:orcid"), records[1], _OPTIONS) == (
@@ -158,7 +161,7 @@ def test_column_value__author_ids_delimiter_option() -> None:
 
 
 def test_export_columns__author_id_key_clashing_with_other_id_gets_suffix() -> None:
-    record = _record(author_ids="orcid:[0000-1]", other_ids={"ORCID": "x"})
+    record = _record(author_ids={"orcid": ["0000-1"]}, other_ids={"ORCID": "x"})
 
     column = _column(export_columns([record], _OPTIONS), "author_ids:orcid")
 
@@ -188,7 +191,7 @@ def test_column_value__date_parts_only_from_cleaned_date(
 
 
 def test_export_columns__unsplit_keywords_exported_as_stored_per_prefix() -> None:
-    record = _record(keywords=["keywords:[deep learning; AI]", "MeSH:[Humans; Mice]"])
+    record = _record(keywords={"": ["deep learning; AI"], "MeSH": ["Humans; Mice"]})
     columns = export_columns([record], _OPTIONS)
 
     keyword_columns = [c for c in columns if isinstance(c, KeywordsColumn)]
@@ -226,7 +229,7 @@ def test_export_columns__other_dates_suggest_full_publication_date(
 
 def test_export_columns__one_keyword_row_per_prefix_with_prefix_stripped() -> None:
     record = _record(
-        keywords=["deep learning", "[MeSH] Humans", "[MeSH] Neural Networks"]
+        keywords={"": ["deep learning"], "MeSH": ["Humans", "Neural Networks"]}
     )
     columns = export_columns([record], _OPTIONS)
 
@@ -237,7 +240,7 @@ def test_export_columns__one_keyword_row_per_prefix_with_prefix_stripped() -> No
 
 
 def test_column_value__keywords_delimiter_option() -> None:
-    record = _record(keywords=["[MeSH] Humans", "[MeSH] Neural Networks"])
+    record = _record(keywords={"MeSH": ["Humans", "Neural Networks"]})
     column = KeywordsColumn(key="k", label="", name="", prefix="MeSH", delimiter="|")
 
     assert column_value(column, record, _OPTIONS) == "Humans|Neural Networks"
@@ -434,7 +437,7 @@ def test_export_columns__ris_notes_row_is_n1_without_note_name() -> None:
 
 
 def test_export_columns__ris_keyword_prefix_rows_are_kw() -> None:
-    record = _record(keywords=["[Author] fossils"])
+    record = _record(keywords={"Author": ["fossils"]})
 
     assert _ris_column("keywords:Author", [record]).name == "KW"
 
@@ -464,7 +467,7 @@ def test_export_columns__ris_rows_without_a_tag_go_to_n1(
     record = _record(
         other_ids={"eid": "2-s2.0-1"},
         labels=[Label(phase="ta", screener="screener 1", value="include")],
-        author_ids="orcid:1",
+        author_ids={"orcid": ["1"]},
     )
 
     column = _ris_column(key, [record])
@@ -536,8 +539,8 @@ def test_column_value__ris_type(stored: str | None, code: str) -> None:
 
 def test_column_values__one_value_per_author_keyword_and_label() -> None:
     record = _record(
-        author_names="LeCun, Yann|Bengio, Yoshua",
-        keywords=["fossils", "dinosaurs"],
+        author_names=["LeCun, Yann", "Bengio, Yoshua"],
+        keywords={"": ["fossils", "dinosaurs"]},
         labels=[
             Label(phase="ta", screener="s", value="include"),
             Label(phase="ta", screener="s", value="maybe"),
@@ -611,10 +614,10 @@ def test_load_export_records__builds_record_sources_and_labels(
     scopus = _mapped_file("scopus.csv", "scopus", ["Title"])
     record = models.Record(
         title="Deep learning",
-        author_names="LeCun, Yann",
+        author_names=["LeCun, Yann"],
         publication_date="2015/05/",
         doi="10.1038/nature14539",
-        keywords=["[MeSH] Humans"],
+        keywords={"MeSH": ["Humans"]},
         other_ids={"eid": "2-s2.0-1"},
         sources=[
             models.RecordSource(
@@ -633,9 +636,9 @@ def test_load_export_records__builds_record_sources_and_labels(
 
     assert export.id == record.id
     assert export.record.title == "Deep learning"
-    assert export.record.author_names == "LeCun, Yann"
+    assert export.record.author_names == ["LeCun, Yann"]
     assert export.record.publication_date == "2015/05/"
-    assert export.record.keywords == ["[MeSH] Humans"]
+    assert export.record.keywords == {"MeSH": ["Humans"]}
     assert export.record.other_ids == {"eid": "2-s2.0-1"}
     assert [(lb.phase, lb.screener, lb.value) for lb in export.record.labels] == [
         ("ft", "s1", "include")

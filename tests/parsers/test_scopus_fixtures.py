@@ -82,9 +82,12 @@ def test_scopus_small_csv__keeps_author_columns_as_in_the_file(
 ) -> None:
     record = csv_records[_NODOSAUR_EID]
 
-    assert (record.author_names or "").startswith("Oyabu, Shumpei (60900075400); ")
-    assert (record.author_ids or "").startswith("scopus_author_id:[60900075400; ")
-    assert (record.author_affiliations or "").startswith(
+    [names] = record.author_names
+    assert names.startswith("Oyabu, Shumpei (60900075400); ")
+    [ids] = record.author_ids["scopus_author_id"]
+    assert ids.startswith("60900075400; ")
+    [affiliations] = record.author_affiliations
+    assert affiliations.startswith(
         "Oyabu S., Department of Natural History and Planetary Sciences, "
         "Hokkaido University, Kita 10, Nishi 8, Kita-ku, Hokkaido, Sapporo, "
         "060-0810, Japan;"
@@ -96,8 +99,9 @@ def test_scopus_small_csv__keys_author_keywords_by_prefix(
 ) -> None:
     keywords = csv_records[_CONFERENCE_EID].keywords
 
-    assert keywords[0].startswith("author:[ANSYS Simulation; ")
-    assert keywords[1].startswith("index:[")
+    assert list(keywords) == ["author", "index"]
+    [author_keywords] = keywords["author"]
+    assert author_keywords.startswith("ANSYS Simulation; ")
 
 
 def test_scopus_small_ris__keeps_values_as_in_the_file(
@@ -119,11 +123,8 @@ def test_scopus_small_bibtex__keeps_values_as_in_the_file(
     hummingbird = bibtex_records[_HUMMINGBIRD_EID]
     assert hummingbird.pmid == "32161388"
     assert hummingbird.publication_type == "Retracted"
-    assert (
-        bibtex_records[_CONFERENCE_EID]
-        .keywords[0]
-        .startswith("author:[ANSYS Simulation; ")
-    )
+    [author_keywords] = bibtex_records[_CONFERENCE_EID].keywords["author"]
+    assert author_keywords.startswith("ANSYS Simulation; ")
 
 
 def test_scopus_small__formats_agree_on_ids_and_document_type(

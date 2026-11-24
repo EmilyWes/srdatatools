@@ -72,7 +72,7 @@ def test_parse_nbib_text__repeated_author_tags_become_separate_authors() -> None
 
     result = parse_nbib_text(text, _MAPPING)
 
-    assert result.rows[0].record.author_names == "Smith, John|Doe, Jane"
+    assert result.rows[0].record.author_names == ["Smith, John", "Doe, Jane"]
 
 
 def test_parse_nbib_text__repeated_keyword_tags_collect_all() -> None:
@@ -80,7 +80,7 @@ def test_parse_nbib_text__repeated_keyword_tags_collect_all() -> None:
 
     result = parse_nbib_text(text, _MAPPING)
 
-    assert result.rows[0].record.keywords == ["nlp", "machine learning"]
+    assert result.rows[0].record.keywords == {"": ["nlp", "machine learning"]}
     assert result.rows[0].raw_fields["OT"] == "nlp\nmachine learning"
 
 
@@ -90,7 +90,7 @@ def test_parse_nbib_text__continuation_line_is_joined_with_a_space() -> None:
     result = parse_nbib_text(text, _MAPPING)
 
     assert result.rows[0].record.abstract == "First line second line."
-    assert result.rows[0].record.keywords == ["nlp"]
+    assert result.rows[0].record.keywords == {"": ["nlp"]}
 
 
 def test_parse_nbib_text__parses_several_records_split_on_blank_lines() -> None:
@@ -197,7 +197,7 @@ def test_parse_nbib_file__reads_realistic_export() -> None:
         "Results show a large reduction in manual workload."
     )
     assert first.doi == "10.1016/j.jbi.2020.1"
-    assert first.keywords == ["machine learning", "systematic review"]
+    assert first.keywords == {"": ["machine learning", "systematic review"]}
     assert second.doi is None
 
 
@@ -332,13 +332,13 @@ def test_parse_nbib_file__default_mapping_on_realistic_export() -> None:
 
     first, second = (row.record for row in result.rows)
     assert first.pmid == "31234567"
-    assert first.author_names == "Smith, John A|Doe, Jane"
+    assert first.author_names == ["Smith, John A", "Doe, Jane"]
     assert first.pages == "100-110"
     assert first.doi == "10.1016/j.jbi.2020.1"
     assert first.other_ids == {"pmcid": "PMC7000001"}
     assert first.issn == "1532-0480 (Electronic)"
     assert first.publication_date == "2020 May 14"
-    assert second.keywords == ["[MeSH] Humans", "[MeSH] Review Literature as Topic"]
+    assert second.keywords == {"MeSH": ["Humans", "Review Literature as Topic"]}
     assert second.publication_date == "2019 Jan-Feb"
 
 
@@ -422,7 +422,9 @@ def test_parse_nbib_text__auid_orcid_attaches_to_preceding_author() -> None:
 
     record = _parse_authors(text)
 
-    assert record.author_ids == "orcid:0000-0001-8894-9875|orcid:0000-0002-6000-6450"
+    assert record.author_ids == {
+        "orcid": ["0000-0001-8894-9875", "0000-0002-6000-6450"]
+    }
 
 
 def test_parse_nbib_text__orcid_url_prefix_is_stripped() -> None:
@@ -436,19 +438,21 @@ def test_parse_nbib_text__orcid_url_prefix_is_stripped() -> None:
 
     record = _parse_authors(text)
 
-    assert record.author_ids == "orcid:0000-0001-8894-9875|orcid:0000-0002-6000-6450"
+    assert record.author_ids == {
+        "orcid": ["0000-0001-8894-9875", "0000-0002-6000-6450"]
+    }
 
 
 def test_parse_nbib_text__non_orcid_auid_keeps_its_scheme_as_key() -> None:
     text = "PMID- 1\nFAU - Smith, John\nAUID- ISNI: 0000 0001 2345 6789\n"
 
-    assert _parse_authors(text).author_ids == "isni:0000 0001 2345 6789"
+    assert _parse_authors(text).author_ids == {"isni": ["0000 0001 2345 6789"]}
 
 
 def test_parse_nbib_text__auid_without_scheme_uses_row_id_key() -> None:
     text = "PMID- 1\nFAU - Smith, John\nAUID- 12345\n"
 
-    assert _parse_authors(text).author_ids == "auid:12345"
+    assert _parse_authors(text).author_ids == {"auid": ["12345"]}
 
 
 def test_parse_nbib_text__several_auids_of_one_author_share_a_slot() -> None:
@@ -459,7 +463,10 @@ def test_parse_nbib_text__several_auids_of_one_author_share_a_slot() -> None:
         "AUID- ISNI: 1\n"
     )
 
-    assert _parse_authors(text).author_ids == "orcid:0000-0001-8894-9875, isni:1"
+    assert _parse_authors(text).author_ids == {
+        "orcid": ["0000-0001-8894-9875"],
+        "isni": ["1"],
+    }
 
 
 def test_parse_nbib_text__ad_lines_are_joined_in_order() -> None:
@@ -472,11 +479,11 @@ def test_parse_nbib_text__ad_lines_are_joined_in_order() -> None:
         "AD  - Department C, University Z.\n"
     )
 
-    assert _parse_authors(text).author_affiliations == (
-        "Department A, University X."
-        "|Department B, University Y. smith@example.org."
-        "|Department C, University Z."
-    )
+    assert _parse_authors(text).author_affiliations == [
+        "Department A, University X.",
+        "Department B, University Y. smith@example.org.",
+        "Department C, University Z.",
+    ]
 
 
 def test_parse_nbib_text__ad_continuation_line_is_joined() -> None:
@@ -487,9 +494,9 @@ def test_parse_nbib_text__ad_continuation_line_is_joined() -> None:
         "      Blacksburg, VA, USA.\n"
     )
 
-    assert _parse_authors(text).author_affiliations == (
+    assert _parse_authors(text).author_affiliations == [
         "Department of Geosciences, Virginia Tech, Blacksburg, VA, USA."
-    )
+    ]
 
 
 def test_parse_nbib_text__author_without_auid_keeps_an_empty_id_slot() -> None:
@@ -500,7 +507,7 @@ def test_parse_nbib_text__author_without_auid_keeps_an_empty_id_slot() -> None:
         "AUID- ORCID: 0000-0002-6000-6450\n"
     )
 
-    assert _parse_authors(text).author_ids == "|orcid:0000-0002-6000-6450"
+    assert _parse_authors(text).author_ids == {"orcid": ["", "0000-0002-6000-6450"]}
 
 
 def test_parse_nbib_text__auid_ad_before_first_author_are_ignored() -> None:
@@ -513,7 +520,7 @@ def test_parse_nbib_text__auid_ad_before_first_author_are_ignored() -> None:
 
     record = _parse_authors(text)
 
-    assert (record.author_ids, record.author_affiliations) == (None, None)
+    assert (record.author_ids, record.author_affiliations) == ({}, [])
 
 
 def test_parse_nbib_text__au_fallback_author_tag_groups_auid() -> None:
@@ -530,9 +537,9 @@ def test_parse_nbib_text__au_fallback_author_tag_groups_auid() -> None:
 
     record = _parse_authors(text, mapping)
 
-    assert record.author_names == "Smith J|Doe J"
-    assert record.author_ids == "orcid:0000-0001-8894-9875|"
-    assert record.author_affiliations == "Department A."
+    assert record.author_names == ["Smith J", "Doe J"]
+    assert record.author_ids == {"orcid": ["0000-0001-8894-9875", ""]}
+    assert record.author_affiliations == ["Department A."]
 
 
 def test_parse_nbib_text__unmapped_auid_ad_are_not_read() -> None:
@@ -545,8 +552,8 @@ def test_parse_nbib_text__unmapped_auid_ad_are_not_read() -> None:
 
     record = _parse_authors(text, _MAPPING)
 
-    assert record.author_names == "Smith, John"
-    assert (record.author_ids, record.author_affiliations) == (None, None)
+    assert record.author_names == ["Smith, John"]
+    assert (record.author_ids, record.author_affiliations) == ({}, [])
 
 
 def test_parse_nbib_text__ad_mapped_elsewhere_behaves_like_normal_tag() -> None:
@@ -556,7 +563,7 @@ def test_parse_nbib_text__ad_mapped_elsewhere_behaves_like_normal_tag() -> None:
     record = parse_nbib_text(text, mapping).rows[0].record
 
     assert record.notes == "Department A."
-    assert record.author_affiliations is None
+    assert record.author_affiliations == []
 
 
 def test_suggest_nbib_mapping__maps_auid_and_ad_to_authors() -> None:
@@ -570,7 +577,7 @@ def test_suggest_nbib_mapping__maps_auid_and_ad_to_authors() -> None:
 def test_parse_nbib_text__names_are_kept_as_in_the_file() -> None:
     record = _parse_authors("PMID- 1\nFAU - Agnolín, Federico L\nFAU - Madonna\n")
 
-    assert record.author_names == "Agnolín, Federico L|Madonna"
+    assert record.author_names == ["Agnolín, Federico L", "Madonna"]
 
 
 _KEYWORD_MAPPING = suggest_nbib_mapping(["OT", "MH"])
@@ -581,10 +588,7 @@ def test_parse_nbib_text__mh_keywords_get_mesh_prefix() -> None:
 
     record = parse_nbib_text(text, _KEYWORD_MAPPING).rows[0].record
 
-    assert record.keywords == [
-        "[MeSH] *Dinosaurs/anatomy & histology",
-        "[MeSH] Animals",
-    ]
+    assert record.keywords == {"MeSH": ["*Dinosaurs/anatomy & histology", "Animals"]}
 
 
 def test_parse_nbib_text__ot_keywords_have_no_prefix() -> None:
@@ -592,7 +596,7 @@ def test_parse_nbib_text__ot_keywords_have_no_prefix() -> None:
 
     record = parse_nbib_text(text, _KEYWORD_MAPPING).rows[0].record
 
-    assert record.keywords == ["Quality control", "[MeSH] Quality Control"]
+    assert record.keywords == {"": ["Quality control"], "MeSH": ["Quality Control"]}
 
 
 def test_parse_nbib_text__mh_mapped_elsewhere_has_no_prefix() -> None:
@@ -640,7 +644,7 @@ def test_parse_nbib_text__editor_ad_is_left_out() -> None:
         "AD  - Department B.\n"
     )
 
-    assert _parse_authors(text).author_affiliations == "Department A."
+    assert _parse_authors(text).author_affiliations == ["Department A."]
 
 
 def test_parse_nbib_text__editor_auid_is_left_out() -> None:
@@ -651,7 +655,7 @@ def test_parse_nbib_text__editor_auid_is_left_out() -> None:
         "AUID- ORCID: 0000-0002-6000-6450\n"
     )
 
-    assert _parse_authors(text).author_ids is None
+    assert _parse_authors(text).author_ids == {}
 
 
 def test_parse_nbib_text__author_after_editor_gets_its_own_ad() -> None:
@@ -665,8 +669,8 @@ def test_parse_nbib_text__author_after_editor_gets_its_own_ad() -> None:
 
     record = _parse_authors(text)
 
-    assert record.author_names == "Smith, John"
-    assert record.author_affiliations == "Department A."
+    assert record.author_names == ["Smith, John"]
+    assert record.author_affiliations == ["Department A."]
 
 
 def test_parse_nbib_record__keeps_is_qualifier() -> None:
@@ -690,20 +694,23 @@ def test_parse_nbib_record__attaches_auid_and_ad_to_preceding_fau() -> None:
 
     row = parse_nbib_record(lines, mapping)
 
-    assert row.record.author_names == "Smith, John"
-    assert row.record.author_ids == "orcid:0000-0001-2345-6789"
-    assert row.record.author_affiliations == "University X"
+    assert row.record.author_names == ["Smith, John"]
+    assert row.record.author_ids == {"orcid": ["0000-0001-2345-6789"]}
+    assert row.record.author_affiliations == ["University X"]
 
 
 def _fail_on_bad_title(monkeypatch: pytest.MonkeyPatch) -> None:
     real = mapping_module.apply_mapping
 
     def apply(
-        raw_fields: dict[str, str], mapping: FieldMapping, settings: ParseSettings
+        raw_fields: dict[str, str],
+        mapping: FieldMapping,
+        settings: ParseSettings,
+        split_authors: dict[str, list[str]] | None = None,
     ) -> Record:
         if "Bad" in raw_fields.values():
             raise ValueError("bad value")
-        return real(raw_fields, mapping, settings)
+        return real(raw_fields, mapping, settings, split_authors)
 
     monkeypatch.setattr(mapping_module, "apply_mapping", apply)
 

@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
 
-from app.parsers.authors import AuthorIds, author_id
+from app.parsers.authors import AuthorSlots
 from app.parsers.common import (
     FileSummary,
     ParsedRow,
@@ -66,13 +66,13 @@ _TYPE_TAG = "TY"
 
 def _author_lines(
     lines: list[tuple[str, str]], rows: dict[str, AuthorsRow]
-) -> tuple[list[tuple[str, str]], AuthorIds]:
+) -> tuple[list[tuple[str, str]], AuthorSlots]:
     """An ID line belongs to the author directly above it; an affiliation line may
     sit in between, any other tag ends the author. Every name and affiliation
     line is kept: Scopus lists the affiliations after all authors."""
     kept: list[tuple[str, str]] = []
-    slots: AuthorIds = []
-    current: list[str] | None = None
+    slots: AuthorSlots = []
+    current: list[tuple[str, str]] | None = None
     for tag, value in lines:
         row = rows.get(tag)
         if row is None:
@@ -86,7 +86,7 @@ def _author_lines(
         elif row.role == "affiliations":
             kept.append((tag, value))
         elif current is not None:
-            current.append(author_id(row.id_key, value))
+            current.append((row.id_key, value))
     return kept, slots
 
 

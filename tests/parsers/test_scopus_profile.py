@@ -77,7 +77,7 @@ def test_scopus_csv__ignores_conference_details_and_publication_stage() -> None:
     }
 
 
-_IDS = "scopus_author_id:[60652739200; 59534195400]"
+_IDS = {"scopus_author_id": ["60652739200; 59534195400"]}
 
 
 def test_scopus_csv__abbreviated_names_mapped_by_hand() -> None:
@@ -85,7 +85,7 @@ def test_scopus_csv__abbreviated_names_mapped_by_hand() -> None:
 
     record = _parse_csv(row, _with_abbreviated_names(_suggest_csv(list(row))))
 
-    assert (record.author_names, record.author_ids) == ("Teng Y.; Han Y.", _IDS)
+    assert (record.author_names, record.author_ids) == (["Teng Y.; Han Y."], _IDS)
 
 
 def _without(mapping: FieldMapping, *ignored: str) -> FieldMapping:
@@ -108,7 +108,7 @@ def test_scopus_csv__ignored_author_id_column_is_not_used() -> None:
 
     record = _parse_csv(row, mapping)
 
-    assert (record.author_names, record.author_ids) == ("Teng Y.; Han Y.", None)
+    assert (record.author_names, record.author_ids) == (["Teng Y.; Han Y."], {})
 
 
 def test_scopus_csv__ignored_full_names_still_give_ids() -> None:
@@ -116,7 +116,7 @@ def test_scopus_csv__ignored_full_names_still_give_ids() -> None:
 
     record = _parse_csv(_AUTHOR_ROW, mapping)
 
-    assert (record.author_names, record.author_ids) == (None, _IDS)
+    assert (record.author_names, record.author_ids) == ([], _IDS)
 
 
 def test_scopus_csv__ignored_index_keywords_column_is_not_used() -> None:
@@ -125,13 +125,13 @@ def test_scopus_csv__ignored_index_keywords_column_is_not_used() -> None:
 
     record = _parse_csv(row, mapping)
 
-    assert record.keywords == ["author:[Asia]"]
+    assert record.keywords == {"author": ["Asia"]}
 
 
 def test_scopus_csv__unmapped_authors_stay_empty() -> None:
     record = _parse_csv(_AUTHOR_ROW, FieldMapping())
 
-    assert (record.author_names, record.author_ids) == (None, None)
+    assert (record.author_names, record.author_ids) == ([], {})
 
 
 def test_scopus_csv__prefixes_author_and_index_keywords() -> None:
@@ -142,10 +142,10 @@ def test_scopus_csv__prefixes_author_and_index_keywords() -> None:
         }
     )
 
-    assert record.keywords == [
-        "author:[ANSYS Simulation; Battery Thermal Management]",
-        "index:[Bionics; Thermal]",
-    ]
+    assert record.keywords == {
+        "author": ["ANSYS Simulation; Battery Thermal Management"],
+        "index": ["Bionics; Thermal"],
+    }
 
 
 def test_scopus_csv__unmapped_keywords_stay_empty() -> None:
@@ -153,7 +153,7 @@ def test_scopus_csv__unmapped_keywords_stay_empty() -> None:
 
     record = _parse_csv(row, FieldMapping())
 
-    assert record.keywords == []
+    assert record.keywords == {}
 
 
 def test_scopus_csv__maps_eid_and_pubmed_id() -> None:
@@ -246,7 +246,7 @@ def test_scopus_bibtex__prefixes_cleaned_author_keywords_only() -> None:
         'author_keywords = {Gr{\\"o}nland; Asia},\nkeywords = {R\\&D; Thermal},\n'
     )
 
-    assert record.keywords == ["author:[Grönland; Asia]", "keywords:[R&D; Thermal]"]
+    assert record.keywords == {"author": ["Grönland; Asia"], "": ["R&D; Thermal"]}
 
 
 def test_scopus_bibtex__ignored_author_keywords_field_is_not_used() -> None:
@@ -255,7 +255,7 @@ def test_scopus_bibtex__ignored_author_keywords_field_is_not_used() -> None:
         mapping_of({"keywords": "keywords"}),
     )
 
-    assert record.keywords == ["keywords:[Thermal]"]
+    assert record.keywords == {"": ["Thermal"]}
 
 
 def test_scopus_bibtex__unmapped_keywords_stay_empty() -> None:
@@ -263,7 +263,7 @@ def test_scopus_bibtex__unmapped_keywords_stay_empty() -> None:
         "author_keywords = {Asia},\nkeywords = {Thermal},\n", FieldMapping()
     )
 
-    assert record.keywords == []
+    assert record.keywords == {}
 
 
 def test_scopus_bibtex__non_scopus_url_gives_no_eid() -> None:

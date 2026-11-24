@@ -322,7 +322,7 @@ def test_parse_bibtex_text__keeps_keywords_unsplit() -> None:
 
     record = parse_bibtex_text(text, _MAPPING).rows[0].record
 
-    assert record.keywords == ["keywords:[machine learning; systematic review]"]
+    assert record.keywords == {"": ["machine learning; systematic review"]}
 
 
 def test_parse_bibtex_file__reads_realistic_export() -> None:
@@ -335,7 +335,7 @@ def test_parse_bibtex_file__reads_realistic_export() -> None:
     assert first.journal == "Journal of Biomedical Informatics"
     assert first.abstract == ("We evaluate neural classifiers for citation screening.")
     assert first.pages == "101-115"
-    assert first.keywords == ["keywords:[machine learning; systematic review]"]
+    assert first.keywords == {"": ["machine learning; systematic review"]}
     assert second.publication_type == "inproceedings"
     assert second.title == "R&D in Café Networks"
     assert second.pages == "7-9"
@@ -346,7 +346,7 @@ def test_parse_bibtex_text__joins_authors_split_on_and() -> None:
 
     record = parse_bibtex_text(text, _MAPPING).rows[0].record
 
-    assert record.author_names == "Smith, John|Doe, Jane|Roe, Rick"
+    assert record.author_names == ["Smith, John", "Doe, Jane", "Roe, Rick"]
 
 
 def test_parse_bibtex_text__and_inside_braces_stays_one_author() -> None:
@@ -354,7 +354,7 @@ def test_parse_bibtex_text__and_inside_braces_stays_one_author() -> None:
 
     record = parse_bibtex_text(text, _MAPPING).rows[0].record
 
-    assert record.author_names == "Barnes and Noble|Doe, Jane"
+    assert record.author_names == ["Barnes and Noble", "Doe, Jane"]
 
 
 def test_parse_bibtex_text__author_names_are_cleaned_but_not_split() -> None:
@@ -362,7 +362,7 @@ def test_parse_bibtex_text__author_names_are_cleaned_but_not_split() -> None:
 
     record = parse_bibtex_text(text, _MAPPING).rows[0].record
 
-    assert record.author_names == "Müller, Hans R.|Jane Doe"
+    assert record.author_names == ["Müller, Hans R.", "Jane Doe"]
 
 
 def test_parse_bibtex_text__authors_ignore_keyword_delimiter() -> None:
@@ -370,7 +370,7 @@ def test_parse_bibtex_text__authors_ignore_keyword_delimiter() -> None:
 
     record = parse_bibtex_text(text, _MAPPING).rows[0].record
 
-    assert record.author_names == "Smith; Jr., John|Doe, Jane"
+    assert record.author_names == ["Smith; Jr., John", "Doe, Jane"]
 
 
 def test_parse_bibtex_record__unmapped_author_field_adds_no_authors() -> None:
@@ -378,7 +378,7 @@ def test_parse_bibtex_record__unmapped_author_field_adds_no_authors() -> None:
 
     row = parse_bibtex_record([("title", "T"), ("author", "Doe, Jane")], mapping)
 
-    assert row.record.author_names is None
+    assert row.record.author_names == []
 
 
 def test_read_bibtex_fields__file_without_entries_has_no_samples(
@@ -458,12 +458,12 @@ def test_parse_bibtex_file__default_mapping_on_realistic_export() -> None:
 
     first, second = (row.record for row in parse_bibtex_file(path, mapping).rows)
 
-    assert first.author_names == "Smith, John A.|Müller, Hans|Barnes and Noble"
+    assert first.author_names == ["Smith, John A.", "Müller, Hans", "Barnes and Noble"]
     assert first.issue == "3"
     assert first.doi == "10.1016/j.jbi.2024.101"
     assert first.publication_date == "2024/mar/"
     assert second.journal == "Proceedings of the 5th Conference"
-    assert second.author_names == "Jane Doe"
+    assert second.author_names == ["Jane Doe"]
 
 
 def test_parse_bibtex_file__reads_scopus_export() -> None:
@@ -476,9 +476,11 @@ def test_parse_bibtex_file__reads_scopus_export() -> None:
     assert len(result.rows) == 10
     olsen = next(r.record for r in result.rows if r.raw_fields["@key"] == "Olsen202619")
     assert olsen.publication_type == "article"
-    assert olsen.author_names == (
-        "Olsen, Paul E.|McDonald, Nicholas G.|Kinney, Sean T."
-    )
+    assert olsen.author_names == [
+        "Olsen, Paul E.",
+        "McDonald, Nicholas G.",
+        "Kinney, Sean T.",
+    ]
     assert olsen.journal == "GSA Field Guides"
     assert olsen.volume == "77"
     assert olsen.pages == "19-65"
@@ -492,11 +494,14 @@ def _fail_on_bad_title(monkeypatch: pytest.MonkeyPatch) -> None:
     real = bibtex.apply_mapping
 
     def apply(
-        raw_fields: dict[str, str], mapping: FieldMapping, settings: ParseSettings
+        raw_fields: dict[str, str],
+        mapping: FieldMapping,
+        settings: ParseSettings,
+        split_authors: dict[str, list[str]] | None = None,
     ) -> Record:
         if "Bad" in raw_fields.values():
             raise ValueError("bad value")
-        return real(raw_fields, mapping, settings)
+        return real(raw_fields, mapping, settings, split_authors)
 
     monkeypatch.setattr(bibtex, "apply_mapping", apply)
 

@@ -39,7 +39,7 @@ def _records() -> list[ExportRecord]:
             id=1,
             record=Record(
                 title="Deep learning",
-                author_names="LeCun, Yann",
+                author_names=["LeCun, Yann"],
                 doi="10.1038/nature14539",
             ),
             sources=[

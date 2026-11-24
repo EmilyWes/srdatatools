@@ -70,7 +70,7 @@ def test_parse_ris_text__repeated_author_tags_become_separate_authors() -> None:
 
     result = parse_ris_text(text, _MAPPING)
 
-    assert result.rows[0].record.author_names == "Smith, John|Doe, Jane"
+    assert result.rows[0].record.author_names == ["Smith, John", "Doe, Jane"]
 
 
 _AFFILIATION_MAPPING = mapping_of(
@@ -86,8 +86,8 @@ def test_parse_ris_text__joins_affiliation_lines_in_order() -> None:
 
     record = parse_ris_text(text, _AFFILIATION_MAPPING).rows[0].record
 
-    assert record.author_names == "Smith, John|Doe, Jane"
-    assert record.author_affiliations == "Uni A|Uni B|Uni C"
+    assert record.author_names == ["Smith, John", "Doe, Jane"]
+    assert record.author_affiliations == ["Uni A", "Uni B", "Uni C"]
 
 
 def test_parse_ris_text__first_affiliation_tag_with_lines_wins() -> None:
@@ -95,7 +95,7 @@ def test_parse_ris_text__first_affiliation_tag_with_lines_wins() -> None:
 
     record = parse_ris_text(text, _AFFILIATION_MAPPING).rows[0].record
 
-    assert record.author_affiliations == "Uni B"
+    assert record.author_affiliations == ["Uni B"]
 
 
 def test_parse_ris_text__keeps_affiliations_listed_after_all_authors() -> None:
@@ -106,7 +106,7 @@ def test_parse_ris_text__keeps_affiliations_listed_after_all_authors() -> None:
 
     record = parse_ris_text(text, _AFFILIATION_MAPPING).rows[0].record
 
-    assert record.author_affiliations == "Uni A|Uni B"
+    assert record.author_affiliations == ["Uni A", "Uni B"]
 
 
 _ID_MAPPING = mapping_of(
@@ -128,7 +128,9 @@ def test_parse_ris_text__id_line_belongs_to_the_author_above() -> None:
 
     record = parse_ris_text(text, _ID_MAPPING).rows[0].record
 
-    assert record.author_ids == ("orcid:0000-0001-2345-6789||orcid:0000-0002-0000-0000")
+    assert record.author_ids == {
+        "orcid": ["0000-0001-2345-6789", "", "0000-0002-0000-0000"]
+    }
 
 
 def test_parse_ris_text__other_tag_ends_the_author_for_id_lines() -> None:
@@ -139,7 +141,7 @@ def test_parse_ris_text__other_tag_ends_the_author_for_id_lines() -> None:
 
     record = parse_ris_text(text, _ID_MAPPING).rows[0].record
 
-    assert record.author_ids is None
+    assert record.author_ids == {}
 
 
 def test_parse_ris_text__unmapped_affiliation_tag_is_ignored() -> None:
@@ -147,8 +149,8 @@ def test_parse_ris_text__unmapped_affiliation_tag_is_ignored() -> None:
 
     record = parse_ris_text(text, _MAPPING).rows[0].record
 
-    assert record.author_names == "Smith, John"
-    assert record.author_affiliations is None
+    assert record.author_names == ["Smith, John"]
+    assert record.author_affiliations == []
 
 
 def test_parse_ris_text__repeated_keyword_tags_collect_all() -> None:
@@ -156,7 +158,7 @@ def test_parse_ris_text__repeated_keyword_tags_collect_all() -> None:
 
     result = parse_ris_text(text, _MAPPING)
 
-    assert result.rows[0].record.keywords == ["nlp", "machine learning"]
+    assert result.rows[0].record.keywords == {"": ["nlp", "machine learning"]}
 
 
 def test_parse_ris_text__repeated_tag_is_joined_with_newline_in_raw_fields() -> None:
@@ -174,7 +176,7 @@ def test_parse_ris_text__continuation_line_extends_previous_value() -> None:
     result = parse_ris_text(text, _MAPPING)
 
     assert result.rows[0].record.abstract == "First line.\nSecond line."
-    assert result.rows[0].record.keywords == ["nlp"]
+    assert result.rows[0].record.keywords == {"": ["nlp"]}
 
 
 def test_parse_ris_text__parses_several_records_with_blank_lines() -> None:
@@ -270,7 +272,7 @@ def test_parse_ris_file__reads_realistic_export() -> None:
         "We evaluate neural classifiers for citation screening.\n"
         "Results show a large reduction in manual workload."
     )
-    assert first.keywords == ["machine learning", "systematic review"]
+    assert first.keywords == {"": ["machine learning", "systematic review"]}
     assert second.notes == "Preprint available\nPresented as a poster"
 
 
@@ -346,7 +348,7 @@ def test_parse_ris_text__keeps_names_as_in_the_file() -> None:
 
     result = parse_ris_text(text, suggest_ris_mapping(["AU"]))
 
-    assert result.rows[0].record.author_names == "Smith, John|Madonna"
+    assert result.rows[0].record.author_names == ["Smith, John", "Madonna"]
 
 
 def test_suggest_ris_mapping__first_of_alternate_title_tags_wins_in_parse() -> None:
@@ -410,7 +412,7 @@ def test_parse_ris_file__default_mapping_on_realistic_export() -> None:
 
     first = result.rows[0].record
     assert first.publication_type == "JOUR"
-    assert first.author_names == "Smith, John A.|Doe, Jane"
+    assert first.author_names == ["Smith, John A.", "Doe, Jane"]
     assert first.pages == "100-110"
     assert first.doi == "10.1016/j.jbi.2020.1"
     assert first.publication_date == "2020///"
@@ -485,7 +487,7 @@ def test_parse_ris_record__joins_repeated_tags() -> None:
 
     row = parse_ris_record(lines, _MAPPING)
 
-    assert row.record.author_names == "Smith, John|Doe, Jane"
+    assert row.record.author_names == ["Smith, John", "Doe, Jane"]
     assert row.record.title == "Some Paper"
     assert row.raw_fields["AU"] == "Smith, John\nDoe, Jane"
 
@@ -494,11 +496,14 @@ def _fail_on_bad_title(monkeypatch: pytest.MonkeyPatch) -> None:
     real = mapping_module.apply_mapping
 
     def apply(
-        raw_fields: dict[str, str], mapping: FieldMapping, settings: ParseSettings
+        raw_fields: dict[str, str],
+        mapping: FieldMapping,
+        settings: ParseSettings,
+        split_authors: dict[str, list[str]] | None = None,
     ) -> Record:
         if "Bad" in raw_fields.values():
             raise ValueError("bad value")
-        return real(raw_fields, mapping, settings)
+        return real(raw_fields, mapping, settings, split_authors)
 
     monkeypatch.setattr(mapping_module, "apply_mapping", apply)
 

@@ -18,6 +18,8 @@ from app.parsers.mapping import FieldMapping
 
 # Cleaning doesn't touch these, and they aren't plain columns.
 _NOT_CLEANED = {"labels"}
+# Their values are stored as they come; RIS and NBIB give one per line.
+_SPLIT_FORMATS = frozenset({"csv", "tsv", "excel", "bibtex"})
 
 
 def _context(
@@ -34,6 +36,7 @@ def _context(
     source_file = source.source_file
     return CleaningContext(
         raw_fields=source.raw_fields,
+        split=source_file.format in _SPLIT_FORMATS,
         mapping=FieldMapping.model_validate(source_file.field_mapping),
         use_first=tuple(source_file.option_choices.get("use_first", [])),
         names_separator=separators[0],

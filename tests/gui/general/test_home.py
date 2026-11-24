@@ -421,7 +421,7 @@ def test_home__show_in_table_expands_author_ids_to_key_columns(
 ) -> None:
     _add_source_file_with_record(engine)
     with Session(engine) as session:
-        session.query(Record).one().author_ids = "orcid:[1; 2]"
+        session.query(Record).one().author_ids = {"orcid": ["1; 2"]}
         session.commit()
     shells = _capture_shells(monkeypatch)
     home()

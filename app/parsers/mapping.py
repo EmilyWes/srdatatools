@@ -7,14 +7,8 @@ from typing import Annotated, Any, Literal, TypeVar, get_args
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_validator
 
-from app.helpers.format import STORAGE_SEPARATOR
 from app.models.record import Label, LabelValue, PartialDate, Record
-from app.parsers.authors import (
-    ID_JOINER,
-    AuthorIds,
-    format_author_ids,
-    unsplit_author_ids,
-)
+from app.parsers.authors import AuthorSlots, ids_by_key
 from app.parsers.parse_settings import DEFAULT_SETTINGS, ParseSettings
 
 logger = logging.getLogger(__name__)
@@ -24,11 +18,6 @@ _SUGGESTION_CUTOFF = 0.85
 # Case-sensitive on purpose: "PMCID" is an ID header, "Valid" is not.
 _ID_HEADER = re.compile(r"(?<![A-Za-z])[Ii][Dd](?![A-Za-z])|[A-Z]ID(?![A-Za-z])")
 _KEYWORD_HEADER = re.compile(r"keywords?", re.IGNORECASE)
-
-_TAGGED_KEYWORD = re.compile(r"\[([^\]]+)\] (.*)", re.DOTALL)
-_UNSPLIT_KEYWORDS = re.compile(r"(?P<key>[^:\[\]]+):\[(?P<value>.*)\]", re.DOTALL)
-# The key of unsplit keywords without a prefix.
-UNPREFIXED_KEYWORDS_KEY = "keywords"
 
 _MONTH_ABBREVIATIONS = {
     "jan": 1,
@@ -138,8 +127,7 @@ class AuthorsRow(BaseModel):
 
 
 class KeywordsRow(BaseModel):
-    """prefix is a bare name; keywords get it as "[name] keyword", so an export can
-    split the prefix off again."""
+    """prefix is a bare name; "" is no prefix."""
 
     target: Literal["keywords"] = "keywords"
     prefix: str = ""
@@ -148,34 +136,6 @@ class KeywordsRow(BaseModel):
     @classmethod
     def strip_brackets(cls, value: str) -> str:
         return value.strip().removeprefix("[").removesuffix("]").strip()
-
-
-def tag_keyword(prefix: str, keyword: str) -> str:
-    return f"[{prefix}] {keyword}" if prefix else keyword
-
-
-def split_keyword(keyword: str) -> tuple[str | None, str]:
-    """An unsplit "prefix:[value]" gives its whole value as one keyword."""
-    if (unsplit := parse_unsplit_keywords(keyword)) is not None:
-        prefix, value = unsplit
-        return prefix or None, value
-    match = _TAGGED_KEYWORD.fullmatch(keyword)
-    return (match[1], match[2]) if match else (None, keyword)
-
-
-def unsplit_keywords(prefix: str, value: str) -> str:
-    """A column holding all of a record's keywords, stored as "prefix:[value]"
-    until cleaning splits it."""
-    return f"{prefix or UNPREFIXED_KEYWORDS_KEY}:[{value}]"
-
-
-def parse_unsplit_keywords(keyword: str) -> tuple[str, str] | None:
-    """The prefix ("" for none) and the unsplit value."""
-    match = _UNSPLIT_KEYWORDS.fullmatch(keyword)
-    if match is None:
-        return None
-    key = match["key"]
-    return ("" if key == UNPREFIXED_KEYWORDS_KEY else key), match["value"]
 
 
 class LabelRow(BaseModel):
@@ -429,13 +389,17 @@ def apply_mapping(
     raw_fields: dict[str, str],
     mapping: FieldMapping,
     settings: ParseSettings = DEFAULT_SETTINGS,
+    split_authors: Mapping[str, list[str]] | None = None,
 ) -> Record:
+    """A table cell is stored as one value, which cleaning splits; `split_authors`
+    gives the names or affiliations of a key already split by the format."""
     mapping = ordered_mapping(mapping, settings.use_first)
+    split_authors = split_authors or {}
     values: dict[str, Any] = {}
     other_ids: dict[str, str] = {}
-    keywords: list[str] = []
+    keywords: dict[str, list[str]] = {}
     labels: list[Label] = []
-    author_ids: list[str] = []
+    author_ids: dict[str, list[str]] = {}
     for key, row in mapping.rows.items():
         value = (raw_fields.get(key) or "").strip()
         if isinstance(row, LabelRow):
@@ -456,18 +420,24 @@ def apply_mapping(
         elif isinstance(row, OtherIdRow):
             other_ids[row.key] = value
         elif isinstance(row, KeywordsRow):
-            keywords.append(unsplit_keywords(row.prefix, value))
+            keywords.setdefault(row.prefix, []).append(value)
         elif isinstance(row, AuthorsRow):
-            if row.role == "ids":
-                author_ids.append(unsplit_author_ids(row.id_key, value))
+            if row.role != "ids":
+                items = split_authors.get(key, [value])
+                if items:
+                    values.setdefault(_AUTHOR_FIELDS[row.role], items)
+            elif row.id_key in author_ids:
+                logger.warning(
+                    "Ignoring %r: an earlier column gives %r", key, row.id_key
+                )
             else:
-                values.setdefault(_AUTHOR_FIELDS[row.role], value)
+                author_ids[row.id_key] = [value]
 
     return Record(
         **values,
         pages=_parse_pages(raw_fields, mapping),
         other_ids=other_ids,
-        author_ids=ID_JOINER.join(author_ids) or None,
+        author_ids=author_ids,
         keywords=keywords,
         labels=labels,
         publication_date=_parse_publication_date(raw_fields, mapping),
@@ -476,7 +446,7 @@ def apply_mapping(
 
 TagLines = list[tuple[str, str]]
 # The name and affiliation lines to keep, plus each author's ids.
-LineAuthors = Callable[[TagLines, dict[str, AuthorsRow]], tuple[TagLines, AuthorIds]]
+LineAuthors = Callable[[TagLines, dict[str, AuthorsRow]], tuple[TagLines, AuthorSlots]]
 
 
 def join_tag_lines(lines: TagLines) -> dict[str, str]:
@@ -496,22 +466,21 @@ def apply_line_mapping(
     settings: ParseSettings,
     author_lines: LineAuthors,
 ) -> Record:
-    """The kept name and affiliation lines are joined with STORAGE_SEPARATOR; the ids
-    come from the lines in order, so each stays with its author line rather than
-    being matched by position. Each keyword line is a keyword."""
+    """Each kept name and affiliation line is one author's; the ids come from the
+    lines in order, so each stays with its author line rather than being matched
+    by position. Each keyword line is a keyword."""
     author_rows = dict(mapping.rows_of(AuthorsRow))
-    kept, author_ids = author_lines(lines, author_rows)
-    joined = {
-        tag: STORAGE_SEPARATOR.join(value for t, value in kept if t == tag)
+    kept, slots = author_lines(lines, author_rows)
+    split_authors = {
+        tag: [value for t, value in kept if t == tag]
         for tag, row in author_rows.items()
         if row.role != "ids"
     }
-    keywords = [
-        tag_keyword(row.prefix, line.strip())
-        for key, row in mapping.rows_of(KeywordsRow)
-        for line in (raw_fields.get(key) or "").splitlines()
-        if line.strip()
-    ]
+    keywords: dict[str, list[str]] = {}
+    for key, row in mapping.rows_of(KeywordsRow):
+        for line in (raw_fields.get(key) or "").splitlines():
+            if line.strip():
+                keywords.setdefault(row.prefix, []).append(line.strip())
     rest = {
         key: row
         for key, row in mapping.rows.items()
@@ -519,12 +488,10 @@ def apply_line_mapping(
         and not (isinstance(row, AuthorsRow) and row.role == "ids")
     }
     record = apply_mapping(
-        {**raw_fields, **joined},
-        mapping.model_copy(update={"rows": rest}),
-        settings,
+        raw_fields, mapping.model_copy(update={"rows": rest}), settings, split_authors
     )
     return record.model_copy(
-        update={"author_ids": format_author_ids(author_ids), "keywords": keywords}
+        update={"author_ids": ids_by_key(slots), "keywords": keywords}
     )
 
 

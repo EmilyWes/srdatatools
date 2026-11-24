@@ -173,9 +173,9 @@ def test_store_parsed_rows__handles_multiple_rows_in_one_call(
 def test_store_parsed_rows__stores_author_fields(session: Session) -> None:
     schema = RecordSchema(
         title="A Study of Things",
-        author_names="Smith, Jane|Doe, John",
-        author_ids="orcid:0000-0001-2345-6789|",
-        author_affiliations="University of Example",
+        author_names=["Smith, Jane", "Doe, John"],
+        author_ids={"orcid": ["0000-0001-2345-6789", ""]},
+        author_affiliations=["University of Example"],
     )
 
     store_parsed_rows(
@@ -188,9 +188,9 @@ def test_store_parsed_rows__stores_author_fields(session: Session) -> None:
     session.commit()
 
     record = session.query(Record).one()
-    assert record.author_names == "Smith, Jane|Doe, John"
-    assert record.author_ids == "orcid:0000-0001-2345-6789|"
-    assert record.author_affiliations == "University of Example"
+    assert record.author_names == ["Smith, Jane", "Doe, John"]
+    assert record.author_ids == {"orcid": ["0000-0001-2345-6789", ""]}
+    assert record.author_affiliations == ["University of Example"]
 
 
 def test_store_parsed_rows__stores_skipped_rows_on_source_file(

@@ -39,8 +39,7 @@ from app.helpers.format import (
 )
 from app.helpers.options_overview import render_box_frame
 from app.models.record import publication_year
-from app.parsers.authors import author_ids_for_key
-from app.parsers.mapping import split_keyword
+from app.parsers.authors import ids_of_key
 from app.parsers.profiles import source_label
 
 _COLUMNS_KEY = "table_columns"
@@ -93,7 +92,7 @@ COLUMNS: dict[str, str] = {
 # Columns worked out from other fields rather than read from one.
 _DERIVED_COLUMNS = ("sources", "keywords", "publication_year", "data_quality")
 DEFAULT_COLUMNS = ["doi", "title", "author_names"]
-_JOINED_FIELDS = frozenset({"author_names", "author_affiliations", "issn", "isbn"})
+_JOINED_FIELDS = frozenset({"issn", "isbn"})
 _QUALITY_FILTER_STATE: dict[str, Any] = {
     "filter": {
         "filterModel": {"data_quality": {"filterType": "text", "type": "notBlank"}}
@@ -251,23 +250,21 @@ def load_rows(
         fields.extend(QUALITY_FIELDS)
     rows = []
     for record in list_record_rows(session, list(dict.fromkeys(fields))):
-        keywords = [split_keyword(keyword) for keyword in record.pop("keywords", [])]
+        keywords: dict[str, list[str]] = record.pop("keywords", {})
         row = row_for(record)
         for key in author_id_columns:
-            row[column_field(key)] = author_ids_for_key(
-                record.get("author_ids"), author_id_name(key), DISPLAY_SEPARATOR
+            row[column_field(key)] = DISPLAY_SEPARATOR.join(
+                ids_of_key(record["author_ids"], author_id_name(key))
             )
         if "data_quality" in columns:
             row["data_quality"] = DISPLAY_SEPARATOR.join(quality_issues(record))
         if "publication_year" in columns:
             row["publication_year"] = publication_year(row.get("publication_date"))
         if "keywords" in columns:
-            row["keywords"] = DISPLAY_SEPARATOR.join(
-                text for prefix, text in keywords if prefix is None
-            )
+            row["keywords"] = DISPLAY_SEPARATOR.join(keywords.get("", []))
         for key in keyword_columns:
             row[column_field(key)] = DISPLAY_SEPARATOR.join(
-                text for prefix, text in keywords if prefix == keyword_prefix(key)
+                keywords.get(keyword_prefix(key) or "", [])
             )
         rows.append(row)
     if "sources" in columns:

@@ -41,9 +41,11 @@ def _context(
     affiliations: str | None = None,
     ids: str | None = None,
     keywords: str | None = None,
+    split: bool = True,
 ) -> CleaningContext:
     return CleaningContext(
         raw_fields=raw_fields or {},
+        split=split,
         mapping=mapping or FieldMapping(),
         use_first=use_first,
         names_separator=names,
@@ -159,21 +161,23 @@ def test_strip_pmid__keeps_only_the_digits(pmid: str, expected: str) -> None:
 @pytest.mark.parametrize(
     ("names", "expected"),
     [
-        ("Smith J|et al.", "Smith J"),
-        ("Smith J, Doe A, et al.", "Smith J, Doe A"),
-        ("Smith J; et al.", "Smith J"),
-        ("Smith J et al.", "Smith J"),
-        ("et al.", None),
+        (["Smith J", "et al."], ["Smith J"]),
+        (["Smith J, Doe A, et al."], ["Smith J, Doe A"]),
+        (["Smith J; et al."], ["Smith J"]),
+        (["Smith J", "Doe A et al."], ["Smith J", "Doe A"]),
+        (["et al."], []),
     ],
 )
-def test_drop_et_al__drops_trailing_et_al(names: str, expected: str | None) -> None:
+def test_drop_et_al__drops_trailing_et_al(
+    names: list[str], expected: list[str]
+) -> None:
     record = drop_et_al(Record(author_names=names), _NO_CONTEXT, _OPTIONS)
 
     assert record.author_names == expected
 
 
 def test_drop_et_al__keeps_names_without_et_al() -> None:
-    record = Record(author_names="Smith J|Petal.")
+    record = Record(author_names=["Smith J", "Petal."])
 
     assert drop_et_al(record, _NO_CONTEXT, _OPTIONS) == record
 
@@ -181,16 +185,18 @@ def test_drop_et_al__keeps_names_without_et_al() -> None:
 @pytest.mark.parametrize(
     ("names", "expected"),
     [
-        ("Brown, Barnum.", "Brown, Barnum"),
-        ("Owen,", "Owen"),
-        ("Doe ...", "Doe"),
-        ("Doe A;, ", "Doe A"),
-        ("Doe…", "Doe"),
-        ("Illinois State Museum;", "Illinois State Museum"),
+        (["Brown, Barnum."], ["Brown, Barnum"]),
+        (["Owen,"], ["Owen"]),
+        (["Doe ..."], ["Doe"]),
+        (["Doe A;, "], ["Doe A"]),
+        (["Doe…"], ["Doe"]),
+        (["Illinois State Museum;"], ["Illinois State Museum"]),
+        (["Smith J.", "Owen,"], ["Smith J.", "Owen"]),
+        ([";"], []),
     ],
 )
 def test_drop_trailing__strips_punctuation_and_spaces(
-    names: str, expected: str
+    names: list[str], expected: list[str]
 ) -> None:
     record = drop_trailing(Record(author_names=names), _NO_CONTEXT, _OPTIONS)
 
@@ -200,16 +206,16 @@ def test_drop_trailing__strips_punctuation_and_spaces(
 @pytest.mark.parametrize(
     ("names", "expected"),
     [
-        ("Smith J.|Doe A.", "Smith J.|Doe A."),
-        ("Galton, P.M.", "Galton, P.M."),
-        ("Bolotsky, I. Yu.", "Bolotsky, I. Yu."),
-        ("Doe A.;, ", "Doe A."),
-        ("Doe (1).", "Doe (1)."),
-        ("Romano M, Novacek MJ.", "Romano M, Novacek MJ."),
+        (["Smith J.", "Doe A."], ["Smith J.", "Doe A."]),
+        (["Galton, P.M."], ["Galton, P.M."]),
+        (["Bolotsky, I. Yu."], ["Bolotsky, I. Yu."]),
+        (["Doe A.;, "], ["Doe A."]),
+        (["Doe (1)."], ["Doe (1)."]),
+        (["Romano M, Novacek MJ."], ["Romano M, Novacek MJ."]),
     ],
 )
 def test_drop_trailing__keeps_full_stop_after_short_word(
-    names: str, expected: str
+    names: list[str], expected: list[str]
 ) -> None:
     record = drop_trailing(Record(author_names=names), _NO_CONTEXT, _OPTIONS)
 
@@ -223,10 +229,10 @@ def test_drop_trailing__without_authors_leaves_record_unchanged() -> None:
 def test_file_separators__chosen_separator_wins_over_sniffing() -> None:
     records = [
         Record(
-            author_names="A; B",
-            author_affiliations="X; Y",
-            author_ids="scopus_author_id:[1|2]",
-            keywords=["Author:[a; b]", "[MeSH] c|d"],
+            author_names=["A; B"],
+            author_affiliations=["X; Y"],
+            author_ids={"scopus_author_id": ["1|2"]},
+            keywords={"Author": ["a; b"], "MeSH": ["c|d", "e; f"]},
         )
     ]
 
@@ -238,110 +244,142 @@ def test_file_separators__chosen_separator_wins_over_sniffing() -> None:
     )
 
 
-def test_split_authors__joins_names_and_affiliations_with_bar() -> None:
+def test_file_separators__sniffs_over_every_value() -> None:
+    records = [
+        Record(author_ids={"a": ["1|2"], "b": ["3; 4"]}),
+        Record(author_ids={"b": ["5; 6"]}),
+    ]
+
+    assert file_separators(records, _OPTIONS)[2] == ";"
+
+
+def test_split_authors__splits_names_and_affiliations() -> None:
     record = Record(
-        author_names="Teng, Yu; Han, Li",
-        author_affiliations="Guangxi, China ; Nanning University",
+        author_names=["Teng, Yu; Han, Li"],
+        author_affiliations=["Guangxi, China ; Nanning University"],
     )
 
     cleaned = split_authors(record, _context(names=";", affiliations=";"), _OPTIONS)
 
-    assert cleaned.author_names == "Teng, Yu|Han, Li"
-    assert cleaned.author_affiliations == "Guangxi, China|Nanning University"
+    assert cleaned.author_names == ["Teng, Yu", "Han, Li"]
+    assert cleaned.author_affiliations == ["Guangxi, China", "Nanning University"]
 
 
 def test_split_authors__keeps_empty_pieces() -> None:
     record = Record(
-        author_names="Teng, Yu; ;Han, Li ;",
-        author_affiliations="Guangxi, China ; ; Nanning University",
+        author_names=["Teng, Yu; ;Han, Li ;"],
+        author_affiliations=["Guangxi, China ; ; Nanning University"],
     )
 
     cleaned = split_authors(record, _context(names=";", affiliations=";"), _OPTIONS)
 
-    assert cleaned.author_names == "Teng, Yu||Han, Li|"
-    assert cleaned.author_affiliations == "Guangxi, China||Nanning University"
+    assert cleaned.author_names == ["Teng, Yu", "", "Han, Li", ""]
+    assert cleaned.author_affiliations == ["Guangxi, China", "", "Nanning University"]
 
 
-def test_split_authors__value_already_split_is_left_alone() -> None:
-    record = Record(author_names="Doe, J|Roe, K")
+def test_split_authors__only_empty_pieces_leave_no_authors() -> None:
+    record = Record(author_names=[" ; "])
 
-    assert split_authors(record, _context(names=","), _OPTIONS) == record
+    assert split_authors(record, _context(names=";"), _OPTIONS).author_names == []
+
+
+def test_split_authors__splitting_again_changes_nothing() -> None:
+    record = Record(
+        author_names=["Doe, J; Roe, K"], author_ids={"scopus_author_id": ["1; 2"]}
+    )
+    context = _context(names=";", ids=";")
+
+    once = split_authors(record, context, _OPTIONS)
+
+    assert split_authors(once, context, _OPTIONS) == once
+
+
+def test_split_authors__line_format_values_are_left_alone() -> None:
+    record = Record(author_names=["Doe, J; Roe, K"])
+
+    assert split_authors(record, _context(names=";", split=False), _OPTIONS) == record
 
 
 def test_split_authors__without_separator_leaves_record_unchanged() -> None:
-    record = Record(author_names="Teng, Yu; Han, Li")
+    record = Record(author_names=["Teng, Yu; Han, Li"])
 
-    assert split_authors(record, _NO_CONTEXT, _OPTIONS) == record
+    assert split_authors(record, _context(), _OPTIONS) == record
 
 
 def test_split_authors__splits_id_column_per_author() -> None:
-    record = Record(author_ids="scopus_author_id:[601; 602;603]")
+    record = Record(author_ids={"scopus_author_id": ["601; 602;603"]})
 
     cleaned = split_authors(record, _context(ids=";"), _OPTIONS)
 
-    assert cleaned.author_ids == (
-        "scopus_author_id:601|scopus_author_id:602|scopus_author_id:603"
-    )
+    assert cleaned.author_ids == {"scopus_author_id": ["601", "602", "603"]}
 
 
-def test_split_authors__merges_id_columns_by_position() -> None:
+def test_split_authors__splits_each_id_key_on_its_own() -> None:
     record = Record(
-        author_ids="openalex_author_id:[A1|A2|A3], orcid:[https://orcid.org/0-1||0-3]"
+        author_ids={
+            "openalex_author_id": ["A1|A2|A3"],
+            "orcid": ["https://orcid.org/0-1||0-3"],
+        }
     )
 
     cleaned = split_authors(record, _context(ids="|"), _OPTIONS)
 
-    assert cleaned.author_ids == (
-        "openalex_author_id:A1, orcid:0-1|openalex_author_id:A2"
-        "|openalex_author_id:A3, orcid:0-3"
-    )
+    assert cleaned.author_ids == {
+        "openalex_author_id": ["A1", "A2", "A3"],
+        "orcid": ["0-1", "", "0-3"],
+    }
 
 
-def test_split_authors__id_column_with_other_author_count_is_ignored(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    record = Record(author_ids="openalex_author_id:[A1|A2], orcid:[0-1]")
+def test_split_authors__id_column_with_other_author_count_is_kept() -> None:
+    record = Record(author_ids={"openalex_author_id": ["A1|A2"], "orcid": ["0-1"]})
 
     cleaned = split_authors(record, _context(ids="|"), _OPTIONS)
 
-    assert cleaned.author_ids == "openalex_author_id:A1|openalex_author_id:A2"
-    assert "orcid" in caplog.text
+    assert cleaned.author_ids == {"openalex_author_id": ["A1", "A2"], "orcid": ["0-1"]}
 
 
 def test_split_authors__without_ids_separator_the_column_is_one_author() -> None:
-    record = Record(author_ids="scopus_author_id:[601]")
+    record = Record(author_ids={"orcid": ["https://orcid.org/0-1"]})
 
-    cleaned = split_authors(record, _NO_CONTEXT, _OPTIONS)
+    cleaned = split_authors(record, _context(), _OPTIONS)
 
-    assert cleaned.author_ids == "scopus_author_id:601"
-
-
-def test_split_authors__ids_already_split_are_left_alone() -> None:
-    record = Record(author_ids="scopus_author_id:601|scopus_author_id:602")
-
-    assert split_authors(record, _context(ids=";"), _OPTIONS) == record
+    assert cleaned.author_ids == {"orcid": ["0-1"]}
 
 
-def test_split_keywords__splits_unsplit_values_keeping_the_prefix() -> None:
-    record = Record(keywords=["Author:[fossils; dinosaurs ;]", "keywords:[Humans]"])
+def test_split_authors__id_column_of_only_separators_is_dropped() -> None:
+    record = Record(author_ids={"orcid": [" | "]})
+
+    assert split_authors(record, _context(ids="|"), _OPTIONS).author_ids == {}
+
+
+def test_split_keywords__splits_values_keeping_the_prefix() -> None:
+    record = Record(keywords={"Author": ["fossils; dinosaurs ;"], "": ["Humans"]})
 
     cleaned = split_keywords(record, _context(keywords=";"), _OPTIONS)
 
-    assert cleaned.keywords == ["[Author] fossils", "[Author] dinosaurs", "Humans"]
+    assert cleaned.keywords == {"Author": ["fossils", "dinosaurs"], "": ["Humans"]}
 
 
-def test_split_keywords__split_keywords_are_left_alone() -> None:
-    record = Record(keywords=["[MeSH] Humans", "fossils; dinosaurs"])
+def test_split_keywords__splits_every_value_of_a_prefix() -> None:
+    record = Record(keywords={"": ["a; b", "c"]})
 
-    assert split_keywords(record, _context(keywords=";"), _OPTIONS) == record
+    cleaned = split_keywords(record, _context(keywords=";"), _OPTIONS)
+
+    assert cleaned.keywords == {"": ["a", "b", "c"]}
+
+
+def test_split_keywords__line_format_values_are_left_alone() -> None:
+    record = Record(keywords={"MeSH": ["fossils; dinosaurs"]})
+
+    assert split_keywords(record, _context(keywords=";", split=False), _OPTIONS) == (
+        record
+    )
 
 
 def test_split_keywords__without_separator_the_value_is_one_keyword() -> None:
-    record = Record(keywords=["keywords:[fossils; dinosaurs]"])
+    record = Record(keywords={"": ["fossils; dinosaurs"]})
 
-    cleaned = split_keywords(record, _NO_CONTEXT, _OPTIONS)
-
-    assert cleaned.keywords == ["fossils; dinosaurs"]
+    assert split_keywords(record, _context(), _OPTIONS) == record
 
 
 @pytest.mark.parametrize(
@@ -383,51 +421,54 @@ def test_clean_date__cleaning_again_changes_nothing() -> None:
 
 
 def test_id_from_name__moves_ids_out_of_names() -> None:
-    record = Record(author_names="Teng, Yu (60652739200)|Han, Li (57190000001)")
+    record = Record(author_names=["Teng, Yu (60652739200)", "Han, Li (57190000001)"])
 
     record = id_from_name(record, _NO_CONTEXT, _OPTIONS)
 
-    assert record.author_names == "Teng, Yu|Han, Li"
-    assert record.author_ids == (
-        "scopus_author_id:60652739200|scopus_author_id:57190000001"
-    )
+    assert record.author_names == ["Teng, Yu", "Han, Li"]
+    assert record.author_ids == {"scopus_author_id": ["60652739200", "57190000001"]}
 
 
 def test_id_from_name__adds_to_ids_already_from_a_column() -> None:
     record = Record(
-        author_names="Teng (1)|Han (2)",
-        author_ids="scopus_author_id:1|scopus_author_id:3",
+        author_names=["Teng (1)", "Han (2)"],
+        author_ids={"scopus_author_id": ["1", "3"]},
     )
 
     record = id_from_name(record, _NO_CONTEXT, _OPTIONS)
 
-    assert record.author_ids == (
-        "scopus_author_id:1|scopus_author_id:3, scopus_author_id:2"
-    )
+    assert record.author_ids == {"scopus_author_id": ["1", "3 | 2"]}
 
 
 def test_id_from_name__keeps_empty_slot_for_name_without_id() -> None:
-    record = id_from_name(Record(author_names="Teng (1)|Han"), _NO_CONTEXT, _OPTIONS)
+    record = id_from_name(
+        Record(author_names=["Teng (1)", "Han"]), _NO_CONTEXT, _OPTIONS
+    )
 
     assert (record.author_names, record.author_ids) == (
-        "Teng|Han",
-        "scopus_author_id:1|",
+        ["Teng", "Han"],
+        {"scopus_author_id": ["1", ""]},
     )
 
 
 def test_id_from_name__other_author_count_still_cleans_names(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    record = Record(author_names="Teng (1)|Han (2)", author_ids="orcid:x")
+    record = Record(
+        author_names=["Teng (1)", "Han (2)"], author_ids={"scopus_author_id": ["x"]}
+    )
 
     record = id_from_name(record, _NO_CONTEXT, _OPTIONS)
 
-    assert (record.author_names, record.author_ids) == ("Teng|Han", "orcid:x")
-    assert "author names" in caplog.text
+    assert (record.author_names, record.author_ids) == (
+        ["Teng", "Han"],
+        {"scopus_author_id": ["x"]},
+    )
+    assert "scopus_author_id" in caplog.text
 
 
 def test_id_from_name__leaves_name_without_numeric_id_unchanged() -> None:
-    record = Record(author_names="Teng, Yu (Jr)")
+    record = Record(author_names=["Teng, Yu (Jr)"])
 
     assert id_from_name(record, _NO_CONTEXT, _OPTIONS) == record
 
@@ -435,57 +476,63 @@ def test_id_from_name__leaves_name_without_numeric_id_unchanged() -> None:
 @pytest.mark.parametrize(
     ("names", "expected"),
     [
-        ("Teng, Yu (60652739200)|Han, Li", "Teng, Yu|Han, Li"),
-        ("Doe, J [Editor]|Roe, K (Jr) ", "Doe, J|Roe, K"),
-        ("Doe (A) (B)", "Doe (A)"),
-        ("Doe, J", "Doe, J"),
+        (["Teng, Yu (60652739200)", "Han, Li"], ["Teng, Yu", "Han, Li"]),
+        (["Doe, J [Editor]", "Roe, K (Jr) "], ["Doe, J", "Roe, K"]),
+        (["Doe (A) (B)"], ["Doe (A)"]),
+        (["Doe, J"], ["Doe, J"]),
     ],
 )
 def test_strip_author_extras__drops_trailing_bracketed_text(
-    names: str, expected: str
+    names: list[str], expected: list[str]
 ) -> None:
     record = strip_author_extras(Record(author_names=names), _NO_CONTEXT, _OPTIONS)
 
     assert record.author_names == expected
-    assert record.author_ids is None
+    assert record.author_ids == {}
 
 
 def test_strip_affiliation_start__drops_name_before_separator() -> None:
     record = Record(
-        author_names="Teng, Yu|Han, Li|Doe, Jane",
-        author_affiliations=(
-            "Teng Y., Guangxi Cartier Technology Ltd., Nanning|Han L."
-            "|Doe J., Utrecht University"
-        ),
+        author_names=["Teng, Yu", "Han, Li", "Doe, Jane"],
+        author_affiliations=[
+            "Teng Y., Guangxi Cartier Technology Ltd., Nanning",
+            "Han L.",
+            "Doe J., Utrecht University",
+        ],
     )
 
     record = strip_affiliation_start(
         record, _NO_CONTEXT, _options(affiliation_start=", ")
     )
 
-    assert record.author_affiliations == (
-        "Guangxi Cartier Technology Ltd., Nanning|Utrecht University"
-    )
+    assert record.author_affiliations == [
+        "Guangxi Cartier Technology Ltd., Nanning",
+        "Utrecht University",
+    ]
 
 
 def test_strip_affiliation_start__only_names_leaves_no_affiliations() -> None:
     record = Record(
-        author_names="Teng, Yu|Han, Li", author_affiliations="Teng Y.|Han L."
+        author_names=["Teng, Yu", "Han, Li"], author_affiliations=["Teng Y.", "Han L."]
     )
 
     record = strip_affiliation_start(
         record, _NO_CONTEXT, _options(affiliation_start=", ")
     )
 
-    assert record.author_affiliations is None
+    assert record.author_affiliations == []
 
 
 def test_strip_affiliation_start__keeps_affiliation_not_starting_with_the_name() -> (
     None
 ):
     record = Record(
-        author_names="Teng, Yu|Han, Li|Roe, K",
-        author_affiliations="Guangxi Ltd., Nanning|Utrecht University|Leiden, NL",
+        author_names=["Teng, Yu", "Han, Li", "Roe, K"],
+        author_affiliations=[
+            "Guangxi Ltd., Nanning",
+            "Utrecht University",
+            "Leiden, NL",
+        ],
     )
 
     cleaned = strip_affiliation_start(
@@ -497,8 +544,8 @@ def test_strip_affiliation_start__keeps_affiliation_not_starting_with_the_name()
 
 def test_strip_affiliation_start__keeps_name_followed_by_more_than_initials() -> None:
     record = Record(
-        author_names="Stein, Koen|Lauer, R.",
-        author_affiliations="Steinmann Institut, Bonn|Lauer Foundation, Wheaton",
+        author_names=["Stein, Koen", "Lauer, R."],
+        author_affiliations=["Steinmann Institut, Bonn", "Lauer Foundation, Wheaton"],
     )
 
     cleaned = strip_affiliation_start(
@@ -510,19 +557,22 @@ def test_strip_affiliation_start__keeps_name_followed_by_more_than_initials() ->
 
 def test_strip_affiliation_start__name_without_initials() -> None:
     record = Record(
-        author_names="Qinggele|Broderick, Timothy J.",
-        author_affiliations="Qinggele, Inner Mongolia Museum|Broderick T.J., Harare",
+        author_names=["Qinggele", "Broderick, Timothy J."],
+        author_affiliations=[
+            "Qinggele, Inner Mongolia Museum",
+            "Broderick T.J., Harare",
+        ],
     )
 
     cleaned = strip_affiliation_start(
         record, _NO_CONTEXT, _options(affiliation_start=", ")
     )
 
-    assert cleaned.author_affiliations == "Inner Mongolia Museum|Harare"
+    assert cleaned.author_affiliations == ["Inner Mongolia Museum", "Harare"]
 
 
 def test_strip_affiliation_start__without_names_leaves_record_unchanged() -> None:
-    record = Record(author_affiliations="Teng Y., Guangxi Ltd.")
+    record = Record(author_affiliations=["Teng Y., Guangxi Ltd."])
 
     cleaned = strip_affiliation_start(
         record, _NO_CONTEXT, _options(affiliation_start=", ")
@@ -675,16 +725,25 @@ def test_clear_empty_values__match_the_whole_value() -> None:
     assert clear_empty_values(record, _NO_CONTEXT, _OPTIONS) == record
 
 
-def test_clear_empty_values__refill_author_names_joins_lines_with_bar() -> None:
+def test_clear_empty_values__refill_author_names_a_line_each() -> None:
     mapping = mapping_of({"AU": "authors", "A2": "authors"})
     raw = {"AU": "n/a", "A2": "Doe, J\nRoe, K"}
     options = _options(empty_values=["n/a"])
 
     cleaned = clear_empty_values(
-        Record(author_names="n/a"), _context(raw, mapping), options
+        Record(author_names=["n/a"]), _context(raw, mapping), options
     )
 
-    assert cleaned.author_names == "Doe, J|Roe, K"
+    assert cleaned.author_names == ["Doe, J", "Roe, K"]
+
+
+def test_clear_empty_values__clears_single_empty_author_value() -> None:
+    record = Record(author_names=["n/a"], author_affiliations=["x", "n/a"])
+    options = _options(empty_values=["n/a"], refill_from_raw=False)
+
+    cleaned = clear_empty_values(record, _NO_CONTEXT, options)
+
+    assert (cleaned.author_names, cleaned.author_affiliations) == ([], ["x", "n/a"])
 
 
 def test_eid_from_url__adds_prefixed_eid() -> None:
@@ -766,39 +825,34 @@ def test_citation_parts__ignores_values_not_in_the_plain_form(citation: str) -> 
 
 
 _SCOPUS_RECORD = Record(
-    author_names="Teng, Yu (60652739200); Han, Yiyong (59534195400)",
-    author_ids="scopus_author_id:60652739200|scopus_author_id:59534195400",
-    author_affiliations=(
+    author_names=["Teng, Yu (60652739200); Han, Yiyong (59534195400)"],
+    author_ids={"scopus_author_id": ["60652739200; 59534195400"]},
+    author_affiliations=[
         "Teng Y., Guangxi Cartier Technology Ltd., Nanning, China; "
         "Han Y., Nanning University, Guangxi, China"
-    ),
+    ],
 )
+_SCOPUS_CONTEXT = _context(names=";", affiliations=";", ids=";")
 
 
 def test_clean_record__scopus_authors_with_defaults_and_affiliation_start() -> None:
     options = _options(affiliation_start=", ")
 
-    record, changed = clean_record(
-        _SCOPUS_RECORD, _context(names=";", affiliations=";"), options
-    )
+    record, changed = clean_record(_SCOPUS_RECORD, _SCOPUS_CONTEXT, options)
 
-    assert record.author_names == "Teng, Yu|Han, Yiyong"
-    assert record.author_ids == (
-        "scopus_author_id:60652739200|scopus_author_id:59534195400"
-    )
-    assert record.author_affiliations == (
-        "Guangxi Cartier Technology Ltd., Nanning, China|"
-        "Nanning University, Guangxi, China"
-    )
+    assert record.author_names == ["Teng, Yu", "Han, Yiyong"]
+    assert record.author_ids == {"scopus_author_id": ["60652739200", "59534195400"]}
+    assert record.author_affiliations == [
+        "Guangxi Cartier Technology Ltd., Nanning, China",
+        "Nanning University, Guangxi, China",
+    ]
     assert changed == ["Split authors", "Scopus ID from name", "Affiliation start"]
 
 
 def test_clean_record__author_steps_need_split_authors() -> None:
     options = _options(split_authors=False, affiliation_start=", ")
 
-    record, changed = clean_record(
-        _SCOPUS_RECORD, _context(names=";", affiliations=";"), options
-    )
+    record, changed = clean_record(_SCOPUS_RECORD, _SCOPUS_CONTEXT, options)
 
     assert record == _SCOPUS_RECORD
     assert changed == []
@@ -808,12 +862,12 @@ def test_clean_record__id_from_name_runs_before_drop_trailing() -> None:
     options = _options(drop_trailing=True)
 
     record, _ = clean_record(
-        Record(author_names="Teng (1); Han (2)"), _context(names=";"), options
+        Record(author_names=["Teng (1); Han (2)"]), _context(names=";"), options
     )
 
     assert (record.author_names, record.author_ids) == (
-        "Teng|Han",
-        "scopus_author_id:1|scopus_author_id:2",
+        ["Teng", "Han"],
+        {"scopus_author_id": ["1", "2"]},
     )
 
 
@@ -827,11 +881,10 @@ def test_clean_record__pages_set_expands_pages_from_citation() -> None:
 
 
 def test_clean_record__cleaning_twice_changes_nothing_more() -> None:
-    context = _context(names=";", affiliations=";")
     options = _options(affiliation_start=", ", drop_trailing=True)
-    once, _ = clean_record(_SCOPUS_RECORD, context, options)
+    once, _ = clean_record(_SCOPUS_RECORD, _SCOPUS_CONTEXT, options)
 
-    twice, changed = clean_record(once, context, options)
+    twice, changed = clean_record(once, _SCOPUS_CONTEXT, options)
 
     assert twice == once
     assert changed == []

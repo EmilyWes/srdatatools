@@ -191,7 +191,7 @@ def test_parse_csv_text__keeps_authors_as_in_the_file() -> None:
 
     result = parse_csv_text(text, mapping)
 
-    assert result.rows[0].record.author_names == "Jane Smith; John Doe"
+    assert result.rows[0].record.author_names == ["Jane Smith; John Doe"]
 
 
 def test_parse_csv_text__keeps_keywords_unsplit() -> None:
@@ -200,7 +200,7 @@ def test_parse_csv_text__keeps_keywords_unsplit() -> None:
 
     result = parse_csv_text(text, mapping)
 
-    assert result.rows[0].record.keywords == ["keywords:[machine learning; nlp]"]
+    assert result.rows[0].record.keywords == {"": ["machine learning; nlp"]}
 
 
 def test_parse_csv_text__keeps_author_id_column_unsplit() -> None:
@@ -209,7 +209,7 @@ def test_parse_csv_text__keeps_author_id_column_unsplit() -> None:
 
     result = parse_csv_text(text, mapping)
 
-    assert result.rows[0].record.author_ids == "x:[1| 2]"
+    assert result.rows[0].record.author_ids == {"x": ["1| 2"]}
 
 
 def test_parse_csv_text__first_non_empty_name_column_sets_the_authors() -> None:
@@ -218,7 +218,7 @@ def test_parse_csv_text__first_non_empty_name_column_sets_the_authors() -> None:
 
     result = parse_csv_text(text, mapping)
 
-    assert result.rows[0].record.author_names == "John Doe; Alice Lee"
+    assert result.rows[0].record.author_names == ["John Doe; Alice Lee"]
 
 
 def test_parse_csv_text__combines_multiple_keyword_columns_in_order() -> None:
@@ -227,10 +227,7 @@ def test_parse_csv_text__combines_multiple_keyword_columns_in_order() -> None:
 
     result = parse_csv_text(text, mapping)
 
-    assert result.rows[0].record.keywords == [
-        "keywords:[machine learning]",
-        "keywords:[nlp; llms]",
-    ]
+    assert result.rows[0].record.keywords == {"": ["machine learning", "nlp; llms"]}
 
 
 def test_parse_csv_text__empty_authors_column_gives_no_authors() -> None:
@@ -240,7 +237,7 @@ def test_parse_csv_text__empty_authors_column_gives_no_authors() -> None:
     result = parse_csv_text(text, mapping)
 
     assert result.skipped == []
-    assert result.rows[0].record.author_names is None
+    assert result.rows[0].record.author_names == []
 
 
 def test_parse_csv_text__copies_date_column_as_it_is() -> None:
@@ -547,7 +544,7 @@ def test_parse_csv_record__applies_mapping() -> None:
     row = parse_csv_record(raw_fields, mapping)
 
     assert row.record.title == "Some Paper"
-    assert row.record.author_names == "Smith, J; Doe, J"
+    assert row.record.author_names == ["Smith, J; Doe, J"]
     assert row.raw_fields == raw_fields
 
 
@@ -570,9 +567,9 @@ def test_parse_csv_file__tab_delimiter_maps_fields() -> None:
     assert len(result.rows) == 3
     record = result.rows[0].record
     assert record.title == "Deep learning for screening, a review"
-    assert record.author_names == "Smith, Jane; Doe, John"
+    assert record.author_names == ["Smith, Jane; Doe, John"]
     assert record.doi == "10.1000/abc123"
-    assert record.keywords == ["keywords:[active learning; screening]"]
+    assert record.keywords == {"": ["active learning; screening"]}
     assert record.publication_date == "2021//"
 
 
@@ -651,11 +648,14 @@ def _fail_on_bad_title(monkeypatch: pytest.MonkeyPatch) -> None:
     real = csv_.apply_mapping
 
     def apply(
-        raw_fields: dict[str, str], mapping: FieldMapping, settings: ParseSettings
+        raw_fields: dict[str, str],
+        mapping: FieldMapping,
+        settings: ParseSettings,
+        split_authors: dict[str, list[str]] | None = None,
     ) -> Record:
         if "Bad" in raw_fields.values():
             raise ValueError("bad value")
-        return real(raw_fields, mapping, settings)
+        return real(raw_fields, mapping, settings, split_authors)
 
     monkeypatch.setattr(csv_, "apply_mapping", apply)
 

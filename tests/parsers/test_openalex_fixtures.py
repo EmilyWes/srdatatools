@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pytest
 
-from app.helpers.format import STORAGE_SEPARATOR
 from app.models.record import Record
 from app.parsers.bibtex import (
     parse_bibtex_file,
@@ -86,19 +85,17 @@ def test_openalex_small__ris_and_bibtex_are_not_detected(suffix: str) -> None:
     assert detect_sources(path, _FORMAT_BY_SUFFIX[suffix]) == ()
 
 
-def _names(record: Record) -> list[str]:
-    return (record.author_names or "").split(STORAGE_SEPARATOR)
-
-
 def test_openalex_small_csv__keeps_author_id_columns_unsplit(
     csv_records: dict[str, Record],
 ) -> None:
     dinosaur = csv_records[_DINOSAUR_DOI]
 
-    assert _names(dinosaur)[0] == "Matthew G. Baron"
-    assert (dinosaur.author_ids or "").startswith("openalex_author_id:[A5091833725|")
-    assert ", orcid:[https://orcid.org/0000-0001-9069-7638|" in (
-        dinosaur.author_ids or ""
+    [names] = dinosaur.author_names
+    assert names.startswith("Matthew G. Baron|")
+    assert list(dinosaur.author_ids) == ["openalex_author_id", "orcid"]
+    assert dinosaur.author_ids["openalex_author_id"][0].startswith("A5091833725|")
+    assert dinosaur.author_ids["orcid"][0].startswith(
+        "https://orcid.org/0000-0001-9069-7638|"
     )
 
 
@@ -112,9 +109,9 @@ def test_openalex_small_csv__keeps_values_as_in_the_file(
     assert dinosaur.publication_type == "article"
     assert dinosaur.other_ids == {"openalex": "W2601753892"}
     keywords = dinosaur.keywords
-    assert any(k.startswith("keywords:[dinosaur phylogeny|") for k in keywords)
-    assert any(k.startswith("Concept:[Theropoda|") for k in keywords)
-    assert "Topic:[Paleontology and Evolutionary Biology]" in keywords
+    assert keywords[""][0].startswith("dinosaur phylogeny|")
+    assert keywords["Concept"][0].startswith("Theropoda|")
+    assert keywords["Topic"] == ["Paleontology and Evolutionary Biology"]
 
 
 def test_openalex_small_ris__joins_au_and_c1_lines(
@@ -122,10 +119,10 @@ def test_openalex_small_ris__joins_au_and_c1_lines(
 ) -> None:
     dinosaur = ris_records[_DINOSAUR_DOI]
 
-    assert _names(dinosaur)[:2] == ["Baron, Matthew", "NORMAN, DAVID"]
-    assert (dinosaur.author_affiliations or "").startswith(
+    assert dinosaur.author_names[:2] == ["Baron, Matthew", "NORMAN, DAVID"]
+    assert dinosaur.author_affiliations[0] == (
         "Department of Earth Sciences, Natural History Museum, Cromwell Road, "
-        "London SW7 5BD, UK|"
+        "London SW7 5BD, UK"
     )
     assert ris_records[_CHICKEN_DOI].author_affiliations
 
@@ -133,8 +130,8 @@ def test_openalex_small_ris__joins_au_and_c1_lines(
 def test_openalex_small_bibtex__keeps_keywords_unsplit(
     bibtex_records: dict[str, Record],
 ) -> None:
-    [keywords] = bibtex_records[_DINOSAUR_DOI].keywords
-    assert keywords.startswith("keywords:[dinosaur phylogeny, Ornithischia, ")
+    [keywords] = bibtex_records[_DINOSAUR_DOI].keywords[""]
+    assert keywords.startswith("dinosaur phylogeny, Ornithischia, ")
 
 
 def test_openalex_small__formats_agree_on_ids_and_titles(
@@ -146,7 +143,8 @@ def test_openalex_small__formats_agree_on_ids_and_titles(
     for doi, record in csv_records.items():
         for other in (ris_records[doi], bibtex_records[doi]):
             assert other.title == record.title, doi
-            assert len(_names(other)) == len(_names(record)), doi
+            names = record.author_names[0].split("|") if record.author_names else []
+            assert len(other.author_names) == len(names), doi
 
 
 @pytest.mark.big

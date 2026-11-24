@@ -7,7 +7,6 @@ from functools import partial
 from itertools import zip_longest
 from pathlib import Path
 
-from app.helpers.format import STORAGE_SEPARATOR
 from app.parsers.common import (
     FileSummary,
     ParsedRow,
@@ -235,9 +234,9 @@ def _split_authors(value: str) -> list[str]:
     return names
 
 
-def _author_lines(value: str) -> str:
+def _author_lines(value: str) -> list[str]:
     names = (clean_value(_AUTHOR_FIELD, name) for name in _split_authors(value))
-    return STORAGE_SEPARATOR.join(name for name in names if name)
+    return [name for name in names if name]
 
 
 def parse_bibtex_record(
@@ -247,10 +246,12 @@ def parse_bibtex_record(
 ) -> ParsedRow:
     raw_fields = dict(lines)
     cleaned = {key: clean_value(key, value) for key, value in raw_fields.items()}
-    for key, _ in mapping.rows_of(AuthorsRow):
-        if key in raw_fields:
-            cleaned[key] = _author_lines(raw_fields[key])
-    record = apply_mapping(cleaned, mapping, settings)
+    split_authors = {
+        key: _author_lines(raw_fields[key])
+        for key, row in mapping.rows_of(AuthorsRow)
+        if key in raw_fields and row.role != "ids"
+    }
+    record = apply_mapping(cleaned, mapping, settings, split_authors)
     return ParsedRow(record=record, raw_fields=raw_fields)
 
 

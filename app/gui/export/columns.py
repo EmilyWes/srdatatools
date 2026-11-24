@@ -10,12 +10,7 @@ from app.gui.export.options import ExportOptions
 from app.gui.export.ris_tags import TAG_PATTERN, ris_type
 from app.helpers.format import DISPLAY_SEPARATOR, STORAGE_SEPARATOR, label_text
 from app.models.record import CLEANED_DATE, Label, Record
-from app.parsers.authors import (
-    author_id_keys,
-    author_ids_for_key,
-    author_ids_per_slot,
-)
-from app.parsers.mapping import split_keyword
+from app.parsers.authors import ids_of_key
 from app.parsers.profiles import source_label
 
 DatePart = Literal["full", "year", "month", "day", "ris"]
@@ -276,14 +271,11 @@ def export_columns(
 ) -> list[ExportColumn]:
     schemas = [export.record for export in records]
     prefixes = dict.fromkeys(
-        prefix
-        for schema in schemas
-        for prefix, _ in map(split_keyword, schema.keywords)
-        if prefix is not None
+        prefix for schema in schemas for prefix in schema.keywords if prefix
     )
     id_keys = dict.fromkeys(key for schema in schemas for key in schema.other_ids)
     id_keys_of_authors = dict.fromkeys(
-        key for schema in schemas for key in author_id_keys(schema.author_ids)
+        key for schema in schemas for key in schema.author_ids
     )
     label_pairs = dict.fromkeys(
         (label.phase, label.screener) for schema in schemas for label in schema.labels
@@ -422,8 +414,15 @@ def _joined_distinct(values: Sequence[str]) -> str:
 
 
 def _keyword_texts(column: KeywordsColumn, record: Record) -> list[str]:
-    keywords = (split_keyword(keyword) for keyword in record.keywords)
-    return [text for prefix, text in keywords if prefix == column.prefix]
+    return record.keywords.get(column.prefix or "", [])
+
+
+def _joined_values(column: JoinedColumn, record: Record) -> list[str]:
+    """Authors are a list; ISSN and ISBN values are joined with STORAGE_SEPARATOR."""
+    value: list[str] | str | None = getattr(record, column.field)
+    if isinstance(value, list):
+        return value
+    return (value or "").split(STORAGE_SEPARATOR)
 
 
 def _label_texts(
@@ -444,11 +443,11 @@ def column_values(
     record = export.record
     values: list[str]
     if isinstance(column, JoinedColumn):
-        values = (getattr(record, column.field) or "").split(STORAGE_SEPARATOR)
+        values = _joined_values(column, record)
     elif isinstance(column, KeywordsColumn):
         values = _keyword_texts(column, record)
     elif isinstance(column, AuthorIdKeyColumn):
-        values = author_ids_per_slot(record.author_ids, column.id_key)
+        values = ids_of_key(record.author_ids, column.id_key)
     elif isinstance(column, LabelColumn):
         values = _label_texts(column, record, options)
     elif isinstance(column, ScalarColumn) and column.field == "notes":
@@ -464,8 +463,7 @@ def column_value(
 ) -> str:
     record = export.record
     if isinstance(column, JoinedColumn):
-        value = getattr(record, column.field) or ""
-        return value.replace(STORAGE_SEPARATOR, column.delimiter)
+        return column.delimiter.join(_joined_values(column, record))
     if isinstance(column, ScalarColumn):
         value = getattr(record, column.field)
         return "" if value is None else str(value)
@@ -479,7 +477,7 @@ def column_value(
     if isinstance(column, KeywordsColumn):
         return column.delimiter.join(_keyword_texts(column, record))
     if isinstance(column, AuthorIdKeyColumn):
-        return author_ids_for_key(record.author_ids, column.id_key, column.delimiter)
+        return column.delimiter.join(ids_of_key(record.author_ids, column.id_key))
     if isinstance(column, OtherIdColumn):
         return record.other_ids.get(column.id_key, "")
     if isinstance(column, LabelColumn):

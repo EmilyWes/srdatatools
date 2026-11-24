@@ -21,11 +21,7 @@ from app.parsers.mapping import (
     normalize_label,
     override_aliases,
     parse_date_string,
-    parse_unsplit_keywords,
-    split_keyword,
     suggest_mapping,
-    tag_keyword,
-    unsplit_keywords,
 )
 from app.parsers.parse_settings import ParseSettings
 from tests.mappings import mapping_of, targets_of
@@ -116,7 +112,7 @@ def test_apply_mapping__use_first_picks_the_names_column() -> None:
 
     record = apply_mapping(raw, mapping, ParseSettings(use_first=("AF",)))
 
-    assert record.author_names == "Doe, Jane"
+    assert record.author_names == ["Doe, Jane"]
 
 
 def test_apply_mapping__other_id_uses_row_key() -> None:
@@ -409,23 +405,20 @@ def test_apply_mapping__keeps_each_keyword_column_unsplit_under_its_prefix() -> 
 
     record = apply_mapping({"A": "x; y", "B": "z|w"}, mapping)
 
-    assert record.keywords == ["A:[x; y]", "keywords:[z|w]"]
+    assert record.keywords == {"A": ["x; y"], "": ["z|w"]}
 
 
-def test_parse_unsplit_keywords__gives_prefix_and_value() -> None:
-    assert parse_unsplit_keywords(unsplit_keywords("A", "x; y")) == ("A", "x; y")
-    assert parse_unsplit_keywords(unsplit_keywords("", "z")) == ("", "z")
-    assert parse_unsplit_keywords("[A] x") is None
+def test_apply_mapping__keyword_columns_with_one_prefix_are_both_kept() -> None:
+    mapping = mapping_of({"A": "keywords", "B": "keywords"})
+
+    record = apply_mapping({"A": "x; y", "B": "z"}, mapping)
+
+    assert record.keywords == {"": ["x; y", "z"]}
 
 
 @pytest.mark.parametrize("typed", ["Author", " Author ", "[Author]", "[Author] "])
 def test_keywords_row__prefix_is_stored_without_brackets(typed: str) -> None:
     assert KeywordsRow(prefix=typed).prefix == "Author"
-
-
-def test_tag_keyword__tags_keyword_only_with_a_prefix() -> None:
-    assert tag_keyword("MeSH", "Humans") == "[MeSH] Humans"
-    assert tag_keyword("", "Humans") == "Humans"
 
 
 _PARALLEL = {
@@ -441,9 +434,9 @@ def test_apply_mapping__keeps_names_and_affiliations_as_in_the_file() -> None:
 
     record = apply_mapping(raw, mapping_of(_PARALLEL))
 
-    assert record.author_names == "Ann Lee|Bo Kim"
-    assert record.author_affiliations == "Uni A| Uni B"
-    assert record.author_ids is None
+    assert record.author_names == ["Ann Lee|Bo Kim"]
+    assert record.author_affiliations == ["Uni A| Uni B"]
+    assert record.author_ids == {}
 
 
 def test_apply_mapping__keeps_each_id_column_unsplit_under_its_key() -> None:
@@ -451,9 +444,26 @@ def test_apply_mapping__keeps_each_id_column_unsplit_under_its_key() -> None:
 
     record = apply_mapping(raw, mapping_of(_PARALLEL))
 
-    assert record.author_ids == (
-        "orcid:[|https://orcid.org/0000-0001], openalex_author_id:[A1|A2]"
+    assert record.author_ids == {
+        "orcid": ["|https://orcid.org/0000-0001"],
+        "openalex_author_id": ["A1|A2"],
+    }
+
+
+def test_apply_mapping__first_id_column_of_a_key_wins(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    mapping = mapping_of(
+        {
+            "A": Suggest("authors", {"role": "ids", "id_key": "orcid"}),
+            "B": Suggest("authors", {"role": "ids", "id_key": "orcid"}),
+        }
     )
+
+    record = apply_mapping({"A": "1; 2", "B": "3; 4"}, mapping)
+
+    assert record.author_ids == {"orcid": ["1; 2"]}
+    assert "'B'" in caplog.text
 
 
 def test_apply_mapping__first_non_empty_name_column_wins() -> None:
@@ -461,7 +471,7 @@ def test_apply_mapping__first_non_empty_name_column_wins() -> None:
 
     record = apply_mapping({"Full": "", "Short": "Teng Y.; Han Y."}, mapping)
 
-    assert record.author_names == "Teng Y.; Han Y."
+    assert record.author_names == ["Teng Y.; Han Y."]
 
 
 def test_apply_mapping__unmapped_author_columns_are_not_read() -> None:
@@ -469,7 +479,7 @@ def test_apply_mapping__unmapped_author_columns_are_not_read() -> None:
 
     record = apply_mapping({"Author": "Ann Lee", "Author IDs": "A1"}, mapping)
 
-    assert (record.author_names, record.author_ids) == ("Ann Lee", None)
+    assert (record.author_names, record.author_ids) == (["Ann Lee"], {})
 
 
 @pytest.mark.parametrize(
@@ -699,20 +709,3 @@ def test_suggest_mapping__ignored_keys_stay_unmapped() -> None:
     )
 
     assert targets_of(mapping) == {"M3": "publication_type"}
-
-
-def test_split_keyword__splits_prefix_off() -> None:
-    assert split_keyword("[MeSH] Humans") == ("MeSH", "Humans")
-
-
-def test_split_keyword__unprefixed_keyword() -> None:
-    assert split_keyword("Humans") == (None, "Humans")
-
-
-def test_split_keyword__unwraps_unsplit_value() -> None:
-    assert split_keyword(unsplit_keywords("MeSH", "a; b")) == ("MeSH", "a; b")
-    assert split_keyword(unsplit_keywords("", "a; b")) == (None, "a; b")
-
-
-def test_split_keyword__round_trips_tagged() -> None:
-    assert split_keyword(tag_keyword("Author", "[a] b")) == ("Author", "[a] b")

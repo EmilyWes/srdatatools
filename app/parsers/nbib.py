@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
 
-from app.parsers.authors import AuthorIds, author_id
+from app.parsers.authors import AuthorSlots
 from app.parsers.common import (
     FileSummary,
     ParsedRow,
@@ -75,7 +75,7 @@ def _doi_from_id(value: str) -> str | None:
     return stripped.removesuffix(_DOI_SUFFIX).strip() or None
 
 
-def _auid(row: AuthorsRow, value: str) -> str | None:
+def _auid(row: AuthorsRow, value: str) -> tuple[str, str] | None:
     """AUID values look like "ORCID: 0000-0001-8894-9875"; the scheme is the key,
     without one the row's ID key is used."""
     scheme, colon, identifier = value.partition(":")
@@ -83,17 +83,17 @@ def _auid(row: AuthorsRow, value: str) -> str | None:
         scheme, identifier = "", value
     if not identifier.strip():
         return None
-    return author_id(scheme.strip().lower() or row.id_key, identifier)
+    return scheme.strip().lower() or row.id_key, identifier
 
 
 def _author_lines(
     lines: list[tuple[str, str]], rows: dict[str, AuthorsRow]
-) -> tuple[list[tuple[str, str]], AuthorIds]:
+) -> tuple[list[tuple[str, str]], AuthorSlots]:
     """AUID and AD lines belong to the author or editor name line before them;
     an editor's, or one before the first author, is left out."""
     kept: list[tuple[str, str]] = []
-    slots: AuthorIds = []
-    current: list[str] | None = None
+    slots: AuthorSlots = []
+    current: list[tuple[str, str]] | None = None
     for tag, value in lines:
         row = rows.get(tag)
         if row is None:

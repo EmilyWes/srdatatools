@@ -35,8 +35,8 @@ def test_record__create_with_authors_and_source(session: Session) -> None:
     record = Record(
         title="A Study of Things",
         doi="10.1000/abc",
-        author_names="Smith|Doe",
-        author_ids="orcid:0000-0001-2345-6789|",
+        author_names=["Smith", "Doe"],
+        author_ids={"orcid": ["0000-0001-2345-6789", ""]},
     )
     record.sources = [
         RecordSource(source_file=source_file, raw_fields={"TI": "A Study of Things"})
@@ -46,8 +46,8 @@ def test_record__create_with_authors_and_source(session: Session) -> None:
 
     fetched = session.query(Record).one()
     assert fetched.title == "A Study of Things"
-    assert fetched.author_names == "Smith|Doe"
-    assert fetched.author_ids == "orcid:0000-0001-2345-6789|"
+    assert fetched.author_names == ["Smith", "Doe"]
+    assert fetched.author_ids == {"orcid": ["0000-0001-2345-6789", ""]}
     assert fetched.sources[0].source_file.filename == "pubmed_export.nbib"
     assert fetched.sources[0].raw_fields == {"TI": "A Study of Things"}
 
@@ -67,7 +67,7 @@ def test_record__no_authors_and_no_skipped_rows(
     )
     session.commit()
 
-    assert session.query(Record).one().author_names is None
+    assert session.query(Record).one().author_names == []
     assert session.query(SourceFile).one().skipped_rows == []
 
 

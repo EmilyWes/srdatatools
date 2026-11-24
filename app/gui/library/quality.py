@@ -3,12 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.gui.cleaning.steps import PUBLICATION_TYPES
-from app.helpers.format import STORAGE_SEPARATOR
 from app.models.record import CLEANED_DATE
-from app.parsers.authors import (
-    parse_author_ids,
-    parse_unsplit_author_ids,
-)
 
 # The record fields the checks read.
 QUALITY_FIELDS = (
@@ -27,14 +22,11 @@ def _unparsed_date(fields: Fields) -> bool:
 
 
 def _misaligned_authors(fields: Fields) -> bool:
-    """Unsplit ids aren't per author yet, so they count as misaligned."""
-    names, ids = fields.get("author_names"), fields.get("author_ids")
-    if not ids:
-        return False
-    if parse_unsplit_author_ids(ids):
-        return True
-    name_count = len(names.split(STORAGE_SEPARATOR)) if names else 0
-    return len(parse_author_ids(ids)) != name_count
+    """IDs not split yet are one value for several names, so they count as
+    misaligned."""
+    names: list[str] = fields.get("author_names") or []
+    ids: dict[str, list[str]] = fields.get("author_ids") or {}
+    return any(len(values) != len(names) for values in ids.values())
 
 
 def _unmapped_publication_type(fields: Fields) -> bool:

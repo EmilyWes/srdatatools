@@ -15,19 +15,19 @@ _RECORDS = [
         id=1,
         record=Record(
             title="Deep learning, a review",
-            author_names="LeCun, Yann; Bengio, Yoshua",
+            author_names=["LeCun, Yann; Bengio, Yoshua"],
             abstract="First line.\nSecond line.",
             publication_date="2015/05/",
             volume="521",
             doi="10.1038/nature14539",
-            keywords=["deep learning", "[MeSH] Humans"],
+            keywords={"": ["deep learning"], "MeSH": ["Humans"]},
         ),
     ),
     ExportRecord(
         id=2,
         record=Record(
             title="Gradient-based learning applied to document recognition",
-            author_names="LeCun, Yann",
+            author_names=["LeCun, Yann"],
             publication_date="1998//",
             volume="086",
             doi="10.1109/5.726791",
@@ -192,9 +192,9 @@ def test_write_excel__round_trips_through_the_excel_importer(tmp_path: Path) -> 
     assert not result.skipped
     first = result.rows[0].record
     assert first.title == "Deep learning, a review"
-    assert first.author_names == "LeCun, Yann; Bengio, Yoshua"
+    assert first.author_names == ["LeCun, Yann; Bengio, Yoshua"]
     assert first.doi == "10.1038/nature14539"
     assert first.publication_date == "2015/05/"
     assert first.volume == "521"
-    assert "keywords:[deep learning]" in first.keywords
+    assert first.keywords[""] == ["deep learning"]
     assert result.rows[1].record.volume == "086"

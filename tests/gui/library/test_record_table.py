@@ -131,15 +131,15 @@ def test_columns__cover_every_record_field_plus_sources() -> None:
 def test_row_for__separates_joined_values_with_semicolon() -> None:
     row = row_for(
         {
-            "author_names": "Smith, J|Doe, A",
-            "author_affiliations": None,
+            "author_names": ["Smith, J", "Doe, A"],
+            "author_affiliations": [],
             "issn": "1234-5678|8765-4321",
         }
     )
 
     assert row == {
         "author_names": "Smith, J; Doe, A",
-        "author_affiliations": None,
+        "author_affiliations": "",
         "issn": "1234-5678; 8765-4321",
     }
 
@@ -180,8 +180,8 @@ def test_load_rows__data_quality_joins_each_records_problems(
     session: Session,
 ) -> None:
     session.add(Record(id=1, publication_date="2020/05/"))
-    session.add(Record(id=2, publication_date="May 2020", author_ids="x:[1;2]"))
-    session.add(Record(id=3, publication_date="May 2020", author_names="A"))
+    session.add(Record(id=2, publication_date="May 2020", author_ids={"x": ["1;2"]}))
+    session.add(Record(id=3, publication_date="May 2020", author_names=["A"]))
     session.commit()
 
     rows = load_rows(session, ["data_quality", "publication_date"])
@@ -672,8 +672,8 @@ AUTHOR = keyword_key("Author")
 def _add_keywords(session: Session) -> None:
     session.add_all(
         [
-            Record(id=1, keywords=["Cancer", "[MeSH] Humans", "[MeSH] Mice"]),
-            Record(id=2, keywords=["[Author] diet"]),
+            Record(id=1, keywords={"": ["Cancer"], "MeSH": ["Humans", "Mice"]}),
+            Record(id=2, keywords={"Author": ["diet"]}),
         ]
     )
     session.commit()
@@ -703,7 +703,7 @@ def test_load_columns__keyword_columns_after_label_columns(session: Session) -> 
 
 
 def _add_keywords_to_existing(session: Session) -> None:
-    session.add(Record(id=3, keywords=["[MeSH] Humans"]))
+    session.add(Record(id=3, keywords={"MeSH": ["Humans"]}))
     session.commit()
 
 
@@ -728,7 +728,7 @@ def test_load_rows__keyword_columns_strip_prefix_per_column(session: Session) ->
 def test_load_rows__unsplit_keywords_shown_as_stored_per_prefix(
     session: Session,
 ) -> None:
-    session.add(Record(id=1, keywords=["keywords:[Cancer; Diet]", "MeSH:[Humans]"]))
+    session.add(Record(id=1, keywords={"": ["Cancer; Diet"], "MeSH": ["Humans"]}))
     session.commit()
 
     assert load_rows(session, ["keywords", MESH]) == [
@@ -742,8 +742,11 @@ ORCID = author_id_key("orcid")
 def _add_author_ids(session: Session) -> None:
     session.add_all(
         [
-            Record(id=1, author_ids="orcid:[0000-1; 0000-2], scopus_author_id:[1]"),
-            Record(id=2, author_ids="orcid:9|orcid:8"),
+            Record(
+                id=1,
+                author_ids={"orcid": ["0000-1; 0000-2"], "scopus_author_id": ["1"]},
+            ),
+            Record(id=2, author_ids={"orcid": ["9", "8"]}),
         ]
     )
     session.commit()

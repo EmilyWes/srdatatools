@@ -217,7 +217,7 @@ def test_parse_excel_file__keeps_authors_as_in_the_file(tmp_path: Path) -> None:
 
     result = parse_excel_file(path, mapping)
 
-    assert result.rows[0].record.author_names == "Jane Smith; John Doe"
+    assert result.rows[0].record.author_names == ["Jane Smith; John Doe"]
 
 
 def test_parse_excel_file__non_workbook_file_raises(tmp_path: Path) -> None:
@@ -283,11 +283,14 @@ def _fail_on_bad_title(monkeypatch: pytest.MonkeyPatch) -> None:
     real = csv_.apply_mapping
 
     def apply(
-        raw_fields: dict[str, str], mapping: FieldMapping, settings: ParseSettings
+        raw_fields: dict[str, str],
+        mapping: FieldMapping,
+        settings: ParseSettings,
+        split_authors: dict[str, list[str]] | None = None,
     ) -> Record:
         if "Bad" in raw_fields.values():
             raise ValueError("bad value")
-        return real(raw_fields, mapping, settings)
+        return real(raw_fields, mapping, settings, split_authors)
 
     monkeypatch.setattr(csv_, "apply_mapping", apply)
 

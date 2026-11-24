@@ -52,16 +52,17 @@ def test_count_data_quality__unparsed_dates(session: Session) -> None:
 @pytest.mark.parametrize(
     ("names", "ids", "misaligned"),
     [
-        ("A|B", "x:1|x:2", False),
-        ("A|B", "x:1", True),
-        ("A|B", "x:1|x:2|x:3", True),
-        (None, "x:1", True),
-        ("A|B", "x:[1;2]", True),
-        ("A|B", None, False),
+        (["A", "B"], {"x": ["1", "2"]}, False),
+        (["A", "B"], {"x": ["1"]}, True),
+        (["A", "B"], {"x": ["1", "2", "3"]}, True),
+        ([], {"x": ["1"]}, True),
+        (["A", "B"], {"x": ["1;2"]}, True),
+        (["A", "B"], {"x": ["1", "2"], "y": ["3"]}, True),
+        (["A", "B"], {}, False),
     ],
 )
 def test_count_data_quality__misaligned_authors(
-    session: Session, names: str | None, ids: str | None, misaligned: bool
+    session: Session, names: list[str], ids: dict[str, list[str]], misaligned: bool
 ) -> None:
     session.add(Record(author_names=names, author_ids=ids))
     session.commit()
@@ -100,10 +101,10 @@ def test_count_data_quality__unmapped_publication_types(
 def keyworded(session: Session) -> Session:
     session.add_all(
         [
-            Record(keywords=["Cancer", "[MeSH] Humans", "[MeSH] Mice", "cancer"]),
-            Record(keywords=["cancer", "[MeSH] Humans", "Diet"]),
-            Record(keywords=["[Author] diet", "Aging"]),
-            Record(keywords=[]),
+            Record(keywords={"": ["Cancer", "cancer"], "MeSH": ["Humans", "Mice"]}),
+            Record(keywords={"": ["cancer", "Diet"], "MeSH": ["Humans"]}),
+            Record(keywords={"Author": ["diet"], "": ["Aging"]}),
+            Record(keywords={}),
         ]
     )
     session.commit()
@@ -129,7 +130,7 @@ def test_list_keyword_prefixes__first_seen_order_without_unprefixed(
 def test_count_keywords__unsplit_value_counts_as_one_keyword(
     session: Session,
 ) -> None:
-    session.add(Record(keywords=["keywords:[Cancer; Diet]", "MeSH:[Humans]"]))
+    session.add(Record(keywords={"": ["Cancer; Diet"], "MeSH": ["Humans"]}))
     session.commit()
 
     assert count_keywords(session) == {
@@ -143,10 +144,10 @@ def test_list_author_id_keys__first_seen_order_cleaned_and_unsplit(
 ) -> None:
     session.add_all(
         [
-            Record(author_ids="scopus_author_id:[1; 2]"),
-            Record(author_ids="pmid:1|orcid:2"),
-            Record(author_ids="orcid:[a], scopus_author_id:[3]"),
-            Record(author_ids=None),
+            Record(author_ids={"scopus_author_id": ["1; 2"]}),
+            Record(author_ids={"pmid": ["1", ""], "orcid": ["", "2"]}),
+            Record(author_ids={"orcid": ["a"], "scopus_author_id": ["3"]}),
+            Record(author_ids={}),
         ]
     )
     session.commit()

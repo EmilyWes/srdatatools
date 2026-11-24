@@ -36,9 +36,10 @@ def _store(
     rows: Sequence[tuple[RecordSchema, dict[str, str]]],
     mapping: FieldMapping | None = None,
     use_first: Sequence[str] = (),
+    file_format: str = "csv",
 ) -> SourceFile:
     source_file = store_parsed_rows(
-        session, filename="x.csv", path=None, format="csv", parsed_rows=rows
+        session, filename="x.csv", path=None, format=file_format, parsed_rows=rows
     )
     source_file.field_mapping = (mapping or FieldMapping()).model_dump()
     source_file.option_choices = {"use_first": list(use_first)}
@@ -98,27 +99,40 @@ def test_clean_records__only_the_given_ids(session: Session) -> None:
 def test_clean_records__sniffs_the_author_separator_per_source_file(
     session: Session,
 ) -> None:
-    _store(session, [(RecordSchema(author_names="Doe, J; Roe, K"), {})])
-    _store(session, [(RecordSchema(author_names="Doe J and Roe K"), {})])
+    _store(session, [(RecordSchema(author_names=["Doe, J; Roe, K"]), {})])
+    _store(session, [(RecordSchema(author_names=["Doe J and Roe K"]), {})])
 
     clean_records(session, CleaningOptions())
     session.commit()
 
     assert [r.author_names for r in session.query(Record).order_by(Record.id)] == [
-        "Doe, J|Roe, K",
-        "Doe J|Roe K",
+        ["Doe, J", "Roe, K"],
+        ["Doe J", "Roe K"],
     ]
+
+
+def test_clean_records__line_format_values_are_not_split(session: Session) -> None:
+    _store(
+        session,
+        [(RecordSchema(author_names=["Doe, J; Roe, K"]), {})],
+        file_format="ris",
+    )
+
+    clean_records(session, CleaningOptions(names_separator=";"))
+    session.commit()
+
+    assert session.query(Record).one().author_names == ["Doe, J; Roe, K"]
 
 
 def test_clean_records__chosen_separator_is_used_for_every_file(
     session: Session,
 ) -> None:
-    _store(session, [(RecordSchema(author_names="Romano M, Novacek MJ."), {})])
+    _store(session, [(RecordSchema(author_names=["Romano M, Novacek MJ."]), {})])
 
     clean_records(session, CleaningOptions(names_separator=","))
     session.commit()
 
-    assert session.query(Record).one().author_names == "Romano M|Novacek MJ."
+    assert session.query(Record).one().author_names == ["Romano M", "Novacek MJ."]
 
 
 def test_clean_records__refills_from_the_source_mapping_and_ordering(

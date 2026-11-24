@@ -2,9 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from app.helpers.format import STORAGE_SEPARATOR
 from app.models.record import Record
-from app.parsers.authors import parse_author_ids
 from app.parsers.common import FileType, ParseResult
 from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
 from app.parsers.nbib import parse_nbib_file, read_nbib_tags, suggest_nbib_mapping
@@ -67,8 +65,8 @@ def test_pubmed_small_nbib__mesh_keywords_are_prefixed(
 ) -> None:
     keywords = nbib_records["41672119"].keywords
 
-    assert "[MeSH] *Materia Medica/standards/history" in keywords
-    assert "Adulteration" in keywords
+    assert "*Materia Medica/standards/history" in keywords["MeSH"]
+    assert "Adulteration" in keywords[""]
 
 
 def test_pubmed_small_nbib__book_chapter_uses_book_title_as_journal(
@@ -77,10 +75,10 @@ def test_pubmed_small_nbib__book_chapter_uses_book_title_as_journal(
     record = nbib_records["28590685"]
 
     assert record.journal == "Micro-, Meso- and Macro-Dynamics of the Brain"
-    names = (record.author_names or "").split(STORAGE_SEPARATOR)
+    names = record.author_names
     assert len(names) == 11
     assert names[0].startswith("Laurent, ")
-    assert (record.author_affiliations or "").startswith(
+    assert record.author_affiliations[0].startswith(
         "Max Planck Institute for Brain Research"
     )
 
@@ -89,15 +87,16 @@ def test_pubmed_small_nbib__authors_have_orcids_and_affiliations(
     nbib_records: dict[str, Record],
 ) -> None:
     record = nbib_records["37587301"]
-    names = (record.author_names or "").split(STORAGE_SEPARATOR)
-    ids = parse_author_ids(record.author_ids)
+    names = record.author_names
+    orcids = record.author_ids["orcid"]
 
-    assert len(names) == len(ids) == 9
+    assert list(record.author_ids) == ["orcid"]
+    assert len(names) == len(orcids) == 9
     assert names[0] == "Müller, Rodrigo T"
-    assert ids[0] == ["orcid:0000-0001-8894-9875"]
-    assert ids[2] == []
-    assert ids[8] == ["orcid:0000-0002-7017-1652"]
-    affiliations = (record.author_affiliations or "").split(STORAGE_SEPARATOR)
+    assert orcids[0] == "0000-0001-8894-9875"
+    assert orcids[2] == ""
+    assert orcids[8] == "0000-0002-7017-1652"
+    affiliations = record.author_affiliations
     assert (
         "Programa de Pós-Graduação em Biodiversidade Animal, Universidade Federal "
         "de Santa Maria, Santa Maria, Brazil. rodrigotmuller@hotmail.com."
@@ -119,9 +118,7 @@ def test_pubmed_small_csv__keeps_values_as_in_the_file(
     nature = csv_records["37587301"]
     assert (nature.volume, nature.issue, nature.pages) == (None, None, None)
     assert nature.publication_date == "2023//"
-    assert (csv_records["30527956"].author_names or "").endswith(
-        ", Walsworth AK, et al."
-    )
+    assert csv_records["30527956"].author_names[0].endswith(", Walsworth AK, et al.")
     assert csv_records["37886492"].other_ids["pmcid"] == "PMC10602114"
 
 

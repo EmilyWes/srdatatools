@@ -38,10 +38,10 @@ class Label(BaseModel):
 
 class Record(BaseModel):
     title: str | None = None
-    author_names: str | None = None
-    # One slot per author, "key:value" ids; see app.parsers.authors.
-    author_ids: str | None = None
-    author_affiliations: str | None = None
+    author_names: list[str] = Field(default_factory=list)
+    # ID key -> one value per author, in author order ("" for an author without one).
+    author_ids: dict[str, list[str]] = Field(default_factory=dict)
+    author_affiliations: list[str] = Field(default_factory=list)
     abstract: str | None = None
     # Cleaned to YYYY/MM/DD, unknown parts left empty: 1994//.
     publication_date: str | None = None
@@ -56,7 +56,8 @@ class Record(BaseModel):
     isbn: str | None = None
     other_ids: dict[str, str] = Field(default_factory=dict)
     publication_type: str | None = None
-    keywords: list[str] = Field(default_factory=list)
+    # Prefix ("" for none) -> keywords.
+    keywords: dict[str, list[str]] = Field(default_factory=dict)
     language: str | None = None
     publisher: str | None = None
     url: str | None = None

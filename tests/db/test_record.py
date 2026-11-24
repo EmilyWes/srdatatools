@@ -74,8 +74,8 @@ def test_list_record_rows__requested_fields_ordered_by_id(library: Session) -> N
 def test_count_filled_fields__counts_non_empty_values(session: Session) -> None:
     session.add_all(
         [
-            Record(title="Paper", doi="10.1/a", author_names="A"),
-            Record(title="", keywords=["x"], author_names=""),
+            Record(title="Paper", doi="10.1/a", author_names=["A"]),
+            Record(title="", keywords={"": ["x"]}, author_names=[]),
             Record(title="Other", other_ids={}),
         ]
     )

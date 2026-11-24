@@ -1,99 +1,66 @@
 import logging
 import re
 
-from app.helpers.format import STORAGE_SEPARATOR
-
 logger = logging.getLogger(__name__)
 
-ID_JOINER = ", "
+# Between one author's different IDs of the same key.
+SAME_KEY_JOINER = " | "
 _ORCID_URL = re.compile(r"^https?://orcid\.org/")
-_UNSPLIT_IDS = re.compile(r"(?:^|, )(?P<key>[^:\[\]]+):\[(?P<value>[^\]]*)\]")
 
-# One list of "key:value" ids per author, in author order.
-AuthorIds = list[list[str]]
-
-
-def unsplit_author_ids(key: str, value: str) -> str:
-    """A column holding every author's ids, stored as "key:[value]" until
-    cleaning splits it per author."""
-    return f"{key}:[{value}]"
-
-
-def parse_unsplit_author_ids(value: str | None) -> list[tuple[str, str]]:
-    return [(m["key"], m["value"]) for m in _UNSPLIT_IDS.finditer(value or "")]
+# ID key -> one value per author, in author order ("" for an author without one).
+AuthorIds = dict[str, list[str]]
+# Per author, in author order: its (key, value) IDs.
+AuthorSlots = list[list[tuple[str, str]]]
 
 
 def strip_orcid_url(value: str) -> str:
     return _ORCID_URL.sub("", value)
 
 
-def author_id(key: str, value: str) -> str:
-    return f"{key}:{strip_orcid_url(value.strip())}"
+def clean_author_id(value: str) -> str:
+    return strip_orcid_url(value.strip())
 
 
-def format_author_ids(slots: AuthorIds) -> str | None:
-    """Empty slots are kept so positions keep matching the authors."""
-    if not any(slots):
-        return None
-    return STORAGE_SEPARATOR.join(ID_JOINER.join(dict.fromkeys(slot)) for slot in slots)
+def add_author_id(existing: str, new: str) -> str:
+    """An ID the author already has isn't added again."""
+    ids = existing.split(SAME_KEY_JOINER) if existing else []
+    if new and new not in ids:
+        ids.append(new)
+    return SAME_KEY_JOINER.join(ids)
 
 
-def parse_author_ids(value: str | None) -> AuthorIds:
-    if not value:
-        return []
-    return [
-        [item for item in piece.split(ID_JOINER) if item]
-        for piece in value.split(STORAGE_SEPARATOR)
-    ]
+def ids_by_key(slots: AuthorSlots) -> AuthorIds:
+    ids: AuthorIds = {}
+    for index, slot in enumerate(slots):
+        for key, value in slot:
+            values = ids.setdefault(key, [""] * len(slots))
+            values[index] = add_author_id(values[index], clean_author_id(value))
+    return ids
 
 
-def _split_author_id(item: str) -> tuple[str, str]:
-    key, _, value = item.partition(":")
-    return key, value
+def ids_of_key(ids: AuthorIds, key: str) -> list[str]:
+    """One value per author, also when no author has that key: as many as the
+    other keys have."""
+    if key in ids:
+        return ids[key]
+    return [""] * max(map(len, ids.values()), default=0)
 
 
-def author_id_keys(value: str | None) -> list[str]:
-    unsplit = parse_unsplit_author_ids(value)
-    if unsplit:
-        return list(dict.fromkeys(key for key, _ in unsplit))
-    return list(
-        dict.fromkeys(
-            _split_author_id(item)[0]
-            for slot in parse_author_ids(value)
-            for item in slot
-        )
-    )
-
-
-def author_ids_per_slot(value: str | None, key: str) -> list[str]:
-    """Unsplit ids as stored, or cleaned ids with one slot per author even when
-    no author has that key (an author's ids of one key joined with ID_JOINER)."""
-    unsplit = parse_unsplit_author_ids(value)
-    if unsplit:
-        return [ids for k, ids in unsplit if k == key]
-    return [
-        ID_JOINER.join(id_ for k, id_ in map(_split_author_id, slot) if k == key)
-        for slot in parse_author_ids(value)
-    ]
-
-
-def author_ids_for_key(value: str | None, key: str, delimiter: str) -> str:
-    return delimiter.join(author_ids_per_slot(value, key))
-
-
-def merge_author_ids(existing: AuthorIds, new: AuthorIds, source: str) -> AuthorIds:
-    """Adds each author's new ids to their slot; a different author count can't
-    be matched by position, so the new ids are then ignored."""
-    if not existing:
-        return new
-    if not new:
-        return existing
-    if len(new) != len(existing):
+def merge_author_ids(ids: AuthorIds, key: str, new: list[str]) -> AuthorIds:
+    """A different author count can't be matched by position, so the new IDs are
+    then ignored."""
+    existing = ids.get(key)
+    if existing is None:
+        return {**ids, key: new}
+    if len(existing) != len(new):
         logger.warning(
-            "%r has %d authors' ids for %d authors; ignoring it",
-            source,
+            "%d authors' %r IDs for %d authors; ignoring them",
             len(new),
+            key,
             len(existing),
         )
-        return existing
-    return [[*old, *added] for old, added in zip(existing, new, strict=True)]
+        return ids
+    merged = [
+        add_author_id(old, added) for old, added in zip(existing, new, strict=True)
+    ]
+    return {**ids, key: merged}
