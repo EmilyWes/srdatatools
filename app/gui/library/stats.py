@@ -2,7 +2,7 @@ from collections import Counter, defaultdict
 
 from sqlalchemy.orm import Session
 
-from app.db.queries import list_record_rows
+from app.db.record import list_record_rows
 from app.gui.library.quality import CHECKS, QUALITY_FIELDS, quality_issues
 from app.models.record import publication_year
 from app.parsers.authors import author_id_keys

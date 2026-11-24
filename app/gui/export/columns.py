@@ -5,7 +5,7 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
-from app.db.queries import load_records, record_schema
+from app.db.record import load_records, record_schema
 from app.gui.export.options import ExportOptions
 from app.gui.export.ris_tags import TAG_PATTERN, ris_type
 from app.helpers.format import DISPLAY_SEPARATOR, STORAGE_SEPARATOR, label_text

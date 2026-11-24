@@ -118,10 +118,13 @@ app/
   db/
     models.py        # SQLAlchemy models
     session.py       # engine/session setup, runs Alembic migrations
-    store.py         # writes parsed records to the database, updates and deletes records
-    queries.py       # read queries for the GUI
+    record.py        # record table reads, updates and deletes
+    source.py        # source_file table reads
+    record_source.py # record_source table reads
+    label.py         # label table reads
+    general.py       # writes and deletes spanning several tables (storing an import, removing a file, deleting the library)
     settings.py      # app_settings key/value read/write
-    activity_log.py  # adds and clears activity_log rows
+    activity_log.py  # adds, lists and clears activity_log rows
     migrations/      # Alembic
   gui/
     general/

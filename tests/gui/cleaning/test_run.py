@@ -5,8 +5,8 @@ import pytest
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.db.general import store_parsed_rows
 from app.db.models import Base, Record, SourceFile
-from app.db.store import store_parsed_rows
 from app.gui.cleaning.options import CleaningOptions
 from app.gui.cleaning.run import clean_records
 from app.models.record import Label as LabelSchema

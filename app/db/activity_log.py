@@ -1,9 +1,14 @@
 import datetime
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.db.models import ActivityLog
+
+
+def list_activity_log(session: Session) -> list[ActivityLog]:
+    statement = select(ActivityLog).order_by(ActivityLog.timestamp, ActivityLog.id)
+    return list(session.scalars(statement))
 
 
 def add_activity(

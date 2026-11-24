@@ -15,12 +15,9 @@ from nicegui.element import Element
 from nicegui.events import GenericEventArguments
 from sqlalchemy.orm import Session
 
-from app.db.queries import (
-    list_label_columns,
-    list_record_labels,
-    list_record_rows,
-    list_record_sources,
-)
+from app.db.label import list_label_columns, list_record_labels
+from app.db.record import list_record_rows
+from app.db.record_source import list_record_sources
 from app.db.settings import delete_setting, get_setting, set_setting
 from app.gui.library.quality import QUALITY_FIELDS, quality_issues
 from app.gui.library.stats import list_author_id_keys, list_keyword_prefixes

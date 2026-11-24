@@ -5,8 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.db.models import RecordSource
-from app.db.queries import load_records, record_schema
-from app.db.store import update_records
+from app.db.record import load_records, record_schema, update_records
 from app.gui.cleaning.options import CleaningOptions
 from app.gui.cleaning.steps import (
     STEP_NAMES,

@@ -1,44 +1,18 @@
 import datetime
-from collections.abc import Iterator
 
-import pytest
-from sqlalchemy import Engine, create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
+from app.db.general import delete_library, remove_source_file, store_parsed_rows
 from app.db.models import (
     ActivityLog,
     AppSetting,
-    Base,
     Label,
     Record,
     RecordSource,
     SourceFile,
 )
-from app.db.store import (
-    delete_library,
-    delete_records,
-    remove_source_file,
-    store_parsed_rows,
-    update_records,
-)
 from app.models.record import Label as LabelSchema
 from app.models.record import Record as RecordSchema
-
-
-@pytest.fixture
-def engine() -> Iterator[Engine]:
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    yield engine
-    engine.dispose()
-
-
-@pytest.fixture
-def session(engine: Engine) -> Iterator[Session]:
-    session_factory = sessionmaker(bind=engine)
-    session = session_factory()
-    yield session
-    session.close()
 
 
 def test_store_parsed_rows__creates_source_file_with_row_count(
@@ -438,40 +412,3 @@ def test_delete_library__keeps_activity_log_and_settings(session: Session) -> No
 
 def test_delete_library__empty_library_returns_zeros(session: Session) -> None:
     assert delete_library(session) == (0, 0)
-
-
-def test_delete_records__removes_records_their_sources_and_labels(
-    session: Session,
-) -> None:
-    source_file = _source_file("export.ris")
-    first = _record("First", source_file)
-    second = _record("Second", source_file)
-    kept = _record("Kept", source_file)
-    session.add_all([first, second, kept, _label(first, source_file, "ft")])
-    session.commit()
-
-    deleted = delete_records(session, {first.id, second.id})
-    session.commit()
-
-    assert deleted == 2
-    assert [r.title for r in session.query(Record)] == ["Kept"]
-    assert session.query(RecordSource).count() == 1
-    assert session.query(Label).count() == 0
-    assert [f.filename for f in session.query(SourceFile)] == ["export.ris"]
-
-
-def test_update_records__sets_the_given_fields_only(session: Session) -> None:
-    first = Record(title="First", doi="10.1/a")
-    second = Record(title="Second")
-    session.add_all([first, second])
-    session.commit()
-
-    update_records(session, {first.id: {"title": "Changed", "pages": "1-2"}})
-    session.commit()
-
-    assert [
-        (r.title, r.doi, r.pages) for r in session.query(Record).order_by(Record.id)
-    ] == [
-        ("Changed", "10.1/a", "1-2"),
-        ("Second", None, None),
-    ]
