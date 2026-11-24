@@ -581,6 +581,10 @@ def test_strip_affiliation_start__without_names_leaves_record_unchanged() -> Non
     assert cleaned == record
 
 
+def _issn_options(**changes: object) -> CleaningOptions:
+    return _options(**{"strip_extras": True, "only_one": True, **changes})
+
+
 _SN = ["1234-5678 (electronic), 9123-4567 (print)"]
 
 
@@ -609,7 +613,7 @@ def test_clean_issn_isbn__strip_extras_and_only_one(
     ],
 )
 def test_clean_issn_isbn__only_one_keeps_first_value(value: list[str]) -> None:
-    options = _options(preferred_qualifier="")
+    options = _issn_options(preferred_qualifier="")
 
     assert clean_issn_isbn(Record(issn=value), _NO_CONTEXT, options).issn == [
         "1234-5678"
@@ -627,7 +631,7 @@ def test_clean_issn_isbn__only_one_keeps_first_value(value: list[str]) -> None:
 def test_clean_issn_isbn__strip_extras_drops_qualifier(
     issn: list[str], isbn: list[str], expected: tuple[list[str], list[str]]
 ) -> None:
-    record = clean_issn_isbn(Record(issn=issn, isbn=isbn), _NO_CONTEXT, _OPTIONS)
+    record = clean_issn_isbn(Record(issn=issn, isbn=isbn), _NO_CONTEXT, _issn_options())
 
     assert (record.issn, record.isbn) == expected
 
@@ -635,13 +639,17 @@ def test_clean_issn_isbn__strip_extras_drops_qualifier(
 def test_clean_issn_isbn__each_field_keeps_numbers_of_its_own_length() -> None:
     value = ["12345; 9783161484100; 1234-5678"]
 
-    record = clean_issn_isbn(Record(issn=value, isbn=value), _NO_CONTEXT, _OPTIONS)
+    record = clean_issn_isbn(
+        Record(issn=value, isbn=value), _NO_CONTEXT, _issn_options()
+    )
 
     assert (record.issn, record.isbn) == (["1234-5678"], ["9783161484100"])
 
 
 def test_clean_issn_isbn__unrecognised_values_are_kept() -> None:
-    record = clean_issn_isbn(Record(issn=["12345", "n/a"]), _NO_CONTEXT, _OPTIONS)
+    record = clean_issn_isbn(
+        Record(issn=["12345", "n/a"]), _NO_CONTEXT, _issn_options()
+    )
 
     assert record.issn == ["12345", "n/a"]
 
@@ -649,7 +657,7 @@ def test_clean_issn_isbn__unrecognised_values_are_kept() -> None:
 def test_clean_issn_isbn__finds_numbers_across_values() -> None:
     record = Record(issn=["n/a", "1234-5678 (Print)", "8765-4321"])
 
-    cleaned = clean_issn_isbn(record, _NO_CONTEXT, _options(only_one=False))
+    cleaned = clean_issn_isbn(record, _NO_CONTEXT, _issn_options(only_one=False))
 
     assert cleaned.issn == ["1234-5678", "8765-4321"]
 
@@ -659,7 +667,7 @@ _IS_LINES = ["1234-5678 (Print)", "8765-4321 (Electronic)", "1234-5678 (Linking)
 
 @pytest.mark.parametrize("preferred", ["Electronic", "electronic", " ELECTRONIC "])
 def test_clean_issn_isbn__preferred_qualifier_value_wins(preferred: str) -> None:
-    options = _options(preferred_qualifier=preferred)
+    options = _issn_options(preferred_qualifier=preferred)
 
     assert clean_issn_isbn(Record(issn=_IS_LINES), _NO_CONTEXT, options).issn == [
         "8765-4321"
@@ -670,7 +678,7 @@ def test_clean_issn_isbn__preferred_qualifier_value_wins(preferred: str) -> None
 def test_clean_issn_isbn__without_matching_qualifier_first_value_wins(
     preferred: str,
 ) -> None:
-    options = _options(preferred_qualifier=preferred)
+    options = _issn_options(preferred_qualifier=preferred)
 
     assert clean_issn_isbn(Record(issn=_IS_LINES), _NO_CONTEXT, options).issn == [
         "1234-5678"
@@ -678,7 +686,7 @@ def test_clean_issn_isbn__without_matching_qualifier_first_value_wins(
 
 
 def test_clean_issn_isbn__preferred_qualifier_is_ignored_without_only_one() -> None:
-    options = _options(only_one=False)
+    options = _issn_options(only_one=False)
 
     assert clean_issn_isbn(Record(issn=_IS_LINES), _NO_CONTEXT, options).issn == [
         "1234-5678",

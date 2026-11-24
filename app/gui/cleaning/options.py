@@ -9,8 +9,8 @@ _OPTIONS_KEY = "cleaning_options"
 
 
 class CleaningOptions(BaseModel):
-    strip_extras: bool = True
-    only_one: bool = True
+    strip_extras: bool = False
+    only_one: bool = False
     preferred_qualifier: str = "Electronic"
     drop_et_al: bool = True
     drop_trailing: bool = True

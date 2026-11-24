@@ -108,6 +108,26 @@ def test_render_cleaning_view__restore_defaults_goes_to_the_built_in_defaults() 
     assert "color" not in view.screen.widgets["drop_et_al"].props
 
 
+def test_render_cleaning_view__turn_off_all_unchecks_and_clears_empty_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    middle = shell().middle
+    view = _render(CleaningOptions(names_separator=";"), middle=middle)
+    [button] = [
+        e
+        for e in middle.descendants()
+        if isinstance(e, ui.button) and e.text == "Turn off all"
+    ]
+
+    click_and_wait(button, monkeypatch)
+
+    choices = view.screen.current_choices()
+    assert not any(v for v in choices.model_dump().values() if isinstance(v, bool))
+    assert choices.empty_values == []
+    assert choices.names_separator == ";"
+    assert len(view.screen.empty_rows) == 1
+
+
 def test_render_cleaning_view__checkbox_has_no_text_of_its_own() -> None:
     checkbox = _render().screen.widgets["drop_et_al"]
 

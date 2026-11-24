@@ -160,6 +160,14 @@ class OptionsScreen(Generic[_M]):
         if "use_first" in self.lists:
             self.refresh_ordering()
 
+    def turn_off_all(self) -> None:
+        for widget in self.widgets.values():
+            if isinstance(widget, ui.checkbox):
+                widget.value = False
+        if "empty_values" in self.lists:
+            self.empty_values = []
+            self._render_empty_values()
+
     def _field(self, widget: _W, wide: bool = False) -> _W:
         if isinstance(widget, ui.checkbox):
             widget.props(f"dense keep-color size={_CHECKBOX_SIZE}")
@@ -373,6 +381,7 @@ def render_options_overview(
     chosen: _M | None = None,
     current_mapping: Callable[[], FieldMapping] | None = None,
     start: _M | None = None,
+    turn_off_button: bool = False,
 ) -> OptionsScreen[_M]:
     """`chosen` shows a stored import's choices read-only; `start` opens editable
     on other values than the defaults."""
@@ -393,6 +402,10 @@ def render_options_overview(
                 screen.render_box(box, shown)
         if not screen.readonly:
             with ui.row().classes("w-full justify-end"):
+                if turn_off_button:
+                    ui.button("Turn off all", on_click=screen.turn_off_all).props(
+                        "dense flat no-caps"
+                    ).classes("text-xs")
                 ui.button("Restore defaults", on_click=screen.restore_defaults).props(
                     "dense flat no-caps"
                 ).classes("text-xs")

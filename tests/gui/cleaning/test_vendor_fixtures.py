@@ -17,6 +17,7 @@ from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
 from tests.vendor_data import vendor_file
 
 _OPTIONS = CleaningOptions()
+_ISSN_ON = _OPTIONS.model_copy(update={"strip_extras": True, "only_one": True})
 
 
 def _mapping(path: Path, file_type: FileType, source: str) -> FieldMapping:
@@ -108,7 +109,7 @@ def test_cleaned_scopus_csv__splits_keywords_keeping_the_author_prefix() -> None
 
 
 def test_cleaned_scopus_ris__reads_eid_and_conference_name_from_notes() -> None:
-    records = _by(_cleaned("scopus", ".ris", "ris"), "eid")
+    records = _by(_cleaned("scopus", ".ris", "ris", _ISSN_ON), "eid")
 
     hummingbird = records["2-s2.0-85081690252"]
     assert hummingbird.issn == ["00280836"]
@@ -138,7 +139,7 @@ def test_cleaned_scopus__every_format_gets_the_same_eids() -> None:
 
 
 def test_cleaned_pubmed_nbib__applies_the_defaults() -> None:
-    records = _by(_cleaned("pubmed", ".txt", "nbib"), "pmid")
+    records = _by(_cleaned("pubmed", ".txt", "nbib", _ISSN_ON), "pmid")
 
     assert records["27869079"].title == (
         "Clin d’œil du Dinosaure émérite - Quand les parents DMD montent au "
@@ -179,7 +180,7 @@ def test_cleaned_openalex_csv__groups_author_ids_and_orcids() -> None:
 def test_cleaned_openalex_csv__strips_pmid_and_keeps_one_issn() -> None:
     [dinosaur] = [
         record
-        for record in _cleaned("openalex", ".csv", "csv")
+        for record in _cleaned("openalex", ".csv", "csv", _ISSN_ON)
         if record.doi == "10.1038/nature21700"
     ]
 

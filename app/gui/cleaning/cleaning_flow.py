@@ -39,6 +39,7 @@ def render_cleaning_view(
             CLEANING_BOXES,
             CleaningOptions(),
             start=options,
+            turn_off_button=True,
         )
         run_button = ui.button(
             "Run cleaning", on_click=lambda: on_clean(screen.current_choices())
