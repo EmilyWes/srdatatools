@@ -8,7 +8,7 @@ from nicegui import ui
 from nicegui.element import Element
 from pydantic import BaseModel
 
-from app.parsers.mapping import FieldMapping
+from app.gui.importing.mapping import FieldMapping
 
 Control = Literal["checkbox", "text", "number", "select", "note"]
 

@@ -92,28 +92,6 @@ Goal: support as many databases as possible, built in order of how widely used t
 app/
   models/
     record.py        # pydantic Record schema every parser normalizes to
-  parsers/
-    common.py        # result types shared by all parsers, the FileType literal, file decoding
-    detect.py        # Type/Source auto-detection from file extension + content sniffing
-    mapping.py       # generic input-key -> Record field mapping (CSV columns, RIS/NBIB tags, BibTeX fields)
-    authors.py       # author-ID field format shared by the parsers and cleaning
-    csv_.py          # generic CSV/TSV reader + column-mapping suggestions
-    excel.py         # generic Excel (.xlsx) reader, reusing the CSV column mapping
-    ris.py           # generic RIS tokenizer + tag-mapping suggestions
-    nbib.py          # generic NBIB/MEDLINE tokenizer + tag-mapping suggestions
-    bibtex.py        # generic BibTeX tokenizer + field-mapping suggestions
-    parse_settings.py # parse settings (label values, field-size limit, ordering)
-    profiles/        # per-database tag/column mappings + parse settings
-      base.py        # Profile/FormatProfile types
-      default.py     # default profile per Type, used when Source is Unknown
-      asreview.py
-      openalex.py
-      pubmed.py
-      scopus.py
-      web_of_science.py  # (planned)
-      ieee_xplore.py     # (planned)
-      embase.py          # (planned)
-      psycinfo.py        # (planned)
   db/
     models.py        # SQLAlchemy models
     session.py       # engine/session setup, runs Alembic migrations
@@ -134,6 +112,27 @@ app/
     importing/
       import_flow.py # import view in the middle panel + the per-Type parser wiring it imports with
       options.py     # import options (stored with the source file) + their boxes per Type, applied to the profile
+      common.py      # result types shared by all parsers, the FileType literal, file decoding
+      detect.py      # Type/Source auto-detection from file extension + content sniffing
+      mapping.py     # generic input-key -> Record field mapping (CSV columns, RIS/NBIB tags, BibTeX fields)
+      parse_settings.py # parse settings (label values, field-size limit, ordering)
+      formats/
+        csv.py       # generic CSV/TSV reader + column-mapping suggestions
+        excel.py     # generic Excel (.xlsx) reader, reusing the CSV column mapping
+        ris.py       # generic RIS tokenizer + tag-mapping suggestions
+        nbib.py      # generic NBIB/MEDLINE tokenizer + tag-mapping suggestions
+        bibtex.py    # generic BibTeX tokenizer + field-mapping suggestions
+      profiles/      # per-database tag/column mappings + parse settings
+        base.py      # Profile/FormatProfile types
+        default.py   # default profile per Type, used when Source is Unknown
+        asreview.py
+        openalex.py
+        pubmed.py
+        scopus.py
+        web_of_science.py  # (planned)
+        ieee_xplore.py     # (planned)
+        embase.py          # (planned)
+        psycinfo.py        # (planned)
     cleaning/
       cleaning_flow.py # cleaning view in the middle panel
       steps.py       # cleaning steps and the order they run in, per record
@@ -161,6 +160,7 @@ app/
       about.py       # About view (version, license, third-party licenses) and Help view
       activity_log.py # plain-language activity_log messages (for every module that acts)
   helpers/
+    authors.py       # author-ID field format shared by the parsers and cleaning
     options_overview.py # box types + subject boxes (Parsing and Cleaning views) + the Mapping | Parsing toggle, for the import, source-file, cleaning and export views
     mapping_table.py # field-mapping table (CSV columns, RIS/NBIB tags, BibTeX fields)
     busy.py          # runs slow work off the event loop, with a spinner dialog if it takes a while
@@ -169,7 +169,7 @@ app/
   main.py            # launches pywebview + NiceGUI server
 ```
 
-Keeping parsers, dedup, enrich and the export writers (the last three in `gui/`) as separate modules with a shared internal `Record` schema means each input/output format only needs a thin adapter, and new sources (e.g. Scopus, Web of Science exports) can be added later without touching the rest of the app.
+Keeping the parsers, dedup, enrich and the export writers as separate modules in `gui/` with a shared internal `Record` schema means each input/output format only needs a thin adapter, and new sources (e.g. Scopus, Web of Science exports) can be added later without touching the rest of the app.
 
 ## Data model
 

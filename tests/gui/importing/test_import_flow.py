@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db.models import ActivityLog, Base, Record
 from app.gui.general.layout import shell
 from app.gui.importing import import_flow
+from app.gui.importing.common import FileSummary, FileType
 from app.gui.importing.import_flow import (
     ImportView,
     common_detection,
@@ -24,14 +25,13 @@ from app.gui.importing.import_flow import (
     render_import_view,
     render_mapping,
 )
+from app.gui.importing.mapping import AuthorsRow, FieldMapping
 from app.gui.importing.options import (
     ImportOptions,
     default_options,
     load_options,
 )
 from app.helpers.mapping_table import MappingScreen
-from app.parsers.common import FileSummary, FileType
-from app.parsers.mapping import AuthorsRow, FieldMapping
 from tests.gui.clicks import click_and_wait, run_in
 from tests.mappings import mapping_of, targets_of
 

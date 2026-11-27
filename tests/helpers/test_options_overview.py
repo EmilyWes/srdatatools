@@ -3,6 +3,8 @@ from nicegui.element import Element
 from pydantic import BaseModel, Field
 
 from app.gui.general.layout import shell
+from app.gui.importing.common import FileType
+from app.gui.importing.mapping import FieldMapping
 from app.gui.importing.options import (
     ImportOptions,
     default_options,
@@ -15,8 +17,6 @@ from app.helpers.options_overview import (
     render_options_overview,
     render_view_toggle,
 )
-from app.parsers.common import FileType
-from app.parsers.mapping import FieldMapping
 from tests.mappings import mapping_of
 
 

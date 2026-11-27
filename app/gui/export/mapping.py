@@ -14,10 +14,10 @@ from app.gui.export.formats.ris_tags import (
     ris_type,
 )
 from app.gui.export.options import ExportOptions
+from app.gui.importing.profiles import source_label
+from app.helpers.authors import ids_of_key
 from app.helpers.format import DISPLAY_SEPARATOR, label_text
 from app.models.record import CLEANED_DATE, Label, Record
-from app.parsers.authors import ids_of_key
-from app.parsers.profiles import source_label
 
 # Ris standard keeps an extra "/"" at the end for other info.
 DatePart = Literal["full", "year", "month", "day", "ris"]

@@ -2,18 +2,30 @@ from pathlib import Path
 
 from app.gui.cleaning.options import CleaningOptions
 from app.gui.cleaning.steps import CleaningContext, clean_record, get_separators
-from app.models.record import Record
-from app.parsers.bibtex import (
+from app.gui.importing.common import FileType
+from app.gui.importing.formats.bibtex import (
     parse_bibtex_file,
     read_bibtex_fields,
     suggest_bibtex_mapping,
 )
-from app.parsers.common import FileType
-from app.parsers.csv_ import parse_csv_file, read_csv_headers, suggest_mapping
-from app.parsers.mapping import FieldMapping
-from app.parsers.nbib import parse_nbib_file, read_nbib_tags, suggest_nbib_mapping
-from app.parsers.profiles import profile_for
-from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
+from app.gui.importing.formats.csv import (
+    parse_csv_file,
+    read_csv_headers,
+    suggest_mapping,
+)
+from app.gui.importing.formats.nbib import (
+    parse_nbib_file,
+    read_nbib_tags,
+    suggest_nbib_mapping,
+)
+from app.gui.importing.formats.ris import (
+    parse_ris_file,
+    read_ris_tags,
+    suggest_ris_mapping,
+)
+from app.gui.importing.mapping import FieldMapping
+from app.gui.importing.profiles import profile_for
+from app.models.record import Record
 from tests.vendor_data import vendor_file
 
 _OPTIONS = CleaningOptions()

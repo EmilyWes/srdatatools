@@ -12,9 +12,13 @@ from app.gui.export.formats.ris_tags import (
 )
 from app.gui.export.mapping import ExportRecord, export_fields
 from app.gui.export.options import ExportOptions
+from app.gui.importing.formats.ris import (
+    parse_ris_file,
+    read_ris_tags,
+    suggest_ris_mapping,
+)
 from app.helpers.format import PUBLICATION_TYPES
 from app.models.record import Record
-from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
 
 _DATA = Path(__file__).parents[3] / "data"
 

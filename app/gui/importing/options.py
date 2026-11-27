@@ -5,10 +5,10 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from app.gui.importing.common import FileType
+from app.gui.importing.profiles import FormatProfile, profile_for
 from app.helpers.options_overview import OptionBox, OptionItem, OptionList
 from app.models.record import LabelValue
-from app.parsers.common import FileType
-from app.parsers.profiles import FormatProfile, profile_for
 
 logger = logging.getLogger(__name__)
 

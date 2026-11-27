@@ -26,8 +26,8 @@ from app.gui.cleaning.steps import (
     strip_doi,
     strip_pmid,
 )
+from app.gui.importing.mapping import FieldMapping
 from app.models.record import Record
-from app.parsers.mapping import FieldMapping
 from tests.mappings import mapping_of
 
 _OPTIONS = CleaningOptions()

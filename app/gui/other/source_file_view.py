@@ -5,18 +5,18 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import SourceFile
+from app.gui.importing.common import FileSummary, FileType
 from app.gui.importing.import_flow import type_label
+from app.gui.importing.mapping import FieldMapping
 from app.gui.importing.options import (
     default_options,
     import_boxes,
     load_options,
 )
+from app.gui.importing.profiles import sources_label
 from app.helpers.format import format_count
 from app.helpers.mapping_table import render_mapping_table
 from app.helpers.options_overview import render_options_overview, render_view_toggle
-from app.parsers.common import FileSummary, FileType
-from app.parsers.mapping import FieldMapping
-from app.parsers.profiles import sources_label
 
 
 def render_source_file_view(

@@ -9,9 +9,9 @@ from app.db.general import store_parsed_rows
 from app.db.models import Base, Record, SourceFile
 from app.gui.cleaning.options import CleaningOptions
 from app.gui.cleaning.run import clean_records
+from app.gui.importing.mapping import FieldMapping
 from app.models.record import Label as LabelSchema
 from app.models.record import Record as RecordSchema
-from app.parsers.mapping import FieldMapping
 from tests.mappings import mapping_of
 
 

@@ -13,8 +13,8 @@ from app.gui.cleaning.steps import (
     clean_record,
     get_separators,
 )
+from app.gui.importing.mapping import FieldMapping
 from app.models.record import Record as RecordSchema
-from app.parsers.mapping import FieldMapping
 
 # Cleaning doesn't touch these, and they aren't plain columns.
 _NOT_CLEANED = {"labels"}

@@ -88,7 +88,7 @@ def test_run_migrations__activity_log_status_defaults_to_ok(tmp_path: Path) -> N
 def test_run_migrations__leaves_app_logging_configuration_alone(
     tmp_path: Path,
 ) -> None:
-    app_logger = logging.getLogger("app.parsers.csv_")
+    app_logger = logging.getLogger("app.gui.importing.formats.csv")
     root = logging.getLogger()
     handlers_before, level_before = root.handlers[:], root.level
 

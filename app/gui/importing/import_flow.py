@@ -8,6 +8,41 @@ from sqlalchemy.orm import Session
 
 from app.db.general import store_parsed_rows
 from app.db.models import SourceFile
+from app.gui.importing.common import (
+    UNKNOWN,
+    FileSummary,
+    FileType,
+    ParseResult,
+    is_file_type,
+    merge_summaries,
+)
+from app.gui.importing.detect import detect_sources, detect_type
+from app.gui.importing.formats.bibtex import (
+    parse_bibtex_file,
+    read_bibtex_fields,
+    suggest_bibtex_mapping,
+)
+from app.gui.importing.formats.csv import (
+    parse_csv_file,
+    read_csv_headers,
+    suggest_mapping,
+)
+from app.gui.importing.formats.excel import (
+    parse_excel_file,
+    read_excel_headers,
+    read_excel_sheets,
+)
+from app.gui.importing.formats.nbib import (
+    parse_nbib_file,
+    read_nbib_tags,
+    suggest_nbib_mapping,
+)
+from app.gui.importing.formats.ris import (
+    parse_ris_file,
+    read_ris_tags,
+    suggest_ris_mapping,
+)
+from app.gui.importing.mapping import FieldMapping
 from app.gui.importing.options import (
     ImportOptions,
     default_options,
@@ -15,6 +50,8 @@ from app.gui.importing.options import (
     import_boxes,
     profile_with,
 )
+from app.gui.importing.parse_settings import ParseSettings
+from app.gui.importing.profiles import FormatProfile, source_label, sources_label
 from app.gui.other.activity_log import log_import
 from app.helpers.busy import run_busy
 from app.helpers.format import GRID_CLASSES, GRID_COLUMNS
@@ -26,43 +63,6 @@ from app.helpers.options_overview import (
     OptionsScreen,
     render_options_overview,
     render_view_toggle,
-)
-from app.parsers.bibtex import (
-    parse_bibtex_file,
-    read_bibtex_fields,
-    suggest_bibtex_mapping,
-)
-from app.parsers.common import (
-    UNKNOWN,
-    FileSummary,
-    FileType,
-    ParseResult,
-    is_file_type,
-    merge_summaries,
-)
-from app.parsers.csv_ import (
-    parse_csv_file,
-    read_csv_headers,
-    suggest_mapping,
-)
-from app.parsers.detect import detect_sources, detect_type
-from app.parsers.excel import (
-    parse_excel_file,
-    read_excel_headers,
-    read_excel_sheets,
-)
-from app.parsers.mapping import FieldMapping
-from app.parsers.nbib import (
-    parse_nbib_file,
-    read_nbib_tags,
-    suggest_nbib_mapping,
-)
-from app.parsers.parse_settings import ParseSettings
-from app.parsers.profiles import FormatProfile, source_label, sources_label
-from app.parsers.ris import (
-    parse_ris_file,
-    read_ris_tags,
-    suggest_ris_mapping,
 )
 
 _TYPE_OPTIONS = {

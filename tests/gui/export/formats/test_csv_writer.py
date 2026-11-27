@@ -3,8 +3,8 @@ from pathlib import Path
 from app.gui.export.formats.csv import write_csv
 from app.gui.export.mapping import ExportField, ExportRecord, export_fields
 from app.gui.export.options import ExportOptions
+from app.gui.importing.formats.csv import parse_csv_text, suggest_mapping
 from app.models.record import Record
-from app.parsers.csv_ import parse_csv_text, suggest_mapping
 
 _RECORDS = [
     ExportRecord(

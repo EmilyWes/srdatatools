@@ -5,8 +5,8 @@ from typing import Literal
 from nicegui import ui
 from nicegui.element import Element
 
-from app.parsers.common import FileSummary
-from app.parsers.mapping import (
+from app.gui.importing.common import FileSummary
+from app.gui.importing.mapping import (
     AUTHORS_TARGET,
     DATE_TARGET,
     ISSN_ISBN_TARGET,

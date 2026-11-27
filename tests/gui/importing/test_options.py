@@ -1,5 +1,6 @@
 import pytest
 
+from app.gui.importing.common import FileType
 from app.gui.importing.options import (
     ImportOptions,
     default_options,
@@ -8,9 +9,8 @@ from app.gui.importing.options import (
     load_options,
     profile_with,
 )
+from app.gui.importing.profiles import PROFILES, profile_for
 from app.helpers.options_overview import OptionItem, OptionList
-from app.parsers.common import FileType
-from app.parsers.profiles import PROFILES, profile_for
 
 _ALL_TYPES = ("ris", "nbib", "csv", "tsv", "excel", "bibtex")
 

@@ -37,7 +37,9 @@ from app.gui.export.options import (
 from app.gui.general.layout import shell
 from app.gui.general.left_panel import LeftPanel, render_left_panel
 from app.gui.general.right_panel import render_right_panel
+from app.gui.importing.common import FileSummary, FileType
 from app.gui.importing.import_flow import import_file, render_import_view
+from app.gui.importing.mapping import FieldMapping
 from app.gui.importing.options import ImportOptions
 from app.gui.library.dashboard import (
     COMPLETENESS_FIELDS,
@@ -84,8 +86,6 @@ from app.gui.other.activity_log import (
 from app.gui.other.source_file_view import render_source_file_view
 from app.helpers.busy import run_busy
 from app.helpers.format import format_count
-from app.parsers.common import FileSummary, FileType
-from app.parsers.mapping import FieldMapping
 
 logger = logging.getLogger(__name__)
 

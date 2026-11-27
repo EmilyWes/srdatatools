@@ -1,0 +1,146 @@
+from pathlib import Path
+
+import pytest
+
+from app.gui.importing.common import FileType, ParseResult
+from app.gui.importing.formats.csv import (
+    parse_csv_file,
+    read_csv_headers,
+    suggest_mapping,
+)
+from app.gui.importing.formats.nbib import (
+    parse_nbib_file,
+    read_nbib_tags,
+    suggest_nbib_mapping,
+)
+from app.gui.importing.profiles.pubmed import PUBMED
+from app.models.record import Record
+from tests.vendor_data import vendor_file, vendor_files
+
+_FORMAT_BY_SUFFIX: dict[str, FileType] = {
+    ".txt": "nbib",
+    ".nbib": "nbib",
+    ".csv": "csv",
+}
+
+
+def _parse(path: Path, file_format: FileType) -> ParseResult:
+    profile = PUBMED.formats[file_format]
+    if file_format == "nbib":
+        tags = list(read_nbib_tags(path).samples)
+        mapping = suggest_nbib_mapping(tags, profile.suggestions, profile.ignored_keys)
+        return parse_nbib_file(path, mapping, settings=profile.settings)
+    headers = list(read_csv_headers(path).samples)
+    mapping = suggest_mapping(headers, profile.suggestions)
+    return parse_csv_file(path, mapping, settings=profile.settings)
+
+
+def _records_by_pmid(suffix: str, file_format: FileType) -> dict[str, Record]:
+    result = _parse(vendor_file("pubmed", "small", suffix), file_format)
+    assert result.skipped == []
+    return {row.record.pmid: row.record for row in result.rows if row.record.pmid}
+
+
+@pytest.fixture
+def nbib_records() -> dict[str, Record]:
+    return _records_by_pmid(".txt", "nbib")
+
+
+@pytest.fixture
+def csv_records() -> dict[str, Record]:
+    return _records_by_pmid(".csv", "csv")
+
+
+def test_pubmed_small_nbib__parses_every_record(
+    nbib_records: dict[str, Record],
+) -> None:
+    assert len(nbib_records) == 12
+
+
+def test_pubmed_small_nbib__keeps_values_as_in_the_file(
+    nbib_records: dict[str, Record],
+) -> None:
+    assert nbib_records["41672119"].journal == "Journal of ethnopharmacology"
+    assert nbib_records["27869079"].title == "[Not Available]."
+    assert nbib_records["11523304"].pages == "521-2"
+    assert nbib_records["11523304"].doi is None
+    assert nbib_records["28590685"].isbn == ["978-3-319-28801-7", "978-3-319-28802-4"]
+    assert nbib_records["28590685"].publication_type == "Review\nBook Chapter"
+
+
+def test_pubmed_small_nbib__mesh_keywords_are_prefixed(
+    nbib_records: dict[str, Record],
+) -> None:
+    keywords = nbib_records["41672119"].keywords
+
+    assert "*Materia Medica/standards/history" in keywords["MeSH"]
+    assert "Adulteration" in keywords[""]
+
+
+def test_pubmed_small_nbib__book_chapter_uses_book_title_as_journal(
+    nbib_records: dict[str, Record],
+) -> None:
+    record = nbib_records["28590685"]
+
+    assert record.journal == "Micro-, Meso- and Macro-Dynamics of the Brain"
+    names = record.author_names
+    assert len(names) == 11
+    assert names[0].startswith("Laurent, ")
+    assert record.author_affiliations[0].startswith(
+        "Max Planck Institute for Brain Research"
+    )
+
+
+def test_pubmed_small_nbib__authors_have_orcids_and_affiliations(
+    nbib_records: dict[str, Record],
+) -> None:
+    record = nbib_records["37587301"]
+    names = record.author_names
+    orcids = record.author_ids["orcid"]
+
+    assert list(record.author_ids) == ["orcid"]
+    assert len(names) == len(orcids) == 9
+    assert names[0] == "Müller, Rodrigo T"
+    assert orcids[0] == "0000-0001-8894-9875"
+    assert orcids[2] == ""
+    assert orcids[8] == "0000-0002-7017-1652"
+    affiliations = record.author_affiliations
+    assert (
+        "Programa de Pós-Graduação em Biodiversidade Animal, Universidade Federal "
+        "de Santa Maria, Santa Maria, Brazil. rodrigotmuller@hotmail.com."
+    ) in affiliations
+    assert affiliations[-1] == (
+        "Department of Geosciences, Virginia Tech, Blacksburg, VA, USA."
+    )
+
+
+def test_pubmed_small_csv__parses_every_record(
+    csv_records: dict[str, Record],
+) -> None:
+    assert len(csv_records) == 12
+
+
+def test_pubmed_small_csv__keeps_values_as_in_the_file(
+    csv_records: dict[str, Record],
+) -> None:
+    nature = csv_records["37587301"]
+    assert (nature.volume, nature.issue, nature.pages) == (None, None, None)
+    assert nature.publication_date == "2023//"
+    assert csv_records["30527956"].author_names[0].endswith(", Walsworth AK, et al.")
+    assert csv_records["37886492"].other_ids["pmcid"] == "PMC10602114"
+
+
+def test_pubmed_small__nbib_and_csv_agree_on_ids(
+    nbib_records: dict[str, Record], csv_records: dict[str, Record]
+) -> None:
+    assert nbib_records.keys() == csv_records.keys()
+    for pmid, record in nbib_records.items():
+        assert record.doi == csv_records[pmid].doi, pmid
+
+
+@pytest.mark.big
+def test_pubmed_big__every_file_parses_without_skips() -> None:
+    for path in vendor_files("pubmed", "big"):
+        result = _parse(path, _FORMAT_BY_SUFFIX[path.suffix.lower()])
+        assert result.rows, path.name
+        assert result.skipped == [], path.name

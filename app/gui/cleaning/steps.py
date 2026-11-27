@@ -7,11 +7,7 @@ from dataclasses import dataclass, field
 from pydantic import ValidationError
 
 from app.gui.cleaning.options import CleaningOptions, DateOrder
-from app.helpers.format import STANDARD_PUBLICATION_TYPE
-from app.helpers.functions import sniff_separator
-from app.models.record import PartialDate, Record
-from app.parsers.authors import AuthorIds, clean_author_id, merge_author_ids
-from app.parsers.mapping import (
+from app.gui.importing.mapping import (
     ISBN_LENGTHS,
     ISSN_ISBN_TOKEN,
     ISSN_LENGTH,
@@ -22,6 +18,10 @@ from app.parsers.mapping import (
     ScalarRow,
     ordered_mapping,
 )
+from app.helpers.authors import AuthorIds, clean_author_id, merge_author_ids
+from app.helpers.format import STANDARD_PUBLICATION_TYPE
+from app.helpers.functions import sniff_separator
+from app.models.record import PartialDate, Record
 
 logger = logging.getLogger(__name__)
 

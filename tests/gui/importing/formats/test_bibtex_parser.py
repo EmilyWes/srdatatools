@@ -1,0 +1,523 @@
+from pathlib import Path
+
+import pytest
+
+from app.gui.importing.common import SkippedRow
+from app.gui.importing.formats import bibtex
+from app.gui.importing.formats.bibtex import (
+    parse_bibtex_file,
+    parse_bibtex_record,
+    parse_bibtex_text,
+    read_bibtex_fields,
+    suggest_bibtex_mapping,
+)
+from app.gui.importing.mapping import AuthorsRow, DateRow, FieldMapping, Suggest
+from app.gui.importing.parse_settings import ParseSettings
+from app.models.record import Record
+from tests.mappings import mapping_of, targets_of
+from tests.vendor_data import vendor_file
+
+BIBTEX_FIXTURES_DIR = Path(__file__).resolve().parents[3] / "data" / "general"
+
+_MAPPING = mapping_of(
+    {
+        "@type": "publication_type",
+        "title": "title",
+        "journal": "journal",
+        "abstract": "abstract",
+        "keywords": "keywords",
+        "pages": "pages",
+        "volume": "volume",
+        "year": Suggest("date", {"part": "year"}),
+        "month": Suggest("date", {"part": "month"}),
+        "note": "notes",
+        "author": "authors",
+    }
+)
+
+
+def test_parse_bibtex_text__maps_brace_delimited_fields() -> None:
+    text = "@article{key1,\n  title = {Some Paper},\n  journal = {Nature}\n}\n"
+
+    result = parse_bibtex_text(text, _MAPPING)
+
+    assert result.skipped == []
+    record = result.rows[0].record
+    assert record.title == "Some Paper"
+    assert record.journal == "Nature"
+
+
+def test_parse_bibtex_text__comma_inside_quotes_does_not_split_field() -> None:
+    text = '@article{key1, title = "Cats, Dogs, and Mice", journal = "Nature"}'
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.title == "Cats, Dogs, and Mice"
+    assert record.journal == "Nature"
+
+
+def test_parse_bibtex_text__maps_quote_delimited_fields() -> None:
+    text = '@article{key1, title = "Some Paper", journal = "Nature"}'
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.title == "Some Paper"
+    assert record.journal == "Nature"
+
+
+def test_parse_bibtex_text__reads_bare_values() -> None:
+    text = "@article{key1, title = {T}, volume = 12, year = 2024, month = mar}"
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.volume == "12"
+    assert record.publication_date == "2024/mar/"
+
+
+def test_parse_bibtex_text__raw_fields_include_entry_type_and_key() -> None:
+    text = "@ARTICLE{Smith2024, title = {Some Paper}}"
+
+    row = parse_bibtex_text(text, _MAPPING).rows[0]
+
+    assert row.raw_fields == {
+        "@type": "article",
+        "@key": "Smith2024",
+        "title": "Some Paper",
+    }
+    assert row.record.publication_type == "article"
+
+
+def test_parse_bibtex_text__citation_key_may_contain_commas() -> None:
+    text = (
+        "@ARTICLE{Guay1981222,224,226passim,\n"
+        "\ttitle = {Private practice--no dinosaur!},\n"
+        "\tpages = {222,224,226passim}\n"
+        "}\n"
+    )
+
+    result = parse_bibtex_text(text, _MAPPING)
+
+    assert result.skipped == []
+    row = result.rows[0]
+    assert row.raw_fields["@key"] == "Guay1981222,224,226passim"
+    assert row.record.title == "Private practice–no dinosaur!"
+    assert row.record.pages == "222,224,226passim"
+
+
+def test_parse_bibtex_text__field_names_are_case_insensitive() -> None:
+    text = "@article{key1, TITLE = {Some Paper}, Journal = {Nature}}"
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.title == "Some Paper"
+    assert record.journal == "Nature"
+
+
+def test_parse_bibtex_text__raw_fields_keep_inner_braces() -> None:
+    text = "@article{key1, title = {Deep Learning for {DNA} Screening}}"
+
+    row = parse_bibtex_text(text, _MAPPING).rows[0]
+
+    assert row.raw_fields["title"] == "Deep Learning for {DNA} Screening"
+    assert row.record.title == "Deep Learning for DNA Screening"
+
+
+def test_parse_bibtex_text__nested_braces_do_not_end_the_entry() -> None:
+    text = "@article{key1, title = {A {B {C}} D}, journal = {Nature}}"
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.title == "A B C D"
+    assert record.journal == "Nature"
+
+
+def test_parse_bibtex_text__commas_inside_values_do_not_split_fields() -> None:
+    text = '@article{key1, title = {One, two}, journal = "Three, four"}'
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.title == "One, two"
+    assert record.journal == "Three, four"
+
+
+def test_parse_bibtex_text__collapses_multiline_values() -> None:
+    text = "@article{key1,\n  abstract = {First line\n\t\tsecond line.}\n}"
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.abstract == "First line second line."
+
+
+def test_parse_bibtex_text__reads_parenthesis_delimited_entry() -> None:
+    text = "@article(key1, title = {Some (short) Paper})"
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.title == "Some (short) Paper"
+
+
+def test_parse_bibtex_text__allows_trailing_comma() -> None:
+    text = "@article{key1, title = {Some Paper},\n}"
+
+    result = parse_bibtex_text(text, _MAPPING)
+
+    assert result.skipped == []
+    assert result.rows[0].record.title == "Some Paper"
+
+
+def test_parse_bibtex_text__ignores_text_outside_entries() -> None:
+    text = "Scopus\nEXPORT DATE: 22 October 2026\n\n@article{key1, title = {T}}\n"
+
+    result = parse_bibtex_text(text, _MAPPING)
+
+    assert result.skipped == []
+    assert len(result.rows) == 1
+
+
+def test_parse_bibtex_text__ignores_comment_string_and_preamble_entries() -> None:
+    text = (
+        "@comment{some note}\n"
+        '@string{nat = "Nature"}\n'
+        '@preamble{"\\newcommand{\\x}{}"}\n'
+        "@article{key1, title = {T}}\n"
+    )
+
+    result = parse_bibtex_text(text, _MAPPING)
+
+    assert result.skipped == []
+    assert [row.raw_fields["@key"] for row in result.rows] == ["key1"]
+
+
+def test_parse_bibtex_text__keeps_macro_values_as_written() -> None:
+    text = "@article{key1, title = {T}, journal = nat}"
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.journal == "nat"
+
+
+def test_parse_bibtex_text__skips_entry_with_unbalanced_braces() -> None:
+    text = (
+        "@article{key1, title = {Fine}}\n"
+        "@article{key2, title = {Broken}\n"
+        "@article{key3, title = {Also fine}}\n"
+    )
+
+    result = parse_bibtex_text(text, _MAPPING)
+
+    assert [row.record.title for row in result.rows] == ["Fine", "Also fine"]
+    assert [(s.row_number, s.reason) for s in result.skipped] == [
+        (2, "entry has unbalanced braces")
+    ]
+
+
+def test_parse_bibtex_text__skips_entry_without_citation_key() -> None:
+    text = "@article{title = {No key}}\n@article{key2, title = {Has key}}\n"
+
+    result = parse_bibtex_text(text, _MAPPING)
+
+    assert [row.record.title for row in result.rows] == ["Has key"]
+    assert [(s.row_number, s.reason) for s in result.skipped] == [
+        (1, "entry has no citation key")
+    ]
+
+
+def test_parse_bibtex_text__skips_entry_without_fields() -> None:
+    text = "@article{key1}\n"
+
+    result = parse_bibtex_text(text, _MAPPING)
+
+    assert result.rows == []
+    assert [s.reason for s in result.skipped] == ["entry has no fields"]
+
+
+def test_parse_bibtex_text__skips_entry_with_malformed_field() -> None:
+    text = "@article{key1, title = {T}, just some words}\n"
+
+    result = parse_bibtex_text(text, _MAPPING)
+
+    assert result.rows == []
+    assert [s.reason for s in result.skipped] == ["malformed field 'just some words'"]
+
+
+def test_parse_bibtex_text__repeated_field_keeps_first() -> None:
+    text = "@article{key1, title = {First}, title = {Second}}"
+
+    row = parse_bibtex_text(text, _MAPPING).rows[0]
+
+    assert row.raw_fields["title"] == "First"
+    assert row.record.title == "First"
+
+
+def test_parse_bibtex_text__handles_crlf_line_endings() -> None:
+    text = "@article{key1,\r\n  title = {Some\r\n  Paper}\r\n}\r\n@article{key2,\r\n}"
+
+    result = parse_bibtex_text(text, _MAPPING)
+
+    assert result.rows[0].record.title == "Some Paper"
+    assert [(s.row_number, s.reason) for s in result.skipped] == [
+        (5, "entry has no fields")
+    ]
+
+
+def test_parse_bibtex_text__decodes_accent_commands() -> None:
+    text = (
+        "@article{key1, title = "
+        "{M{\\\"u}ller \\\"{o} \\'e {\\`a} \\^{i} \\~n {\\c c} \\v{s} {\\'\\i}}}"
+    )
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.title == "Müller ö é à î ñ ç š í"
+
+
+def test_parse_bibtex_text__decodes_escaped_symbols() -> None:
+    text = "@article{key1, title = {R\\&D at 50\\% for \\$5 \\#1 a\\_b}}"
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.title == "R&D at 50% for $5 #1 a_b"
+
+
+def test_parse_bibtex_text__keeps_other_commands_as_written() -> None:
+    text = "@article{key1, title = {An \\emph{important} result}}"
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.title == "An \\emph important result"
+
+
+def test_parse_bibtex_text__double_dash_becomes_en_dash() -> None:
+    text = "@article{key1, title = {Pre--post comparison}}"
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.title == "Pre–post comparison"
+
+
+def test_parse_bibtex_text__keeps_double_dash_in_url_and_doi() -> None:
+    text = "@article{key1, url = {https://x.org/a--b}, doi = {10.1/a--b}}"
+    mapping = mapping_of({"url": "url", "doi": "doi"})
+
+    record = parse_bibtex_text(text, mapping).rows[0].record
+
+    assert record.url == "https://x.org/a--b"
+    assert record.doi == "10.1/a--b"
+
+
+def test_parse_bibtex_text__normalizes_page_ranges() -> None:
+    text = (
+        "@article{key1, pages = {101--115}}\n"
+        "@article{key2, pages = {19 - 65}}\n"
+        "@article{key3, pages = {e1234}}\n"
+    )
+
+    records = [row.record for row in parse_bibtex_text(text, _MAPPING).rows]
+
+    assert [record.pages for record in records] == ["101-115", "19-65", "e1234"]
+
+
+def test_parse_bibtex_text__keeps_keywords_unsplit() -> None:
+    text = "@article{key1, keywords = {machine learning; systematic review}}"
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.keywords == {"": ["machine learning; systematic review"]}
+
+
+def test_parse_bibtex_file__reads_realistic_export() -> None:
+    result = parse_bibtex_file(BIBTEX_FIXTURES_DIR / "bibtex_style.bib", _MAPPING)
+
+    assert result.skipped == []
+    first, second = (row.record for row in result.rows)
+    assert first.publication_type == "article"
+    assert first.title == "Deep Learning for DNA Screening"
+    assert first.journal == "Journal of Biomedical Informatics"
+    assert first.abstract == ("We evaluate neural classifiers for citation screening.")
+    assert first.pages == "101-115"
+    assert first.keywords == {"": ["machine learning; systematic review"]}
+    assert second.publication_type == "inproceedings"
+    assert second.title == "R&D in Café Networks"
+    assert second.pages == "7-9"
+
+
+def test_parse_bibtex_text__joins_authors_split_on_and() -> None:
+    text = "@article{key1, author = {Smith, John and Doe, Jane AND Roe, Rick}}"
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.author_names == ["Smith, John", "Doe, Jane", "Roe, Rick"]
+
+
+def test_parse_bibtex_text__and_inside_braces_stays_one_author() -> None:
+    text = "@article{key1, author = {{Barnes and Noble} and Doe, Jane}}"
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.author_names == ["Barnes and Noble", "Doe, Jane"]
+
+
+def test_parse_bibtex_text__author_names_are_cleaned_but_not_split() -> None:
+    text = '@article{key1, author = {M{\\"u}ller, Hans R. and Jane Doe}}'
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.author_names == ["Müller, Hans R.", "Jane Doe"]
+
+
+def test_parse_bibtex_text__authors_ignore_keyword_delimiter() -> None:
+    text = "@article{key1, author = {Smith; Jr., John and Doe, Jane}}"
+
+    record = parse_bibtex_text(text, _MAPPING).rows[0].record
+
+    assert record.author_names == ["Smith; Jr., John", "Doe, Jane"]
+
+
+def test_parse_bibtex_record__unmapped_author_field_adds_no_authors() -> None:
+    mapping = mapping_of({"title": "title"})
+
+    row = parse_bibtex_record([("title", "T"), ("author", "Doe, Jane")], mapping)
+
+    assert row.record.author_names == []
+
+
+def test_read_bibtex_fields__file_without_entries_has_no_samples(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "empty.bib"
+    path.write_text("just a comment, no entries\n", encoding="utf-8")
+
+    summary = read_bibtex_fields(path)
+
+    assert summary.samples == {}
+
+
+def test_read_bibtex_fields__collects_samples_and_fill_counts(tmp_path: Path) -> None:
+    path = tmp_path / "export.bib"
+    path.write_text(
+        "@article{key1, title = {First {DNA}}, volume = {}}\n"
+        "@article{key2, title = {Second}, volume = {3}, year = 2024}\n"
+        "@article{key3, title = {Broken}\n",
+        encoding="utf-8",
+    )
+
+    summary = read_bibtex_fields(path)
+
+    assert summary.samples == {
+        "@type": "article",
+        "@key": "key1",
+        "title": "First {DNA}",
+        "volume": "3",
+        "year": "2024",
+    }
+    assert summary.filled == {"@type": 2, "@key": 2, "title": 2, "volume": 1, "year": 1}
+    assert summary.total_rows == 2
+
+
+def test_suggest_bibtex_mapping__maps_common_fields() -> None:
+    keys = ["@type", "@key", "author", "title", "journal", "year", "month", "number"]
+
+    mapping = suggest_bibtex_mapping(keys)
+
+    assert targets_of(mapping) == {
+        "@type": "publication_type",
+        "author": "authors",
+        "title": "title",
+        "journal": "journal",
+        "year": "date",
+        "month": "date",
+        "number": "issue",
+    }
+    assert mapping.rows["author"] == AuthorsRow(id_key="author")
+    assert mapping.rows["year"] == DateRow(part="year")
+
+
+def test_suggest_bibtex_mapping__booktitle_maps_to_journal() -> None:
+    mapping = suggest_bibtex_mapping(["booktitle"])
+
+    assert targets_of(mapping) == {"booktitle": "journal"}
+
+
+def test_suggest_bibtex_mapping__maps_pmid() -> None:
+    assert targets_of(suggest_bibtex_mapping(["pmid"])) == {"pmid": "pmid"}
+
+
+def test_suggest_bibtex_mapping__applies_alias_overrides() -> None:
+    mapping = suggest_bibtex_mapping(
+        ["type", "@type"],
+        overrides={"type": Suggest("publication_type")},
+        ignored_keys=frozenset({"@type"}),
+    )
+
+    assert targets_of(mapping) == {"type": "publication_type"}
+
+
+def test_parse_bibtex_file__default_mapping_on_realistic_export() -> None:
+    path = BIBTEX_FIXTURES_DIR / "bibtex_style.bib"
+    mapping = suggest_bibtex_mapping(list(read_bibtex_fields(path).samples))
+
+    first, second = (row.record for row in parse_bibtex_file(path, mapping).rows)
+
+    assert first.author_names == ["Smith, John A.", "Müller, Hans", "Barnes and Noble"]
+    assert first.issue == "3"
+    assert first.doi == "10.1016/j.jbi.2024.101"
+    assert first.publication_date == "2024/mar/"
+    assert second.journal == "Proceedings of the 5th Conference"
+    assert second.author_names == ["Jane Doe"]
+
+
+def test_parse_bibtex_file__reads_scopus_export() -> None:
+    path = vendor_file("scopus", "small", ".bib")
+    mapping = suggest_bibtex_mapping(list(read_bibtex_fields(path).samples))
+
+    result = parse_bibtex_file(path, mapping)
+
+    assert result.skipped == []
+    assert len(result.rows) == 10
+    olsen = next(r.record for r in result.rows if r.raw_fields["@key"] == "Olsen202619")
+    assert olsen.publication_type == "article"
+    assert olsen.author_names == [
+        "Olsen, Paul E.",
+        "McDonald, Nicholas G.",
+        "Kinney, Sean T.",
+    ]
+    assert olsen.journal == "GSA Field Guides"
+    assert olsen.volume == "77"
+    assert olsen.pages == "19-65"
+    assert olsen.doi == "10.1130/2026.0077(02)"
+    assert olsen.issn == ["23330937"]
+    assert olsen.language == "English"
+    assert olsen.notes == "Cited by: 0"
+
+
+def _fail_on_bad_title(monkeypatch: pytest.MonkeyPatch) -> None:
+    real = bibtex.apply_mapping
+
+    def apply(
+        raw_fields: dict[str, str],
+        mapping: FieldMapping,
+        settings: ParseSettings,
+        split_authors: dict[str, list[str]] | None = None,
+    ) -> Record:
+        if "Bad" in raw_fields.values():
+            raise ValueError("bad value")
+        return real(raw_fields, mapping, settings, split_authors)
+
+    monkeypatch.setattr(bibtex, "apply_mapping", apply)
+
+
+def test_parse_bibtex_text__skips_record_that_fails_to_parse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _fail_on_bad_title(monkeypatch)
+    text = (
+        "@article{a,\n title={Good}\n}\n"
+        "@article{b,\n title={Bad}\n}\n"
+        "@article{c,\n title={Also good}\n}\n"
+    )
+
+    result = bibtex.parse_bibtex_text(text, mapping_of({"title": "title"}))
+
+    assert [row.record.title for row in result.rows] == ["Good", "Also good"]
+    assert [row.row_number for row in result.rows] == [1, 7]
+    assert result.skipped == [SkippedRow(4, "bad value")]

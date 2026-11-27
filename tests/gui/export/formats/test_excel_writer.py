@@ -6,9 +6,9 @@ from openpyxl.worksheet.worksheet import Worksheet
 from app.gui.export.formats.excel import write_excel
 from app.gui.export.mapping import ExportField, ExportRecord, export_fields
 from app.gui.export.options import ExportOptions
+from app.gui.importing.formats.csv import suggest_mapping
+from app.gui.importing.formats.excel import parse_excel_file
 from app.models.record import Record
-from app.parsers.csv_ import suggest_mapping
-from app.parsers.excel import parse_excel_file
 
 _RECORDS = [
     ExportRecord(

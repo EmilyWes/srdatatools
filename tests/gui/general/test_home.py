@@ -17,11 +17,11 @@ from app.gui.general.home import home
 from app.gui.general.layout import ShellPanes
 from app.gui.general.left_panel import LeftPanel
 from app.gui.general.right_panel import RightPanel
+from app.gui.importing.common import FileSummary
 from app.gui.importing.options import default_options
 from app.gui.library.dashboard import save_hidden
 from app.gui.library.record_table import load_columns
 from app.helpers.format import author_id_key
-from app.parsers.common import FileSummary
 from tests.gui.clicks import click_and_wait
 from tests.mappings import mapping_of
 
