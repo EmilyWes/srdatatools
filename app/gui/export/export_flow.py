@@ -34,7 +34,20 @@ from app.gui.export.options import (
     export_boxes,
 )
 from app.helpers.format import format_count
-from app.helpers.mapping_table import fill_color
+from app.helpers.mapping_table import (
+    SELECT_CHROME_CH,
+    body_row,
+    count_cell,
+    example_cell,
+    fill_color,
+    header_cells,
+    header_row,
+    input_width_ch,
+    label_cell,
+    option_row,
+    table_frame,
+    widget_cell,
+)
 from app.helpers.options_overview import (
     OptionsScreen,
     render_options_overview,
@@ -49,8 +62,6 @@ from app.helpers.theme import (
     GRID_CLASSES,
     GRID_COLUMNS,
     INPUT_PROPS,
-    MUTED_TEXT,
-    OUTLINED_BOX,
     SELECT_CLASSES,
     SELECT_PROPS,
     STATUS_TINTS,
@@ -72,12 +83,6 @@ _NO_RECORDS = "no records to export"
 _NO_COLUMNS = "no columns selected"
 _INVALID_TAGS = "invalid tag for: "
 _UNCHECKED_CLASS = "opacity-50"
-
-_OPTION_ROW_CLASSES = "w-full no-wrap items-center gap-1"
-_OPTION_LABEL_CLASSES = f"w-10 shrink-0 text-xs {MUTED_TEXT}"
-_NAME_WIDTH = "width: 24ch"
-_FIELD_WIDTH = "width: 20ch"
-
 
 _TAG_SEPARATOR = " — "
 _TAG_OPTIONS = {
@@ -313,8 +318,7 @@ class ExportView:
         label: str,
         choices: dict[str, str] | None = None,
     ) -> None:
-        with ui.row().classes(_OPTION_ROW_CLASSES):
-            ui.label(f"{short}:").classes(_OPTION_LABEL_CLASSES).tooltip(label)
+        with option_row(short, label):
             value = getattr(row.column, name)
             widget: ui.select | ui.input
             if choices is not None:
@@ -361,51 +365,26 @@ class ExportView:
         defaults = {c.key: c.name for c in export_fields(self.records, self.options)}
         self.rows = []
         self.mapping.clear()
-        count_cell_classes = "self-stretch flex items-center px-2 mr-1"
-        count_cell_style = "background: rgba(0, 0, 0, 0.04)"
-        row_base = (
-            "w-full min-w-max no-wrap items-center gap-1 pl-0 border-b outline-variant"
-        )
+        field_width = input_width_ch(c.label for c in self.columns)
+        name_width = input_width_ch(defaults.values(), chrome=SELECT_CHROME_CH)
+        if self._ris:
+            # The tag select also holds a clear button.
+            name_width = name_width * 3 // 2
         with self.mapping:
-            with ui.column().classes(f"gap-0 {OUTLINED_BOX}"):
-                with ui.row().classes(f"{row_base} py-2 surface-container"):
+            with table_frame():
+                with header_row():
                     self.header_checkbox = ui.checkbox(
                         on_change=lambda e: self._set_all_checked(e.value)
                     ).props("dense")
-                    with (
-                        ui.element("div")
-                        .classes(count_cell_classes)
-                        .style(count_cell_style)
-                    ):
-                        ui.label("#").classes("w-10 text-xs font-bold text-center")
-                    ui.label("Field").classes("text-xs font-bold").style(_FIELD_WIDTH)
-                    ui.label("Export as").classes("text-xs font-bold").style(
-                        _NAME_WIDTH
-                    )
-                    ui.label("Example").classes("w-48 text-xs font-bold text-center")
+                    header_cells("Field", "Export as", field_width, name_width)
                 for i, column in enumerate(self.columns):
-                    row_classes = f"{row_base} py-0"
-                    if i % 2 == 1:
-                        row_classes += " surface-low"
-                    with ui.row().classes(row_classes):
+                    with body_row(i):
                         checkbox = ui.checkbox(
                             value=column.key not in self.unchecked
                         ).props("dense")
-                        with (
-                            ui.element("div")
-                            .classes(count_cell_classes)
-                            .style(count_cell_style)
-                        ) as count_cell:
-                            count = ui.linear_progress(show_value=False).classes("w-10")
-                        field_label = (
-                            ui.label(column.label)
-                            .classes("truncate text-xs")
-                            .style(_FIELD_WIDTH)
-                            .tooltip(column.label)
-                        )
-                        with (
-                            ui.column().classes("gap-0").style(_NAME_WIDTH) as name_cell
-                        ):
+                        count_box, count = count_cell()
+                        field_label = label_cell(column.label, field_width)
+                        with widget_cell(name_width) as name_cell:
                             name: ui.input | ui.select | None = None
                             shared_tooltip = None
                             if isinstance(column, RisTypeField):
@@ -426,9 +405,7 @@ class ExportView:
                                     else INPUT_PROPS
                                 )
                             options = ui.column().classes("gap-0 w-full")
-                        sample = ui.label().classes(
-                            f"w-48 truncate text-xs {MUTED_TEXT}"
-                        )
+                        sample = example_cell("")
                     row = _Row(
                         column=column,
                         default_name=defaults[column.key],
@@ -436,7 +413,7 @@ class ExportView:
                         name=name,
                         count=count,
                         example=sample,
-                        cells=[count_cell, field_label, name_cell, sample],
+                        cells=[count_box, field_label, name_cell, sample],
                         options=options,
                         shared_tooltip=shared_tooltip,
                     )

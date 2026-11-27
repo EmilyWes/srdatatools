@@ -17,6 +17,7 @@ from app.gui.export.mapping import (
 )
 from app.gui.export.options import ExportOptions
 from app.gui.general.layout import shell
+from app.helpers.mapping_table import SELECT_CHROME_CH, input_width_ch
 from app.models.record import Record
 from tests.gui.clicks import click_and_wait, run_in
 
@@ -487,6 +488,22 @@ _RIS = ExportOptions(file_type="ris")
 
 def _ris_view(options: ExportOptions = _RIS, **callbacks: Any) -> ExportView:
     return _view(options=options, **callbacks)
+
+
+def test_export_view__column_widths_follow_content() -> None:
+    view = _view()
+    labels = [row.column.label for row in view.rows]
+    names = [row.default_name for row in view.rows]
+    _, field_label, name_cell, _ = view.rows[0].cells
+
+    assert f"w-[{input_width_ch(labels)}ch]" in field_label.classes
+    assert f"w-[{input_width_ch(names, SELECT_CHROME_CH)}ch]" in name_cell.classes
+
+
+def test_export_view__ris_tag_column_is_wider_for_clear_button() -> None:
+    _, _, name_cell, _ = _ris_view().rows[0].cells
+
+    assert "w-[12ch]" in name_cell.classes
 
 
 def _type_tag(row: Any, typed: str) -> None:
