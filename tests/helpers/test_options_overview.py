@@ -1,5 +1,6 @@
 from nicegui import ui
 from nicegui.element import Element
+from pydantic import BaseModel, Field
 
 from app.gui.general.layout import shell
 from app.helpers.options_overview import (
@@ -10,6 +11,8 @@ from app.helpers.options_overview import (
 from app.parsers.common import FileType
 from app.parsers.mapping import FieldMapping
 from app.parsers.profiles.overview import (
+    OptionBox,
+    OptionItem,
     ParsingChoices,
     default_choices,
     option_boxes,
@@ -226,6 +229,42 @@ def test_render_options_overview__label_boxes_are_wide() -> None:
 
     assert "w-[7rem]" in screen.widgets["label_include"].classes
     assert "w-[5.5rem]" in screen.widgets["field_size_limit"].classes
+
+
+class _Toggled(BaseModel):
+    off: bool = False
+    on: bool = True
+    limit: int = Field(default=10, le=100)
+
+
+_TOGGLED_BOX = OptionBox(
+    "Toggled",
+    (
+        OptionItem("off", "Off", "", "checkbox"),
+        OptionItem("on", "On", "", "checkbox"),
+        OptionItem("limit", "Limit", "", "number", enabled_by="on", disabled_by="off"),
+    ),
+)
+
+
+def test_render_options_overview__number_max_from_model_field() -> None:
+    screen = render_options_overview(shell().middle, [_TOGGLED_BOX], _Toggled())
+
+    assert screen.widgets["limit"].props["max"] == 100
+    assert "max" not in _render().widgets["field_size_limit"].props
+
+
+def test_render_options_overview__disabled_by_disables_while_toggle_on() -> None:
+    screen = render_options_overview(shell().middle, [_TOGGLED_BOX], _Toggled())
+    limit = screen.widgets["limit"]
+    assert limit.enabled
+
+    screen.set_value("off", True)
+    assert not limit.enabled
+
+    screen.set_value("off", False)
+    screen.set_value("on", False)
+    assert not limit.enabled
 
 
 def test_render_view_toggle__shows_one_view_and_reports_switches() -> None:

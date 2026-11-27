@@ -195,7 +195,9 @@ class OptionsScreen(Generic[_M]):
         if item.control == "checkbox":
             widget = ui.checkbox(value=value)
         elif item.control == "number":
-            widget = ui.number(value=value, min=1, precision=0)
+            widget = ui.number(
+                value=value, min=1, max=self._maximum(item.key), precision=0
+            )
         elif item.control == "select":
             widget = ui.select(item.choices or {}, value=value)
         else:
@@ -204,15 +206,30 @@ class OptionsScreen(Generic[_M]):
         widget.on_value_change(lambda _e: self._refresh_color(item.key))
         self._refresh_color(item.key)
 
-    def _wire_enabled_by(self, item: OptionItem) -> None:
-        if item.enabled_by is None or item.key not in self.widgets:
+    def _maximum(self, key: str) -> int | None:
+        """The model field's `le` bound, if it has one."""
+        metadata = type(self.defaults).model_fields[key].metadata
+        return next(
+            (m.le for m in metadata if getattr(m, "le", None) is not None), None
+        )
+
+    def _wire_toggles(self, item: OptionItem) -> None:
+        toggles = [t for t in (item.enabled_by, item.disabled_by) if t is not None]
+        if not toggles or item.key not in self.widgets:
             return
-        widget, toggle = self.widgets[item.key], self.widgets[item.enabled_by]
+        widget = self.widgets[item.key]
 
         def sync() -> None:
-            widget.set_enabled(bool(toggle.value))
+            enabled = item.enabled_by is None or bool(
+                self.widgets[item.enabled_by].value
+            )
+            disabled = item.disabled_by is not None and bool(
+                self.widgets[item.disabled_by].value
+            )
+            widget.set_enabled(enabled and not disabled)
 
-        toggle.on_value_change(lambda _e: sync())
+        for toggle in toggles:
+            self.widgets[toggle].on_value_change(lambda _e: sync())
         sync()
 
     def _remove_button(self, on_click: Callable[[], None]) -> None:
@@ -315,7 +332,7 @@ class OptionsScreen(Generic[_M]):
                     self._render_item(item, getattr(chosen, item.key, None))
         for item in box.items:
             if isinstance(item, OptionItem):
-                self._wire_enabled_by(item)
+                self._wire_toggles(item)
 
 
 VIEW_MAPPING = "mapping"

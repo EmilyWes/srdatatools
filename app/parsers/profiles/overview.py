@@ -39,6 +39,7 @@ class OptionItem:
     hover: str
     control: Control
     enabled_by: str | None = None
+    disabled_by: str | None = None
     wide: bool = False
     choices: dict[str, str] | None = None
 
