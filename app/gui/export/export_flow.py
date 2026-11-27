@@ -8,7 +8,7 @@ from nicegui import app, ui
 from nicegui.element import Element
 from webview import FileDialog
 
-from app.gui.export.fields import (
+from app.gui.export.mapping import (
     AuthorIdKeyField,
     DateField,
     ExportField,

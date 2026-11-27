@@ -24,7 +24,7 @@ from app.gui.cleaning.run import clean_records
 from app.gui.export.csv import write_csv
 from app.gui.export.excel import write_excel
 from app.gui.export.export_flow import render_export_view
-from app.gui.export.fields import ExportField, ExportRecord, load_export_records
+from app.gui.export.mapping import ExportField, ExportRecord, load_export_records
 from app.gui.export.options import (
     ExportOptions,
     default_path,

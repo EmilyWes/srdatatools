@@ -4,7 +4,7 @@ from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from app.gui.export.excel import write_excel
-from app.gui.export.fields import ExportField, ExportRecord, export_fields
+from app.gui.export.mapping import ExportField, ExportRecord, export_fields
 from app.gui.export.options import ExportOptions
 from app.models.record import Record
 from app.parsers.csv_ import suggest_mapping

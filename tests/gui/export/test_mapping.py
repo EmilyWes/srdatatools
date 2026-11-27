@@ -7,7 +7,7 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import models
-from app.gui.export.fields import (
+from app.gui.export.mapping import (
     AuthorIdKeyField,
     DateField,
     ExportField,

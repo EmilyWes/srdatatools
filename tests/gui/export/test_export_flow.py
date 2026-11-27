@@ -9,7 +9,7 @@ from nicegui.elements.tooltip import Tooltip
 
 from app.gui.export import export_flow
 from app.gui.export.export_flow import ExportView, pick_save_path, render_export_view
-from app.gui.export.fields import (
+from app.gui.export.mapping import (
     ExportField,
     ExportRecord,
     ExportSource,

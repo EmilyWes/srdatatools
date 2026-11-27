@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from app.gui.export.fields import ExportRecord, export_fields
+from app.gui.export.mapping import ExportRecord, export_fields
 from app.gui.export.options import ExportOptions
 from app.gui.export.ris import write_ris
 from app.gui.export.ris_tags import (

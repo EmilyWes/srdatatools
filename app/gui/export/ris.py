@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from pathlib import Path
 
-from app.gui.export.fields import (
+from app.gui.export.mapping import (
     ExportField,
     ExportRecord,
     field_value,
