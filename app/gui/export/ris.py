@@ -2,13 +2,13 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from app.gui.export.columns import (
-    NOTE_TAG,
     ExportColumn,
     ExportRecord,
     column_value,
     column_values,
 )
 from app.gui.export.options import ExportOptions
+from app.gui.export.ris_tags import NOTE_TAG
 
 _END_LINE = "ER  - \n\n"
 

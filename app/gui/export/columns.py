@@ -7,7 +7,13 @@ from sqlalchemy.orm import Session
 
 from app.db.record import load_records, record_schema
 from app.gui.export.options import ExportOptions
-from app.gui.export.ris_tags import TAG_PATTERN, ris_type
+from app.gui.export.ris_tags import (
+    KEYWORD_TAG,
+    NOTE_TAG,
+    RIS_FIELD_TO_TAG,
+    TAG_PATTERN,
+    ris_type,
+)
 from app.helpers.format import DISPLAY_SEPARATOR, label_text
 from app.models.record import CLEANED_DATE, Label, Record
 from app.parsers.authors import ids_of_key
@@ -16,35 +22,13 @@ from app.parsers.profiles import source_label
 # Ris standard keeps an extra "/"" at the end for other info.
 DatePart = Literal["full", "year", "month", "day", "ris"]
 PagesPart = Literal["start", "end"]
-ExtraKind = Literal["record_id", "sources", "source_files"]
+ExtraType = Literal["record_id", "sources", "source_files"]
 
 _ORIGINAL_SUFFIX = " (original)"
 _PLAIN_YEAR = re.compile(r"\d{4}")
 _AUTHOR_IDS_SUFFIX = " (author IDs)"
 _PAGE_DASH = "-"
 
-_RIS_TAGS = {
-    "record_id": "ID",
-    "title": "TI",
-    "author_names": "AU",
-    "author_affiliations": "AD",
-    "journal": "T2",
-    "conference_name": "T2",
-    "volume": "VL",
-    "issue": "IS",
-    "pages": "SP",
-    "abstract": "AB",
-    "doi": "DO",
-    "pmid": "AN",
-    "issn": "SN",
-    "isbn": "SN",
-    "language": "LA",
-    "publisher": "PB",
-    "url": "UR",
-    "notes": "N1",
-}
-NOTE_TAG = "N1"
-_KEYWORD_TAG = "KW"
 _UNCHECKED_IN_RIS = frozenset({"sources", "source_files"})
 
 _SCALAR_LABELS = {
@@ -67,7 +51,7 @@ _SCALAR_LABELS = {
     "url": "URL",
     "notes": "Notes",
 }
-_EXTRA_LABELS: dict[ExtraKind, str] = {
+_EXTRA_LABELS: dict[ExtraType, str] = {
     "record_id": "Record ID",
     "sources": "Sources",
     "source_files": "Source files",
@@ -186,7 +170,7 @@ class LabelColumn(ExportColumn):
 
 @dataclass
 class ExtraColumn(ExportColumn):
-    kind: ExtraKind = "record_id"
+    type: ExtraType = "record_id"
 
 
 @dataclass
@@ -255,9 +239,9 @@ def _date(schemas: Sequence[Record]) -> DateColumn:
     return DateColumn(key="date", label="Publication date", name="Publication date")
 
 
-def _extra(kind: ExtraKind) -> ExtraColumn:
-    label = _EXTRA_LABELS[kind]
-    return ExtraColumn(key=kind, label=label, name=label, kind=kind)
+def _extra(type: ExtraType) -> ExtraColumn:
+    label = _EXTRA_LABELS[type]
+    return ExtraColumn(key=type, label=label, name=label, type=type)
 
 
 def _raw(raw_key: str, taken: set[str]) -> RawColumn:
@@ -335,9 +319,9 @@ def default_note_name(column: ExportColumn) -> str:
 def _ris_column(column: ExportColumn) -> ExportColumn:
     """A row without a tag of its own goes to N1, its line starting with its name."""
     if isinstance(column, KeywordsColumn):
-        return replace(column, name=_KEYWORD_TAG)
-    if column.key in _RIS_TAGS:
-        return replace(column, name=_RIS_TAGS[column.key])
+        return replace(column, name=KEYWORD_TAG)
+    if column.key in RIS_FIELD_TO_TAG:
+        return replace(column, name=RIS_FIELD_TO_TAG[column.key])
     note_name = default_note_name(column)
     if isinstance(column, RawColumn):
         if TAG_PATTERN.fullmatch(column.raw_key):
@@ -482,9 +466,9 @@ def column_value(
     if isinstance(column, LabelColumn):
         return DISPLAY_SEPARATOR.join(_label_texts(column, record, options))
     if isinstance(column, ExtraColumn):
-        if column.kind == "record_id":
+        if column.type == "record_id":
             return str(export.id)
-        if column.kind == "sources":
+        if column.type == "sources":
             return ", ".join(
                 dict.fromkeys(
                     source_label(vendor)

@@ -8,7 +8,7 @@ from app.gui.export.options import ExportOptions
 from app.gui.export.ris import write_ris
 from app.gui.export.ris_tags import (
     CURATED_TAGS,
-    RIS_TAGS,
+    RIS_TAG_TO_NAME,
     TAG_PATTERN,
     TYPE_CODES,
     ris_type,
@@ -20,15 +20,15 @@ _DATA = Path(__file__).parents[2] / "data"
 
 
 def test_ris_tags__curated_tags_come_first() -> None:
-    assert list(RIS_TAGS)[: len(CURATED_TAGS)] == list(CURATED_TAGS)
+    assert list(RIS_TAG_TO_NAME)[: len(CURATED_TAGS)] == list(CURATED_TAGS)
 
 
 def test_ris_tags__all_are_valid_tags() -> None:
-    assert all(TAG_PATTERN.fullmatch(tag) for tag in RIS_TAGS)
+    assert all(TAG_PATTERN.fullmatch(tag) for tag in RIS_TAG_TO_NAME)
 
 
 def test_ris_tags__end_tag_not_offered() -> None:
-    assert "ER" not in RIS_TAGS
+    assert "ER" not in RIS_TAG_TO_NAME
 
 
 def test_type_codes__cover_every_standard_type() -> None:

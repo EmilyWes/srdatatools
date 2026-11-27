@@ -33,7 +33,7 @@ CURATED_TAGS: dict[str, str] = {
     "M3": "Type of work",
 }
 # ER only ends a record, so it isn't offered.
-RIS_TAGS: dict[str, str] = {
+RIS_TAG_TO_NAME: dict[str, str] = {
     **CURATED_TAGS,
     "A1": "Primary author",
     "A3": "Tertiary author",
@@ -86,6 +86,29 @@ RIS_TAGS: dict[str, str] = {
     "Y1": "Primary date",
     "Y2": "Access date",
 }
+
+RIS_FIELD_TO_TAG: dict[str, str] = {
+    "record_id": "ID",
+    "title": "TI",
+    "author_names": "AU",
+    "author_affiliations": "AD",
+    "journal": "T2",
+    "conference_name": "T2",
+    "volume": "VL",
+    "issue": "IS",
+    "pages": "SP",
+    "abstract": "AB",
+    "doi": "DO",
+    "pmid": "AN",
+    "issn": "SN",
+    "isbn": "SN",
+    "language": "LA",
+    "publisher": "PB",
+    "url": "UR",
+    "notes": "N1",
+}
+NOTE_TAG = "N1"
+KEYWORD_TAG = "KW"
 
 RIS_TYPES = frozenset(
     """ABST ADVS AGGR ANCIENT ART BILL BLOG BOOK CASE CHAP CHART CLSWK COMP CONF

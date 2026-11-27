@@ -9,7 +9,6 @@ from nicegui.element import Element
 from webview import FileDialog
 
 from app.gui.export.columns import (
-    NOTE_TAG,
     AuthorIdKeyColumn,
     DateColumn,
     ExportColumn,
@@ -23,7 +22,12 @@ from app.gui.export.columns import (
     fill_count,
 )
 from app.gui.export.options import ExportFileType, ExportOptions, default_path
-from app.gui.export.ris_tags import CURATED_TAGS, RIS_TAGS, TAG_PATTERN
+from app.gui.export.ris_tags import (
+    CURATED_TAGS,
+    NOTE_TAG,
+    RIS_TAG_TO_NAME,
+    TAG_PATTERN,
+)
 from app.gui.importing.import_flow import (
     BUTTON_PROPS,
     FILE_LABEL_CLASSES,
@@ -80,7 +84,7 @@ _LINE_BREAKS = {"keep": "Keep", "space": "Replace with a space"}
 
 _TAG_SEPARATOR = " — "
 _TAG_OPTIONS = {
-    tag: f"{tag}{_TAG_SEPARATOR}{meaning}" for tag, meaning in RIS_TAGS.items()
+    tag: f"{tag}{_TAG_SEPARATOR}{meaning}" for tag, meaning in RIS_TAG_TO_NAME.items()
 }
 # NiceGUI hands Quasar each option as {value: index, label}, so the slots read
 # the tag from the label; a typed tag is its own label.
