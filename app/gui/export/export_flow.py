@@ -33,20 +33,28 @@ from app.gui.export.options import (
     default_path,
     export_boxes,
 )
-from app.gui.importing.import_flow import (
-    BUTTON_PROPS,
-    FILE_LABEL_CLASSES,
-    SELECT_CLASSES,
-    SELECT_PROPS,
-)
-from app.helpers.format import GRID_CLASSES, GRID_COLUMNS, format_count
-from app.helpers.mapping_table import ROW_FIELD_CSS, fill_color
+from app.helpers.format import format_count
+from app.helpers.mapping_table import fill_color
 from app.helpers.options_overview import (
     OptionsScreen,
     render_options_overview,
     render_view_toggle,
 )
 from app.helpers.record_fields import DATE_PART_LABELS
+from app.helpers.theme import (
+    BUTTON_PROPS,
+    CHANGED_TINT,
+    FIELD_CLASSES,
+    FILE_LABEL_CLASSES,
+    GRID_CLASSES,
+    GRID_COLUMNS,
+    INPUT_PROPS,
+    MUTED_TEXT,
+    OUTLINED_BOX,
+    SELECT_CLASSES,
+    SELECT_PROPS,
+    STATUS_TINTS,
+)
 
 OnExport = Callable[
     [Path, list[ExportField], list[ExportRecord], ExportOptions],
@@ -65,11 +73,8 @@ _NO_COLUMNS = "no columns selected"
 _INVALID_TAGS = "invalid tag for: "
 _UNCHECKED_CLASS = "opacity-50"
 
-_EMPTY_NAME_COLOR = "red-2"
-_SHARED_TAG_COLOR = "amber-2"
-_CHANGED_COLOR = "blue-2"
 _OPTION_ROW_CLASSES = "w-full no-wrap items-center gap-1"
-_OPTION_LABEL_CLASSES = "w-10 shrink-0 text-xs text-grey-7"
+_OPTION_LABEL_CLASSES = f"w-10 shrink-0 text-xs {MUTED_TEXT}"
 _NAME_WIDTH = "width: 24ch"
 _FIELD_WIDTH = "width: 20ch"
 
@@ -215,11 +220,11 @@ class ExportView:
             return
         shared = self._shared_with(row)
         if not self._valid_name(row.column.name):
-            row.name.props(f"bg-color={_EMPTY_NAME_COLOR}")
+            row.name.props(f"bg-color={STATUS_TINTS['red']}")
         elif shared:
-            row.name.props(f"bg-color={_SHARED_TAG_COLOR}")
+            row.name.props(f"bg-color={STATUS_TINTS['orange']}")
         elif row.column.name != row.default_name:
-            row.name.props(f"bg-color={_CHANGED_COLOR}")
+            row.name.props(f"bg-color={CHANGED_TINT}")
         else:
             row.name.props(remove="bg-color")
         if row.shared_tooltip is not None:
@@ -314,11 +319,11 @@ class ExportView:
             widget: ui.select | ui.input
             if choices is not None:
                 widget = ui.select(choices, value=value)
-                widget.props("dense options-dense outlined")
+                widget.props(SELECT_PROPS)
             else:
                 # Separators may be or end in a space, so they aren't stripped.
-                widget = ui.input(value=value).props("dense outlined")
-            widget.classes("mapping-field text-xs col")
+                widget = ui.input(value=value).props(INPUT_PROPS)
+            widget.classes(f"{FIELD_CLASSES} col")
             widget.on_value_change(
                 lambda e: self._set_column_option(row, name, e.value or "")
             )
@@ -362,7 +367,7 @@ class ExportView:
             "w-full min-w-max no-wrap items-center gap-1 pl-0 border-b outline-variant"
         )
         with self.mapping:
-            with ui.column().classes("gap-0 border outline-variant rounded-xl"):
+            with ui.column().classes(f"gap-0 {OUTLINED_BOX}"):
                 with ui.row().classes(f"{row_base} py-2 surface-container"):
                     self.header_checkbox = ui.checkbox(
                         on_change=lambda e: self._set_all_checked(e.value)
@@ -415,11 +420,15 @@ class ExportView:
                             else:
                                 name = ui.input(value=column.name)
                             if name is not None:
-                                name.classes("mapping-field text-xs w-full").props(
-                                    "dense outlined"
+                                name.classes(f"{FIELD_CLASSES} w-full").props(
+                                    SELECT_PROPS
+                                    if isinstance(name, ui.select)
+                                    else INPUT_PROPS
                                 )
                             options = ui.column().classes("gap-0 w-full")
-                        sample = ui.label().classes("w-48 truncate text-xs text-grey-7")
+                        sample = ui.label().classes(
+                            f"w-48 truncate text-xs {MUTED_TEXT}"
+                        )
                     row = _Row(
                         column=column,
                         default_name=defaults[column.key],
@@ -547,7 +556,6 @@ class ExportView:
         )
 
     def render(self) -> None:
-        ui.add_css(ROW_FIELD_CSS)
         self.middle.clear()
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):

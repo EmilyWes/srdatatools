@@ -9,6 +9,14 @@ from nicegui.element import Element
 from pydantic import BaseModel
 
 from app.gui.importing.mapping import FieldMapping
+from app.helpers.theme import (
+    CHANGED_COLOR,
+    CHANGED_TINT,
+    FIELD_CLASSES,
+    MUTED_TEXT,
+    OUTLINED_BOX,
+    SELECT_PROPS,
+)
 
 Control = Literal["checkbox", "text", "number", "select", "note"]
 
@@ -39,35 +47,16 @@ class OptionBox:
     items: tuple[OptionItem | OptionList, ...]
 
 
-_CHANGED_BG_COLOR = "blue-2"
-_CHANGED_CHECKBOX_COLOR = "blue"
-# Dense boxes no taller than a line of text-sm (20px).
-FIELD_CSS = """
-.option-field .q-field__control, .option-field .q-field__marginal {
-    min-height: 20px;
-    height: 20px;
-    align-items: center;
-}
-.option-field .q-field__control-container {
-    padding-top: 0;
-    align-items: center;
-}
-.option-field .q-field__native, .option-field .q-field__input {
-    padding: 0;
-    min-height: 0;
-}
-"""
 # Controls line up within a box, after its longest label.
 _GRID_STYLE = "grid-template-columns: max-content auto"
 _GRID_CLASSES = "grid items-center gap-x-3 gap-y-1"
 _CHECKBOX_SIZE = "32px"
-_FIELD_CLASSES = "option-field text-xs"
 _FIELD_WIDTH = "w-[5.5rem]"
 _WIDE_FIELD_WIDTH = "w-[7rem]"
 _TOOLTIP_CLASSES = "max-w-sm text-xs"
-_NOTE_CLASSES = "col-span-2 text-xs text-grey-6"
+_NOTE_CLASSES = f"col-span-2 text-xs {MUTED_TEXT}"
 _BOXES_CLASS = "option-boxes"
-_BOX_CLASSES = "option-box w-fit border outline-variant rounded-xl px-3 pb-2"
+_BOX_CLASSES = f"option-box w-fit {OUTLINED_BOX} px-3 pb-2"
 # CSS can't give wrapping boxes the width of the widest one, so a script does:
 # again whenever rows change, and when the hidden Parsing view is shown (hidden
 # boxes measure 0). Run, not added to the head: a script added late never runs.
@@ -165,11 +154,11 @@ class OptionsScreen(Generic[_M]):
         changed = self._value(key) != getattr(self.defaults, key)
         if isinstance(widget, ui.checkbox):
             if changed:
-                widget.props(f"color={_CHANGED_CHECKBOX_COLOR}")
+                widget.props(f"color={CHANGED_COLOR}")
             else:
                 widget.props(remove="color")
         elif changed:
-            widget.props(f"bg-color={_CHANGED_BG_COLOR}")
+            widget.props(f"bg-color={CHANGED_TINT}")
         else:
             widget.props(remove="bg-color")
 
@@ -199,8 +188,8 @@ class OptionsScreen(Generic[_M]):
                 widget.props("disable")
         else:
             width = _WIDE_FIELD_WIDTH if wide else _FIELD_WIDTH
-            widget.classes(f"{_FIELD_CLASSES} {width}")
-            widget.props("dense options-dense outlined")
+            widget.classes(f"{FIELD_CLASSES} {width}")
+            widget.props(SELECT_PROPS)
             if self.readonly:
                 widget.props("readonly")
         return widget
@@ -435,7 +424,6 @@ def render_options_overview(
         empty_values=list(lists.get("empty_values", [])),
         use_first=list(lists.get("use_first", [])),
     )
-    ui.add_css(FIELD_CSS)
     container.clear()
     with container, ui.column().classes("gap-1 w-full"):
         with render_boxes_row():

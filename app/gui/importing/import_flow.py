@@ -54,8 +54,7 @@ from app.gui.importing.parse_settings import ParseSettings
 from app.gui.importing.profiles import FormatProfile, source_label, sources_label
 from app.gui.other.activity_log import log_import
 from app.helpers.busy import run_busy
-from app.helpers.format import GRID_CLASSES, GRID_COLUMNS
-from app.helpers.mapping_table import ROW_FIELD_CSS, MappingScreen, render_mapping_table
+from app.helpers.mapping_table import MappingScreen, render_mapping_table
 from app.helpers.options_overview import (
     VIEW_MAPPING,
     VIEW_PARSING,
@@ -63,6 +62,14 @@ from app.helpers.options_overview import (
     OptionsScreen,
     render_options_overview,
     render_view_toggle,
+)
+from app.helpers.theme import (
+    BUTTON_PROPS,
+    FILE_LABEL_CLASSES,
+    GRID_CLASSES,
+    GRID_COLUMNS,
+    SELECT_CLASSES,
+    SELECT_PROPS,
 )
 
 _TYPE_OPTIONS = {
@@ -82,11 +89,7 @@ _MIXED_WARNING = (
 )
 _EXCEL_SINGLE_FILE = "Excel import takes one file at a time"
 
-CELL_ROW_CLASSES = "items-center gap-2 no-wrap"
-FILE_LABEL_CLASSES = "text-sm whitespace-nowrap"
-SELECT_PROPS = "dense outlined options-dense popup-content-class=text-xs"
-BUTTON_PROPS = "dense size=11px"
-SELECT_CLASSES = "mapping-field text-xs w-32"
+_CELL_ROW_CLASSES = "items-center gap-2 no-wrap"
 
 
 async def pick_files() -> list[Path]:
@@ -428,7 +431,6 @@ class ImportView:
         type_known = file_type is not None
         has_file = bool(self.paths)
 
-        ui.add_css(ROW_FIELD_CSS)
         self.middle.clear()
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):
@@ -436,7 +438,7 @@ class ImportView:
                     ui.button("Select files", on_click=self._select_files).props(
                         BUTTON_PROPS
                     )
-                    with ui.row().classes(CELL_ROW_CLASSES):
+                    with ui.row().classes(_CELL_ROW_CLASSES):
                         if len(self.paths) > 1:
                             files_label = ui.label(f"{len(self.paths)} files selected")
                             files_label.tooltip(
@@ -455,7 +457,7 @@ class ImportView:
                             )
 
                     ui.label("Detected sources:").classes("text-sm")
-                    with ui.row().classes(CELL_ROW_CLASSES):
+                    with ui.row().classes(_CELL_ROW_CLASSES):
                         for source in self.sources:
                             ui.chip(source_label(source)).props("dense square").classes(
                                 "text-xs"
@@ -464,7 +466,7 @@ class ImportView:
                             ui.label(source_label(None)).classes(FILE_LABEL_CLASSES)
 
                     ui.label("Select type:").classes("text-sm")
-                    with ui.row().classes(CELL_ROW_CLASSES):
+                    with ui.row().classes(_CELL_ROW_CLASSES):
                         type_select = (
                             ui.select(_TYPE_OPTIONS, value=self.file_type)
                             .props(SELECT_PROPS)

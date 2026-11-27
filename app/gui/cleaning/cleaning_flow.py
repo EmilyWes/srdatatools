@@ -5,8 +5,9 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.gui.cleaning.options import CLEANING_BOXES, CleaningOptions
-from app.helpers.format import GRID_CLASSES, GRID_COLUMNS, records_count
+from app.helpers.format import records_count
 from app.helpers.options_overview import OptionsScreen, render_options_overview
+from app.helpers.theme import GRID_CLASSES, GRID_COLUMNS
 
 OnClean = Callable[[CleaningOptions], Awaitable[None] | None]
 

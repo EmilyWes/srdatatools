@@ -17,6 +17,7 @@ from app.gui.importing.profiles import sources_label
 from app.helpers.format import format_count
 from app.helpers.mapping_table import render_mapping_table
 from app.helpers.options_overview import render_options_overview, render_view_toggle
+from app.helpers.theme import MUTED_TEXT
 
 
 def render_source_file_view(
@@ -58,7 +59,7 @@ def render_source_file_view(
                 if source_file.sheet is not None:
                     details.insert(2, ("Sheet", source_file.sheet))
                 for name, value in details:
-                    ui.label(name).classes("text-sm text-grey-7")
+                    ui.label(name).classes(f"text-sm {MUTED_TEXT}")
                     ui.label(value).classes("text-sm")
             with ui.row().classes("items-center gap-6"):
                 for name, count in (
@@ -66,7 +67,7 @@ def render_source_file_view(
                     ("Records in library", records_in_library),
                 ):
                     with ui.column().classes("gap-0"):
-                        ui.label(name).classes("text-sm text-grey-7")
+                        ui.label(name).classes(f"text-sm {MUTED_TEXT}")
                         ui.label(format_count(count)).classes("text-3xl")
                 ui.button(
                     "Remove from library",
@@ -77,7 +78,7 @@ def render_source_file_view(
             with ui.column().classes("w-full gap-1"):
                 ui.label(
                     f"Skipped on import: {format_count(len(source_file.skipped_rows))}"
-                ).classes("text-sm text-grey-7")
+                ).classes(f"text-sm {MUTED_TEXT}")
                 ui.table(
                     columns=[
                         {"name": "row", "label": "Row", "field": "row_number"},

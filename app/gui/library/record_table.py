@@ -40,6 +40,7 @@ from app.helpers.format import (
 )
 from app.helpers.options_overview import render_box_frame
 from app.helpers.record_fields import FIELD_LABELS
+from app.helpers.theme import SECTION_HEADING
 from app.models.record import publication_year
 
 _COLUMNS_KEY = "table_columns"
@@ -448,7 +449,7 @@ def render_table_settings(
     with middle:
         with ui.column().classes("w-full p-6 gap-2"):
             ui.label("Table settings").classes("text-2xl")
-            ui.label("Columns").classes("title-small pt-2")
+            ui.label("Columns").classes(SECTION_HEADING)
             with ui.row().classes("gap-3 items-start"):
                 for title, keys in _COLUMN_BOXES.items():
                     if title == "Authors":

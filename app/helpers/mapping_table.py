@@ -28,22 +28,15 @@ from app.gui.importing.mapping import (
     row_with,
 )
 from app.helpers.record_fields import DATE_PART_LABELS, FIELD_LABELS
-
-ROW_FIELD_CSS = """
-.mapping-field .q-field__control, .mapping-field .q-field__marginal {
-    min-height: 24px;
-    height: 24px;
-    align-items: center;
-}
-.mapping-field .q-field__control-container {
-    padding-top: 0;
-    align-items: center;
-}
-.mapping-field .q-field__native, .mapping-field .q-field__input {
-    padding: 0;
-    min-height: 0;
-}
-"""
+from app.helpers.theme import (
+    CHANGED_TINT,
+    FIELD_CLASSES,
+    INPUT_PROPS,
+    MUTED_TEXT,
+    OUTLINED_BOX,
+    SELECT_PROPS,
+    STATUS_TINTS,
+)
 
 _IGNORE = "ignore"
 _TARGET_KEYS = (_IGNORE, *TARGETS)
@@ -71,7 +64,7 @@ class _Option:
 
 _OPTION_ROW_CLASSES = "w-full no-wrap items-center gap-1"
 # Fixed width so the boxes line up whatever the label.
-_OPTION_LABEL_CLASSES = "w-10 shrink-0 text-xs text-grey-7"
+_OPTION_LABEL_CLASSES = f"w-10 shrink-0 text-xs {MUTED_TEXT}"
 
 _OPTIONS: dict[str, tuple[_Option, ...]] = {
     DATE_TARGET: (_Option("part", "part", "Part", DATE_PART_LABELS),),
@@ -150,12 +143,7 @@ _FIELD_ORDER = (
 Status = Literal["green", "orange", "red"]
 _STATUS_ORDER: tuple[Status, ...] = ("green", "orange", "red")
 _CHANGED = "blue"
-_STATUS_COLORS = {
-    "green": "green-2",
-    "orange": "orange-2",
-    "red": "red-2",
-    _CHANGED: "blue-2",
-}
+_STATUS_COLORS = {**STATUS_TINTS, _CHANGED: CHANGED_TINT}
 
 
 def _value_slot(row: RowMapping) -> tuple[str, ...] | None:
@@ -291,15 +279,15 @@ class MappingScreen:
                 widget: ui.select | ui.input
                 if option.choices is not None:
                     widget = ui.select(option.choices, value=base[option.name])
-                    widget.props("dense options-dense outlined")
+                    widget.props(SELECT_PROPS)
                 elif self.readonly:
-                    widget = ui.input(value=base[option.name]).props("dense outlined")
+                    widget = ui.input(value=base[option.name]).props(INPUT_PROPS)
                 else:
                     widget = ui.input(placeholder=base[option.name])
-                    widget.props("dense outlined")
+                    widget.props(INPUT_PROPS)
                 if self.readonly:
                     widget.props("readonly")
-                widget.classes("mapping-field text-xs col")
+                widget.classes(f"{FIELD_CLASSES} col")
                 widget.on_value_change(lambda _e: self.on_option_change(row))
             row.inputs[option.name] = widget
             row.option_rows[option.name] = option_row
@@ -375,16 +363,12 @@ def render_mapping_table(
         for header in headers
     }
 
-    ui.add_css(ROW_FIELD_CSS)
-
     count_cell_classes = "self-stretch flex items-center px-2 mr-1"
     count_cell_style = "background: rgba(0, 0, 0, 0.04)"
 
     middle.clear()
     with middle:
-        table_classes = (
-            "gap-0 border outline-variant rounded-xl max-w-full overflow-x-auto"
-        )
+        table_classes = f"gap-0 {OUTLINED_BOX} max-w-full overflow-x-auto"
         with ui.column().classes(table_classes):
             row_base = (
                 "w-full min-w-max no-wrap items-center gap-1 pl-0 border-b"
@@ -427,15 +411,12 @@ def render_mapping_table(
                                 sorted_target_options(_TARGET_KEYS),
                                 value=initial_targets[header],
                             )
-                            .classes("mapping-field text-xs w-full")
-                            .props(
-                                "dense options-dense outlined "
-                                f"bg-color={_STATUS_COLORS[status]}"
-                            )
+                            .classes(f"{FIELD_CLASSES} w-full")
+                            .props(f"{SELECT_PROPS} bg-color={_STATUS_COLORS[status]}")
                         )
                         options = ui.column().classes("gap-0 w-full")
                     sample = ui.label(samples[header]).classes(
-                        "w-48 truncate text-xs text-grey-7"
+                        f"w-48 truncate text-xs {MUTED_TEXT}"
                     )
                     if samples[header]:
                         sample.tooltip(samples[header])

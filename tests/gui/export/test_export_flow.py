@@ -591,8 +591,8 @@ def test_export_view__ris_shared_tag_gets_warning_colour_and_hover() -> None:
 
     _type_tag(doi, "TI")
 
-    assert title.name.props["bg-color"] == "amber-2"
-    assert doi.name.props["bg-color"] == "amber-2"
+    assert title.name.props["bg-color"] == "orange-2"
+    assert doi.name.props["bg-color"] == "orange-2"
     assert title.shared_tooltip.text == "Also used by: DOI"
     assert title.shared_tooltip.visible is True
 

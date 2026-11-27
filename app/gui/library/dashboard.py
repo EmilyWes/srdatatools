@@ -15,6 +15,8 @@ from app.helpers.theme import (
     COMPLETE_COLOR,
     MULTIPLE_COLOR,
     OTHER_COLOR,
+    OUTLINED_BOX,
+    SECTION_HEADING,
     UNKNOWN_COLOR,
     UU_GREEN,
     UU_ORANGE,
@@ -41,9 +43,7 @@ _LABEL_COLORS = {
 _TITLE_CLASSES = "title-small self-start"
 _BOX_CLASSES = "w-full h-56"
 _BOX_WIDTH = "17rem"
-_FRAME_CLASSES = (
-    f"w-[{_BOX_WIDTH}] gap-2 items-center p-4 border outline-variant rounded-xl"
-)
+_FRAME_CLASSES = f"w-[{_BOX_WIDTH}] gap-2 items-center p-4 {OUTLINED_BOX}"
 _TOP_KEYWORDS = 10
 _TOP_TYPES = 7
 _MIN_SLICE_ANGLE = 5
@@ -426,7 +426,7 @@ def render_dashboard_settings(
     with middle:
         with ui.column().classes("w-full p-6 gap-2"):
             ui.label("Dashboard settings").classes("text-2xl")
-            ui.label("Shown").classes("title-small pt-2")
+            ui.label("Shown").classes(SECTION_HEADING)
             with ui.column().classes("gap-0"):
                 for key, label in items:
                     ui.checkbox(

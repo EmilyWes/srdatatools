@@ -107,7 +107,7 @@ def test_render_options_overview__note_is_grey_text_without_control() -> None:
     screen = _render("ris", middle=middle)
 
     note = _label(middle, "Author handling")
-    assert "text-grey-6" in note.classes
+    assert "text-grey-7" in note.classes
     assert _tooltip(note).startswith("Author name and affiliation lines")
     assert "ris.author_details" not in screen.widgets
 
