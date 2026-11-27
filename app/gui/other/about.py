@@ -4,6 +4,7 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.session import project_root
+from app.helpers.theme import OUTLINED_BOX, PAGE_TITLE, SECTION_HEADING
 
 PACKAGE = "srdatatools"
 REPOSITORY_URL = "https://github.com/EmilyWes/srdatatools"
@@ -11,9 +12,7 @@ LICENSE_FILE = "LICENSE"
 THIRD_PARTY_FILE = "THIRD_PARTY_LICENSES.txt"
 THIRD_PARTY_SUMMARY_FILE = "THIRD_PARTY_SUMMARY.txt"
 HELP_PLACEHOLDER = "Help will be added later."
-_TITLE_CLASSES = "text-2xl"
-_HEADING_CLASSES = "title-small pt-3"
-_TEXT_BOX_CLASSES = "w-full h-64 border outline-variant rounded-xl surface-low"
+_TEXT_BOX_CLASSES = f"w-full h-64 {OUTLINED_BOX} surface-low"
 _EXPANSION_CLASSES = "w-full text-sm"
 
 
@@ -35,14 +34,14 @@ def render_about_view(middle: Element) -> None:
     root = project_root()
     middle.clear()
     with middle, ui.column().classes("w-full max-w-3xl gap-1 p-6"):
-        ui.label(PACKAGE).classes(_TITLE_CLASSES)
+        ui.label(PACKAGE).classes(PAGE_TITLE)
         ui.label(f"Version {version}").classes("text-sm text-on-surface-variant")
         if summary:
             ui.label(summary).classes("text-sm")
         ui.link(REPOSITORY_URL, REPOSITORY_URL, new_tab=True).classes("text-sm")
         with ui.expansion("License").classes(_EXPANSION_CLASSES):
             _text_box((root / LICENSE_FILE).read_text(encoding="utf-8"))
-        ui.label("Third-party software").classes(_HEADING_CLASSES)
+        ui.label("Third-party software").classes(SECTION_HEADING)
         _text_box((root / THIRD_PARTY_SUMMARY_FILE).read_text(encoding="utf-8"))
         with ui.expansion("Full license texts").classes(_EXPANSION_CLASSES):
             _text_box((root / THIRD_PARTY_FILE).read_text(encoding="utf-8"))
@@ -51,5 +50,5 @@ def render_about_view(middle: Element) -> None:
 def render_help_view(middle: Element) -> None:
     middle.clear()
     with middle, ui.column().classes("w-full gap-1 p-6"):
-        ui.label("Help").classes(_TITLE_CLASSES)
+        ui.label("Help").classes(PAGE_TITLE)
         ui.label(HELP_PLACEHOLDER).classes("text-sm")

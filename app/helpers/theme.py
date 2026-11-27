@@ -28,6 +28,25 @@ COMPLETE_COLOR = "#A4D65E"
 UNKNOWN_COLOR = "#E6E1D3"
 MULTIPLE_COLOR = "#5E5A4E"
 
+STATUS_TINTS = {"green": "green-2", "orange": "orange-2", "red": "red-2"}
+CHANGED_TINT = "blue-2"
+CHANGED_COLOR = "blue"
+MUTED_TEXT = "text-grey-7"
+OUTLINED_BOX = "border outline-variant rounded-xl"
+SECTION_HEADING = "title-small pt-2"
+PAGE_TITLE = "text-2xl"
+
+INPUT_PROPS = "dense outlined"
+SELECT_PROPS = f"{INPUT_PROPS} options-dense popup-content-class=text-xs"
+BUTTON_PROPS = "dense size=11px"
+FIELD_CLASSES = "compact-field text-xs"
+SELECT_CLASSES = f"{FIELD_CLASSES} w-32"
+FILE_LABEL_CLASSES = "text-sm whitespace-nowrap"
+# The second column is fixed to the select width (w-32) so a long file name
+# overflows to the right instead of moving the button and selects.
+GRID_COLUMNS = "max-content 8rem"
+GRID_CLASSES = "items-center justify-items-start gap-x-1 gap-y-2"
+
 # Material Design 3 roles, built around the palette: warm neutral surfaces so
 # the yellow sits comfortably, near-black text as UU uses black.
 # In NiceGUI's "overrides" layer: it beats Quasar's normal rules, and its
@@ -119,6 +138,21 @@ a.nicegui-link {{
     text-decoration-color: {UU_YELLOW};
     text-decoration-thickness: 2px;
     text-underline-offset: 3px;
+}}
+
+/* Dense fields no taller than a line of text-sm (20px). */
+.compact-field .q-field__control, .compact-field .q-field__marginal {{
+    min-height: 20px;
+    height: 20px;
+    align-items: center;
+}}
+.compact-field .q-field__control-container {{
+    padding-top: 0;
+    align-items: center;
+}}
+.compact-field .q-field__native, .compact-field .q-field__input {{
+    padding: 0;
+    min-height: 0;
 }}
 
 .q-tooltip {{

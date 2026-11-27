@@ -13,15 +13,15 @@ from sqlalchemy.orm import Session
 import app.gui.general.home as home_module
 import app.main
 from app.db.models import ActivityLog, Base, Record, RecordSource, SourceFile
-from app.gui.general.action_panel import ActionPanel
 from app.gui.general.home import home
 from app.gui.general.layout import ShellPanes
+from app.gui.general.left_panel import LeftPanel
+from app.gui.general.right_panel import RightPanel
+from app.gui.importing.common import FileSummary
+from app.gui.importing.options import default_options
 from app.gui.library.dashboard import save_hidden
-from app.gui.library.navigation import LeftPanelNav
 from app.gui.library.record_table import load_columns
 from app.helpers.format import author_id_key
-from app.parsers.common import FileSummary
-from app.parsers.profiles.overview import default_choices
 from tests.gui.clicks import click_and_wait
 from tests.mappings import mapping_of
 
@@ -55,10 +55,10 @@ def test_home__shows_activity_log_entries_in_right_panel(
             )
         )
         session.commit()
-    panels: list[ActionPanel] = []
+    panels: list[RightPanel] = []
     render_right_panel = home_module.render_right_panel
 
-    def capture(*args: Any, **kwargs: Any) -> ActionPanel:
+    def capture(*args: Any, **kwargs: Any) -> RightPanel:
         panel = render_right_panel(*args, **kwargs)
         panels.append(panel)
         return panel
@@ -85,10 +85,10 @@ def test_home__clear_log_empties_db_and_right_panel(
             )
         )
         session.commit()
-    panels: list[ActionPanel] = []
+    panels: list[RightPanel] = []
     render_right_panel = home_module.render_right_panel
 
-    def capture(*args: Any, **kwargs: Any) -> ActionPanel:
+    def capture(*args: Any, **kwargs: Any) -> RightPanel:
         panel = render_right_panel(*args, **kwargs)
         panels.append(panel)
         return panel
@@ -195,11 +195,11 @@ def _add_source_file_with_record(engine: Engine) -> int:
         return source_file.id
 
 
-def _capture_navs(monkeypatch: pytest.MonkeyPatch) -> list[LeftPanelNav]:
-    navs: list[LeftPanelNav] = []
+def _capture_navs(monkeypatch: pytest.MonkeyPatch) -> list[LeftPanel]:
+    navs: list[LeftPanel] = []
     render_left_panel = home_module.render_left_panel
 
-    def capture(*args: Any, **kwargs: Any) -> LeftPanelNav:
+    def capture(*args: Any, **kwargs: Any) -> LeftPanel:
         nav = render_left_panel(*args, **kwargs)
         navs.append(nav)
         return nav
@@ -260,7 +260,7 @@ def test_home__import_stores_given_summary_and_selects_new_file(
                 mapping_of({"Title": "title"}),
                 (),
                 None,
-                default_choices("csv", ()),
+                default_options("csv", ()),
                 False,
             )
 
@@ -303,7 +303,7 @@ def test_home__import_and_clean_cleans_only_the_imported_records(
                 mapping_of({"Pages": "pages"}),
                 (),
                 None,
-                default_choices("csv", ()),
+                default_options("csv", ()),
                 True,
             )
 
@@ -348,7 +348,7 @@ def test_home__multi_file_import_stores_each_file_and_selects_dashboard(
                 mapping_of({"Title": "title"}),
                 (),
                 None,
-                default_choices("csv", ()),
+                default_options("csv", ()),
                 False,
             )
 
@@ -421,7 +421,7 @@ def test_home__show_in_table_expands_author_ids_to_key_columns(
 ) -> None:
     _add_source_file_with_record(engine)
     with Session(engine) as session:
-        session.query(Record).one().author_ids = "orcid:[1; 2]"
+        session.query(Record).one().author_ids = {"orcid": ["1; 2"]}
         session.commit()
     shells = _capture_shells(monkeypatch)
     home()
@@ -494,7 +494,7 @@ def test_home__deleting_library_empties_db_logs_and_shows_dashboard(
     on_deletes: list[Any] = []
     render_right_panel = home_module.render_right_panel
 
-    def capture(*args: Any, **kwargs: Any) -> ActionPanel:
+    def capture(*args: Any, **kwargs: Any) -> RightPanel:
         on_deletes.append(kwargs["on_delete_library"])
         return render_right_panel(*args, **kwargs)
 
@@ -590,7 +590,7 @@ def test_home__failing_file_is_logged_and_notified_without_undoing_others(
                 mapping_of({"Title": "title"}),
                 (),
                 None,
-                default_choices("csv", ()),
+                default_options("csv", ()),
                 False,
             )
 
@@ -729,7 +729,7 @@ def test_home__export_options_are_remembered(
     home()
     click_and_wait(_export_button(shells[-1]), monkeypatch)
 
-    views[-1].option_widgets["delimiter"].value = ";"
+    views[-1].screen.widgets["delimiter"].value = ";"
     click_and_wait(_export_button(shells[-1]), monkeypatch)
 
     assert views[-1].options.delimiter == ";"
@@ -741,7 +741,7 @@ def test_home__export_with_cut_values_warns(
     _add_source_file_with_record(engine)
     notifications = _capture_notifications(monkeypatch)
     [view] = _open_export(monkeypatch)
-    view.option_widgets["max_length"].value = 3
+    view.screen.widgets["max_length"].value = 3
     view.path = tmp_path / "library.csv"
     view._refresh_export_button()
 
@@ -762,7 +762,7 @@ def test_home__export_writes_excel_and_warns_about_cuts(
     [view] = _open_export(monkeypatch)
     assert view.file_type_select is not None
     view.file_type_select.value = "xlsx"
-    view.option_widgets["excel_max_length"].value = 3
+    view.screen.widgets["excel_max_length"].value = 3
     view.path = tmp_path / "library.xlsx"
     view._refresh_export_button()
 

@@ -1,12 +1,8 @@
 import json
-from collections.abc import Collection
 from typing import Literal
-
-from app.parsers.profiles import PROFILES
 
 # Between the values of a list, wherever one is shown or exported.
 DISPLAY_SEPARATOR = "; "
-_UNKNOWN_SOURCE = "Unknown"
 _LABEL_PREFIX = "label:"
 _KEYWORD_PREFIX = "keywords:"
 _AUTHOR_ID_PREFIX = "author_ids:"
@@ -16,6 +12,46 @@ _LABEL_NUMBERS = {
     "maybe": "0.5",
     "unknown": "?",
 }
+PUBLICATION_TYPES = {
+    "Journal article": ("jour", "article", "journal article"),
+    "Review": ("review", "short survey"),
+    "Book": ("book",),
+    "Book chapter": (
+        "chap",
+        "book chapter",
+        "book-chapter",
+        "incollection",
+        "inbook",
+        "label.ris.referencetype.book_chapter",
+    ),
+    "Conference paper": (
+        "conf",
+        "cpaper",
+        "conference paper",
+        "conference-paper",
+        "inproceedings",
+        "conference",
+    ),
+    "Conference abstract": (
+        "conference review",
+        "conference-abstract",
+        "label.ris.referencetype.conference_review.p",
+    ),
+    "Thesis": ("thes", "phdthesis", "mastersthesis", "dissertation"),
+    "Report": ("rprt", "techreport", "report"),
+    "Dataset": ("data", "dataset", "data paper", "data-paper"),
+    "Preprint": ("preprint",),
+    "Letter": ("letter",),
+    "Editorial": ("editorial",),
+    "Note": ("note",),
+    "Erratum": ("errt", "erratum"),
+    "Retraction": ("retracted", "retraction"),
+}
+STANDARD_PUBLICATION_TYPE = {
+    value: standard
+    for standard, values in PUBLICATION_TYPES.items()
+    for value in values
+}
 
 LabelFormat = Literal["words", "numbers"]
 
@@ -24,15 +60,10 @@ def format_count(count: int) -> str:
     return f"{count:,}".replace(",", ".")
 
 
-def source_label(source: str | None) -> str:
-    if source is None:
-        return _UNKNOWN_SOURCE
-    profile = PROFILES.get(source)
-    return profile.label if profile is not None else source
-
-
-def sources_label(sources: Collection[str]) -> str:
-    return ", ".join(map(source_label, sources)) or _UNKNOWN_SOURCE
+def records_count(count: int, selected: bool) -> str:
+    if selected:
+        return f"{format_count(count)} (selected)"
+    return format_count(count)
 
 
 def label_key(phase: str, screener: str) -> str:

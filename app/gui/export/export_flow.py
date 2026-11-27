@@ -8,41 +8,67 @@ from nicegui import app, ui
 from nicegui.element import Element
 from webview import FileDialog
 
-from app.gui.export.columns import (
+from app.gui.export.formats.ris_tags import (
+    CURATED_TAGS,
     NOTE_TAG,
-    AuthorIdKeyColumn,
-    DateColumn,
-    ExportColumn,
+    RIS_TAG_TO_NAME,
+    TAG_PATTERN,
+)
+from app.gui.export.mapping import (
+    AuthorIdKeyField,
+    DateField,
+    ExportField,
     ExportRecord,
-    JoinedColumn,
-    KeywordsColumn,
-    RisTypeColumn,
+    JoinedField,
+    KeywordsField,
+    RisTypeField,
     default_note_name,
     example,
-    export_columns,
+    export_fields,
     fill_count,
 )
-from app.gui.export.options import ExportFileType, ExportOptions, default_path
-from app.gui.export.ris_tags import CURATED_TAGS, RIS_TAGS, TAG_PATTERN
-from app.gui.importing.import_flow import (
+from app.gui.export.options import (
+    ExportFileType,
+    ExportOptions,
+    default_path,
+    export_boxes,
+)
+from app.helpers.format import format_count
+from app.helpers.mapping_table import (
+    SELECT_CHROME_CH,
+    body_row,
+    count_cell,
+    example_cell,
+    fill_color,
+    header_cells,
+    header_row,
+    input_width_ch,
+    label_cell,
+    option_row,
+    table_frame,
+    widget_cell,
+)
+from app.helpers.options_overview import (
+    OptionsScreen,
+    render_options_overview,
+    render_view_toggle,
+)
+from app.helpers.record_fields import DATE_PART_LABELS
+from app.helpers.theme import (
     BUTTON_PROPS,
+    CHANGED_TINT,
+    FIELD_CLASSES,
     FILE_LABEL_CLASSES,
     GRID_CLASSES,
     GRID_COLUMNS,
+    INPUT_PROPS,
     SELECT_CLASSES,
     SELECT_PROPS,
-)
-from app.helpers.format import format_count
-from app.helpers.mapping_table import ROW_FIELD_CSS, fill_color
-from app.helpers.quirks_overview import (
-    FIELD_CSS,
-    render_box_frame,
-    render_boxes_row,
-    render_view_toggle,
+    STATUS_TINTS,
 )
 
 OnExport = Callable[
-    [Path, list[ExportColumn], list[ExportRecord], ExportOptions],
+    [Path, list[ExportField], list[ExportRecord], ExportOptions],
     Awaitable[None] | None,
 ]
 
@@ -53,36 +79,14 @@ _FILE_TYPES: dict[ExportFileType, str] = {
     "ris": "RIS files (*.ris)",
 }
 _TYPE_OPTIONS = {"csv": "CSV", "tsv": "TSV", "xlsx": "Excel", "ris": "RIS"}
-_EXCEL_MAX_LENGTH = 32_767
 _NO_RECORDS = "no records to export"
 _NO_COLUMNS = "no columns selected"
 _INVALID_TAGS = "invalid tag for: "
 _UNCHECKED_CLASS = "opacity-50"
 
-_EMPTY_NAME_COLOR = "red-2"
-_SHARED_TAG_COLOR = "amber-2"
-_CHANGED_COLOR = "blue-2"
-_CHANGED_CHECKBOX_COLOR = "blue"
-_OPTION_ROW_CLASSES = "w-full no-wrap items-center gap-1"
-_OPTION_LABEL_CLASSES = "w-10 shrink-0 text-xs text-grey-7"
-_NAME_WIDTH = "width: 24ch"
-_FIELD_WIDTH = "width: 20ch"
-_BOX_FIELD_CLASSES = "quirk-field text-xs"
-_BOX_FIELD_WIDTH = "w-[6.5rem]"
-_WIDE_BOX_FIELD_WIDTH = "w-[9rem]"
-# Controls sit at the right edge of the (equally wide) boxes.
-_BOX_GRID_STYLE = "grid-template-columns: max-content 1fr"
-
-_DATE_PARTS = {"full": "Full date", "year": "Year", "month": "Month", "day": "Day"}
-
-_DELIMITERS = {",": "Comma", ";": "Semicolon", "\t": "Tab"}
-_ENCODINGS = {"utf-8-sig": "UTF-8 with BOM", "utf-8": "UTF-8"}
-_LABEL_FORMATS = {"numbers": "Numbers", "words": "Words"}
-_LINE_BREAKS = {"keep": "Keep", "space": "Replace with a space"}
-
 _TAG_SEPARATOR = " — "
 _TAG_OPTIONS = {
-    tag: f"{tag}{_TAG_SEPARATOR}{meaning}" for tag, meaning in RIS_TAGS.items()
+    tag: f"{tag}{_TAG_SEPARATOR}{meaning}" for tag, meaning in RIS_TAG_TO_NAME.items()
 }
 # NiceGUI hands Quasar each option as {value: index, label}, so the slots read
 # the tag from the label; a typed tag is its own label.
@@ -108,7 +112,7 @@ def _tag_options(tag: str) -> dict[str, str]:
     return dict(_TAG_OPTIONS)
 
 
-def _default_unchecked(columns: Sequence[ExportColumn]) -> set[str]:
+def _default_unchecked(columns: Sequence[ExportField]) -> set[str]:
     return {column.key for column in columns if not column.default_checked}
 
 
@@ -123,15 +127,9 @@ async def pick_save_path(suggested: Path, file_type: ExportFileType) -> Path | N
     return Path(selected[0]) if selected else None
 
 
-def records_count(count: int, selected: bool) -> str:
-    if selected:
-        return f"{format_count(count)} (selected)"
-    return format_count(count)
-
-
 @dataclass
 class _Row:
-    column: ExportColumn
+    column: ExportField
     default_name: str
     checkbox: ui.checkbox
     # A RIS tag select; None for the fixed TY row.
@@ -153,12 +151,9 @@ class ExportView:
     path: Path
     on_export: OnExport
     on_options_change: Callable[[ExportOptions], Any] | None = None
-    on_restore_options: Callable[[], Any] | None = None
-    columns: list[ExportColumn] = field(default_factory=list)
+    columns: list[ExportField] = field(default_factory=list)
     rows: list[_Row] = field(default_factory=list)
-    option_widgets: dict[str, ui.select | ui.checkbox | ui.number] = field(
-        default_factory=dict
-    )
+    screen: OptionsScreen[ExportOptions] = field(init=False)
     mapping: ui.column | None = None
     option_boxes: Element | None = None
     path_label: ui.label | None = None
@@ -171,7 +166,7 @@ class ExportView:
     syncing_header: bool = False
 
     def __post_init__(self) -> None:
-        self.columns = export_columns(self.records, self.options)
+        self.columns = export_fields(self.records, self.options)
         self.unchecked = _default_unchecked(self.columns)
 
     @property
@@ -181,7 +176,7 @@ class ExportView:
     def _rebuild_columns(self) -> None:
         """Rows that stay keep their edited name and options."""
         current = {column.key: column for column in self.columns}
-        fresh = export_columns(self.records, self.options)
+        fresh = export_fields(self.records, self.options)
         self.unchecked |= _default_unchecked(
             [column for column in fresh if column.key not in current]
         )
@@ -189,7 +184,7 @@ class ExportView:
 
     def _reset_columns(self) -> None:
         """Back to the file type's default names and checks."""
-        self.columns = export_columns(self.records, self.options)
+        self.columns = export_fields(self.records, self.options)
         self.unchecked = _default_unchecked(self.columns)
         self._render_mapping()
 
@@ -230,11 +225,11 @@ class ExportView:
             return
         shared = self._shared_with(row)
         if not self._valid_name(row.column.name):
-            row.name.props(f"bg-color={_EMPTY_NAME_COLOR}")
+            row.name.props(f"bg-color={STATUS_TINTS['red']}")
         elif shared:
-            row.name.props(f"bg-color={_SHARED_TAG_COLOR}")
+            row.name.props(f"bg-color={STATUS_TINTS['orange']}")
         elif row.column.name != row.default_name:
-            row.name.props(f"bg-color={_CHANGED_COLOR}")
+            row.name.props(f"bg-color={CHANGED_TINT}")
         else:
             row.name.props(remove="bg-color")
         if row.shared_tooltip is not None:
@@ -245,12 +240,12 @@ class ExportView:
         for row in self.rows:
             self._refresh_name_color(row)
 
-    def _exported_columns(self) -> list[ExportColumn]:
+    def _exported_columns(self) -> list[ExportField]:
         return [c for c in self.columns if c.key not in self.unchecked]
 
-    def _optional_columns(self) -> list[ExportColumn]:
+    def _optional_columns(self) -> list[ExportField]:
         """The TY row is always exported, so it isn't counted as a choice."""
-        return [c for c in self.columns if not isinstance(c, RisTypeColumn)]
+        return [c for c in self.columns if not isinstance(c, RisTypeField)]
 
     def _set_checked(self, row: _Row, checked: bool) -> None:
         if checked:
@@ -273,7 +268,7 @@ class ExportView:
         if self.syncing_header:
             return
         for row in self.rows:
-            if not isinstance(row.column, RisTypeColumn):
+            if not isinstance(row.column, RisTypeField):
                 row.checkbox.value = value is not False
 
     def _sync_header_checkbox(self) -> None:
@@ -323,17 +318,16 @@ class ExportView:
         label: str,
         choices: dict[str, str] | None = None,
     ) -> None:
-        with ui.row().classes(_OPTION_ROW_CLASSES):
-            ui.label(f"{short}:").classes(_OPTION_LABEL_CLASSES).tooltip(label)
+        with option_row(short, label):
             value = getattr(row.column, name)
             widget: ui.select | ui.input
             if choices is not None:
                 widget = ui.select(choices, value=value)
-                widget.props("dense options-dense outlined")
+                widget.props(SELECT_PROPS)
             else:
                 # Separators may be or end in a space, so they aren't stripped.
-                widget = ui.input(value=value).props("dense outlined")
-            widget.classes("mapping-field text-xs col")
+                widget = ui.input(value=value).props(INPUT_PROPS)
+            widget.classes(f"{FIELD_CLASSES} col")
             widget.on_value_change(
                 lambda e: self._set_column_option(row, name, e.value or "")
             )
@@ -341,10 +335,10 @@ class ExportView:
     def _render_options(self, row: _Row) -> None:
         column = row.column
         joined = not (self._ris and self.options.one_line_per_value)
-        if isinstance(column, DateColumn) and not self._ris:
-            self._option(row, "part", "part", "Part", _DATE_PARTS)
+        if isinstance(column, DateField) and not self._ris:
+            self._option(row, "part", "part", "Part", DATE_PART_LABELS)
         elif (
-            isinstance(column, AuthorIdKeyColumn | JoinedColumn | KeywordsColumn)
+            isinstance(column, AuthorIdKeyField | JoinedField | KeywordsField)
             and joined
         ):
             self._option(row, "delimiter", "sep", "Delimiter")
@@ -353,7 +347,7 @@ class ExportView:
                 row, "note_name", "name", "Written before the value, as Name: value"
             )
 
-    def _tag_select(self, column: ExportColumn) -> ui.select:
+    def _tag_select(self, column: ExportField) -> ui.select:
         select = ui.select(
             _tag_options(column.name),
             value=column.name or None,
@@ -368,57 +362,32 @@ class ExportView:
 
     def _render_mapping(self) -> None:
         assert self.mapping is not None
-        defaults = {c.key: c.name for c in export_columns(self.records, self.options)}
+        defaults = {c.key: c.name for c in export_fields(self.records, self.options)}
         self.rows = []
         self.mapping.clear()
-        count_cell_classes = "self-stretch flex items-center px-2 mr-1"
-        count_cell_style = "background: rgba(0, 0, 0, 0.04)"
-        row_base = (
-            "w-full min-w-max no-wrap items-center gap-1 pl-0 border-b outline-variant"
-        )
+        field_width = input_width_ch(c.label for c in self.columns)
+        name_width = input_width_ch(defaults.values(), chrome=SELECT_CHROME_CH)
+        if self._ris:
+            # The tag select also holds a clear button.
+            name_width = name_width * 3 // 2
         with self.mapping:
-            with ui.column().classes("gap-0 border outline-variant rounded-xl"):
-                with ui.row().classes(f"{row_base} py-2 surface-container"):
+            with table_frame():
+                with header_row():
                     self.header_checkbox = ui.checkbox(
                         on_change=lambda e: self._set_all_checked(e.value)
                     ).props("dense")
-                    with (
-                        ui.element("div")
-                        .classes(count_cell_classes)
-                        .style(count_cell_style)
-                    ):
-                        ui.label("#").classes("w-10 text-xs font-bold text-center")
-                    ui.label("Field").classes("text-xs font-bold").style(_FIELD_WIDTH)
-                    ui.label("Export as").classes("text-xs font-bold").style(
-                        _NAME_WIDTH
-                    )
-                    ui.label("Example").classes("w-48 text-xs font-bold text-center")
+                    header_cells("Field", "Export as", field_width, name_width)
                 for i, column in enumerate(self.columns):
-                    row_classes = f"{row_base} py-0"
-                    if i % 2 == 1:
-                        row_classes += " surface-low"
-                    with ui.row().classes(row_classes):
+                    with body_row(i):
                         checkbox = ui.checkbox(
                             value=column.key not in self.unchecked
                         ).props("dense")
-                        with (
-                            ui.element("div")
-                            .classes(count_cell_classes)
-                            .style(count_cell_style)
-                        ) as count_cell:
-                            count = ui.linear_progress(show_value=False).classes("w-10")
-                        field_label = (
-                            ui.label(column.label)
-                            .classes("truncate text-xs")
-                            .style(_FIELD_WIDTH)
-                            .tooltip(column.label)
-                        )
-                        with (
-                            ui.column().classes("gap-0").style(_NAME_WIDTH) as name_cell
-                        ):
+                        count_box, count = count_cell()
+                        field_label = label_cell(column.label, field_width)
+                        with widget_cell(name_width) as name_cell:
                             name: ui.input | ui.select | None = None
                             shared_tooltip = None
-                            if isinstance(column, RisTypeColumn):
+                            if isinstance(column, RisTypeField):
                                 checkbox.disable()
                                 ui.label(column.name).classes("text-xs px-3").tooltip(
                                     _TYPE_TAG_HOVER
@@ -430,11 +399,13 @@ class ExportView:
                             else:
                                 name = ui.input(value=column.name)
                             if name is not None:
-                                name.classes("mapping-field text-xs w-full").props(
-                                    "dense outlined"
+                                name.classes(f"{FIELD_CLASSES} w-full").props(
+                                    SELECT_PROPS
+                                    if isinstance(name, ui.select)
+                                    else INPUT_PROPS
                                 )
                             options = ui.column().classes("gap-0 w-full")
-                        sample = ui.label().classes("w-48 truncate text-xs text-grey-7")
+                        sample = example_cell("")
                     row = _Row(
                         column=column,
                         default_name=defaults[column.key],
@@ -442,7 +413,7 @@ class ExportView:
                         name=name,
                         count=count,
                         example=sample,
-                        cells=[count_cell, field_label, name_cell, sample],
+                        cells=[count_box, field_label, name_cell, sample],
                         options=options,
                         shared_tooltip=shared_tooltip,
                     )
@@ -471,7 +442,6 @@ class ExportView:
             value = int(value) if value else getattr(ExportOptions(), key)
         previous = self.options.file_type
         self.options = self.options.model_copy(update={key: value})
-        self._refresh_option_colors()
         if key == "file_type":
             self._change_file_type(value, previous)
         elif key in (
@@ -507,176 +477,18 @@ class ExportView:
             self._reset_columns()
         self._render_option_boxes()
 
-    def _refresh_option_colors(self) -> None:
-        defaults = ExportOptions()
-        for key, widget in self.option_widgets.items():
-            changed = getattr(self.options, key) != getattr(defaults, key)
-            if isinstance(widget, ui.checkbox):
-                if changed:
-                    widget.props(f"color={_CHANGED_CHECKBOX_COLOR}")
-                else:
-                    widget.props(remove="color")
-            elif changed:
-                widget.props(f"bg-color={_CHANGED_COLOR}")
-            else:
-                widget.props(remove="bg-color")
-        ignored = self.option_widgets.get("ignored_columns")
-        if ignored is not None:
-            ignored.set_enabled(not self.options.original_data)
-
-    def _box_item(
-        self,
-        key: str,
-        label: str,
-        hover: str,
-        choices: dict[str, str] | None = None,
-        maximum: int | None = None,
-        wide: bool = False,
-    ) -> None:
-        with ui.label(label).classes("text-xs"):
-            ui.tooltip(hover).classes("max-w-sm text-xs")
-        value = getattr(self.options, key)
-        widget: ui.select | ui.checkbox | ui.number
-        if isinstance(value, bool):
-            widget = ui.checkbox(value=value).props("dense keep-color size=32px")
-        elif isinstance(value, int):
-            widget = ui.number(value=value, min=1, max=maximum, precision=0)
-            widget.props("dense outlined")
-        else:
-            widget = ui.select(choices or {}, value=value)
-            widget.props("dense options-dense outlined")
-        if not isinstance(widget, ui.checkbox):
-            width = _WIDE_BOX_FIELD_WIDTH if wide else _BOX_FIELD_WIDTH
-            widget.classes(f"{_BOX_FIELD_CLASSES} {width}")
-        widget.classes("justify-self-end")
-        widget.on_value_change(lambda e: self._set_option(key, e.value))
-        self.option_widgets[key] = widget
-
     def _render_option_boxes(self) -> None:
         """Rendered again on a File type change, as Excel and RIS show other File
         and Values options."""
         assert self.option_boxes is not None
-        excel = self.options.file_type == "xlsx"
-        self.option_widgets = {}
-        self.option_boxes.clear()
-        with self.option_boxes, ui.column().classes("gap-1 w-full"):
-            with render_boxes_row():
-                with render_box_frame("File").style(_BOX_GRID_STYLE):
-                    if excel:
-                        self._box_item(
-                            "excel_max_length",
-                            "Maximum length",
-                            "Longest value written, in characters; longer values"
-                            " are cut. Excel holds at most 32.767 characters per"
-                            " cell.",
-                            maximum=_EXCEL_MAX_LENGTH,
-                        )
-                    elif self._ris:
-                        self._box_item(
-                            "ris_encoding",
-                            "Encoding",
-                            "Some RIS readers don't expect a BOM before the first"
-                            " tag.",
-                            _ENCODINGS,
-                        )
-                    else:
-                        self._box_item(
-                            "delimiter",
-                            "Delimiter",
-                            "The character between the values in a row.",
-                            _DELIMITERS,
-                        )
-                        self._box_item(
-                            "encoding",
-                            "Encoding",
-                            "With a BOM, Excel shows accented characters correctly"
-                            " when it opens the file.",
-                            _ENCODINGS,
-                        )
-                        self._box_item(
-                            "max_length",
-                            "Maximum length",
-                            "Longest value written, in characters; longer values"
-                            " are cut. 131.072 is the default limit of Python's CSV"
-                            " reader, which many tools use; Excel holds at most"
-                            " 32.767 characters per cell.",
-                        )
-                with render_box_frame("Values").style(_BOX_GRID_STYLE):
-                    self._box_item(
-                        "label_format",
-                        "Label values",
-                        "Numbers writes 1 / 0 / 0.5 / ?, Words writes include /"
-                        " exclude / maybe / unknown; unlabeled is empty in both.",
-                        _LABEL_FORMATS,
-                    )
-                    if self._ris:
-                        self._box_item(
-                            "one_line_per_value",
-                            "One line per value",
-                            "Writes each author, keyword, ISSN, label, … and each"
-                            " line of the notes on a tag line of its own, as RIS"
-                            " readers expect. Off joins them on one line with the"
-                            " row's delimiter.",
-                        )
-                        self._box_item(
-                            "split_pages",
-                            "Split pages into SP / EP",
-                            "Writes the start page to SP and the end page to EP."
-                            " Off writes the whole range to SP.",
-                        )
-                        self._box_item(
-                            "cleaned_dates_only",
-                            "Only export cleaned dates",
-                            "Writes only dates Cleaning turned into YYYY/MM/DD to"
-                            " DA. Off writes other dates as stored.",
-                        )
-                    else:
-                        self._box_item(
-                            "line_breaks",
-                            "Line breaks",
-                            "Line breaks inside a value (e.g. an abstract) are kept"
-                            + (" in the cell" if excel else " within quotes")
-                            + ", or replaced with a space.",
-                            _LINE_BREAKS,
-                            wide=True,
-                        )
-                with render_box_frame("Column selection").style(_BOX_GRID_STYLE):
-                    self._box_item(
-                        "empty_columns",
-                        "Export empty columns",
-                        "Adds the columns that none of the exported records has a"
-                        " value for.",
-                    )
-                    self._box_item(
-                        "ignored_columns",
-                        "Export ignored input columns",
-                        "Adds a row for each input column or tag that was set to"
-                        " ignore at import, with the value as it was imported.",
-                    )
-                    self._box_item(
-                        "original_data",
-                        "Export original data",
-                        "Adds a row for every input column or tag, with the value"
-                        " as it was imported.",
-                    )
-            with ui.row().classes("w-full justify-end"):
-                ui.button("Restore defaults", on_click=self._restore_options).props(
-                    "dense flat no-caps"
-                ).classes("text-xs")
-        self._refresh_option_colors()
-
-    def _restore_options(self) -> None:
-        """Resets the options model itself, as the File options of the other file
-        types have no widgets."""
-        previous = self.options.file_type
-        self.options = ExportOptions()
-        assert self.file_type_select is not None
-        self.file_type_select.value = self.options.file_type
-        self._change_file_type(self.options.file_type, previous)
-        self._rebuild_columns()
-        self._render_mapping()
-        if self.on_restore_options is not None:
-            self.on_restore_options()
+        self.screen = render_options_overview(
+            self.option_boxes,
+            export_boxes(self.options.file_type),
+            ExportOptions(),
+            start=self.options,
+        )
+        for key, widget in self.screen.widgets.items():
+            widget.on_value_change(lambda e, key=key: self._set_option(key, e.value))
 
     async def _choose_path(self) -> None:
         path = await pick_save_path(self.path, self.options.file_type)
@@ -721,8 +533,6 @@ class ExportView:
         )
 
     def render(self) -> None:
-        ui.add_css(ROW_FIELD_CSS)
-        ui.add_css(FIELD_CSS)
         self.middle.clear()
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):
@@ -767,7 +577,6 @@ def render_export_view(
     selected: bool,
     on_export: OnExport,
     on_options_change: Callable[[ExportOptions], Any] | None = None,
-    on_restore_options: Callable[[], Any] | None = None,
 ) -> ExportView:
     view = ExportView(
         middle=middle,
@@ -777,7 +586,6 @@ def render_export_view(
         path=path,
         on_export=on_export,
         on_options_change=on_options_change,
-        on_restore_options=on_restore_options,
     )
     view.render()
     return view

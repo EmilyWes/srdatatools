@@ -5,9 +5,9 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.gui.cleaning.options import CLEANING_BOXES, CleaningOptions
-from app.gui.export.export_flow import records_count
-from app.gui.importing.import_flow import GRID_CLASSES, GRID_COLUMNS
-from app.helpers.quirks_overview import QuirksScreen, render_quirks_overview
+from app.helpers.format import records_count
+from app.helpers.options_overview import OptionsScreen, render_options_overview
+from app.helpers.theme import GRID_CLASSES, GRID_COLUMNS
 
 OnClean = Callable[[CleaningOptions], Awaitable[None] | None]
 
@@ -16,7 +16,7 @@ _NO_RECORDS = "no records to clean"
 
 @dataclass
 class CleaningView:
-    screen: QuirksScreen[CleaningOptions]
+    screen: OptionsScreen[CleaningOptions]
     run_button: ui.button
 
 
@@ -35,11 +35,12 @@ def render_cleaning_view(
         with ui.grid(columns=GRID_COLUMNS).classes(GRID_CLASSES):
             ui.label("Number of records:").classes("text-sm")
             ui.label(records_count(record_count, selected)).classes("text-sm")
-        screen = render_quirks_overview(
+        screen = render_options_overview(
             ui.column().classes("w-full"),
             CLEANING_BOXES,
             CleaningOptions(),
             start=options,
+            turn_off_button=True,
         )
         run_button = ui.button(
             "Run cleaning", on_click=lambda: on_clean(screen.current_choices())

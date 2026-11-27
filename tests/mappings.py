@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 
-from app.parsers.mapping import FieldMapping, Suggest, make_row
+from app.gui.importing.mapping import FieldMapping, Suggest, make_row
 
 
 def mapping_of(rows: Mapping[str, str | Suggest]) -> FieldMapping:

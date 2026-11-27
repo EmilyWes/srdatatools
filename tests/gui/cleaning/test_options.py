@@ -13,7 +13,7 @@ from app.gui.cleaning.options import (
     reset_options,
     save_options,
 )
-from app.parsers.profiles.overview import QuirkItem
+from app.helpers.options_overview import OptionItem
 
 
 @pytest.fixture
@@ -95,7 +95,7 @@ def test_cleaning_boxes__split_authors_enables_its_dependants() -> None:
     enabled_by_split = [
         item.key
         for item in authors.items
-        if isinstance(item, QuirkItem) and item.enabled_by == "split_authors"
+        if isinstance(item, OptionItem) and item.enabled_by == "split_authors"
     ]
 
     assert enabled_by_split == [

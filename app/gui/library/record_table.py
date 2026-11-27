@@ -15,16 +15,14 @@ from nicegui.element import Element
 from nicegui.events import GenericEventArguments
 from sqlalchemy.orm import Session
 
-from app.db.queries import (
-    list_author_id_keys,
-    list_keyword_prefixes,
-    list_label_columns,
-    list_record_labels,
-    list_record_rows,
-    list_record_sources,
-)
+from app.db.label import list_label_columns, list_record_labels
+from app.db.record import list_record_rows
+from app.db.record_source import list_record_sources
 from app.db.settings import delete_setting, get_setting, set_setting
+from app.gui.importing.profiles import source_label
 from app.gui.library.quality import QUALITY_FIELDS, quality_issues
+from app.gui.library.stats import list_author_id_keys, list_keyword_prefixes
+from app.helpers.authors import ids_of_key
 from app.helpers.format import (
     DISPLAY_SEPARATOR,
     LabelFormat,
@@ -39,12 +37,11 @@ from app.helpers.format import (
     label_key,
     label_pair,
     label_text,
-    source_label,
 )
-from app.helpers.quirks_overview import render_box_frame
+from app.helpers.options_overview import render_box_frame
+from app.helpers.record_fields import FIELD_LABELS
+from app.helpers.theme import PAGE_TITLE, SECTION_HEADING
 from app.models.record import publication_year
-from app.parsers.authors import AUTHOR_JOINER, author_ids_for_key
-from app.parsers.mapping import split_keyword
 
 _COLUMNS_KEY = "table_columns"
 _NUMBER_COLUMNS = {"publication_year"}
@@ -67,36 +64,43 @@ _LABEL_FORMAT_KEY = "table_label_format"
 
 _LABEL_FORMATS: dict[LabelFormat, str] = {"numbers": "Numbers", "words": "Words"}
 
-COLUMNS: dict[str, str] = {
-    "doi": "DOI",
-    "title": "Title",
-    "author_names": "Authors",
-    "publication_date": "Publication date",
+_TABLE_LABELS = {
     "publication_year": "Publication year",
-    "journal": "Journal",
     "sources": "Sources",
-    "abstract": "Abstract",
-    "author_affiliations": "Affiliations",
-    "conference_name": "Conference",
-    "volume": "Volume",
-    "issue": "Issue",
-    "pages": "Pages",
-    "pmid": "PMID",
-    "issn": "ISSN",
-    "isbn": "ISBN",
-    "other_ids": "Other IDs",
-    "publication_type": "Publication type",
-    "keywords": "Keywords",
-    "language": "Language",
-    "publisher": "Publisher",
-    "url": "URL",
-    "notes": "Notes",
     "data_quality": "Data quality",
+}
+COLUMNS: dict[str, str] = {
+    key: _TABLE_LABELS.get(key) or FIELD_LABELS[key]
+    for key in (
+        "doi",
+        "title",
+        "author_names",
+        "publication_date",
+        "publication_year",
+        "journal",
+        "sources",
+        "abstract",
+        "author_affiliations",
+        "conference_name",
+        "volume",
+        "issue",
+        "pages",
+        "pmid",
+        "issn",
+        "isbn",
+        "other_ids",
+        "publication_type",
+        "keywords",
+        "language",
+        "publisher",
+        "url",
+        "notes",
+        "data_quality",
+    )
 }
 # Columns worked out from other fields rather than read from one.
 _DERIVED_COLUMNS = ("sources", "keywords", "publication_year", "data_quality")
 DEFAULT_COLUMNS = ["doi", "title", "author_names"]
-_JOINED_FIELDS = frozenset({"author_names", "author_affiliations", "issn", "isbn"})
 _QUALITY_FILTER_STATE: dict[str, Any] = {
     "filter": {
         "filterModel": {"data_quality": {"filterType": "text", "type": "notBlank"}}
@@ -227,8 +231,6 @@ def row_for(values: Mapping[str, Any]) -> dict[str, Any]:
     for key, value in values.items():
         if isinstance(value, list):
             value = DISPLAY_SEPARATOR.join(value)
-        elif key in _JOINED_FIELDS and value:
-            value = value.replace(AUTHOR_JOINER, DISPLAY_SEPARATOR)
         elif isinstance(value, dict):
             value = DISPLAY_SEPARATOR.join(
                 f"{name}: {id_}" for name, id_ in value.items()
@@ -254,23 +256,21 @@ def load_rows(
         fields.extend(QUALITY_FIELDS)
     rows = []
     for record in list_record_rows(session, list(dict.fromkeys(fields))):
-        keywords = [split_keyword(keyword) for keyword in record.pop("keywords", [])]
+        keywords: dict[str, list[str]] = record.pop("keywords", {})
         row = row_for(record)
         for key in author_id_columns:
-            row[column_field(key)] = author_ids_for_key(
-                record.get("author_ids"), author_id_name(key), DISPLAY_SEPARATOR
+            row[column_field(key)] = DISPLAY_SEPARATOR.join(
+                ids_of_key(record["author_ids"], author_id_name(key))
             )
         if "data_quality" in columns:
             row["data_quality"] = DISPLAY_SEPARATOR.join(quality_issues(record))
         if "publication_year" in columns:
             row["publication_year"] = publication_year(row.get("publication_date"))
         if "keywords" in columns:
-            row["keywords"] = DISPLAY_SEPARATOR.join(
-                text for prefix, text in keywords if prefix is None
-            )
+            row["keywords"] = DISPLAY_SEPARATOR.join(keywords.get("", []))
         for key in keyword_columns:
             row[column_field(key)] = DISPLAY_SEPARATOR.join(
-                text for prefix, text in keywords if prefix == keyword_prefix(key)
+                keywords.get(keyword_prefix(key) or "", [])
             )
         rows.append(row)
     if "sources" in columns:
@@ -448,8 +448,8 @@ def render_table_settings(
     middle.clear()
     with middle:
         with ui.column().classes("w-full p-6 gap-2"):
-            ui.label("Table settings").classes("text-2xl")
-            ui.label("Columns").classes("title-small pt-2")
+            ui.label("Table settings").classes(PAGE_TITLE)
+            ui.label("Columns").classes(SECTION_HEADING)
             with ui.row().classes("gap-3 items-start"):
                 for title, keys in _COLUMN_BOXES.items():
                     if title == "Authors":

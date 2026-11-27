@@ -1,16 +1,19 @@
+from typing import Literal
+
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from app.db.settings import delete_setting, get_setting, set_setting
-from app.parsers.mapping import DateOrder
-from app.parsers.profiles.overview import QuirkBox, QuirkItem, QuirkList
+from app.helpers.options_overview import OptionBox, OptionItem, OptionList
+
+DateOrder = Literal["eu", "us"]
 
 _OPTIONS_KEY = "cleaning_options"
 
 
 class CleaningOptions(BaseModel):
-    strip_extras: bool = True
-    only_one: bool = True
+    strip_extras: bool = False
+    only_one: bool = False
     preferred_qualifier: str = "Electronic"
     drop_et_al: bool = True
     drop_trailing: bool = True
@@ -55,10 +58,10 @@ def reset_options(session: Session) -> None:
     delete_setting(session, _OPTIONS_KEY)
 
 
-_ISSN_ISBN = QuirkBox(
+_ISSN_ISBN = OptionBox(
     "ISSN/ISBN",
     (
-        QuirkItem(
+        OptionItem(
             "strip_extras",
             "Strip extras",
             "The value might have qualifiers like (electronic) or (ISSN); strips"
@@ -66,14 +69,14 @@ _ISSN_ISBN = QuirkBox(
             " (10 or 13 digits).",
             "checkbox",
         ),
-        QuirkItem(
+        OptionItem(
             "only_one",
             "Only keep one",
             "Some values hold several ISSNs or ISBNs; keeps only one of them:"
             " the first, unless the preferred qualifier picks another.",
             "checkbox",
         ),
-        QuirkItem(
+        OptionItem(
             "preferred_qualifier",
             "Preferred qualifier",
             "If a value is followed by a label in brackets, e.g."
@@ -84,16 +87,16 @@ _ISSN_ISBN = QuirkBox(
         ),
     ),
 )
-_AUTHORS = QuirkBox(
+_AUTHORS = OptionBox(
     "Authors",
     (
-        QuirkItem(
+        OptionItem(
             "drop_et_al",
             'Drop "et al."',
             'Removes a trailing "et al." from the author names.',
             "checkbox",
         ),
-        QuirkItem(
+        OptionItem(
             "drop_trailing",
             "Drop trailing",
             "Removes non-name characters, like ... or ;, from the end of the last"
@@ -101,14 +104,14 @@ _AUTHORS = QuirkBox(
             " more letters, so initials like J. are kept.",
             "checkbox",
         ),
-        QuirkItem(
+        OptionItem(
             "split_authors",
             "Split authors",
             "Separates the author names, affiliations and IDs with |, so each"
             " author can be told apart. Needed for the options below.",
             "checkbox",
         ),
-        QuirkItem(
+        OptionItem(
             "names_separator",
             "Names separator",
             "What separates the author names in the imported value. Leave empty"
@@ -117,7 +120,7 @@ _AUTHORS = QuirkBox(
             "text",
             enabled_by="split_authors",
         ),
-        QuirkItem(
+        OptionItem(
             "affiliations_separator",
             "Affiliations separator",
             "What separates the affiliations in the imported value. Leave empty"
@@ -125,16 +128,16 @@ _AUTHORS = QuirkBox(
             "text",
             enabled_by="split_authors",
         ),
-        QuirkItem(
+        OptionItem(
             "ids_separator",
             "IDs separator",
             "What separates the author IDs in an imported column, e.g. Scopus's"
-            " Author(s) ID. Leave empty to detect it per imported file, as for"
-            " the names.",
+            " Author(s) ID. Leave empty to detect it per imported file (|, ;, a"
+            " line break, ' and ' or a comma).",
             "text",
             enabled_by="split_authors",
         ),
-        QuirkItem(
+        OptionItem(
             "id_from_name",
             "Scopus ID from name",
             "Scopus adds the author ID to the name (Doe, John (12345)); removes it"
@@ -142,7 +145,7 @@ _AUTHORS = QuirkBox(
             "checkbox",
             enabled_by="split_authors",
         ),
-        QuirkItem(
+        OptionItem(
             "author_strip_extras",
             "Strip extras",
             "Removes trailing text in brackets from each author name, e.g."
@@ -150,7 +153,7 @@ _AUTHORS = QuirkBox(
             "checkbox",
             enabled_by="split_authors",
         ),
-        QuirkItem(
+        OptionItem(
             "affiliation_start",
             "Affiliation start",
             "Sometimes an affiliation starts with the author's name; strips"
@@ -163,30 +166,31 @@ _AUTHORS = QuirkBox(
         ),
     ),
 )
-_KEYWORDS = QuirkBox(
+_KEYWORDS = OptionBox(
     "Keywords",
     (
-        QuirkItem(
+        OptionItem(
             "split_keywords",
             "Split keywords",
             "Splits each imported keywords value into separate keywords, keeping"
             " its prefix.",
             "checkbox",
         ),
-        QuirkItem(
+        OptionItem(
             "keywords_separator",
             "Keywords separator",
             "What separates the keywords in the imported value. Leave empty to"
-            " detect it per imported file, as for the author names.",
+            " detect it per imported file (|, ;, a line break, ' and ' or a"
+            " comma).",
             "text",
             enabled_by="split_keywords",
         ),
     ),
 )
-_DATES = QuirkBox(
+_DATES = OptionBox(
     "Dates",
     (
-        QuirkItem(
+        OptionItem(
             "clean_dates",
             "Clean up dates",
             "Reads the publication date and writes it as YYYY/MM/DD, an unknown"
@@ -194,7 +198,7 @@ _DATES = QuirkBox(
             " is.",
             "checkbox",
         ),
-        QuirkItem(
+        OptionItem(
             "date_order",
             "Ambiguous dates",
             "Which number is the month in a numeric date like 03/04/2020 where"
@@ -205,13 +209,13 @@ _DATES = QuirkBox(
         ),
     ),
 )
-_EMPTY_VALUES = QuirkBox(
+_EMPTY_VALUES = OptionBox(
     "Empty values",
     (
-        QuirkList(
+        OptionList(
             "empty_values",
             (
-                QuirkItem(
+                OptionItem(
                     "value",
                     "Ignore",
                     "Values that count as empty in any text field. Not"
@@ -221,7 +225,7 @@ _EMPTY_VALUES = QuirkBox(
                 ),
             ),
         ),
-        QuirkItem(
+        OptionItem(
             "refill_from_raw",
             "Refill from raw",
             "Fills a field emptied above from the next imported column mapped to"
@@ -230,16 +234,16 @@ _EMPTY_VALUES = QuirkBox(
         ),
     ),
 )
-_IDENTIFIERS = QuirkBox(
+_IDENTIFIERS = OptionBox(
     "Identifiers",
     (
-        QuirkItem(
+        OptionItem(
             "strip_doi",
             "Strip DOI",
             'Strips all extra text from a DOI, leaving e.g. "10.1038/nature12373".',
             "checkbox",
         ),
-        QuirkItem(
+        OptionItem(
             "strip_pmid",
             "Strip PMID",
             "Strips all extra text from PMIDs, keeping only the number.",
@@ -247,24 +251,24 @@ _IDENTIFIERS = QuirkBox(
         ),
     ),
 )
-_OTHER = QuirkBox(
+_OTHER = OptionBox(
     "Other",
     (
-        QuirkItem(
+        OptionItem(
             "pages_set",
             "Pages set",
             "Expands a page range like 512-4 to 512-514. Only acts if the second"
             " value is lower than the first.",
             "checkbox",
         ),
-        QuirkItem(
+        OptionItem(
             "first_publication_type",
             "First pub. type",
             "NBIB can have several lines for publication type; keeps only the"
             " first.",
             "checkbox",
         ),
-        QuirkItem(
+        OptionItem(
             "standardize_publication_type",
             "Standardize pub. type",
             "Maps vendor publication types to one list, e.g. JOUR, article and"
@@ -274,10 +278,10 @@ _OTHER = QuirkBox(
         ),
     ),
 )
-_FROM_FILE = QuirkBox(
+_FROM_FILE = OptionBox(
     "From raw fields",
     (
-        QuirkItem(
+        OptionItem(
             "ris_notes",
             "Values in RIS notes",
             "Scopus packs labelled values into N1 note lines (EID: 2-s2.0-…);"
@@ -285,14 +289,14 @@ _FROM_FILE = QuirkBox(
             " filled field is kept; an other ID is always set.",
             "checkbox",
         ),
-        QuirkItem(
+        OptionItem(
             "eid_from_url",
             "Scopus EID from URL",
             "Scopus BibTeX has no EID field, but its url links the record; reads"
             " the EID from it, even when url was set to ignore.",
             "checkbox",
         ),
-        QuirkItem(
+        OptionItem(
             "citation_parts",
             "Values from Citation",
             "PubMed CSV packs volume, issue and pages into its Citation column"

@@ -7,16 +7,21 @@ from app.models.record import PartialDate, Record, publication_year
 def test_record__empty_constructs_successfully() -> None:
     record = Record()
     assert record.title is None
-    assert record.author_names is None
+    assert record.author_names == []
+    assert record.author_ids == {}
+    assert record.keywords == {}
     assert record.other_ids == {}
 
 
 def test_record__full_valid_record_round_trips_all_fields() -> None:
     record = Record(
         title="A Study of Things",
-        author_names="Smith, Jane; Doe, John",
-        author_ids="orcid:0000-0001-2345-6789, scopus_author_id:12345|",
-        author_affiliations="University of Example; Example Hospital",
+        author_names=["Smith, Jane", "Doe, John"],
+        author_ids={
+            "orcid": ["0000-0001-2345-6789", ""],
+            "scopus_author_id": ["12345", ""],
+        },
+        author_affiliations=["University of Example", "Example Hospital"],
         abstract="An abstract.",
         publication_date="2020/06/15",
         journal="Journal of Examples",
@@ -25,11 +30,11 @@ def test_record__full_valid_record_round_trips_all_fields() -> None:
         pages="123-130",
         doi="10.1000/abc",
         pmid="12345678",
-        issn="1234-5678",
-        isbn="978-3-16-148410-0",
+        issn=["1234-5678"],
+        isbn=["978-3-16-148410-0"],
         other_ids={"eid": "2-s2.0-12345"},
         publication_type="journal article",
-        keywords=["testing", "examples"],
+        keywords={"": ["testing"], "MeSH": ["examples"]},
         language="en",
         publisher="Example Press",
         url="https://example.com/paper",
@@ -37,12 +42,15 @@ def test_record__full_valid_record_round_trips_all_fields() -> None:
     )
 
     assert record.title == "A Study of Things"
-    assert record.author_names == "Smith, Jane; Doe, John"
-    assert record.author_ids == "orcid:0000-0001-2345-6789, scopus_author_id:12345|"
-    assert record.author_affiliations == "University of Example; Example Hospital"
+    assert record.author_names == ["Smith, Jane", "Doe, John"]
+    assert record.author_ids == {
+        "orcid": ["0000-0001-2345-6789", ""],
+        "scopus_author_id": ["12345", ""],
+    }
+    assert record.author_affiliations == ["University of Example", "Example Hospital"]
     assert record.publication_date == "2020/06/15"
     assert record.other_ids == {"eid": "2-s2.0-12345"}
-    assert record.keywords == ["testing", "examples"]
+    assert record.keywords == {"": ["testing"], "MeSH": ["examples"]}
 
 
 @pytest.mark.parametrize(

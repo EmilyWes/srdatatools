@@ -6,14 +6,10 @@ from nicegui.elements.label import Label
 from nicegui.elements.tooltip import Tooltip
 
 from app.gui.general.layout import shell
-from app.helpers.mapping_table import (
-    MappingScreen,
-    _input_width_ch,
-    render_mapping_table,
-)
-from app.parsers.common import FileSummary
-from app.parsers.csv_ import suggest_mapping
-from app.parsers.mapping import (
+from app.gui.importing.common import FileSummary
+from app.gui.importing.formats.csv import suggest_mapping
+from app.gui.importing.formats.ris import suggest_ris_mapping
+from app.gui.importing.mapping import (
     AuthorsRow,
     DateRow,
     FieldMapping,
@@ -25,7 +21,11 @@ from app.parsers.mapping import (
     ScalarRow,
     Suggest,
 )
-from app.parsers.ris import suggest_ris_mapping
+from app.helpers.mapping_table import (
+    MappingScreen,
+    input_width_ch,
+    render_mapping_table,
+)
 from tests.mappings import mapping_of, targets_of
 
 
@@ -427,7 +427,7 @@ def test_render_mapping_table__changing_a_row_does_not_reorder_rows() -> None:
 def test_input_width_ch__fits_longest_header_within_bounds(
     headers: list[str], expected: int
 ) -> None:
-    assert _input_width_ch(headers) == expected
+    assert input_width_ch(headers) == expected
 
 
 def test_render_mapping_table__truncated_input_header_has_full_value_tooltip() -> None:

@@ -4,61 +4,43 @@ from typing import Any
 
 from nicegui import ui
 
-from app.db.activity_log import (
-    clear_activity_log,
-    log_cleaning,
-    log_export,
-    log_export_failed,
-    log_import_failed,
-    log_library_deleted,
-    log_records_deleted,
-    log_removal,
-)
+from app.db.activity_log import clear_activity_log, list_activity_log
+from app.db.general import delete_library, remove_source_file
+from app.db.label import count_label_values, list_label_columns
 from app.db.models import SourceFile
-from app.db.queries import (
-    count_data_quality,
-    count_filled_fields,
-    count_keywords,
-    count_label_values,
-    count_publication_types,
-    count_records,
+from app.db.record import count_filled_fields, count_records, delete_records
+from app.db.record_source import (
     count_records_for_file,
     count_records_per_source_file,
-    count_records_per_year,
-    list_activity_log,
-    list_label_columns,
     list_record_ids_for_files,
-    list_source_files,
-    load_export_records,
 )
 from app.db.session import get_engine, session_scope
-from app.db.store import (
-    clean_records,
-    delete_library,
-    delete_records,
-    remove_source_file,
-)
+from app.db.source import list_source_files
 from app.gui.cleaning.cleaning_flow import render_cleaning_view
 from app.gui.cleaning.options import CleaningOptions
 from app.gui.cleaning.options import load_options as load_cleaning_options
 from app.gui.cleaning.options import save_options as save_cleaning_options
-from app.gui.export.columns import ExportColumn, ExportRecord
-from app.gui.export.csv_ import write_csv
-from app.gui.export.excel import write_excel
+from app.gui.cleaning.run import clean_records
 from app.gui.export.export_flow import render_export_view
+from app.gui.export.formats.csv import write_csv
+from app.gui.export.formats.excel import write_excel
+from app.gui.export.formats.ris import write_ris
+from app.gui.export.mapping import ExportField, ExportRecord, load_export_records
 from app.gui.export.options import (
     ExportOptions,
     default_path,
     load_folder,
     load_options,
-    reset_options,
     save_folder,
     save_options,
 )
-from app.gui.export.ris import write_ris
-from app.gui.general.action_panel import render_right_panel
 from app.gui.general.layout import shell
+from app.gui.general.left_panel import LeftPanel, render_left_panel
+from app.gui.general.right_panel import render_right_panel
+from app.gui.importing.common import FileSummary, FileType
 from app.gui.importing.import_flow import import_file, render_import_view
+from app.gui.importing.mapping import FieldMapping
+from app.gui.importing.options import ImportOptions
 from app.gui.library.dashboard import (
     COMPLETENESS_FIELDS,
     dashboard_items,
@@ -68,7 +50,6 @@ from app.gui.library.dashboard import (
     reset_hidden,
     save_hidden,
 )
-from app.gui.library.navigation import LeftPanelNav, render_left_panel
 from app.gui.library.record_table import (
     COLUMNS,
     LabelFormat,
@@ -86,13 +67,25 @@ from app.gui.library.record_table import (
     save_columns,
     save_label_format,
 )
+from app.gui.library.stats import (
+    count_data_quality,
+    count_keywords,
+    count_publication_types,
+    count_records_per_year,
+)
 from app.gui.other.about import render_about_view, render_help_view
+from app.gui.other.activity_log import (
+    log_cleaning,
+    log_export,
+    log_export_failed,
+    log_import_failed,
+    log_library_deleted,
+    log_records_deleted,
+    log_removal,
+)
 from app.gui.other.source_file_view import render_source_file_view
 from app.helpers.busy import run_busy
 from app.helpers.format import format_count
-from app.parsers.common import FileSummary, FileType
-from app.parsers.mapping import FieldMapping
-from app.parsers.profiles.overview import ParsingChoices
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +95,7 @@ _engine = get_engine()
 @ui.page("/")
 def home() -> None:
     panes = shell()
-    nav: LeftPanelNav | None = None
+    nav: LeftPanel | None = None
     selection = RecordSelection()
 
     def clear_nav_selection() -> None:
@@ -303,7 +296,7 @@ def home() -> None:
         mapping: FieldMapping,
         sources: tuple[str, ...],
         sheet: str | None,
-        choices: ParsingChoices,
+        choices: ImportOptions,
         clean: bool,
     ) -> None:
         def store() -> tuple[list[int], list[tuple[str, str]]]:
@@ -354,7 +347,7 @@ def home() -> None:
 
     async def export(
         path: Path,
-        columns: list[ExportColumn],
+        columns: list[ExportField],
         records: list[ExportRecord],
         options: ExportOptions,
     ) -> None:
@@ -404,10 +397,6 @@ def home() -> None:
         with session_scope(_engine) as session:
             save_options(session, options)
 
-    def restore_export_options() -> None:
-        with session_scope(_engine) as session:
-            reset_options(session)
-
     async def start_export() -> None:
         clear_nav_selection()
         ids = set(selection.ids) or None
@@ -430,7 +419,6 @@ def home() -> None:
             selected=ids is not None,
             on_export=export,
             on_options_change=save_export_options,
-            on_restore_options=restore_export_options,
         )
 
     async def run_cleaning(options: CleaningOptions, ids: set[int] | None) -> None:

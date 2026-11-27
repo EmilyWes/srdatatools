@@ -8,15 +8,16 @@ from nicegui.element import Element
 from nicegui.elements.tooltip import Tooltip
 
 from app.gui.export import export_flow
-from app.gui.export.columns import (
-    ExportColumn,
+from app.gui.export.export_flow import ExportView, pick_save_path, render_export_view
+from app.gui.export.mapping import (
+    ExportField,
     ExportRecord,
     ExportSource,
-    RisTypeColumn,
+    RisTypeField,
 )
-from app.gui.export.export_flow import ExportView, pick_save_path, render_export_view
 from app.gui.export.options import ExportOptions
 from app.gui.general.layout import shell
+from app.helpers.mapping_table import SELECT_CHROME_CH, input_width_ch
 from app.models.record import Record
 from tests.gui.clicks import click_and_wait, run_in
 
@@ -39,7 +40,7 @@ def _records() -> list[ExportRecord]:
             id=1,
             record=Record(
                 title="Deep learning",
-                author_names="LeCun, Yann",
+                author_names=["LeCun, Yann"],
                 doi="10.1038/nature14539",
             ),
             sources=[
@@ -182,13 +183,13 @@ def test_export_view__original_data_adds_raw_rows_and_disables_ignored() -> None
     view = _view(on_options_change=changes.append)
     _row(view, "title").name.value = "TI"
 
-    view.option_widgets["original_data"].value = True
+    view.screen.widgets["original_data"].value = True
 
     keys = [row.column.key for row in view.rows]
     assert keys[-2:] == ["raw:Title", "raw:Link"]
     assert _row(view, "raw:Title").name.value == "Title (original)"
     assert _row(view, "title").name.value == "TI"
-    assert view.option_widgets["ignored_columns"].enabled is False
+    assert view.screen.widgets["ignored_columns"].enabled is False
     assert changes[-1].original_data is True
 
 
@@ -196,7 +197,7 @@ def test_export_view__empty_columns_option_adds_empty_rows() -> None:
     view = _view()
     assert "abstract" not in [row.column.key for row in view.rows]
 
-    view.option_widgets["empty_columns"].value = True
+    view.screen.widgets["empty_columns"].value = True
 
     assert "abstract" in [row.column.key for row in view.rows]
 
@@ -204,23 +205,23 @@ def test_export_view__empty_columns_option_adds_empty_rows() -> None:
 def test_export_view__ignored_columns_adds_only_ignored_raw_rows() -> None:
     view = _view()
 
-    view.option_widgets["ignored_columns"].value = True
+    view.screen.widgets["ignored_columns"].value = True
 
     raw_keys = [r.column.key for r in view.rows if r.column.key.startswith("raw:")]
     assert raw_keys == ["raw:Link"]
 
 
-def test_export_view__restore_defaults_resets_options_and_calls_back() -> None:
-    restores: list[None] = []
+def test_export_view__restore_defaults_resets_shown_options_and_saves() -> None:
+    changes: list[ExportOptions] = []
     view = _view(
         options=ExportOptions(delimiter=";", original_data=True),
-        on_restore_options=lambda: restores.append(None),
+        on_options_change=changes.append,
     )
 
-    view._restore_options()
+    view.screen.restore_defaults()
 
     assert view.options == ExportOptions()
-    assert restores == [None]
+    assert changes[-1] == ExportOptions()
     assert not any(row.column.key.startswith("raw:") for row in view.rows)
 
 
@@ -316,10 +317,10 @@ def test_export_view__excel_hides_delimiter_and_encoding(tmp_path: Path) -> None
 
     assert view.options.file_type == "xlsx"
     assert view.path == tmp_path / "library.xlsx"
-    assert "delimiter" not in view.option_widgets
-    assert "encoding" not in view.option_widgets
-    assert "max_length" not in view.option_widgets
-    assert view.option_widgets["excel_max_length"].value == 32_767
+    assert "delimiter" not in view.screen.widgets
+    assert "encoding" not in view.screen.widgets
+    assert "max_length" not in view.screen.widgets
+    assert view.screen.widgets["excel_max_length"].value == 32_767
 
 
 def test_export_view__excel_keeps_delimiter_and_back_to_csv_shows_it(
@@ -327,15 +328,15 @@ def test_export_view__excel_keeps_delimiter_and_back_to_csv_shows_it(
 ) -> None:
     view = _view_at(tmp_path / "library.csv")
     assert view.file_type_select is not None
-    view.option_widgets["delimiter"].value = ";"
+    view.screen.widgets["delimiter"].value = ";"
 
     view.file_type_select.value = "xlsx"
     assert view.options.delimiter == ";"
     view.file_type_select.value = "csv"
 
     assert view.options.delimiter == ","
-    assert view.option_widgets["delimiter"].value == ","
-    assert "excel_max_length" not in view.option_widgets
+    assert view.screen.widgets["delimiter"].value == ","
+    assert "excel_max_length" not in view.screen.widgets
 
 
 def test_export_view__excel_maximum_length_box_sets_its_own_option() -> None:
@@ -344,35 +345,25 @@ def test_export_view__excel_maximum_length_box_sets_its_own_option() -> None:
         options=ExportOptions(file_type="xlsx"), on_options_change=changes.append
     )
 
-    view.option_widgets["excel_max_length"].value = 100
+    view.screen.widgets["excel_max_length"].value = 100
     assert view.options.excel_max_length == 100
     assert view.options.max_length == 131_072
     assert changes[-1].excel_max_length == 100
 
-    view.option_widgets["excel_max_length"].value = None
+    view.screen.widgets["excel_max_length"].value = None
     assert view.options.excel_max_length == 32_767
 
 
-def test_export_view__restore_defaults_resets_hidden_options() -> None:
+def test_export_view__restore_defaults_keeps_file_type_and_hidden_options() -> None:
     view = _view(
-        options=ExportOptions(file_type="xlsx", delimiter=";", encoding="utf-8")
+        options=ExportOptions(file_type="xlsx", delimiter=";", excel_max_length=100)
     )
 
-    view._restore_options()
+    view.screen.restore_defaults()
 
-    assert view.options == ExportOptions()
-    assert view.option_widgets["delimiter"].value == ","
-
-
-def test_export_view__restore_defaults_resets_file_type(tmp_path: Path) -> None:
-    view = _view_at(tmp_path / "library.csv")
-    assert view.file_type_select is not None
-    view.file_type_select.value = "tsv"
-
-    view._restore_options()
-
-    assert view.options == ExportOptions()
-    assert view.path == tmp_path / "library.csv"
+    assert view.options.file_type == "xlsx"
+    assert view.options.delimiter == ";"
+    assert view.options.excel_max_length == 32_767
 
 
 def test_export_view__chosen_path_shows_name_with_full_path_on_hover(
@@ -409,7 +400,7 @@ def test_export_view__export_disabled_without_records() -> None:
 def test_export_view__export_passes_path_columns_records_and_options(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    calls: list[tuple[Path, list[ExportColumn], list[ExportRecord], ExportOptions]] = []
+    calls: list[tuple[Path, list[ExportField], list[ExportRecord], ExportOptions]] = []
     view = _view(on_export=lambda *args: calls.append(args))
     view.path = tmp_path / "library.csv"
     view._refresh_export_button()
@@ -435,7 +426,7 @@ def test_export_view__all_columns_checked_by_default() -> None:
 def test_export_view__unchecked_column_greyed_and_left_out_of_export(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[tuple[Path, list[ExportColumn], list[ExportRecord], ExportOptions]] = []
+    calls: list[tuple[Path, list[ExportField], list[ExportRecord], ExportOptions]] = []
     view = _view(on_export=lambda *args: calls.append(args))
     row = _row(view, "title")
 
@@ -472,7 +463,7 @@ def test_export_view__unchecked_column_stays_unchecked_on_rebuild() -> None:
     view = _view()
     _row(view, "title").checkbox.value = False
 
-    view.option_widgets["empty_columns"].value = True
+    view.screen.widgets["empty_columns"].value = True
 
     assert len(view.rows) > 2
     assert _row(view, "title").checkbox.value is False
@@ -484,11 +475,11 @@ def test_export_view__maximum_length_box_sets_option_and_empty_restores_default(
 ):
     view = _view()
 
-    view.option_widgets["max_length"].value = 32767
+    view.screen.widgets["max_length"].value = 32767
     assert view.options.max_length == 32767
-    assert view.option_widgets["max_length"].props["bg-color"] == "blue-2"
+    assert view.screen.widgets["max_length"].props["bg-color"] == "blue-2"
 
-    view.option_widgets["max_length"].value = None
+    view.screen.widgets["max_length"].value = None
     assert view.options.max_length == 131_072
 
 
@@ -497,6 +488,22 @@ _RIS = ExportOptions(file_type="ris")
 
 def _ris_view(options: ExportOptions = _RIS, **callbacks: Any) -> ExportView:
     return _view(options=options, **callbacks)
+
+
+def test_export_view__column_widths_follow_content() -> None:
+    view = _view()
+    labels = [row.column.label for row in view.rows]
+    names = [row.default_name for row in view.rows]
+    _, field_label, name_cell, _ = view.rows[0].cells
+
+    assert f"w-[{input_width_ch(labels)}ch]" in field_label.classes
+    assert f"w-[{input_width_ch(names, SELECT_CHROME_CH)}ch]" in name_cell.classes
+
+
+def test_export_view__ris_tag_column_is_wider_for_clear_button() -> None:
+    _, _, name_cell, _ = _ris_view().rows[0].cells
+
+    assert "w-[12ch]" in name_cell.classes
 
 
 def _type_tag(row: Any, typed: str) -> None:
@@ -519,7 +526,7 @@ def test_export_view__ris_type_row_first_fixed_and_locked() -> None:
     view = _ris_view()
 
     row = view.rows[0]
-    assert isinstance(row.column, RisTypeColumn)
+    assert isinstance(row.column, RisTypeField)
     assert row.name is None
     assert row.checkbox.value is True
     assert row.checkbox.enabled is False
@@ -601,8 +608,8 @@ def test_export_view__ris_shared_tag_gets_warning_colour_and_hover() -> None:
 
     _type_tag(doi, "TI")
 
-    assert title.name.props["bg-color"] == "amber-2"
-    assert doi.name.props["bg-color"] == "amber-2"
+    assert title.name.props["bg-color"] == "orange-2"
+    assert doi.name.props["bg-color"] == "orange-2"
     assert title.shared_tooltip.text == "Also used by: DOI"
     assert title.shared_tooltip.visible is True
 
@@ -645,7 +652,7 @@ def test_export_view__ris_one_line_per_value_hides_delimiter() -> None:
     view = _ris_view()
     assert _option_inputs(_row(view, "author_names")) == []
 
-    view.option_widgets["one_line_per_value"].value = False
+    view.screen.widgets["one_line_per_value"].value = False
 
     [delimiter] = _option_inputs(_row(view, "author_names"))
     assert delimiter.value == "; "
@@ -662,7 +669,7 @@ def test_export_view__ris_split_pages_option_rebuilds_rows() -> None:
     view = _ris_view(ExportOptions(file_type="ris", empty_columns=True))
     assert _row(view, "pages:end").name.value == "EP"
 
-    view.option_widgets["split_pages"].value = False
+    view.screen.widgets["split_pages"].value = False
 
     keys = [row.column.key for row in view.rows]
     assert "pages:end" not in keys
@@ -678,9 +685,9 @@ def test_export_view__ris_options_hide_tabular_settings() -> None:
         "one_line_per_value",
         "split_pages",
         "cleaned_dates_only",
-    } <= view.option_widgets.keys()
+    } <= view.screen.widgets.keys()
     assert not {"delimiter", "encoding", "max_length", "line_breaks"} & (
-        view.option_widgets.keys()
+        view.screen.widgets.keys()
     )
 
 

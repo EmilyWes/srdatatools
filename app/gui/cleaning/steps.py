@@ -1,37 +1,36 @@
+import logging
 import re
 import string
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
-from app.gui.cleaning.options import CleaningOptions
-from app.models.record import PartialDate, Record
-from app.parsers.authors import (
-    AUTHOR_JOINER,
-    AuthorIds,
-    author_id,
-    format_author_ids,
-    merge_author_ids,
-    parse_author_ids,
-    parse_unsplit_author_ids,
-)
-from app.parsers.mapping import (
+from pydantic import ValidationError
+
+from app.gui.cleaning.options import CleaningOptions, DateOrder
+from app.gui.importing.mapping import (
     ISBN_LENGTHS,
     ISSN_ISBN_TOKEN,
     ISSN_LENGTH,
     LINE_DELIMITER,
-    SCALAR_FIELDS,
     AuthorsRow,
     FieldMapping,
     ScalarRow,
     ordered_mapping,
-    parse_date_string,
-    parse_unsplit_keywords,
-    tag_keyword,
 )
+from app.helpers.authors import AuthorIds, clean_author_id, merge_author_ids
+from app.helpers.format import STANDARD_PUBLICATION_TYPE
+from app.helpers.functions import sniff_separator
+from app.helpers.record_fields import SCALAR_FIELDS
+from app.models.record import PartialDate, Record
+
+logger = logging.getLogger(__name__)
 
 SCOPUS_AUTHOR_ID_KEY = "scopus_author_id"
-# Comma is left out: it also separates last and first names.
-SEPARATOR_CANDIDATES = (AUTHOR_JOINER, ";", "\n", " and ")
+# Comma is left out: it also separates last and first names, and the parts of an
+# affiliation.
+SEPARATOR_CANDIDATES = ("|", ";", "\n", " and ")
+# Comma last, so it loses ties to a keyword that only contains one.
+COMMA_SEPARATOR_CANDIDATES = (*SEPARATOR_CANDIDATES, ",")
 
 _PAGE_RANGE = re.compile(r"^(?P<start>\d+)-(?P<end>\d+)$")
 _TRAILING_ET_AL = re.compile(r"[\s,;|]*\bet al\.$")
@@ -42,6 +41,46 @@ _DIGITS = re.compile(r"\d+")
 _TRAILING_NON_NAME = ".,;:…" + string.whitespace
 _ENDS_IN_WORD = re.compile(r"[^\W\d_]{3}$")
 _INITIALS = re.compile(r"(?:[\s.\-]+[^\W\d_]{1,3})*\.?")
+_MONTH_ABBREVIATIONS = {
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+}
+
+_DATE_PATTERNS = [
+    re.compile(r"^(?P<year>\d{4})$"),
+    re.compile(r"^(?P<year>\d{4})-(?P<month>\d{1,2})$"),
+    re.compile(r"^(?P<year>\d{4})-(?P<month>\d{1,2})-(?P<day>\d{1,2})$"),
+    # Also the stored YYYY/MM/DD, where any part after the year may be empty.
+    re.compile(
+        r"^(?P<year>\d{4})/(?P<month>\d{1,2}|[A-Za-z]{3,9})?/(?P<day>\d{1,2})?$"
+    ),
+    # RIS: YYYY/MM/DD/other, where every part after the year may be empty
+    re.compile(r"^(?P<year>\d{4})/(?P<month>\d{1,2})?/(?P<day>\d{1,2})?/.*$"),
+    # NBIB: YYYY Mon, YYYY Mon DD, YYYY Mon-Mon (a month range keeps its first month)
+    re.compile(
+        r"^(?P<year>\d{4}) (?P<month>[A-Za-z]{3,9})(?:-[A-Za-z]{3,9})?"
+        r"(?: (?P<day>\d{1,2}))?$"
+    ),
+    re.compile(r"^(?P<day>\d{1,2}) (?P<month>[A-Za-z]{3,9})\.? (?P<year>\d{4})$"),
+    re.compile(r"^(?P<month>[A-Za-z]{3,9})\.? (?P<day>\d{1,2}), (?P<year>\d{4})$"),
+    # A season names no month: which months it covers depends on the hemisphere.
+    re.compile(r"^(?:spring|summer|fall|autumn|winter) ?(?P<year>\d{4})$", re.I),
+    re.compile(r"^(?P<month>[A-Za-z]{3,9})\.? ?(?P<year>\d{4})$"),
+]
+_NUMERIC_DATE = re.compile(
+    r"^(?P<first>\d{1,2})(?P<sep>[/.-])(?P<second>\d{1,2})(?P=sep)(?P<year>\d{4})$"
+)
+_MAX_MONTH = 12
 # Only the plain form: ;volume(issue):pages followed by a full stop.
 _CITATION_PARTS = re.compile(
     r";(?P<volume>\d+)\((?P<issue>\d+)\):(?P<pages>\d+(?:-\d+)?)\.(?:\s|$)"
@@ -52,60 +91,21 @@ _SCOPUS_URL_EID = re.compile(
 )
 _EID_PREFIX = "2-s2.0-"
 _AUTHOR_TEXT_FIELDS = {"names": "author_names", "affiliations": "author_affiliations"}
-_EMPTY_VALUE_FIELDS = (*sorted(SCALAR_FIELDS), *_AUTHOR_TEXT_FIELDS.values())
 _RIS_NOTES_TAG = "N1"
 _RIS_NOTE_IDS = {"EID: ": "eid"}
 _RIS_NOTE_FIELDS = {"Conference name: ": "conference_name"}
 _BIBTEX_URL_KEY = "url"
 _CITATION_KEY = "Citation"
-PUBLICATION_TYPES = {
-    "Journal article": ("jour", "article", "journal article"),
-    "Review": ("review", "short survey"),
-    "Book": ("book",),
-    "Book chapter": (
-        "chap",
-        "book chapter",
-        "book-chapter",
-        "incollection",
-        "inbook",
-        "label.ris.referencetype.book_chapter",
-    ),
-    "Conference paper": (
-        "conf",
-        "cpaper",
-        "conference paper",
-        "conference-paper",
-        "inproceedings",
-        "conference",
-    ),
-    "Conference abstract": (
-        "conference review",
-        "conference-abstract",
-        "label.ris.referencetype.conference_review.p",
-    ),
-    "Thesis": ("thes", "phdthesis", "mastersthesis", "dissertation"),
-    "Report": ("rprt", "techreport", "report"),
-    "Dataset": ("data", "dataset", "data paper", "data-paper"),
-    "Preprint": ("preprint",),
-    "Letter": ("letter",),
-    "Editorial": ("editorial",),
-    "Note": ("note",),
-    "Erratum": ("errt", "erratum"),
-    "Retraction": ("retracted", "retraction"),
-}
-STANDARD_PUBLICATION_TYPE = {
-    value: standard
-    for standard, values in PUBLICATION_TYPES.items()
-    for value in values
-}
 
 
 @dataclass(frozen=True)
 class CleaningContext:
-    """What a record's source file adds: its raw fields and mapping, and the
-    author separators chosen or sniffed for that file."""
+    """What a record's source file adds: its raw fields and mapping, whether its
+    values are split (a table format's are stored as they come), and the
+    separators chosen or sniffed for that file."""
 
     raw_fields: dict[str, str] = field(default_factory=dict)
+    split: bool = False
     mapping: FieldMapping = field(default_factory=FieldMapping)
     use_first: tuple[str, ...] = ()
     names_separator: str | None = None
@@ -117,38 +117,36 @@ class CleaningContext:
 Step = Callable[[Record, CleaningContext, CleaningOptions], Record]
 
 
-def sniff_separator(values: Iterable[str | None]) -> str | None:
-    """The candidate found in the most values; earlier candidates win ties."""
-    counts = dict.fromkeys(SEPARATOR_CANDIDATES, 0)
-    for value in values:
-        for candidate in SEPARATOR_CANDIDATES:
-            if value and candidate in value:
-                counts[candidate] += 1
-    best = max(counts, key=lambda candidate: counts[candidate])
-    return best if counts[best] else None
-
-
-def file_separators(
+def get_separators(
     records: Sequence[Record], options: CleaningOptions
 ) -> tuple[str | None, str | None, str | None, str | None]:
     """The names, affiliations, ids and keywords separators for one source file's
     records: the chosen ones, else sniffed from the records."""
     names = options.names_separator or sniff_separator(
-        record.author_names for record in records
+        (name for record in records for name in record.author_names),
+        SEPARATOR_CANDIDATES,
     )
     affiliations = options.affiliations_separator or sniff_separator(
-        record.author_affiliations for record in records
+        (value for record in records for value in record.author_affiliations),
+        SEPARATOR_CANDIDATES,
     )
     ids = options.ids_separator or sniff_separator(
-        value
-        for record in records
-        for _, value in parse_unsplit_author_ids(record.author_ids)
+        (
+            value
+            for record in records
+            for values in record.author_ids.values()
+            for value in values
+        ),
+        COMMA_SEPARATOR_CANDIDATES,
     )
     keywords = options.keywords_separator or sniff_separator(
-        unsplit[1]
-        for record in records
-        for keyword in record.keywords
-        if (unsplit := parse_unsplit_keywords(keyword)) is not None
+        (
+            keyword
+            for record in records
+            for values in record.keywords.values()
+            for keyword in values
+        ),
+        COMMA_SEPARATOR_CANDIDATES,
     )
     return names, affiliations, ids, keywords
 
@@ -158,20 +156,16 @@ def expand_page_range(pages: str) -> str:
     match = _PAGE_RANGE.match(pages)
     if match is None or int(match["end"]) >= int(match["start"]):
         return pages
-    start, end = match["start"], match["end"]
-    return f"{start}-{start[: -len(end)]}{end}"
+    start = match["start"]
+    end = start[: -len(match["end"])] + match["end"]
+    if int(end) < int(start):
+        return pages
+    return f"{start}-{end}"
 
 
 def _counts_as_empty(value: str, options: CleaningOptions) -> bool:
     empty = {v.strip().lower() for v in options.empty_values if v.strip()}
     return value.strip().lower() in empty
-
-
-def _raw_value(key: str, context: CleaningContext) -> str:
-    value = (context.raw_fields.get(key) or "").strip()
-    if isinstance(context.mapping.rows[key], AuthorsRow):
-        return AUTHOR_JOINER.join(line for line in value.splitlines() if line)
-    return value
 
 
 def _refill(
@@ -185,7 +179,7 @@ def _refill(
             maps_here = _AUTHOR_TEXT_FIELDS.get(row.role) == target
         else:
             maps_here = False
-        value = _raw_value(key, context) if maps_here else ""
+        value = (context.raw_fields.get(key) or "").strip() if maps_here else ""
         if value and not _counts_as_empty(value, options):
             return value
     return None
@@ -194,50 +188,55 @@ def _refill(
 def clear_empty_values(
     record: Record, context: CleaningContext, options: CleaningOptions
 ) -> Record:
-    update: dict[str, str | None] = {}
-    for name in _EMPTY_VALUE_FIELDS:
+    """Authors count as empty when there is one, and it counts as empty; refilled
+    from the raw fields they are a line each."""
+    update: dict[str, str | list[str] | None] = {}
+    for name in sorted(SCALAR_FIELDS):
         value: str | None = getattr(record, name)
         if value is not None and _counts_as_empty(value, options):
             refill = (
                 _refill(name, context, options) if options.refill_from_raw else None
             )
             update[name] = refill
+    for name in _AUTHOR_TEXT_FIELDS.values():
+        values: list[str] = getattr(record, name)
+        if len(values) == 1 and _counts_as_empty(values[0], options):
+            refill = (
+                _refill(name, context, options) if options.refill_from_raw else None
+            )
+            lines = (refill or "").splitlines()
+            update[name] = [line.strip() for line in lines if line.strip()]
     return record.model_copy(update=update)
 
 
-def _split(value: str | None, separator: str | None) -> str | None:
-    if not value or not separator or AUTHOR_JOINER in value:
-        return value
-    """Empty pieces are kept so positions keep matching the authors."""
-    pieces = [piece.strip() for piece in value.split(separator)]
-    return AUTHOR_JOINER.join(pieces) if any(pieces) else None
-
-
-def _split_ids(value: str | None, separator: str | None) -> str | None:
-    """Each "key:[value]" column is split by position and merged per author;
-    without a separator its value is one author's id."""
-    columns = parse_unsplit_author_ids(value)
-    if not columns:
-        return value
-    slots: AuthorIds = []
-    for key, ids in columns:
-        split = ids.split(separator) if separator else [ids]
-        pieces = (piece.strip() for piece in split)
-        new = [[author_id(key, piece)] if piece else [] for piece in pieces]
-        slots = merge_author_ids(slots, new, key)
-    return format_author_ids(slots)
+def _split_values(values: list[str], separator: str | None) -> list[str]:
+    """Empty pieces are kept so positions keep matching the authors; splitting
+    again on the same separator changes nothing."""
+    if not separator:
+        return values
+    pieces = [piece.strip() for value in values for piece in value.split(separator)]
+    return pieces if any(pieces) else []
 
 
 def split_authors(
     record: Record, context: CleaningContext, options: CleaningOptions
 ) -> Record:
+    """Each ID key is split on its own; without a separator a value is one
+    author's ID."""
+    if not context.split:
+        return record
+    ids: AuthorIds = {}
+    for key, values in record.author_ids.items():
+        pieces = _split_values(values, context.ids_separator)
+        if any(pieces):
+            ids[key] = [clean_author_id(piece) for piece in pieces]
     return record.model_copy(
         update={
-            "author_names": _split(record.author_names, context.names_separator),
-            "author_affiliations": _split(
+            "author_names": _split_values(record.author_names, context.names_separator),
+            "author_affiliations": _split_values(
                 record.author_affiliations, context.affiliations_separator
             ),
-            "author_ids": _split_ids(record.author_ids, context.ids_separator),
+            "author_ids": ids,
         }
     )
 
@@ -245,18 +244,72 @@ def split_authors(
 def split_keywords(
     record: Record, context: CleaningContext, options: CleaningOptions
 ) -> Record:
-    """Without a separator an unsplit value is one keyword."""
-    separator = context.keywords_separator
-    keywords: list[str] = []
-    for keyword in record.keywords:
-        unsplit = parse_unsplit_keywords(keyword)
-        if unsplit is None:
-            keywords.append(keyword)
-            continue
-        prefix, value = unsplit
-        pieces = value.split(separator) if separator else [value]
-        keywords.extend(tag_keyword(prefix, p.strip()) for p in pieces if p.strip())
+    """Without a separator a value is one keyword."""
+    if not context.split:
+        return record
+    keywords: dict[str, list[str]] = {}
+    for prefix, values in record.keywords.items():
+        pieces = [p for p in _split_values(values, context.keywords_separator) if p]
+        if pieces:
+            keywords[prefix] = pieces
     return record.model_copy(update={"keywords": keywords})
+
+
+def _parse_month(value: str | None) -> int | None:
+    if value is None or not value.strip():
+        return None
+    stripped = value.strip()
+    if stripped.isdigit():
+        return int(stripped)
+    abbreviation = stripped[:3].lower()
+    if abbreviation in _MONTH_ABBREVIATIONS:
+        return _MONTH_ABBREVIATIONS[abbreviation]
+    logger.warning("Could not parse month value %r", value)
+    return None
+
+
+def _build_partial_date(
+    year: int | None, month: int | None, day: int | None
+) -> PartialDate | None:
+    if year is None and month is None and day is None:
+        return None
+    try:
+        return PartialDate(year=year, month=month, day=day)
+    except ValidationError:
+        logger.warning("Dropping day %r because month is missing", day)
+        return PartialDate(year=year, month=month, day=None)
+
+
+def _parse_numeric_date(match: re.Match[str], order: DateOrder) -> PartialDate | None:
+    """The order only decides when both numbers could be the month."""
+    first, second = int(match["first"]), int(match["second"])
+    if first > _MAX_MONTH and second > _MAX_MONTH:
+        logger.warning("Could not parse date value %r", match.string)
+        return None
+    if first > _MAX_MONTH or (second <= _MAX_MONTH and order == "eu"):
+        day, month = first, second
+    else:
+        month, day = first, second
+    return _build_partial_date(int(match["year"]), month, day)
+
+
+def _parse_date_string(value: str, order: DateOrder = "eu") -> PartialDate | None:
+    stripped = value.strip()
+    numeric = _NUMERIC_DATE.match(stripped)
+    if numeric is not None:
+        return _parse_numeric_date(numeric, order)
+    for pattern in _DATE_PATTERNS:
+        match = pattern.match(stripped)
+        if match is None:
+            continue
+        parts = match.groupdict()
+        return _build_partial_date(
+            year=int(parts["year"]),
+            month=_parse_month(parts.get("month")),
+            day=int(parts["day"]) if parts.get("day") else None,
+        )
+    logger.warning("Could not parse date value %r", value)
+    return None
 
 
 def _format_date(date: PartialDate) -> str:
@@ -273,7 +326,7 @@ def clean_date(
 ) -> Record:
     if not record.publication_date:
         return record
-    date = parse_date_string(record.publication_date, options.date_order)
+    date = _parse_date_string(record.publication_date, options.date_order)
     if date is None:
         return record
     return record.model_copy(update={"publication_date": _format_date(date)})
@@ -284,29 +337,25 @@ def id_from_name(
 ) -> Record:
     """Ids that can't be matched to the authors by position are dropped, but the
     names are still cleaned."""
-    if not record.author_names:
-        return record
-    names = record.author_names.split(AUTHOR_JOINER)
+    names = record.author_names
     matches = [_TRAILING_ID.search(name) for name in names]
     if not any(matches):
         return record
-    new_ids = [[author_id(SCOPUS_AUTHOR_ID_KEY, m["id"])] if m else [] for m in matches]
-    merged = merge_author_ids(
-        parse_author_ids(record.author_ids), new_ids, "author names"
-    )
-    cleaned = AUTHOR_JOINER.join(_TRAILING_ID.sub("", name) for name in names)
+    new_ids = [match["id"] if match else "" for match in matches]
     return record.model_copy(
-        update={"author_names": cleaned, "author_ids": format_author_ids(merged)}
+        update={
+            "author_names": [_TRAILING_ID.sub("", name) for name in names],
+            "author_ids": merge_author_ids(
+                record.author_ids, SCOPUS_AUTHOR_ID_KEY, new_ids
+            ),
+        }
     )
 
 
 def strip_author_extras(
     record: Record, context: CleaningContext, options: CleaningOptions
 ) -> Record:
-    if not record.author_names:
-        return record
-    names = record.author_names.split(AUTHOR_JOINER)
-    cleaned = AUTHOR_JOINER.join(_TRAILING_BRACKETS.sub("", name) for name in names)
+    cleaned = [_TRAILING_BRACKETS.sub("", name) for name in record.author_names]
     return record.model_copy(update={"author_names": cleaned})
 
 
@@ -320,11 +369,9 @@ def strip_affiliation_start(
     separator = options.affiliation_start
     if not record.author_affiliations or not record.author_names or not separator:
         return record
-    names = record.author_names.split(AUTHOR_JOINER)
+    names = record.author_names
     kept = []
-    for index, affiliation in enumerate(
-        record.author_affiliations.split(AUTHOR_JOINER)
-    ):
+    for index, affiliation in enumerate(record.author_affiliations):
         last_name = names[index].split(",")[0].strip() if index < len(names) else ""
         lead, found, rest = affiliation.partition(separator)
         is_name = (
@@ -336,32 +383,35 @@ def strip_affiliation_start(
             kept.append(affiliation)
         elif found and rest.strip():
             kept.append(rest.strip())
-    return record.model_copy(
-        update={"author_affiliations": AUTHOR_JOINER.join(kept) or None}
-    )
+    return record.model_copy(update={"author_affiliations": kept})
 
 
 def drop_et_al(
     record: Record, context: CleaningContext, options: CleaningOptions
 ) -> Record:
+    """In the last name, so also in names not split yet; a split-off "et al." is
+    dropped as a whole."""
     if not record.author_names:
         return record
-    names = _TRAILING_ET_AL.sub("", record.author_names)
-    return record.model_copy(update={"author_names": names or None})
+    *names, last = record.author_names
+    last = _TRAILING_ET_AL.sub("", last)
+    return record.model_copy(update={"author_names": [*names, last] if last else names})
 
 
 def drop_trailing(
     record: Record, context: CleaningContext, options: CleaningOptions
 ) -> Record:
-    """A full stop is kept unless it follows a word of three or more letters, so
-    an initial's (J.) or an abbreviated name's (Yu.) stays."""
+    """In the last name. A full stop is kept unless it follows a word of three or
+    more letters, so an initial's (J.) or an abbreviated name's (Yu.) stays."""
     if not record.author_names:
         return record
-    names = record.author_names.rstrip(_TRAILING_NON_NAME)
-    trailing = record.author_names[len(names) :]
-    if trailing.startswith(".") and not _ENDS_IN_WORD.search(names):
-        names += "."
-    return record.model_copy(update={"author_names": names or None})
+    *names, last = record.author_names
+    stripped = last.rstrip(_TRAILING_NON_NAME)
+    if last[len(stripped) :].startswith(".") and not _ENDS_IN_WORD.search(stripped):
+        stripped += "."
+    if not names and not stripped:
+        return record.model_copy(update={"author_names": []})
+    return record.model_copy(update={"author_names": [*names, stripped]})
 
 
 def _keep_match(record: Record, name: str, pattern: re.Pattern[str]) -> Record:
@@ -393,29 +443,26 @@ def _preferred_token(tokens: list[re.Match[str]], preferred: str) -> re.Match[st
 
 
 def _clean_issn_isbn(
-    value: str | None, lengths: tuple[int, ...], options: CleaningOptions
-) -> str | None:
-    if not value:
-        return value
+    values: list[str], lengths: tuple[int, ...], options: CleaningOptions
+) -> list[str]:
     tokens = [
         token
+        for value in values
         for token in ISSN_ISBN_TOKEN.finditer(value)
         if len(token["id"].replace("-", "")) in lengths
     ]
     if not tokens:
-        return value
+        return values
     if options.only_one:
         tokens = [_preferred_token(tokens, options.preferred_qualifier)]
-    return AUTHOR_JOINER.join(
-        token["id"] if options.strip_extras else token[0] for token in tokens
-    )
+    return [token["id"] if options.strip_extras else token[0] for token in tokens]
 
 
 def clean_issn_isbn(
     record: Record, context: CleaningContext, options: CleaningOptions
 ) -> Record:
     """The issn field keeps ISSN-length numbers and the isbn field ISBN-length
-    ones; a value with none of them is kept as it is."""
+    ones; values with none of them are kept as they are."""
     return record.model_copy(
         update={
             "issn": _clean_issn_isbn(record.issn, (ISSN_LENGTH,), options),

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db.models import ActivityLog, Base, Record
 from app.gui.general.layout import shell
 from app.gui.importing import import_flow
+from app.gui.importing.common import FileSummary, FileType
 from app.gui.importing.import_flow import (
     ImportView,
     common_detection,
@@ -24,14 +25,13 @@ from app.gui.importing.import_flow import (
     render_import_view,
     render_mapping,
 )
-from app.helpers.mapping_table import MappingScreen
-from app.parsers.common import FileSummary, FileType
-from app.parsers.mapping import AuthorsRow, FieldMapping
-from app.parsers.profiles.overview import (
-    ParsingChoices,
-    default_choices,
-    load_choices,
+from app.gui.importing.mapping import AuthorsRow, FieldMapping
+from app.gui.importing.options import (
+    ImportOptions,
+    default_options,
+    load_options,
 )
+from app.helpers.mapping_table import MappingScreen
 from tests.gui.clicks import click_and_wait, run_in
 from tests.mappings import mapping_of, targets_of
 
@@ -239,7 +239,7 @@ def test_import_file__saves_every_parsing_choice(
 ) -> None:
     csv_path = tmp_path / "export.csv"
     csv_path.write_text("Title\nSome Paper\n")
-    choices = default_choices("csv", ()).model_copy(update={"drop_et_al": False})
+    choices = default_options("csv", ()).model_copy(update={"drop_et_al": False})
 
     source_file = import_file(
         session,
@@ -250,8 +250,8 @@ def test_import_file__saves_every_parsing_choice(
         choices=choices,
     )
 
-    assert set(source_file.quirk_choices) == set(ParsingChoices.model_fields)
-    assert load_choices(source_file.quirk_choices, "csv", ()) == choices
+    assert set(source_file.option_choices) == set(ImportOptions.model_fields)
+    assert load_options(source_file.option_choices, "csv", ()) == choices
 
 
 def test_import_file__without_choices_saves_the_profile_defaults(
@@ -268,8 +268,8 @@ def test_import_file__without_choices_saves_the_profile_defaults(
         _summary("csv", csv_path),
     )
 
-    stored = load_choices(source_file.quirk_choices, "csv", ())
-    assert stored == default_choices("csv", ())
+    stored = load_options(source_file.option_choices, "csv", ())
+    assert stored == default_options("csv", ())
 
 
 def test_import_file__unsupported_type_raises(session: Session, tmp_path: Path) -> None:
@@ -690,7 +690,7 @@ def test_render_import_view__import_buttons_await_async_on_import(
         mapping: FieldMapping,
         sources: tuple[str, ...],
         sheet: str | None,
-        choices: ParsingChoices,
+        choices: ImportOptions,
         clean: bool,
     ) -> None:
         calls.extend((path, clean) for path, _ in files)
@@ -1358,12 +1358,12 @@ def test_render_import_view__type_change_keeps_the_selected_view(
 def test_render_import_view__import_passes_parsing_choices(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    calls: list[ParsingChoices] = []
+    calls: list[ImportOptions] = []
     view, _ = _nbib_view(
         monkeypatch, tmp_path, lambda f, t, m, s, sh, q, c: calls.append(q)
     )
-    assert view.quirks_screen is not None
-    view.quirks_screen.set_value("label_maybe", "?!")
+    assert view.options_screen is not None
+    view.options_screen.set_value("label_maybe", "?!")
 
     view._import()
 
@@ -1376,13 +1376,13 @@ def test_render_import_view__ordering_offers_keys_sharing_a_target(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     view, middle = _nbib_view(monkeypatch, tmp_path)
-    assert view.mapping_screen is not None and view.quirks_screen is not None
+    assert view.mapping_screen is not None and view.options_screen is not None
     view.mapping_screen.set_target("TA", "journal")
     view.mapping_screen.set_target("JT", "journal")
 
     _toggle(middle).value = "parsing"
 
-    [select] = view.quirks_screen.order_rows
+    [select] = view.options_screen.order_rows
     assert {"TA", "JT"} <= set(select.options)
     assert "PG" not in select.options
 
@@ -1419,7 +1419,7 @@ def test_import_file__applies_parsing_choices(session: Session, tmp_path: Path) 
     nbib_path = tmp_path / "pubmed.nbib"
     nbib_path.write_text(_PUBMED_NBIB_TEXT)
     mapping = mapping_of({"PG": "pages"})
-    choices = default_choices("nbib", ()).model_copy(update={"pages_set": False})
+    choices = default_options("nbib", ()).model_copy(update={"pages_set": False})
 
     import_file(
         session,

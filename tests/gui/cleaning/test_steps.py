@@ -3,6 +3,7 @@ import pytest
 from app.gui.cleaning.options import CleaningOptions
 from app.gui.cleaning.steps import (
     CleaningContext,
+    _parse_date_string,
     citation_parts,
     clean_date,
     clean_issn_isbn,
@@ -12,12 +13,11 @@ from app.gui.cleaning.steps import (
     drop_trailing,
     eid_from_url,
     expand_page_range,
-    file_separators,
     first_publication_type,
+    get_separators,
     id_from_name,
     pages_set,
     ris_notes,
-    sniff_separator,
     split_authors,
     split_keywords,
     standardize_publication_type,
@@ -26,8 +26,8 @@ from app.gui.cleaning.steps import (
     strip_doi,
     strip_pmid,
 )
+from app.gui.importing.mapping import FieldMapping
 from app.models.record import Record
-from app.parsers.mapping import FieldMapping
 from tests.mappings import mapping_of
 
 _OPTIONS = CleaningOptions()
@@ -42,9 +42,11 @@ def _context(
     affiliations: str | None = None,
     ids: str | None = None,
     keywords: str | None = None,
+    split: bool = True,
 ) -> CleaningContext:
     return CleaningContext(
         raw_fields=raw_fields or {},
+        split=split,
         mapping=mapping or FieldMapping(),
         use_first=use_first,
         names_separator=names,
@@ -70,6 +72,7 @@ def _options(**changes: object) -> CleaningOptions:
         ("e123", "e123"),
         ("S12-5", "S12-5"),
         ("512-500", "512-500"),
+        ("516-2", "516-2"),
     ],
 )
 def test_expand_page_range__expands_only_numeric_ranges_ending_lower(
@@ -159,21 +162,23 @@ def test_strip_pmid__keeps_only_the_digits(pmid: str, expected: str) -> None:
 @pytest.mark.parametrize(
     ("names", "expected"),
     [
-        ("Smith J|et al.", "Smith J"),
-        ("Smith J, Doe A, et al.", "Smith J, Doe A"),
-        ("Smith J; et al.", "Smith J"),
-        ("Smith J et al.", "Smith J"),
-        ("et al.", None),
+        (["Smith J", "et al."], ["Smith J"]),
+        (["Smith J, Doe A, et al."], ["Smith J, Doe A"]),
+        (["Smith J; et al."], ["Smith J"]),
+        (["Smith J", "Doe A et al."], ["Smith J", "Doe A"]),
+        (["et al."], []),
     ],
 )
-def test_drop_et_al__drops_trailing_et_al(names: str, expected: str | None) -> None:
+def test_drop_et_al__drops_trailing_et_al(
+    names: list[str], expected: list[str]
+) -> None:
     record = drop_et_al(Record(author_names=names), _NO_CONTEXT, _OPTIONS)
 
     assert record.author_names == expected
 
 
 def test_drop_et_al__keeps_names_without_et_al() -> None:
-    record = Record(author_names="Smith J|Petal.")
+    record = Record(author_names=["Smith J", "Petal."])
 
     assert drop_et_al(record, _NO_CONTEXT, _OPTIONS) == record
 
@@ -181,16 +186,18 @@ def test_drop_et_al__keeps_names_without_et_al() -> None:
 @pytest.mark.parametrize(
     ("names", "expected"),
     [
-        ("Brown, Barnum.", "Brown, Barnum"),
-        ("Owen,", "Owen"),
-        ("Doe ...", "Doe"),
-        ("Doe A;, ", "Doe A"),
-        ("Doe…", "Doe"),
-        ("Illinois State Museum;", "Illinois State Museum"),
+        (["Brown, Barnum."], ["Brown, Barnum"]),
+        (["Owen,"], ["Owen"]),
+        (["Doe ..."], ["Doe"]),
+        (["Doe A;, "], ["Doe A"]),
+        (["Doe…"], ["Doe"]),
+        (["Illinois State Museum;"], ["Illinois State Museum"]),
+        (["Smith J.", "Owen,"], ["Smith J.", "Owen"]),
+        ([";"], []),
     ],
 )
 def test_drop_trailing__strips_punctuation_and_spaces(
-    names: str, expected: str
+    names: list[str], expected: list[str]
 ) -> None:
     record = drop_trailing(Record(author_names=names), _NO_CONTEXT, _OPTIONS)
 
@@ -200,16 +207,16 @@ def test_drop_trailing__strips_punctuation_and_spaces(
 @pytest.mark.parametrize(
     ("names", "expected"),
     [
-        ("Smith J.|Doe A.", "Smith J.|Doe A."),
-        ("Galton, P.M.", "Galton, P.M."),
-        ("Bolotsky, I. Yu.", "Bolotsky, I. Yu."),
-        ("Doe A.;, ", "Doe A."),
-        ("Doe (1).", "Doe (1)."),
-        ("Romano M, Novacek MJ.", "Romano M, Novacek MJ."),
+        (["Smith J.", "Doe A."], ["Smith J.", "Doe A."]),
+        (["Galton, P.M."], ["Galton, P.M."]),
+        (["Bolotsky, I. Yu."], ["Bolotsky, I. Yu."]),
+        (["Doe A.;, "], ["Doe A."]),
+        (["Doe (1)."], ["Doe (1)."]),
+        (["Romano M, Novacek MJ."], ["Romano M, Novacek MJ."]),
     ],
 )
 def test_drop_trailing__keeps_full_stop_after_short_word(
-    names: str, expected: str
+    names: list[str], expected: list[str]
 ) -> None:
     record = drop_trailing(Record(author_names=names), _NO_CONTEXT, _OPTIONS)
 
@@ -220,36 +227,17 @@ def test_drop_trailing__without_authors_leaves_record_unchanged() -> None:
     assert drop_trailing(Record(), _NO_CONTEXT, _OPTIONS) == Record()
 
 
-@pytest.mark.parametrize(
-    ("values", "expected"),
-    [
-        (["Teng, Yu; Han, Li", "Doe, J"], ";"),
-        (["Baron, Matthew|Norman, David"], "|"),
-        (["Smith J\nDoe A"], "\n"),
-        (["Smith, John and Doe, Jane"], " and "),
-        (["Romano M, Novacek MJ"], None),
-        ([None, ""], None),
-        (["A; B|C", "D|E"], "|"),
-        (["A; B|C"], "|"),
-    ],
-)
-def test_sniff_separator__picks_the_candidate_in_most_values(
-    values: list[str | None], expected: str | None
-) -> None:
-    assert sniff_separator(values) == expected
-
-
-def test_file_separators__chosen_separator_wins_over_sniffing() -> None:
+def test_get_separators__chosen_separator_wins_over_sniffing() -> None:
     records = [
         Record(
-            author_names="A; B",
-            author_affiliations="X; Y",
-            author_ids="scopus_author_id:[1|2]",
-            keywords=["Author:[a; b]", "[MeSH] c|d"],
+            author_names=["A; B"],
+            author_affiliations=["X; Y"],
+            author_ids={"scopus_author_id": ["1|2"]},
+            keywords={"Author": ["a; b"], "MeSH": ["c|d", "e; f"]},
         )
     ]
 
-    assert file_separators(records, _options(names_separator=",")) == (
+    assert get_separators(records, _options(names_separator=",")) == (
         ",",
         ";",
         "|",
@@ -257,110 +245,260 @@ def test_file_separators__chosen_separator_wins_over_sniffing() -> None:
     )
 
 
-def test_split_authors__joins_names_and_affiliations_with_bar() -> None:
+def test_get_separators__sniffs_over_every_value() -> None:
+    records = [
+        Record(author_ids={"a": ["1|2"], "b": ["3; 4"]}),
+        Record(author_ids={"b": ["5; 6"]}),
+    ]
+
+    assert get_separators(records, _OPTIONS)[2] == ";"
+
+
+def test_get_separators__sniffs_comma_only_for_ids_and_keywords() -> None:
+    records = [
+        Record(
+            author_names=["Teng, Yu"],
+            author_affiliations=["Dept. of Surgery, Guangxi University, China"],
+            author_ids={"orcid": ["0000-0002-1825-0097, 0000-0001-5109-3700"]},
+            keywords={"Keywords": ["Medicine, Computer science, Biology"]},
+        )
+    ]
+
+    assert get_separators(records, _OPTIONS) == (None, None, ",", ",")
+
+
+def test_get_separators__comma_loses_ties() -> None:
+    records = [
+        Record(keywords={"Author": ["Neoplasms, Experimental"]}),
+        Record(keywords={"Author": ["Humans; Adult"]}),
+    ]
+
+    assert get_separators(records, _OPTIONS)[3] == ";"
+
+
+def test_split_authors__splits_names_and_affiliations() -> None:
     record = Record(
-        author_names="Teng, Yu; Han, Li",
-        author_affiliations="Guangxi, China ; Nanning University",
+        author_names=["Teng, Yu; Han, Li"],
+        author_affiliations=["Guangxi, China ; Nanning University"],
     )
 
     cleaned = split_authors(record, _context(names=";", affiliations=";"), _OPTIONS)
 
-    assert cleaned.author_names == "Teng, Yu|Han, Li"
-    assert cleaned.author_affiliations == "Guangxi, China|Nanning University"
+    assert cleaned.author_names == ["Teng, Yu", "Han, Li"]
+    assert cleaned.author_affiliations == ["Guangxi, China", "Nanning University"]
 
 
 def test_split_authors__keeps_empty_pieces() -> None:
     record = Record(
-        author_names="Teng, Yu; ;Han, Li ;",
-        author_affiliations="Guangxi, China ; ; Nanning University",
+        author_names=["Teng, Yu; ;Han, Li ;"],
+        author_affiliations=["Guangxi, China ; ; Nanning University"],
     )
 
     cleaned = split_authors(record, _context(names=";", affiliations=";"), _OPTIONS)
 
-    assert cleaned.author_names == "Teng, Yu||Han, Li|"
-    assert cleaned.author_affiliations == "Guangxi, China||Nanning University"
+    assert cleaned.author_names == ["Teng, Yu", "", "Han, Li", ""]
+    assert cleaned.author_affiliations == ["Guangxi, China", "", "Nanning University"]
 
 
-def test_split_authors__value_already_split_is_left_alone() -> None:
-    record = Record(author_names="Doe, J|Roe, K")
+def test_split_authors__only_empty_pieces_leave_no_authors() -> None:
+    record = Record(author_names=[" ; "])
 
-    assert split_authors(record, _context(names=","), _OPTIONS) == record
+    assert split_authors(record, _context(names=";"), _OPTIONS).author_names == []
+
+
+def test_split_authors__splitting_again_changes_nothing() -> None:
+    record = Record(
+        author_names=["Doe, J; Roe, K"], author_ids={"scopus_author_id": ["1; 2"]}
+    )
+    context = _context(names=";", ids=";")
+
+    once = split_authors(record, context, _OPTIONS)
+
+    assert split_authors(once, context, _OPTIONS) == once
+
+
+def test_split_authors__line_format_values_are_left_alone() -> None:
+    record = Record(author_names=["Doe, J; Roe, K"])
+
+    assert split_authors(record, _context(names=";", split=False), _OPTIONS) == record
 
 
 def test_split_authors__without_separator_leaves_record_unchanged() -> None:
-    record = Record(author_names="Teng, Yu; Han, Li")
+    record = Record(author_names=["Teng, Yu; Han, Li"])
 
-    assert split_authors(record, _NO_CONTEXT, _OPTIONS) == record
+    assert split_authors(record, _context(), _OPTIONS) == record
 
 
 def test_split_authors__splits_id_column_per_author() -> None:
-    record = Record(author_ids="scopus_author_id:[601; 602;603]")
+    record = Record(author_ids={"scopus_author_id": ["601; 602;603"]})
 
     cleaned = split_authors(record, _context(ids=";"), _OPTIONS)
 
-    assert cleaned.author_ids == (
-        "scopus_author_id:601|scopus_author_id:602|scopus_author_id:603"
-    )
+    assert cleaned.author_ids == {"scopus_author_id": ["601", "602", "603"]}
 
 
-def test_split_authors__merges_id_columns_by_position() -> None:
+def test_split_authors__splits_each_id_key_on_its_own() -> None:
     record = Record(
-        author_ids="openalex_author_id:[A1|A2|A3], orcid:[https://orcid.org/0-1||0-3]"
+        author_ids={
+            "openalex_author_id": ["A1|A2|A3"],
+            "orcid": ["https://orcid.org/0-1||0-3"],
+        }
     )
 
     cleaned = split_authors(record, _context(ids="|"), _OPTIONS)
 
-    assert cleaned.author_ids == (
-        "openalex_author_id:A1, orcid:0-1|openalex_author_id:A2"
-        "|openalex_author_id:A3, orcid:0-3"
-    )
+    assert cleaned.author_ids == {
+        "openalex_author_id": ["A1", "A2", "A3"],
+        "orcid": ["0-1", "", "0-3"],
+    }
 
 
-def test_split_authors__id_column_with_other_author_count_is_ignored(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    record = Record(author_ids="openalex_author_id:[A1|A2], orcid:[0-1]")
+def test_split_authors__id_column_with_other_author_count_is_kept() -> None:
+    record = Record(author_ids={"openalex_author_id": ["A1|A2"], "orcid": ["0-1"]})
 
     cleaned = split_authors(record, _context(ids="|"), _OPTIONS)
 
-    assert cleaned.author_ids == "openalex_author_id:A1|openalex_author_id:A2"
-    assert "orcid" in caplog.text
+    assert cleaned.author_ids == {"openalex_author_id": ["A1", "A2"], "orcid": ["0-1"]}
 
 
 def test_split_authors__without_ids_separator_the_column_is_one_author() -> None:
-    record = Record(author_ids="scopus_author_id:[601]")
+    record = Record(author_ids={"orcid": ["https://orcid.org/0-1"]})
 
-    cleaned = split_authors(record, _NO_CONTEXT, _OPTIONS)
+    cleaned = split_authors(record, _context(), _OPTIONS)
 
-    assert cleaned.author_ids == "scopus_author_id:601"
-
-
-def test_split_authors__ids_already_split_are_left_alone() -> None:
-    record = Record(author_ids="scopus_author_id:601|scopus_author_id:602")
-
-    assert split_authors(record, _context(ids=";"), _OPTIONS) == record
+    assert cleaned.author_ids == {"orcid": ["0-1"]}
 
 
-def test_split_keywords__splits_unsplit_values_keeping_the_prefix() -> None:
-    record = Record(keywords=["Author:[fossils; dinosaurs ;]", "keywords:[Humans]"])
+def test_split_authors__id_column_of_only_separators_is_dropped() -> None:
+    record = Record(author_ids={"orcid": [" | "]})
+
+    assert split_authors(record, _context(ids="|"), _OPTIONS).author_ids == {}
+
+
+def test_split_keywords__splits_values_keeping_the_prefix() -> None:
+    record = Record(keywords={"Author": ["fossils; dinosaurs ;"], "": ["Humans"]})
 
     cleaned = split_keywords(record, _context(keywords=";"), _OPTIONS)
 
-    assert cleaned.keywords == ["[Author] fossils", "[Author] dinosaurs", "Humans"]
+    assert cleaned.keywords == {"Author": ["fossils", "dinosaurs"], "": ["Humans"]}
 
 
-def test_split_keywords__split_keywords_are_left_alone() -> None:
-    record = Record(keywords=["[MeSH] Humans", "fossils; dinosaurs"])
+def test_split_keywords__splits_every_value_of_a_prefix() -> None:
+    record = Record(keywords={"": ["a; b", "c"]})
 
-    assert split_keywords(record, _context(keywords=";"), _OPTIONS) == record
+    cleaned = split_keywords(record, _context(keywords=";"), _OPTIONS)
+
+    assert cleaned.keywords == {"": ["a", "b", "c"]}
+
+
+def test_split_keywords__line_format_values_are_left_alone() -> None:
+    record = Record(keywords={"MeSH": ["fossils; dinosaurs"]})
+
+    assert split_keywords(record, _context(keywords=";", split=False), _OPTIONS) == (
+        record
+    )
 
 
 def test_split_keywords__without_separator_the_value_is_one_keyword() -> None:
-    record = Record(keywords=["keywords:[fossils; dinosaurs]"])
+    record = Record(keywords={"": ["fossils; dinosaurs"]})
 
-    cleaned = split_keywords(record, _NO_CONTEXT, _OPTIONS)
+    assert split_keywords(record, _context(), _OPTIONS) == record
 
-    assert cleaned.keywords == ["fossils; dinosaurs"]
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2020///", (2020, None, None)),
+        ("2020/05//", (2020, 5, None)),
+        ("2020/05/14/", (2020, 5, 14)),
+        ("2020/05/14/Spring", (2020, 5, 14)),
+        ("2020///Spring", (2020, None, None)),
+        ("2020 May 14", (2020, 5, 14)),
+        ("2020 May", (2020, 5, None)),
+        ("2020 Jan-Feb", (2020, 1, None)),
+        ("2020 Oct 3", (2020, 10, 3)),
+    ],
+)
+def test__parse_date_string__reads_ris_and_nbib_dates(
+    value: str, expected: tuple[int, int | None, int | None]
+) -> None:
+    date = _parse_date_string(value)
+
+    assert date is not None
+    assert (date.year, date.month, date.day) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("1994//", (1994, None, None)),
+        ("1994/03/", (1994, 3, None)),
+        ("1994/Mar/", (1994, 3, None)),
+        ("1994/3/5", (1994, 3, 5)),
+        ("2020/03/04", (2020, 3, 4)),
+    ],
+)
+def test__parse_date_string__reads_joined_date_parts(
+    value: str, expected: tuple[int, int | None, int | None]
+) -> None:
+    date = _parse_date_string(value, "us")
+
+    assert date is not None
+    assert (date.year, date.month, date.day) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("14/05/2020", (2020, 5, 14)),
+        ("05/14/2020", (2020, 5, 14)),
+        ("3.4.2020", (2020, 4, 3)),
+        ("03-04-2020", (2020, 4, 3)),
+        ("12 March 2020", (2020, 3, 12)),
+        ("12 Mar. 2020", (2020, 3, 12)),
+        ("March 12, 2020", (2020, 3, 12)),
+        ("Oct2021", (2021, 10, None)),
+        ("Oct 2021", (2021, 10, None)),
+        ("October 2021", (2021, 10, None)),
+        ("Fall2013", (2013, None, None)),
+        ("autumn 2013", (2013, None, None)),
+    ],
+)
+def test__parse_date_string__reads_day_month_and_named_forms(
+    value: str, expected: tuple[int, int | None, int | None]
+) -> None:
+    date = _parse_date_string(value)
+
+    assert date is not None
+    assert (date.year, date.month, date.day) == expected
+
+
+def test__parse_date_string__ambiguous_numeric_date_defaults_to_eu_order() -> None:
+    date = _parse_date_string("03/04/2020")
+
+    assert date is not None
+    assert (date.month, date.day) == (4, 3)
+
+
+def test__parse_date_string__ambiguous_numeric_date_uses_us_order() -> None:
+    date = _parse_date_string("03/04/2020", "us")
+
+    assert date is not None
+    assert (date.month, date.day) == (3, 4)
+
+
+def test__parse_date_string__unambiguous_numeric_date_ignores_order() -> None:
+    date = _parse_date_string("14/05/2020", "us")
+
+    assert date is not None
+    assert (date.month, date.day) == (5, 14)
+
+
+@pytest.mark.parametrize("value", ["13/14/2020", "03/04-2020"])
+def test__parse_date_string__rejects_impossible_or_mixed_numeric_date(
+    value: str,
+) -> None:
+    assert _parse_date_string(value) is None
 
 
 @pytest.mark.parametrize(
@@ -402,51 +540,54 @@ def test_clean_date__cleaning_again_changes_nothing() -> None:
 
 
 def test_id_from_name__moves_ids_out_of_names() -> None:
-    record = Record(author_names="Teng, Yu (60652739200)|Han, Li (57190000001)")
+    record = Record(author_names=["Teng, Yu (60652739200)", "Han, Li (57190000001)"])
 
     record = id_from_name(record, _NO_CONTEXT, _OPTIONS)
 
-    assert record.author_names == "Teng, Yu|Han, Li"
-    assert record.author_ids == (
-        "scopus_author_id:60652739200|scopus_author_id:57190000001"
-    )
+    assert record.author_names == ["Teng, Yu", "Han, Li"]
+    assert record.author_ids == {"scopus_author_id": ["60652739200", "57190000001"]}
 
 
 def test_id_from_name__adds_to_ids_already_from_a_column() -> None:
     record = Record(
-        author_names="Teng (1)|Han (2)",
-        author_ids="scopus_author_id:1|scopus_author_id:3",
+        author_names=["Teng (1)", "Han (2)"],
+        author_ids={"scopus_author_id": ["1", "3"]},
     )
 
     record = id_from_name(record, _NO_CONTEXT, _OPTIONS)
 
-    assert record.author_ids == (
-        "scopus_author_id:1|scopus_author_id:3, scopus_author_id:2"
-    )
+    assert record.author_ids == {"scopus_author_id": ["1", "3 | 2"]}
 
 
 def test_id_from_name__keeps_empty_slot_for_name_without_id() -> None:
-    record = id_from_name(Record(author_names="Teng (1)|Han"), _NO_CONTEXT, _OPTIONS)
+    record = id_from_name(
+        Record(author_names=["Teng (1)", "Han"]), _NO_CONTEXT, _OPTIONS
+    )
 
     assert (record.author_names, record.author_ids) == (
-        "Teng|Han",
-        "scopus_author_id:1|",
+        ["Teng", "Han"],
+        {"scopus_author_id": ["1", ""]},
     )
 
 
 def test_id_from_name__other_author_count_still_cleans_names(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    record = Record(author_names="Teng (1)|Han (2)", author_ids="orcid:x")
+    record = Record(
+        author_names=["Teng (1)", "Han (2)"], author_ids={"scopus_author_id": ["x"]}
+    )
 
     record = id_from_name(record, _NO_CONTEXT, _OPTIONS)
 
-    assert (record.author_names, record.author_ids) == ("Teng|Han", "orcid:x")
-    assert "author names" in caplog.text
+    assert (record.author_names, record.author_ids) == (
+        ["Teng", "Han"],
+        {"scopus_author_id": ["x"]},
+    )
+    assert "scopus_author_id" in caplog.text
 
 
 def test_id_from_name__leaves_name_without_numeric_id_unchanged() -> None:
-    record = Record(author_names="Teng, Yu (Jr)")
+    record = Record(author_names=["Teng, Yu (Jr)"])
 
     assert id_from_name(record, _NO_CONTEXT, _OPTIONS) == record
 
@@ -454,57 +595,63 @@ def test_id_from_name__leaves_name_without_numeric_id_unchanged() -> None:
 @pytest.mark.parametrize(
     ("names", "expected"),
     [
-        ("Teng, Yu (60652739200)|Han, Li", "Teng, Yu|Han, Li"),
-        ("Doe, J [Editor]|Roe, K (Jr) ", "Doe, J|Roe, K"),
-        ("Doe (A) (B)", "Doe (A)"),
-        ("Doe, J", "Doe, J"),
+        (["Teng, Yu (60652739200)", "Han, Li"], ["Teng, Yu", "Han, Li"]),
+        (["Doe, J [Editor]", "Roe, K (Jr) "], ["Doe, J", "Roe, K"]),
+        (["Doe (A) (B)"], ["Doe (A)"]),
+        (["Doe, J"], ["Doe, J"]),
     ],
 )
 def test_strip_author_extras__drops_trailing_bracketed_text(
-    names: str, expected: str
+    names: list[str], expected: list[str]
 ) -> None:
     record = strip_author_extras(Record(author_names=names), _NO_CONTEXT, _OPTIONS)
 
     assert record.author_names == expected
-    assert record.author_ids is None
+    assert record.author_ids == {}
 
 
 def test_strip_affiliation_start__drops_name_before_separator() -> None:
     record = Record(
-        author_names="Teng, Yu|Han, Li|Doe, Jane",
-        author_affiliations=(
-            "Teng Y., Guangxi Cartier Technology Ltd., Nanning|Han L."
-            "|Doe J., Utrecht University"
-        ),
+        author_names=["Teng, Yu", "Han, Li", "Doe, Jane"],
+        author_affiliations=[
+            "Teng Y., Guangxi Cartier Technology Ltd., Nanning",
+            "Han L.",
+            "Doe J., Utrecht University",
+        ],
     )
 
     record = strip_affiliation_start(
         record, _NO_CONTEXT, _options(affiliation_start=", ")
     )
 
-    assert record.author_affiliations == (
-        "Guangxi Cartier Technology Ltd., Nanning|Utrecht University"
-    )
+    assert record.author_affiliations == [
+        "Guangxi Cartier Technology Ltd., Nanning",
+        "Utrecht University",
+    ]
 
 
 def test_strip_affiliation_start__only_names_leaves_no_affiliations() -> None:
     record = Record(
-        author_names="Teng, Yu|Han, Li", author_affiliations="Teng Y.|Han L."
+        author_names=["Teng, Yu", "Han, Li"], author_affiliations=["Teng Y.", "Han L."]
     )
 
     record = strip_affiliation_start(
         record, _NO_CONTEXT, _options(affiliation_start=", ")
     )
 
-    assert record.author_affiliations is None
+    assert record.author_affiliations == []
 
 
 def test_strip_affiliation_start__keeps_affiliation_not_starting_with_the_name() -> (
     None
 ):
     record = Record(
-        author_names="Teng, Yu|Han, Li|Roe, K",
-        author_affiliations="Guangxi Ltd., Nanning|Utrecht University|Leiden, NL",
+        author_names=["Teng, Yu", "Han, Li", "Roe, K"],
+        author_affiliations=[
+            "Guangxi Ltd., Nanning",
+            "Utrecht University",
+            "Leiden, NL",
+        ],
     )
 
     cleaned = strip_affiliation_start(
@@ -516,8 +663,8 @@ def test_strip_affiliation_start__keeps_affiliation_not_starting_with_the_name()
 
 def test_strip_affiliation_start__keeps_name_followed_by_more_than_initials() -> None:
     record = Record(
-        author_names="Stein, Koen|Lauer, R.",
-        author_affiliations="Steinmann Institut, Bonn|Lauer Foundation, Wheaton",
+        author_names=["Stein, Koen", "Lauer, R."],
+        author_affiliations=["Steinmann Institut, Bonn", "Lauer Foundation, Wheaton"],
     )
 
     cleaned = strip_affiliation_start(
@@ -529,19 +676,22 @@ def test_strip_affiliation_start__keeps_name_followed_by_more_than_initials() ->
 
 def test_strip_affiliation_start__name_without_initials() -> None:
     record = Record(
-        author_names="Qinggele|Broderick, Timothy J.",
-        author_affiliations="Qinggele, Inner Mongolia Museum|Broderick T.J., Harare",
+        author_names=["Qinggele", "Broderick, Timothy J."],
+        author_affiliations=[
+            "Qinggele, Inner Mongolia Museum",
+            "Broderick T.J., Harare",
+        ],
     )
 
     cleaned = strip_affiliation_start(
         record, _NO_CONTEXT, _options(affiliation_start=", ")
     )
 
-    assert cleaned.author_affiliations == "Inner Mongolia Museum|Harare"
+    assert cleaned.author_affiliations == ["Inner Mongolia Museum", "Harare"]
 
 
 def test_strip_affiliation_start__without_names_leaves_record_unchanged() -> None:
-    record = Record(author_affiliations="Teng Y., Guangxi Ltd.")
+    record = Record(author_affiliations=["Teng Y., Guangxi Ltd."])
 
     cleaned = strip_affiliation_start(
         record, _NO_CONTEXT, _options(affiliation_start=", ")
@@ -550,19 +700,23 @@ def test_strip_affiliation_start__without_names_leaves_record_unchanged() -> Non
     assert cleaned == record
 
 
-_SN = "1234-5678 (electronic), 9123-4567 (print)"
+def _issn_options(**changes: object) -> CleaningOptions:
+    return _options(**{"strip_extras": True, "only_one": True, **changes})
+
+
+_SN = ["1234-5678 (electronic), 9123-4567 (print)"]
 
 
 @pytest.mark.parametrize(
     ("strip", "only_one", "expected"),
     [
-        (True, True, "1234-5678"),
-        (True, False, "1234-5678|9123-4567"),
-        (False, True, "1234-5678 (electronic)"),
+        (True, True, ["1234-5678"]),
+        (True, False, ["1234-5678", "9123-4567"]),
+        (False, True, ["1234-5678 (electronic)"]),
     ],
 )
 def test_clean_issn_isbn__strip_extras_and_only_one(
-    strip: bool, only_one: bool, expected: str
+    strip: bool, only_one: bool, expected: list[str]
 ) -> None:
     options = _options(strip_extras=strip, only_one=only_one, preferred_qualifier="")
 
@@ -570,75 +724,100 @@ def test_clean_issn_isbn__strip_extras_and_only_one(
 
 
 @pytest.mark.parametrize(
-    "value", ["1234-5678 8765-4321", "1234-5678|8765-4321", "1234-5678\n8765-4321"]
+    "value",
+    [
+        ["1234-5678 8765-4321"],
+        ["1234-5678|8765-4321"],
+        ["1234-5678", "8765-4321"],
+    ],
 )
-def test_clean_issn_isbn__only_one_keeps_first_value(value: str) -> None:
-    options = _options(preferred_qualifier="")
+def test_clean_issn_isbn__only_one_keeps_first_value(value: list[str]) -> None:
+    options = _issn_options(preferred_qualifier="")
 
-    assert clean_issn_isbn(Record(issn=value), _NO_CONTEXT, options).issn == (
+    assert clean_issn_isbn(Record(issn=value), _NO_CONTEXT, options).issn == [
         "1234-5678"
-    )
+    ]
 
 
 @pytest.mark.parametrize(
     ("issn", "isbn", "expected"),
     [
-        ("23330937 (ISSN)", None, ("23330937", None)),
-        (None, "979-840072171-7 (ISBN)", (None, "979-840072171-7")),
-        ("(Print) 1234-5678", None, ("1234-5678", None)),
+        (["23330937 (ISSN)"], [], (["23330937"], [])),
+        ([], ["979-840072171-7 (ISBN)"], ([], ["979-840072171-7"])),
+        (["(Print) 1234-5678"], [], (["1234-5678"], [])),
     ],
 )
 def test_clean_issn_isbn__strip_extras_drops_qualifier(
-    issn: str | None, isbn: str | None, expected: tuple[str | None, str | None]
+    issn: list[str], isbn: list[str], expected: tuple[list[str], list[str]]
 ) -> None:
-    record = clean_issn_isbn(Record(issn=issn, isbn=isbn), _NO_CONTEXT, _OPTIONS)
+    record = clean_issn_isbn(Record(issn=issn, isbn=isbn), _NO_CONTEXT, _issn_options())
 
     assert (record.issn, record.isbn) == expected
 
 
 def test_clean_issn_isbn__each_field_keeps_numbers_of_its_own_length() -> None:
-    value = "12345; 9783161484100; 1234-5678"
+    value = ["12345; 9783161484100; 1234-5678"]
 
-    record = clean_issn_isbn(Record(issn=value, isbn=value), _NO_CONTEXT, _OPTIONS)
+    record = clean_issn_isbn(
+        Record(issn=value, isbn=value), _NO_CONTEXT, _issn_options()
+    )
 
-    assert (record.issn, record.isbn) == ("1234-5678", "9783161484100")
-
-
-def test_clean_issn_isbn__unrecognised_value_is_kept() -> None:
-    record = clean_issn_isbn(Record(issn="12345"), _NO_CONTEXT, _OPTIONS)
-
-    assert record.issn == "12345"
+    assert (record.issn, record.isbn) == (["1234-5678"], ["9783161484100"])
 
 
-_IS_LINES = "1234-5678 (Print)\n8765-4321 (Electronic)\n1234-5678 (Linking)"
+def test_clean_issn_isbn__unrecognised_values_are_kept() -> None:
+    record = clean_issn_isbn(
+        Record(issn=["12345", "n/a"]), _NO_CONTEXT, _issn_options()
+    )
+
+    assert record.issn == ["12345", "n/a"]
+
+
+def test_clean_issn_isbn__finds_numbers_across_values() -> None:
+    record = Record(issn=["n/a", "1234-5678 (Print)", "8765-4321"])
+
+    cleaned = clean_issn_isbn(record, _NO_CONTEXT, _issn_options(only_one=False))
+
+    assert cleaned.issn == ["1234-5678", "8765-4321"]
+
+
+_IS_LINES = ["1234-5678 (Print)", "8765-4321 (Electronic)", "1234-5678 (Linking)"]
 
 
 @pytest.mark.parametrize("preferred", ["Electronic", "electronic", " ELECTRONIC "])
 def test_clean_issn_isbn__preferred_qualifier_value_wins(preferred: str) -> None:
-    options = _options(preferred_qualifier=preferred)
+    options = _issn_options(preferred_qualifier=preferred)
 
-    assert clean_issn_isbn(Record(issn=_IS_LINES), _NO_CONTEXT, options).issn == (
+    assert clean_issn_isbn(Record(issn=_IS_LINES), _NO_CONTEXT, options).issn == [
         "8765-4321"
-    )
+    ]
 
 
 @pytest.mark.parametrize("preferred", ["", "Online"])
 def test_clean_issn_isbn__without_matching_qualifier_first_value_wins(
     preferred: str,
 ) -> None:
-    options = _options(preferred_qualifier=preferred)
+    options = _issn_options(preferred_qualifier=preferred)
 
-    assert clean_issn_isbn(Record(issn=_IS_LINES), _NO_CONTEXT, options).issn == (
+    assert clean_issn_isbn(Record(issn=_IS_LINES), _NO_CONTEXT, options).issn == [
         "1234-5678"
-    )
+    ]
 
 
 def test_clean_issn_isbn__preferred_qualifier_is_ignored_without_only_one() -> None:
-    options = _options(only_one=False)
+    options = _issn_options(only_one=False)
 
-    assert clean_issn_isbn(Record(issn=_IS_LINES), _NO_CONTEXT, options).issn == (
-        "1234-5678|8765-4321|1234-5678"
-    )
+    assert clean_issn_isbn(Record(issn=_IS_LINES), _NO_CONTEXT, options).issn == [
+        "1234-5678",
+        "8765-4321",
+        "1234-5678",
+    ]
+
+
+def test_clean_issn_isbn__cleaning_again_changes_nothing() -> None:
+    once = clean_issn_isbn(Record(issn=_IS_LINES), _NO_CONTEXT, _OPTIONS)
+
+    assert clean_issn_isbn(once, _NO_CONTEXT, _OPTIONS) == once
 
 
 _TITLES = mapping_of({"TI": "title", "TT": "title"})
@@ -694,16 +873,25 @@ def test_clear_empty_values__match_the_whole_value() -> None:
     assert clear_empty_values(record, _NO_CONTEXT, _OPTIONS) == record
 
 
-def test_clear_empty_values__refill_author_names_joins_lines_with_bar() -> None:
+def test_clear_empty_values__refill_author_names_a_line_each() -> None:
     mapping = mapping_of({"AU": "authors", "A2": "authors"})
     raw = {"AU": "n/a", "A2": "Doe, J\nRoe, K"}
     options = _options(empty_values=["n/a"])
 
     cleaned = clear_empty_values(
-        Record(author_names="n/a"), _context(raw, mapping), options
+        Record(author_names=["n/a"]), _context(raw, mapping), options
     )
 
-    assert cleaned.author_names == "Doe, J|Roe, K"
+    assert cleaned.author_names == ["Doe, J", "Roe, K"]
+
+
+def test_clear_empty_values__clears_single_empty_author_value() -> None:
+    record = Record(author_names=["n/a"], author_affiliations=["x", "n/a"])
+    options = _options(empty_values=["n/a"], refill_from_raw=False)
+
+    cleaned = clear_empty_values(record, _NO_CONTEXT, options)
+
+    assert (cleaned.author_names, cleaned.author_affiliations) == ([], ["x", "n/a"])
 
 
 def test_eid_from_url__adds_prefixed_eid() -> None:
@@ -785,39 +973,34 @@ def test_citation_parts__ignores_values_not_in_the_plain_form(citation: str) -> 
 
 
 _SCOPUS_RECORD = Record(
-    author_names="Teng, Yu (60652739200); Han, Yiyong (59534195400)",
-    author_ids="scopus_author_id:60652739200|scopus_author_id:59534195400",
-    author_affiliations=(
+    author_names=["Teng, Yu (60652739200); Han, Yiyong (59534195400)"],
+    author_ids={"scopus_author_id": ["60652739200; 59534195400"]},
+    author_affiliations=[
         "Teng Y., Guangxi Cartier Technology Ltd., Nanning, China; "
         "Han Y., Nanning University, Guangxi, China"
-    ),
+    ],
 )
+_SCOPUS_CONTEXT = _context(names=";", affiliations=";", ids=";")
 
 
 def test_clean_record__scopus_authors_with_defaults_and_affiliation_start() -> None:
     options = _options(affiliation_start=", ")
 
-    record, changed = clean_record(
-        _SCOPUS_RECORD, _context(names=";", affiliations=";"), options
-    )
+    record, changed = clean_record(_SCOPUS_RECORD, _SCOPUS_CONTEXT, options)
 
-    assert record.author_names == "Teng, Yu|Han, Yiyong"
-    assert record.author_ids == (
-        "scopus_author_id:60652739200|scopus_author_id:59534195400"
-    )
-    assert record.author_affiliations == (
-        "Guangxi Cartier Technology Ltd., Nanning, China|"
-        "Nanning University, Guangxi, China"
-    )
+    assert record.author_names == ["Teng, Yu", "Han, Yiyong"]
+    assert record.author_ids == {"scopus_author_id": ["60652739200", "59534195400"]}
+    assert record.author_affiliations == [
+        "Guangxi Cartier Technology Ltd., Nanning, China",
+        "Nanning University, Guangxi, China",
+    ]
     assert changed == ["Split authors", "Scopus ID from name", "Affiliation start"]
 
 
 def test_clean_record__author_steps_need_split_authors() -> None:
     options = _options(split_authors=False, affiliation_start=", ")
 
-    record, changed = clean_record(
-        _SCOPUS_RECORD, _context(names=";", affiliations=";"), options
-    )
+    record, changed = clean_record(_SCOPUS_RECORD, _SCOPUS_CONTEXT, options)
 
     assert record == _SCOPUS_RECORD
     assert changed == []
@@ -827,12 +1010,12 @@ def test_clean_record__id_from_name_runs_before_drop_trailing() -> None:
     options = _options(drop_trailing=True)
 
     record, _ = clean_record(
-        Record(author_names="Teng (1); Han (2)"), _context(names=";"), options
+        Record(author_names=["Teng (1); Han (2)"]), _context(names=";"), options
     )
 
     assert (record.author_names, record.author_ids) == (
-        "Teng|Han",
-        "scopus_author_id:1|scopus_author_id:2",
+        ["Teng", "Han"],
+        {"scopus_author_id": ["1", "2"]},
     )
 
 
@@ -846,11 +1029,10 @@ def test_clean_record__pages_set_expands_pages_from_citation() -> None:
 
 
 def test_clean_record__cleaning_twice_changes_nothing_more() -> None:
-    context = _context(names=";", affiliations=";")
     options = _options(affiliation_start=", ", drop_trailing=True)
-    once, _ = clean_record(_SCOPUS_RECORD, context, options)
+    once, _ = clean_record(_SCOPUS_RECORD, _SCOPUS_CONTEXT, options)
 
-    twice, changed = clean_record(once, context, options)
+    twice, changed = clean_record(once, _SCOPUS_CONTEXT, options)
 
     assert twice == once
     assert changed == []
@@ -860,6 +1042,6 @@ def test_clean_record__switched_off_steps_do_nothing() -> None:
     options = _options(
         strip_doi=False, pages_set=False, strip_extras=False, only_one=False
     )
-    record = Record(doi="doi: 10.1/x", pages="521-2", issn="1234-5678 (Print)")
+    record = Record(doi="doi: 10.1/x", pages="521-2", issn=["1234-5678 (Print)"])
 
     assert clean_record(record, _NO_CONTEXT, options) == (record, [])

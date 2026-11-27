@@ -15,6 +15,9 @@ from app.helpers.theme import (
     COMPLETE_COLOR,
     MULTIPLE_COLOR,
     OTHER_COLOR,
+    OUTLINED_BOX,
+    PAGE_TITLE,
+    SECTION_HEADING,
     UNKNOWN_COLOR,
     UU_GREEN,
     UU_ORANGE,
@@ -41,12 +44,36 @@ _LABEL_COLORS = {
 _TITLE_CLASSES = "title-small self-start"
 _BOX_CLASSES = "w-full h-56"
 _BOX_WIDTH = "17rem"
-_FRAME_CLASSES = (
-    f"w-[{_BOX_WIDTH}] gap-2 items-center p-4 border outline-variant rounded-xl"
-)
+_FRAME_CLASSES = f"w-[{_BOX_WIDTH}] gap-2 items-center p-4 {OUTLINED_BOX}"
 _TOP_KEYWORDS = 10
 _TOP_TYPES = 7
 _MIN_SLICE_ANGLE = 5
+_MIN_LABEL_SHARE = 0.04
+_ABBREVIATIONS = {
+    "Journal article": "JA",
+    "Review": "Rv",
+    "Book": "Bk",
+    "Book chapter": "BC",
+    "Conference paper": "CP",
+    "Conference abstract": "CA",
+    "Thesis": "Th",
+    "Report": "Rp",
+    "Dataset": "Ds",
+    "Preprint": "Pp",
+    "Letter": "Lt",
+    "Editorial": "Ed",
+    "Note": "No",
+    "Erratum": "Er",
+    "Retraction": "Rt",
+    "Other": "Ot",
+    _UNKNOWN: "?",
+    "Multiple files": "MF",
+    "include": "In",
+    "exclude": "Ex",
+    "maybe": "Mb",
+    "unknown": "?",
+    "unlabeled": "UL",
+}
 _COUNT_TABLE_CLASS = "dashboard-counts"
 _COUNT_TABLE_CSS = (
     f".{_COUNT_TABLE_CLASS} tr, .{_COUNT_TABLE_CLASS} th,"
@@ -174,26 +201,23 @@ def _year_chart(per_year: Sequence[tuple[int | None, int]]) -> None:
         ).classes(_BOX_CLASSES)
 
 
+def _abbreviation(name: str) -> str:
+    return _ABBREVIATIONS.get(name, name[:2])
+
+
 def _pie(title: str, slices: Sequence[tuple[str, int, str]]) -> None:
+    total = sum(count for _, count, _ in slices)
     with ui.column().classes(_FRAME_CLASSES):
         ui.label(title).classes(_TITLE_CLASSES)
         ui.echart(
             {
                 "tooltip": {"trigger": "item"},
-                "legend": {
-                    "orient": "vertical",
-                    "right": 0,
-                    "top": 0,
-                    "textStyle": {"width": 100, "overflow": "truncate"},
-                    "tooltip": {"show": True},
-                },
                 "series": [
                     {
                         "type": "pie",
-                        "radius": "55%",
-                        "center": ["25%", "55%"],
+                        "radius": "90%",
                         "minAngle": _MIN_SLICE_ANGLE,
-                        "label": {"show": False},
+                        "label": {"position": "inside", "fontWeight": "bold"},
                         "labelLine": {"show": False},
                         "itemStyle": {"borderColor": "#fff", "borderWidth": 2},
                         "data": [
@@ -201,6 +225,10 @@ def _pie(title: str, slices: Sequence[tuple[str, int, str]]) -> None:
                                 "name": name,
                                 "value": count,
                                 "itemStyle": {"color": color},
+                                "label": {
+                                    "show": count / total >= _MIN_LABEL_SHARE,
+                                    "formatter": _abbreviation(name),
+                                },
                             }
                             for name, count, color in slices
                             if count
@@ -398,8 +426,8 @@ def render_dashboard_settings(
     middle.clear()
     with middle:
         with ui.column().classes("w-full p-6 gap-2"):
-            ui.label("Dashboard settings").classes("text-2xl")
-            ui.label("Shown").classes("title-small pt-2")
+            ui.label("Dashboard settings").classes(PAGE_TITLE)
+            ui.label("Shown").classes(SECTION_HEADING)
             with ui.column().classes("gap-0"):
                 for key, label in items:
                     ui.checkbox(

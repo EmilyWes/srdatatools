@@ -5,17 +5,19 @@ from nicegui import ui
 from nicegui.element import Element
 
 from app.db.models import SourceFile
+from app.gui.importing.common import FileSummary, FileType
 from app.gui.importing.import_flow import type_label
-from app.helpers.format import format_count, sources_label
-from app.helpers.mapping_table import render_mapping_table
-from app.helpers.quirks_overview import render_quirks_overview, render_view_toggle
-from app.parsers.common import FileSummary, FileType
-from app.parsers.mapping import FieldMapping
-from app.parsers.profiles.overview import (
-    default_choices,
-    load_choices,
-    quirk_boxes,
+from app.gui.importing.mapping import FieldMapping
+from app.gui.importing.options import (
+    default_options,
+    import_boxes,
+    load_options,
 )
+from app.gui.importing.profiles import sources_label
+from app.helpers.format import format_count
+from app.helpers.mapping_table import render_mapping_table
+from app.helpers.options_overview import render_options_overview, render_view_toggle
+from app.helpers.theme import MUTED_TEXT, PAGE_TITLE
 
 
 def render_source_file_view(
@@ -46,7 +48,7 @@ def render_source_file_view(
                 )
 
         with ui.column().classes("w-full p-6 gap-4"):
-            ui.label(source_file.filename).classes("text-2xl")
+            ui.label(source_file.filename).classes(PAGE_TITLE)
             with ui.grid(columns="max-content auto").classes("gap-x-4 gap-y-1"):
                 details = [
                     ("Sources", sources_label(source_file.sources)),
@@ -57,7 +59,7 @@ def render_source_file_view(
                 if source_file.sheet is not None:
                     details.insert(2, ("Sheet", source_file.sheet))
                 for name, value in details:
-                    ui.label(name).classes("text-sm text-grey-7")
+                    ui.label(name).classes(f"text-sm {MUTED_TEXT}")
                     ui.label(value).classes("text-sm")
             with ui.row().classes("items-center gap-6"):
                 for name, count in (
@@ -65,7 +67,7 @@ def render_source_file_view(
                     ("Records in library", records_in_library),
                 ):
                     with ui.column().classes("gap-0"):
-                        ui.label(name).classes("text-sm text-grey-7")
+                        ui.label(name).classes(f"text-sm {MUTED_TEXT}")
                         ui.label(format_count(count)).classes("text-3xl")
                 ui.button(
                     "Remove from library",
@@ -76,7 +78,7 @@ def render_source_file_view(
             with ui.column().classes("w-full gap-1"):
                 ui.label(
                     f"Skipped on import: {format_count(len(source_file.skipped_rows))}"
-                ).classes("text-sm text-grey-7")
+                ).classes(f"text-sm {MUTED_TEXT}")
                 ui.table(
                     columns=[
                         {"name": "row", "label": "Row", "field": "row_number"},
@@ -97,16 +99,16 @@ def render_source_file_view(
                 views = render_view_toggle()
                 summary = FileSummary(**source_file.file_summary)
                 sources = source_file.sources
-                choices = load_choices(source_file.quirk_choices, file_type, sources)
+                choices = load_options(source_file.option_choices, file_type, sources)
                 render_mapping_table(
                     views.mapping,
                     summary,
                     FieldMapping.model_validate(source_file.suggested_mapping),
                     chosen=FieldMapping.model_validate(source_file.field_mapping),
                 )
-                render_quirks_overview(
+                render_options_overview(
                     views.parsing,
-                    quirk_boxes(file_type, type_label(file_type)),
-                    default_choices(file_type, sources),
+                    import_boxes(file_type, type_label(file_type)),
+                    default_options(file_type, sources),
                     chosen=choices,
                 )

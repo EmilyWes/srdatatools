@@ -5,8 +5,8 @@ from typing import Literal
 from nicegui import ui
 from nicegui.element import Element
 
-from app.parsers.common import FileSummary
-from app.parsers.mapping import (
+from app.gui.importing.common import FileSummary
+from app.gui.importing.mapping import (
     AUTHORS_TARGET,
     DATE_TARGET,
     ISSN_ISBN_TARGET,
@@ -27,31 +27,25 @@ from app.parsers.mapping import (
     default_row,
     row_with,
 )
-
-ROW_FIELD_CSS = """
-.mapping-field .q-field__control, .mapping-field .q-field__marginal {
-    min-height: 24px;
-    height: 24px;
-    align-items: center;
-}
-.mapping-field .q-field__control-container {
-    padding-top: 0;
-    align-items: center;
-}
-.mapping-field .q-field__native, .mapping-field .q-field__input {
-    padding: 0;
-    min-height: 0;
-}
-"""
+from app.helpers.record_fields import DATE_PART_LABELS, FIELD_LABELS
+from app.helpers.theme import (
+    CHANGED_TINT,
+    FIELD_CLASSES,
+    INPUT_PROPS,
+    MUTED_TEXT,
+    OUTLINED_BOX,
+    SELECT_PROPS,
+    STATUS_TINTS,
+)
 
 _IGNORE = "ignore"
 _TARGET_KEYS = (_IGNORE, *TARGETS)
 
-_LABELS: dict[str, str] = {
-    "doi": "DOI",
+# Targets that aren't a Record field of the same name; "Other ID" is singular
+# since one column gives one ID.
+_TARGET_LABELS: dict[str, str] = {
     ISSN_ISBN_TARGET: "ISSN/ISBN",
-    "pmid": "PMID",
-    "date": "Publication date",
+    DATE_TARGET: FIELD_LABELS["publication_date"],
     OTHER_IDS_TARGET: "Other ID",
 }
 
@@ -70,17 +64,10 @@ class _Option:
 
 _OPTION_ROW_CLASSES = "w-full no-wrap items-center gap-1"
 # Fixed width so the boxes line up whatever the label.
-_OPTION_LABEL_CLASSES = "w-10 shrink-0 text-xs text-grey-7"
+_OPTION_LABEL_CLASSES = f"w-10 shrink-0 text-xs {MUTED_TEXT}"
 
 _OPTIONS: dict[str, tuple[_Option, ...]] = {
-    DATE_TARGET: (
-        _Option(
-            "part",
-            "part",
-            "Part",
-            {"full": "Full date", "year": "Year", "month": "Month", "day": "Day"},
-        ),
-    ),
+    DATE_TARGET: (_Option("part", "part", "Part", DATE_PART_LABELS),),
     PAGES_TARGET: (
         _Option(
             "part",
@@ -156,12 +143,7 @@ _FIELD_ORDER = (
 Status = Literal["green", "orange", "red"]
 _STATUS_ORDER: tuple[Status, ...] = ("green", "orange", "red")
 _CHANGED = "blue"
-_STATUS_COLORS = {
-    "green": "green-2",
-    "orange": "orange-2",
-    "red": "red-2",
-    _CHANGED: "blue-2",
-}
+_STATUS_COLORS = {**STATUS_TINTS, _CHANGED: CHANGED_TINT}
 
 
 def _value_slot(row: RowMapping) -> tuple[str, ...] | None:
@@ -212,11 +194,13 @@ def _sorted_headers(headers: list[str], suggestion: FieldMapping) -> list[str]:
 
 
 def _option_label(key: str) -> str:
-    return _LABELS.get(key, key.replace("_", " ").capitalize())
+    if key in _TARGET_LABELS:
+        return _TARGET_LABELS[key]
+    return FIELD_LABELS.get(key, key.replace("_", " ").capitalize())
 
 
 _INPUT_WIDTH_CH = (8, 24)
-_SELECT_CHROME_CH = 6
+SELECT_CHROME_CH = 6
 
 
 def sorted_target_options(keys: Iterable[str]) -> dict[str, str]:
@@ -224,13 +208,83 @@ def sorted_target_options(keys: Iterable[str]) -> dict[str, str]:
     return dict(sorted(options.items(), key=lambda item: item[1].lower()))
 
 
-def _input_width_ch(headers: list[str]) -> int:
+def input_width_ch(texts: Iterable[str], chrome: int = 1) -> int:
     low, high = _INPUT_WIDTH_CH
-    return max(low, min(high, max(map(len, headers), default=0) + 1))
+    return max(low, min(high, max(map(len, texts), default=0) + chrome))
 
 
 def _mapping_width_ch() -> int:
-    return max(len(_option_label(key)) for key in _TARGET_KEYS) + _SELECT_CHROME_CH
+    return max(len(_option_label(key)) for key in _TARGET_KEYS) + SELECT_CHROME_CH
+
+
+# Without overflow-y-hidden, overflow-x-auto turns on vertical scrolling too.
+_TABLE_CLASSES = f"gap-0 {OUTLINED_BOX} max-w-full overflow-x-auto overflow-y-hidden"
+_ROW_CLASSES = (
+    "w-full min-w-max no-wrap items-center gap-1 pl-0 border-b outline-variant"
+)
+_COUNT_CELL_CLASSES = "self-stretch flex items-center px-2 mr-1"
+_COUNT_CELL_STYLE = "background: rgba(0, 0, 0, 0.04)"
+_HEADER_LABEL_CLASSES = "text-xs font-bold"
+_EXAMPLE_WIDTH = "w-48"
+
+
+def _width(width_ch: int) -> str:
+    return f"w-[{width_ch}ch]"
+
+
+def table_frame() -> ui.column:
+    return ui.column().classes(_TABLE_CLASSES)
+
+
+def header_row() -> ui.row:
+    return ui.row().classes(f"{_ROW_CLASSES} py-2 surface-container")
+
+
+def body_row(index: int) -> ui.row:
+    striped = " surface-low" if index % 2 == 1 else ""
+    return ui.row().classes(f"{_ROW_CLASSES} py-0{striped}")
+
+
+def header_cells(
+    label_title: str, widget_title: str, label_ch: int, widget_ch: int
+) -> None:
+    with ui.element("div").classes(_COUNT_CELL_CLASSES).style(_COUNT_CELL_STYLE):
+        ui.label("#").classes(f"w-10 {_HEADER_LABEL_CLASSES} text-center")
+    ui.label(label_title).classes(f"{_HEADER_LABEL_CLASSES} {_width(label_ch)}")
+    ui.label(widget_title).classes(f"{_HEADER_LABEL_CLASSES} {_width(widget_ch)}")
+    ui.label("Example").classes(f"{_EXAMPLE_WIDTH} {_HEADER_LABEL_CLASSES} text-center")
+
+
+def count_cell() -> tuple[Element, ui.linear_progress]:
+    with (
+        ui.element("div").classes(_COUNT_CELL_CLASSES).style(_COUNT_CELL_STYLE) as cell
+    ):
+        count = ui.linear_progress(show_value=False).classes("w-10")
+    return cell, count
+
+
+def label_cell(text: str, width_ch: int) -> ui.label:
+    label = ui.label(text).classes(f"truncate text-xs {_width(width_ch)}")
+    if len(text) >= width_ch:
+        label.tooltip(text)
+    return label
+
+
+def widget_cell(width_ch: int) -> ui.column:
+    return ui.column().classes(f"gap-0 {_width(width_ch)}")
+
+
+def example_cell(text: str) -> ui.label:
+    sample = ui.label(text).classes(f"{_EXAMPLE_WIDTH} truncate text-xs {MUTED_TEXT}")
+    if text:
+        sample.tooltip(text)
+    return sample
+
+
+def option_row(short: str, label: str) -> ui.row:
+    with ui.row().classes(_OPTION_ROW_CLASSES) as row:
+        ui.label(f"{short}:").classes(_OPTION_LABEL_CLASSES).tooltip(label)
+    return row
 
 
 def fill_color(filled: int, total: int) -> str:
@@ -288,25 +342,22 @@ class MappingScreen:
         base = row.base.model_dump() if row.base is not None else {}
         row.option_rows = {}
         for option in _OPTIONS.get(target, ()):
-            with row.options, ui.row().classes(_OPTION_ROW_CLASSES) as option_row:
-                ui.label(f"{option.short}:").classes(_OPTION_LABEL_CLASSES).tooltip(
-                    option.label
-                )
+            with row.options, option_row(option.short, option.label) as shown_row:
                 widget: ui.select | ui.input
                 if option.choices is not None:
                     widget = ui.select(option.choices, value=base[option.name])
-                    widget.props("dense options-dense outlined")
+                    widget.props(SELECT_PROPS)
                 elif self.readonly:
-                    widget = ui.input(value=base[option.name]).props("dense outlined")
+                    widget = ui.input(value=base[option.name]).props(INPUT_PROPS)
                 else:
                     widget = ui.input(placeholder=base[option.name])
-                    widget.props("dense outlined")
+                    widget.props(INPUT_PROPS)
                 if self.readonly:
                     widget.props("readonly")
-                widget.classes("mapping-field text-xs col")
+                widget.classes(f"{FIELD_CLASSES} col")
                 widget.on_value_change(lambda _e: self.on_option_change(row))
             row.inputs[option.name] = widget
-            row.option_rows[option.name] = option_row
+            row.option_rows[option.name] = shown_row
         self._refresh_option_visibility(row)
         self._refresh_option_colors(row)
 
@@ -368,9 +419,8 @@ def render_mapping_table(
     screen = MappingScreen(readonly=chosen is not None)
     samples = summary.samples
     headers = _sorted_headers(list(samples), suggestion)
-    input_width = _input_width_ch(headers)
-    input_style = f"width: {input_width}ch"
-    mapping_style = f"width: {_mapping_width_ch()}ch"
+    input_width = input_width_ch(headers)
+    mapping_width = _mapping_width_ch()
 
     initial_targets = {
         header: (
@@ -379,70 +429,33 @@ def render_mapping_table(
         for header in headers
     }
 
-    ui.add_css(ROW_FIELD_CSS)
-
-    count_cell_classes = "self-stretch flex items-center px-2 mr-1"
-    count_cell_style = "background: rgba(0, 0, 0, 0.04)"
-
     middle.clear()
     with middle:
-        table_classes = (
-            "gap-0 border outline-variant rounded-xl max-w-full overflow-x-auto"
-        )
-        with ui.column().classes(table_classes):
-            row_base = (
-                "w-full min-w-max no-wrap items-center gap-1 pl-0 border-b"
-                " outline-variant"
-            )
-            with ui.row().classes(f"{row_base} py-2 surface-container"):
-                with (
-                    ui.element("div")
-                    .classes(count_cell_classes)
-                    .style(count_cell_style)
-                ):
-                    ui.label("#").classes("w-10 text-xs font-bold text-center")
-                ui.label("Input").classes("text-xs font-bold").style(input_style)
-                ui.label("Mapping").classes("text-xs font-bold").style(mapping_style)
-                ui.label("Example").classes("w-48 text-xs font-bold text-center")
+        with table_frame():
+            with header_row():
+                header_cells("Input", "Mapping", input_width, mapping_width)
             for i, header in enumerate(headers):
                 status = _initial_status(header, suggestion)
-                row_classes = f"{row_base} py-0"
-                if i % 2 == 1:
-                    row_classes += " surface-low"
-                with ui.row().classes(row_classes):
+                with body_row(i):
                     filled = summary.filled.get(header, 0)
-                    ratio = filled / summary.total_rows if summary.total_rows else 0.0
-                    with (
-                        ui.element("div")
-                        .classes(count_cell_classes)
-                        .style(count_cell_style)
-                    ):
-                        count = ui.linear_progress(value=ratio, show_value=False)
-                        count.props(f"color={fill_color(filled, summary.total_rows)}")
-                        count.classes("w-10")
-                        count.tooltip(f"{filled} of {summary.total_rows}")
-                    label = ui.label(header).classes("truncate text-xs")
-                    label.style(input_style)
-                    if len(header) >= input_width:
-                        label.tooltip(header)
-                    with ui.column().classes("gap-0").style(mapping_style):
+                    _, count = count_cell()
+                    count.value = (
+                        filled / summary.total_rows if summary.total_rows else 0.0
+                    )
+                    count.props(f"color={fill_color(filled, summary.total_rows)}")
+                    count.tooltip(f"{filled} of {summary.total_rows}")
+                    label_cell(header, input_width)
+                    with widget_cell(mapping_width):
                         select = (
                             ui.select(
                                 sorted_target_options(_TARGET_KEYS),
                                 value=initial_targets[header],
                             )
-                            .classes("mapping-field text-xs w-full")
-                            .props(
-                                "dense options-dense outlined "
-                                f"bg-color={_STATUS_COLORS[status]}"
-                            )
+                            .classes(f"{FIELD_CLASSES} w-full")
+                            .props(f"{SELECT_PROPS} bg-color={_STATUS_COLORS[status]}")
                         )
                         options = ui.column().classes("gap-0 w-full")
-                    sample = ui.label(samples[header]).classes(
-                        "w-48 truncate text-xs text-grey-7"
-                    )
-                    if samples[header]:
-                        sample.tooltip(samples[header])
+                    sample = example_cell(samples[header])
 
                 mapped = (chosen or suggestion).rows.get(header)
                 if chosen is not None:

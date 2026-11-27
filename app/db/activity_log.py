@@ -1,116 +1,28 @@
 import datetime
-from collections import Counter
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.db.models import ActivityLog, SourceFile
-from app.helpers.format import format_count
+from app.db.models import ActivityLog
 
 
-def log_import(session: Session, source_file: SourceFile) -> ActivityLog:
-    skipped = len(source_file.skipped_rows)
-    entry = ActivityLog(
-        timestamp=source_file.imported_at,
-        action_type="import",
-        message=(
-            f"Imported from:\n{source_file.filename}\n"
-            f"Processed: {source_file.row_count}\nSkipped: {skipped}"
-        ),
-        status="warning" if skipped else "ok",
-    )
-    session.add(entry)
-    return entry
+def list_activity_log(session: Session) -> list[ActivityLog]:
+    statement = select(ActivityLog).order_by(ActivityLog.timestamp, ActivityLog.id)
+    return list(session.scalars(statement))
 
 
-def log_import_failed(session: Session, filename: str, reason: str) -> ActivityLog:
-    entry = ActivityLog(
-        timestamp=datetime.datetime.now(),
-        action_type="import",
-        message=f"Import failed:\n{filename}\nReason: {reason}",
-        status="warning",
-    )
-    session.add(entry)
-    return entry
-
-
-def log_removal(session: Session, filename: str, removed: int) -> ActivityLog:
-    entry = ActivityLog(
-        timestamp=datetime.datetime.now(),
-        action_type="remove",
-        message=f"Removed source file:\n{filename}\nRecords removed: {removed}",
-    )
-    session.add(entry)
-    return entry
-
-
-def log_library_deleted(
-    session: Session, source_files: int, records: int
+def add_activity(
+    session: Session,
+    action_type: str,
+    message: str,
+    status: str = "ok",
+    timestamp: datetime.datetime | None = None,
 ) -> ActivityLog:
     entry = ActivityLog(
-        timestamp=datetime.datetime.now(),
-        action_type="delete_library",
-        message=(
-            f"Deleted library\nSource files removed: {source_files}\n"
-            f"Records removed: {records}"
-        ),
-    )
-    session.add(entry)
-    return entry
-
-
-def log_records_deleted(session: Session, count: int) -> ActivityLog:
-    entry = ActivityLog(
-        timestamp=datetime.datetime.now(),
-        action_type="delete_records",
-        message=f"Deleted records: {count}",
-    )
-    session.add(entry)
-    return entry
-
-
-def log_export(
-    session: Session, filename: str, records: int, cut: int = 0, removed: int = 0
-) -> ActivityLog:
-    message = f"Exported to:\n{filename}\nRecords: {format_count(records)}"
-    if cut:
-        message += f"\nValues cut: {format_count(cut)}"
-    if removed:
-        message += f"\nControl characters removed: {format_count(removed)}"
-    entry = ActivityLog(
-        timestamp=datetime.datetime.now(),
-        action_type="export",
+        timestamp=timestamp or datetime.datetime.now(),
+        action_type=action_type,
         message=message,
-        status="warning" if cut or removed else "ok",
-    )
-    session.add(entry)
-    return entry
-
-
-def log_export_failed(session: Session, filename: str, reason: str) -> ActivityLog:
-    entry = ActivityLog(
-        timestamp=datetime.datetime.now(),
-        action_type="export",
-        message=f"Export failed:\n{filename}\nReason: {reason}",
-        status="warning",
-    )
-    session.add(entry)
-    return entry
-
-
-def log_cleaning(
-    session: Session, records: int, changed: int, per_step: Counter[str]
-) -> ActivityLog:
-    """One line per step that changed records, in per_step's order."""
-    noun = "record" if records == 1 else "records"
-    lines = [
-        f"Cleaned {format_count(records)} {noun}: {format_count(changed)} changed",
-        *(f"{step}: {format_count(count)}" for step, count in per_step.items()),
-    ]
-    entry = ActivityLog(
-        timestamp=datetime.datetime.now(),
-        action_type="clean",
-        message="\n".join(lines),
+        status=status,
     )
     session.add(entry)
     return entry

@@ -14,9 +14,9 @@ class Record(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str | None]
-    author_names: Mapped[str | None]
-    author_ids: Mapped[str | None]
-    author_affiliations: Mapped[str | None]
+    author_names: Mapped[list[str]] = mapped_column(JSON, default=list)
+    author_ids: Mapped[dict[str, list[str]]] = mapped_column(JSON, default=dict)
+    author_affiliations: Mapped[list[str]] = mapped_column(JSON, default=list)
     abstract: Mapped[str | None]
     publication_date: Mapped[str | None]
     journal: Mapped[str | None]
@@ -26,11 +26,11 @@ class Record(Base):
     pages: Mapped[str | None]
     doi: Mapped[str | None] = mapped_column(index=True)
     pmid: Mapped[str | None] = mapped_column(index=True)
-    issn: Mapped[str | None]
-    isbn: Mapped[str | None]
+    issn: Mapped[list[str]] = mapped_column(JSON, default=list)
+    isbn: Mapped[list[str]] = mapped_column(JSON, default=list)
     other_ids: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
     publication_type: Mapped[str | None]
-    keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
+    keywords: Mapped[dict[str, list[str]]] = mapped_column(JSON, default=dict)
     language: Mapped[str | None]
     publisher: Mapped[str | None]
     url: Mapped[str | None]
@@ -59,7 +59,7 @@ class SourceFile(Base):
     field_mapping: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     suggested_mapping: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     file_summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    quirk_choices: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    option_choices: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     record_sources: Mapped[list["RecordSource"]] = relationship(
         back_populates="source_file", cascade="all, delete-orphan"

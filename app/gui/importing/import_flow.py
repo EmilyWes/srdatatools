@@ -6,26 +6,9 @@ from nicegui import app, ui
 from nicegui.element import Element
 from sqlalchemy.orm import Session
 
-from app.db.activity_log import log_import
+from app.db.general import store_parsed_rows
 from app.db.models import SourceFile
-from app.db.store import store_parsed_rows
-from app.helpers.busy import run_busy
-from app.helpers.format import source_label, sources_label
-from app.helpers.mapping_table import ROW_FIELD_CSS, MappingScreen, render_mapping_table
-from app.helpers.quirks_overview import (
-    VIEW_MAPPING,
-    VIEW_PARSING,
-    MappingParsingViews,
-    QuirksScreen,
-    render_quirks_overview,
-    render_view_toggle,
-)
-from app.parsers.bibtex import (
-    parse_bibtex_file,
-    read_bibtex_fields,
-    suggest_bibtex_mapping,
-)
-from app.parsers.common import (
+from app.gui.importing.common import (
     UNKNOWN,
     FileSummary,
     FileType,
@@ -33,36 +16,60 @@ from app.parsers.common import (
     is_file_type,
     merge_summaries,
 )
-from app.parsers.csv_ import (
+from app.gui.importing.detect import detect_sources, detect_type
+from app.gui.importing.formats.bibtex import (
+    parse_bibtex_file,
+    read_bibtex_fields,
+    suggest_bibtex_mapping,
+)
+from app.gui.importing.formats.csv import (
     parse_csv_file,
     read_csv_headers,
     suggest_mapping,
 )
-from app.parsers.detect import detect_sources, detect_type
-from app.parsers.excel import (
+from app.gui.importing.formats.excel import (
     parse_excel_file,
     read_excel_headers,
     read_excel_sheets,
 )
-from app.parsers.mapping import FieldMapping
-from app.parsers.nbib import (
+from app.gui.importing.formats.nbib import (
     parse_nbib_file,
     read_nbib_tags,
     suggest_nbib_mapping,
 )
-from app.parsers.profiles import FormatProfile
-from app.parsers.profiles.overview import (
-    ParsingChoices,
-    default_choices,
-    dump_choices,
-    profile_with,
-    quirk_boxes,
-)
-from app.parsers.quirks import ParseSettings
-from app.parsers.ris import (
+from app.gui.importing.formats.ris import (
     parse_ris_file,
     read_ris_tags,
     suggest_ris_mapping,
+)
+from app.gui.importing.mapping import FieldMapping
+from app.gui.importing.options import (
+    ImportOptions,
+    default_options,
+    dump_options,
+    import_boxes,
+    profile_with,
+)
+from app.gui.importing.parse_settings import ParseSettings
+from app.gui.importing.profiles import FormatProfile, source_label, sources_label
+from app.gui.other.activity_log import log_import
+from app.helpers.busy import run_busy
+from app.helpers.mapping_table import MappingScreen, render_mapping_table
+from app.helpers.options_overview import (
+    VIEW_MAPPING,
+    VIEW_PARSING,
+    MappingParsingViews,
+    OptionsScreen,
+    render_options_overview,
+    render_view_toggle,
+)
+from app.helpers.theme import (
+    BUTTON_PROPS,
+    FILE_LABEL_CLASSES,
+    GRID_CLASSES,
+    GRID_COLUMNS,
+    SELECT_CLASSES,
+    SELECT_PROPS,
 )
 
 _TYPE_OPTIONS = {
@@ -82,15 +89,7 @@ _MIXED_WARNING = (
 )
 _EXCEL_SINGLE_FILE = "Excel import takes one file at a time"
 
-# The second column is fixed to the dropdown width (w-32) so a long file name
-# overflows to the right instead of moving the button and dropdowns.
-GRID_COLUMNS = "max-content 8rem"
-GRID_CLASSES = "items-center justify-items-start gap-x-1 gap-y-2"
-CELL_ROW_CLASSES = "items-center gap-2 no-wrap"
-FILE_LABEL_CLASSES = "text-sm whitespace-nowrap"
-SELECT_PROPS = "dense outlined options-dense popup-content-class=text-xs"
-BUTTON_PROPS = "dense size=11px"
-SELECT_CLASSES = "mapping-field text-xs w-32"
+_CELL_ROW_CLASSES = "items-center gap-2 no-wrap"
 
 
 async def pick_files() -> list[Path]:
@@ -230,7 +229,7 @@ def import_file(
     summary: FileSummary,
     sources: Collection[str] = (),
     sheet: str | None = None,
-    choices: ParsingChoices | None = None,
+    choices: ImportOptions | None = None,
 ) -> SourceFile:
     profile = profile_with(file_type, sources, choices)
     result = _TYPES[file_type].parse_file(path, mapping, sheet, profile.settings)
@@ -249,8 +248,8 @@ def import_file(
         file_type, sources, summary
     ).model_dump()
     source_file.file_summary = asdict(summary)
-    source_file.quirk_choices = dump_choices(
-        choices or default_choices(file_type, sources)
+    source_file.option_choices = dump_options(
+        choices or default_options(file_type, sources)
     )
     log_import(session, source_file)
     return source_file
@@ -263,7 +262,7 @@ OnImport = Callable[
         FieldMapping,
         tuple[str, ...],
         str | None,
-        ParsingChoices,
+        ImportOptions,
         bool,
     ],
     Awaitable[None] | None,
@@ -283,7 +282,7 @@ class ImportView:
     sheet: str | None = None
     view: str | None = VIEW_MAPPING
     mapping_screen: MappingScreen | None = None
-    quirks_screen: QuirksScreen[ParsingChoices] | None = None
+    options_screen: OptionsScreen[ImportOptions] | None = None
     views: MappingParsingViews | None = None
     import_button: ui.button | None = None
     import_clean_button: ui.button | None = None
@@ -371,7 +370,7 @@ class ImportView:
     def _import(self, clean: bool = False) -> Awaitable[None] | None:
         assert self.paths
         assert self.mapping_screen is not None
-        assert self.quirks_screen is not None
+        assert self.options_screen is not None
         assert is_file_type(self.file_type)
         return self.on_import(
             list(zip(self.paths, self.summaries, strict=True)),
@@ -379,7 +378,7 @@ class ImportView:
             self.mapping_screen.current_mapping(),
             self.sources,
             self.sheet,
-            self.quirks_screen.current_choices(),
+            self.options_screen.current_choices(),
             clean,
         )
 
@@ -392,16 +391,16 @@ class ImportView:
     def _on_view(self, view: str | None) -> None:
         """Parsing refreshes from the mapping's edits when it is shown."""
         self.view = view
-        if view == VIEW_PARSING and self.quirks_screen is not None:
-            self.quirks_screen.refresh_ordering()
+        if view == VIEW_PARSING and self.options_screen is not None:
+            self.options_screen.refresh_ordering()
 
     def _render_mapping_and_parsing(
         self, views: MappingParsingViews, file_type: FileType
     ) -> None:
-        quirks_screen = render_quirks_overview(
+        options_screen = render_options_overview(
             views.parsing,
-            quirk_boxes(file_type, type_label(file_type)),
-            default_choices(file_type, self.sources),
+            import_boxes(file_type, type_label(file_type)),
+            default_options(file_type, self.sources),
             current_mapping=self._current_mapping,
         )
         mapping_screen = render_mapping(
@@ -414,7 +413,7 @@ class ImportView:
         if mapping_screen is None:
             views.parsing.clear()
             return
-        self.mapping_screen, self.quirks_screen = mapping_screen, quirks_screen
+        self.mapping_screen, self.options_screen = mapping_screen, options_screen
         self.views = views
         self._on_view(self.view)
 
@@ -432,7 +431,6 @@ class ImportView:
         type_known = file_type is not None
         has_file = bool(self.paths)
 
-        ui.add_css(ROW_FIELD_CSS)
         self.middle.clear()
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):
@@ -440,7 +438,7 @@ class ImportView:
                     ui.button("Select files", on_click=self._select_files).props(
                         BUTTON_PROPS
                     )
-                    with ui.row().classes(CELL_ROW_CLASSES):
+                    with ui.row().classes(_CELL_ROW_CLASSES):
                         if len(self.paths) > 1:
                             files_label = ui.label(f"{len(self.paths)} files selected")
                             files_label.tooltip(
@@ -459,7 +457,7 @@ class ImportView:
                             )
 
                     ui.label("Detected sources:").classes("text-sm")
-                    with ui.row().classes(CELL_ROW_CLASSES):
+                    with ui.row().classes(_CELL_ROW_CLASSES):
                         for source in self.sources:
                             ui.chip(source_label(source)).props("dense square").classes(
                                 "text-xs"
@@ -468,7 +466,7 @@ class ImportView:
                             ui.label(source_label(None)).classes(FILE_LABEL_CLASSES)
 
                     ui.label("Select type:").classes("text-sm")
-                    with ui.row().classes(CELL_ROW_CLASSES):
+                    with ui.row().classes(_CELL_ROW_CLASSES):
                         type_select = (
                             ui.select(_TYPE_OPTIONS, value=self.file_type)
                             .props(SELECT_PROPS)
@@ -485,7 +483,7 @@ class ImportView:
                         )
                         sheet_select.on_value_change(lambda e: self._set_sheet(e.value))
 
-                self.mapping_screen = self.quirks_screen = None
+                self.mapping_screen = self.options_screen = None
                 self.views = None
                 can_render = bool(self.paths and self.summaries) and type_known
                 has_samples = bool(merge_summaries(self.summaries).samples)
