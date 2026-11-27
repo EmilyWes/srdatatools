@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from app.gui.export.columns import ExportColumn, ExportRecord, export_columns
 from app.gui.export.csv import write_csv
+from app.gui.export.fields import ExportField, ExportRecord, export_fields
 from app.gui.export.options import ExportOptions
 from app.models.record import Record
 from app.parsers.csv_ import parse_csv_text, suggest_mapping
@@ -30,8 +30,8 @@ _RECORDS = [
 ]
 
 
-def _columns(names: dict[str, str], options: ExportOptions) -> list[ExportColumn]:
-    columns = [c for c in export_columns(_RECORDS, options) if c.key in names]
+def _columns(names: dict[str, str], options: ExportOptions) -> list[ExportField]:
+    columns = [c for c in export_fields(_RECORDS, options) if c.key in names]
     for column in columns:
         column.name = names[column.key]
     return columns
@@ -102,7 +102,7 @@ def test_write_csv__line_breaks_replaced_with_space(tmp_path: Path) -> None:
 
 def test_write_csv__round_trips_through_the_csv_importer(tmp_path: Path) -> None:
     options = ExportOptions()
-    columns = export_columns(_RECORDS, options)
+    columns = export_fields(_RECORDS, options)
     path = tmp_path / "library.csv"
 
     write_csv(path, columns, _RECORDS, options)
@@ -134,7 +134,7 @@ def test_write_csv__nothing_cut_within_the_default_length(tmp_path: Path) -> Non
     options = ExportOptions()
 
     cut = write_csv(
-        tmp_path / "a.csv", export_columns(_RECORDS, options), _RECORDS, options
+        tmp_path / "a.csv", export_fields(_RECORDS, options), _RECORDS, options
     )
 
     assert cut == 0

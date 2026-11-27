@@ -3,8 +3,8 @@ from pathlib import Path
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.gui.export.columns import ExportColumn, ExportRecord, export_columns
 from app.gui.export.excel import write_excel
+from app.gui.export.fields import ExportField, ExportRecord, export_fields
 from app.gui.export.options import ExportOptions
 from app.models.record import Record
 from app.parsers.csv_ import suggest_mapping
@@ -38,8 +38,8 @@ _RECORDS = [
 
 def _columns(
     names: dict[str, str], records: list[ExportRecord], options: ExportOptions
-) -> list[ExportColumn]:
-    columns = [c for c in export_columns(records, options) if c.key in names]
+) -> list[ExportField]:
+    columns = [c for c in export_fields(records, options) if c.key in names]
     for column in columns:
         column.name = names[column.key]
     return columns
@@ -185,7 +185,7 @@ def test_write_excel__round_trips_through_the_excel_importer(tmp_path: Path) -> 
     options = ExportOptions(file_type="xlsx")
     path = tmp_path / "library.xlsx"
 
-    write_excel(path, export_columns(_RECORDS, options), _RECORDS, options)
+    write_excel(path, export_fields(_RECORDS, options), _RECORDS, options)
 
     headers = [str(cell) for cell in _rows(load_workbook(path)["Records"])[0]]
     result = parse_excel_file(path, suggest_mapping(headers))

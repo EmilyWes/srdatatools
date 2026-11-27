@@ -2,7 +2,7 @@ import csv
 from collections.abc import Sequence
 from pathlib import Path
 
-from app.gui.export.columns import ExportColumn, ExportRecord, column_value
+from app.gui.export.fields import ExportField, ExportRecord, field_value
 from app.gui.export.options import ExportOptions
 
 
@@ -14,7 +14,7 @@ def line_breaks(value: str, options: ExportOptions) -> str:
 
 def write_csv(
     path: Path,
-    columns: Sequence[ExportColumn],
+    columns: Sequence[ExportField],
     records: Sequence[ExportRecord],
     options: ExportOptions,
 ) -> int:
@@ -26,7 +26,7 @@ def write_csv(
         for record in records:
             row = []
             for column in columns:
-                value = line_breaks(column_value(column, record, options), options)
+                value = line_breaks(field_value(column, record, options), options)
                 if len(value) > options.max_length:
                     value = value[: options.max_length]
                     cut += 1

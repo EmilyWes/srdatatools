@@ -8,17 +8,17 @@ from nicegui import app, ui
 from nicegui.element import Element
 from webview import FileDialog
 
-from app.gui.export.columns import (
-    AuthorIdKeyColumn,
-    DateColumn,
-    ExportColumn,
+from app.gui.export.fields import (
+    AuthorIdKeyField,
+    DateField,
+    ExportField,
     ExportRecord,
-    JoinedColumn,
-    KeywordsColumn,
-    RisTypeColumn,
+    JoinedField,
+    KeywordsField,
+    RisTypeField,
     default_note_name,
     example,
-    export_columns,
+    export_fields,
     fill_count,
 )
 from app.gui.export.options import ExportFileType, ExportOptions, default_path
@@ -44,7 +44,7 @@ from app.helpers.options_overview import (
 )
 
 OnExport = Callable[
-    [Path, list[ExportColumn], list[ExportRecord], ExportOptions],
+    [Path, list[ExportField], list[ExportRecord], ExportOptions],
     Awaitable[None] | None,
 ]
 
@@ -110,7 +110,7 @@ def _tag_options(tag: str) -> dict[str, str]:
     return dict(_TAG_OPTIONS)
 
 
-def _default_unchecked(columns: Sequence[ExportColumn]) -> set[str]:
+def _default_unchecked(columns: Sequence[ExportField]) -> set[str]:
     return {column.key for column in columns if not column.default_checked}
 
 
@@ -127,7 +127,7 @@ async def pick_save_path(suggested: Path, file_type: ExportFileType) -> Path | N
 
 @dataclass
 class _Row:
-    column: ExportColumn
+    column: ExportField
     default_name: str
     checkbox: ui.checkbox
     # A RIS tag select; None for the fixed TY row.
@@ -150,7 +150,7 @@ class ExportView:
     on_export: OnExport
     on_options_change: Callable[[ExportOptions], Any] | None = None
     on_restore_options: Callable[[], Any] | None = None
-    columns: list[ExportColumn] = field(default_factory=list)
+    columns: list[ExportField] = field(default_factory=list)
     rows: list[_Row] = field(default_factory=list)
     option_widgets: dict[str, ui.select | ui.checkbox | ui.number] = field(
         default_factory=dict
@@ -167,7 +167,7 @@ class ExportView:
     syncing_header: bool = False
 
     def __post_init__(self) -> None:
-        self.columns = export_columns(self.records, self.options)
+        self.columns = export_fields(self.records, self.options)
         self.unchecked = _default_unchecked(self.columns)
 
     @property
@@ -177,7 +177,7 @@ class ExportView:
     def _rebuild_columns(self) -> None:
         """Rows that stay keep their edited name and options."""
         current = {column.key: column for column in self.columns}
-        fresh = export_columns(self.records, self.options)
+        fresh = export_fields(self.records, self.options)
         self.unchecked |= _default_unchecked(
             [column for column in fresh if column.key not in current]
         )
@@ -185,7 +185,7 @@ class ExportView:
 
     def _reset_columns(self) -> None:
         """Back to the file type's default names and checks."""
-        self.columns = export_columns(self.records, self.options)
+        self.columns = export_fields(self.records, self.options)
         self.unchecked = _default_unchecked(self.columns)
         self._render_mapping()
 
@@ -241,12 +241,12 @@ class ExportView:
         for row in self.rows:
             self._refresh_name_color(row)
 
-    def _exported_columns(self) -> list[ExportColumn]:
+    def _exported_columns(self) -> list[ExportField]:
         return [c for c in self.columns if c.key not in self.unchecked]
 
-    def _optional_columns(self) -> list[ExportColumn]:
+    def _optional_columns(self) -> list[ExportField]:
         """The TY row is always exported, so it isn't counted as a choice."""
-        return [c for c in self.columns if not isinstance(c, RisTypeColumn)]
+        return [c for c in self.columns if not isinstance(c, RisTypeField)]
 
     def _set_checked(self, row: _Row, checked: bool) -> None:
         if checked:
@@ -269,7 +269,7 @@ class ExportView:
         if self.syncing_header:
             return
         for row in self.rows:
-            if not isinstance(row.column, RisTypeColumn):
+            if not isinstance(row.column, RisTypeField):
                 row.checkbox.value = value is not False
 
     def _sync_header_checkbox(self) -> None:
@@ -337,10 +337,10 @@ class ExportView:
     def _render_options(self, row: _Row) -> None:
         column = row.column
         joined = not (self._ris and self.options.one_line_per_value)
-        if isinstance(column, DateColumn) and not self._ris:
+        if isinstance(column, DateField) and not self._ris:
             self._option(row, "part", "part", "Part", _DATE_PARTS)
         elif (
-            isinstance(column, AuthorIdKeyColumn | JoinedColumn | KeywordsColumn)
+            isinstance(column, AuthorIdKeyField | JoinedField | KeywordsField)
             and joined
         ):
             self._option(row, "delimiter", "sep", "Delimiter")
@@ -349,7 +349,7 @@ class ExportView:
                 row, "note_name", "name", "Written before the value, as Name: value"
             )
 
-    def _tag_select(self, column: ExportColumn) -> ui.select:
+    def _tag_select(self, column: ExportField) -> ui.select:
         select = ui.select(
             _tag_options(column.name),
             value=column.name or None,
@@ -364,7 +364,7 @@ class ExportView:
 
     def _render_mapping(self) -> None:
         assert self.mapping is not None
-        defaults = {c.key: c.name for c in export_columns(self.records, self.options)}
+        defaults = {c.key: c.name for c in export_fields(self.records, self.options)}
         self.rows = []
         self.mapping.clear()
         count_cell_classes = "self-stretch flex items-center px-2 mr-1"
@@ -414,7 +414,7 @@ class ExportView:
                         ):
                             name: ui.input | ui.select | None = None
                             shared_tooltip = None
-                            if isinstance(column, RisTypeColumn):
+                            if isinstance(column, RisTypeField):
                                 checkbox.disable()
                                 ui.label(column.name).classes("text-xs px-3").tooltip(
                                     _TYPE_TAG_HOVER

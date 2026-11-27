@@ -109,7 +109,7 @@ def load_export_records(
 
 
 @dataclass
-class ExportColumn:
+class ExportField:
     """`key` identifies the column across rebuilds; `name` is the CSV header or
     RIS tag. A RIS N1 line starts with `note_name`."""
 
@@ -121,83 +121,83 @@ class ExportColumn:
 
 
 @dataclass
-class ScalarColumn(ExportColumn):
+class ScalarField(ExportField):
     field: str
 
 
 @dataclass
-class JoinedColumn(ScalarColumn):
+class JoinedField(ScalarField):
     delimiter: str = DISPLAY_SEPARATOR
 
 
 @dataclass
-class DateColumn(ExportColumn):
+class DateField(ExportField):
     part: DatePart = "full"
 
 
 @dataclass
-class PagesColumn(ExportColumn):
+class PagesField(ExportField):
     part: PagesPart = "start"
 
 
 @dataclass
-class RisTypeColumn(ExportColumn):
+class RisTypeField(ExportField):
     pass
 
 
 @dataclass
-class KeywordsColumn(ExportColumn):
+class KeywordsField(ExportField):
     prefix: str | None = None
     delimiter: str = DISPLAY_SEPARATOR
 
 
 @dataclass
-class AuthorIdKeyColumn(ExportColumn):
+class AuthorIdKeyField(ExportField):
     id_key: str = ""
     delimiter: str = DISPLAY_SEPARATOR
 
 
 @dataclass
-class OtherIdColumn(ExportColumn):
+class OtherIdField(ExportField):
     id_key: str = ""
 
 
 @dataclass
-class LabelColumn(ExportColumn):
+class LabelField(ExportField):
     phase: str = ""
     screener: str = ""
 
 
 @dataclass
-class ExtraColumn(ExportColumn):
+class ExtraField(ExportField):
     type: ExtraType = "record_id"
 
 
 @dataclass
-class RawColumn(ExportColumn):
+class RawField(ExportField):
     raw_key: str = ""
 
 
-def _scalar(field_name: str) -> ScalarColumn:
+def _scalar(field_name: str) -> ScalarField:
     label = _SCALAR_LABELS[field_name]
-    return ScalarColumn(key=field_name, label=label, name=label, field=field_name)
+    return ScalarField(key=field_name, label=label, name=label, field=field_name)
 
 
-def _joined(field_name: str) -> JoinedColumn:
+def _joined(field_name: str) -> JoinedField:
     label = _SCALAR_LABELS[field_name]
-    return JoinedColumn(key=field_name, label=label, name=label, field=field_name)
+    return JoinedField(key=field_name, label=label, name=label, field=field_name)
 
 
-def _keywords(prefix: str | None) -> KeywordsColumn:
+def _keywords(prefix: str | None) -> KeywordsField:
     label = "Keywords" if prefix is None else f"Keywords: {prefix}"
-    return KeywordsColumn(
+    return KeywordsField(
         key=f"keywords:{prefix}", label=label, name=label, prefix=prefix
     )
 
 
-def _author_id_key(id_key: str, taken: set[str]) -> AuthorIdKeyColumn:
+def _author_id_key(id_key: str, taken: set[str]) -> AuthorIdKeyField:
     name = id_key + _AUTHOR_IDS_SUFFIX if id_key.casefold() in taken else id_key
-    return AuthorIdKeyColumn(
+    return AuthorIdKeyField(
         key=f"author_ids:{id_key}",
         label=f"Author IDs: {id_key}",
         name=name,
@@ -205,15 +205,15 @@ def _author_id_key(id_key: str, taken: set[str]) -> AuthorIdKeyColumn:
     )
 
 
-def _other_id(id_key: str) -> OtherIdColumn:
-    return OtherIdColumn(
+def _other_id(id_key: str) -> OtherIdField:
+    return OtherIdField(
         key=f"other_id:{id_key}", label=id_key, name=id_key, id_key=id_key
     )
 
 
-def _label(phase: str, screener: str) -> LabelColumn:
+def _label(phase: str, screener: str) -> LabelField:
     label = f"Label: {phase} / {screener}"
-    return LabelColumn(
+    return LabelField(
         key=f"label:{phase}\x00{screener}",
         label=label,
         name=label,
@@ -229,31 +229,31 @@ def _year_only(date: str) -> bool:
     return _PLAIN_YEAR.fullmatch(date) is not None
 
 
-def _date(schemas: Sequence[Record]) -> DateColumn:
+def _date(schemas: Sequence[Record]) -> DateField:
     """Suggests the year when every dated record has nothing more than a year."""
     dates = [schema.publication_date for schema in schemas if schema.publication_date]
     if dates and all(map(_year_only, dates)):
-        return DateColumn(
+        return DateField(
             key="date", label="Publication date", name="Publication year", part="year"
         )
-    return DateColumn(key="date", label="Publication date", name="Publication date")
+    return DateField(key="date", label="Publication date", name="Publication date")
 
 
-def _extra(type: ExtraType) -> ExtraColumn:
+def _extra(type: ExtraType) -> ExtraField:
     label = _EXTRA_LABELS[type]
-    return ExtraColumn(key=type, label=label, name=label, type=type)
+    return ExtraField(key=type, label=label, name=label, type=type)
 
 
-def _raw(raw_key: str, taken: set[str]) -> RawColumn:
+def _raw(raw_key: str, taken: set[str]) -> RawField:
     name = raw_key + _ORIGINAL_SUFFIX if raw_key.casefold() in taken else raw_key
-    return RawColumn(
+    return RawField(
         key=f"raw:{raw_key}", label=f"Original: {raw_key}", name=name, raw_key=raw_key
     )
 
 
-def export_columns(
+def export_fields(
     records: Sequence[ExportRecord], options: ExportOptions
-) -> list[ExportColumn]:
+) -> list[ExportField]:
     schemas = [export.record for export in records]
     prefixes = dict.fromkeys(
         prefix for schema in schemas for prefix in schema.keywords if prefix
@@ -266,7 +266,7 @@ def export_columns(
         (label.phase, label.screener) for schema in schemas for label in schema.labels
     )
 
-    columns: list[ExportColumn] = [
+    columns: list[ExportField] = [
         _extra("record_id"),
         _scalar("title"),
         _joined("author_names"),
@@ -306,58 +306,58 @@ def export_columns(
     taken = {column.name.casefold() for column in columns}
     columns.extend(_raw(key, taken) for key in raw_keys)
     if options.file_type == "ris":
-        columns = _ris_columns(columns, options)
+        columns = _ris_fields(columns, options)
     if options.empty_columns:
         return columns
     return [column for column in columns if fill_count(column, records, options)]
 
 
-def default_note_name(column: ExportColumn) -> str:
-    return column.raw_key if isinstance(column, RawColumn) else column.label
+def default_note_name(column: ExportField) -> str:
+    return column.raw_key if isinstance(column, RawField) else column.label
 
 
-def _ris_column(column: ExportColumn) -> ExportColumn:
+def _ris_field(column: ExportField) -> ExportField:
     """A row without a tag of its own goes to N1, its line starting with its name."""
-    if isinstance(column, KeywordsColumn):
+    if isinstance(column, KeywordsField):
         return replace(column, name=KEYWORD_TAG)
     if column.key in RIS_FIELD_TO_TAG:
         return replace(column, name=RIS_FIELD_TO_TAG[column.key])
     note_name = default_note_name(column)
-    if isinstance(column, RawColumn):
+    if isinstance(column, RawField):
         if TAG_PATTERN.fullmatch(column.raw_key):
             return replace(column, name=column.raw_key)
         return replace(column, name=NOTE_TAG, note_name=note_name)
     checked = not (
-        isinstance(column, AuthorIdKeyColumn) or column.key in _UNCHECKED_IN_RIS
+        isinstance(column, AuthorIdKeyField) or column.key in _UNCHECKED_IN_RIS
     )
     return replace(column, name=NOTE_TAG, note_name=note_name, default_checked=checked)
 
 
-def _ris_columns(
-    columns: Sequence[ExportColumn], options: ExportOptions
-) -> list[ExportColumn]:
+def _ris_fields(
+    columns: Sequence[ExportField], options: ExportOptions
+) -> list[ExportField]:
     """TY comes first; the date becomes a PY and a DA row, and pages an SP and an
     EP row when split."""
-    result: list[ExportColumn] = [
-        RisTypeColumn(key="publication_type", label="Publication type", name="TY")
+    result: list[ExportField] = [
+        RisTypeField(key="publication_type", label="Publication type", name="TY")
     ]
     for column in columns:
         if column.key == "publication_type":
             continue
-        if isinstance(column, DateColumn):
+        if isinstance(column, DateField):
             result += [
-                DateColumn(
+                DateField(
                     key="date:year", label="Publication year", name="PY", part="year"
                 ),
-                DateColumn(key="date", label="Publication date", name="DA", part="ris"),
+                DateField(key="date", label="Publication date", name="DA", part="ris"),
             ]
         elif column.key == "pages" and options.split_pages:
             result += [
-                PagesColumn(key="pages:start", label="Start page", name="SP"),
-                PagesColumn(key="pages:end", label="End page", name="EP", part="end"),
+                PagesField(key="pages:start", label="Start page", name="SP"),
+                PagesField(key="pages:end", label="End page", name="EP", part="end"),
             ]
         else:
-            result.append(_ris_column(column))
+            result.append(_ris_field(column))
     return result
 
 
@@ -399,17 +399,17 @@ def _joined_distinct(values: Sequence[str]) -> str:
     return DISPLAY_SEPARATOR.join(dict.fromkeys(value for value in values if value))
 
 
-def _keyword_texts(column: KeywordsColumn, record: Record) -> list[str]:
+def _keyword_texts(column: KeywordsField, record: Record) -> list[str]:
     return record.keywords.get(column.prefix or "", [])
 
 
-def _joined_values(column: JoinedColumn, record: Record) -> list[str]:
+def _joined_values(column: JoinedField, record: Record) -> list[str]:
     values: list[str] = getattr(record, column.field)
     return values
 
 
 def _label_texts(
-    column: LabelColumn, record: Record, options: ExportOptions
+    column: LabelField, record: Record, options: ExportOptions
 ) -> list[str]:
     texts = (
         label_text(label.value, options.label_format)
@@ -419,53 +419,53 @@ def _label_texts(
     return [text for text in texts if text]
 
 
-def column_values(
-    column: ExportColumn, export: ExportRecord, options: ExportOptions
+def field_values(
+    column: ExportField, export: ExportRecord, options: ExportOptions
 ) -> list[str]:
     """The separate non-empty values, for one RIS line each."""
     record = export.record
     values: list[str]
-    if isinstance(column, JoinedColumn):
+    if isinstance(column, JoinedField):
         values = _joined_values(column, record)
-    elif isinstance(column, KeywordsColumn):
+    elif isinstance(column, KeywordsField):
         values = _keyword_texts(column, record)
-    elif isinstance(column, AuthorIdKeyColumn):
+    elif isinstance(column, AuthorIdKeyField):
         values = ids_of_key(record.author_ids, column.id_key)
-    elif isinstance(column, LabelColumn):
+    elif isinstance(column, LabelField):
         values = _label_texts(column, record, options)
-    elif isinstance(column, ScalarColumn) and column.field == "notes":
+    elif isinstance(column, ScalarField) and column.field == "notes":
         # Repeated RIS N1 lines are stored as one value, a line each.
         values = (record.notes or "").splitlines()
     else:
-        values = [column_value(column, export, options)]
+        values = [field_value(column, export, options)]
     return [value for value in values if value]
 
 
-def column_value(
-    column: ExportColumn, export: ExportRecord, options: ExportOptions
+def field_value(
+    column: ExportField, export: ExportRecord, options: ExportOptions
 ) -> str:
     record = export.record
-    if isinstance(column, JoinedColumn):
+    if isinstance(column, JoinedField):
         return column.delimiter.join(_joined_values(column, record))
-    if isinstance(column, ScalarColumn):
+    if isinstance(column, ScalarField):
         value = getattr(record, column.field)
         return "" if value is None else str(value)
-    if isinstance(column, DateColumn):
+    if isinstance(column, DateField):
         return _date_text(record, column.part, options)
-    if isinstance(column, PagesColumn):
+    if isinstance(column, PagesField):
         start, _, end = (record.pages or "").partition(_PAGE_DASH)
         return (start if column.part == "start" else end).strip()
-    if isinstance(column, RisTypeColumn):
+    if isinstance(column, RisTypeField):
         return ris_type(record.publication_type)
-    if isinstance(column, KeywordsColumn):
+    if isinstance(column, KeywordsField):
         return column.delimiter.join(_keyword_texts(column, record))
-    if isinstance(column, AuthorIdKeyColumn):
+    if isinstance(column, AuthorIdKeyField):
         return column.delimiter.join(ids_of_key(record.author_ids, column.id_key))
-    if isinstance(column, OtherIdColumn):
+    if isinstance(column, OtherIdField):
         return record.other_ids.get(column.id_key, "")
-    if isinstance(column, LabelColumn):
+    if isinstance(column, LabelField):
         return DISPLAY_SEPARATOR.join(_label_texts(column, record, options))
-    if isinstance(column, ExtraColumn):
+    if isinstance(column, ExtraField):
         if column.type == "record_id":
             return str(export.id)
         if column.type == "sources":
@@ -477,7 +477,7 @@ def column_value(
                 )
             )
         return _joined_distinct([source.filename for source in export.sources])
-    if isinstance(column, RawColumn):
+    if isinstance(column, RawField):
         return _joined_distinct(
             [source.raw_fields.get(column.raw_key, "") for source in export.sources]
         )
@@ -485,13 +485,13 @@ def column_value(
 
 
 def fill_count(
-    column: ExportColumn, records: Sequence[ExportRecord], options: ExportOptions
+    column: ExportField, records: Sequence[ExportRecord], options: ExportOptions
 ) -> int:
-    return sum(bool(column_value(column, export, options)) for export in records)
+    return sum(bool(field_value(column, export, options)) for export in records)
 
 
 def example(
-    column: ExportColumn, records: Sequence[ExportRecord], options: ExportOptions
+    column: ExportField, records: Sequence[ExportRecord], options: ExportOptions
 ) -> str:
-    values = (column_value(column, export, options) for export in records)
+    values = (field_value(column, export, options) for export in records)
     return next((value for value in values if value), "")

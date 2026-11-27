@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from app.gui.cleaning.steps import PUBLICATION_TYPES
-from app.gui.export.columns import ExportRecord, export_columns
+from app.gui.export.fields import ExportRecord, export_fields
 from app.gui.export.options import ExportOptions
 from app.gui.export.ris import write_ris
 from app.gui.export.ris_tags import (
@@ -100,7 +100,7 @@ def _write(
 ) -> str:
     columns = [
         column
-        for column in export_columns(_RECORDS, options)
+        for column in export_fields(_RECORDS, options)
         if keys is None or column.key in keys
     ]
     path = tmp_path / "library.ris"
@@ -162,7 +162,7 @@ def test_write_ris__year_and_date(tmp_path: Path) -> None:
 
 
 def test_write_ris__note_name_prefixes_n1_lines(tmp_path: Path) -> None:
-    columns = export_columns(_RECORDS, _RIS)
+    columns = export_fields(_RECORDS, _RIS)
     eid = next(c for c in columns if c.key == "other_id:eid")
     path = tmp_path / "library.ris"
 
@@ -177,7 +177,7 @@ def test_write_ris__note_name_prefixes_n1_lines(tmp_path: Path) -> None:
 
 def test_write_ris__one_n1_line_per_notes_line(tmp_path: Path) -> None:
     record = ExportRecord(id=1, record=Record(notes="Export Date: 1\nCited By: 4"))
-    columns = [c for c in export_columns([record], _RIS) if c.key == "notes"]
+    columns = [c for c in export_fields([record], _RIS) if c.key == "notes"]
     path = tmp_path / "library.ris"
 
     write_ris(path, columns, [record], _RIS)
@@ -197,7 +197,7 @@ def test_write_ris__round_trips_through_the_ris_importer(tmp_path: Path) -> None
     records = [ExportRecord(id=i, record=r) for i, r in enumerate(imported, 1)]
     path = tmp_path / "library.ris"
 
-    write_ris(path, export_columns(records, _RIS), records, _RIS)
+    write_ris(path, export_fields(records, _RIS), records, _RIS)
     mapping = suggest_ris_mapping(list(read_ris_tags(path).filled))
     result = parse_ris_file(path, mapping)
 

@@ -8,8 +8,8 @@ from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE, Cell
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet._write_only import WriteOnlyWorksheet
 
-from app.gui.export.columns import ExportColumn, ExportRecord, column_value
 from app.gui.export.csv import line_breaks
+from app.gui.export.fields import ExportField, ExportRecord, field_value
 from app.gui.export.options import ExportOptions
 
 _SHEET_NAME = "Records"
@@ -34,7 +34,7 @@ def _cell(sheet: WriteOnlyWorksheet, value: str) -> Cell | int | None:
 
 def write_excel(
     path: Path,
-    columns: Sequence[ExportColumn],
+    columns: Sequence[ExportField],
     records: Sequence[ExportRecord],
     options: ExportOptions,
 ) -> tuple[int, int]:
@@ -52,7 +52,7 @@ def write_excel(
     for record in records:
         row: list[Cell | int | None] = []
         for column in columns:
-            value = line_breaks(column_value(column, record, options), options)
+            value = line_breaks(field_value(column, record, options), options)
             if len(value) > options.excel_max_length:
                 value = value[: options.excel_max_length]
                 cut += 1

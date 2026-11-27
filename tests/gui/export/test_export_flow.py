@@ -8,13 +8,13 @@ from nicegui.element import Element
 from nicegui.elements.tooltip import Tooltip
 
 from app.gui.export import export_flow
-from app.gui.export.columns import (
-    ExportColumn,
+from app.gui.export.export_flow import ExportView, pick_save_path, render_export_view
+from app.gui.export.fields import (
+    ExportField,
     ExportRecord,
     ExportSource,
-    RisTypeColumn,
+    RisTypeField,
 )
-from app.gui.export.export_flow import ExportView, pick_save_path, render_export_view
 from app.gui.export.options import ExportOptions
 from app.gui.general.layout import shell
 from app.models.record import Record
@@ -409,7 +409,7 @@ def test_export_view__export_disabled_without_records() -> None:
 def test_export_view__export_passes_path_columns_records_and_options(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    calls: list[tuple[Path, list[ExportColumn], list[ExportRecord], ExportOptions]] = []
+    calls: list[tuple[Path, list[ExportField], list[ExportRecord], ExportOptions]] = []
     view = _view(on_export=lambda *args: calls.append(args))
     view.path = tmp_path / "library.csv"
     view._refresh_export_button()
@@ -435,7 +435,7 @@ def test_export_view__all_columns_checked_by_default() -> None:
 def test_export_view__unchecked_column_greyed_and_left_out_of_export(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[tuple[Path, list[ExportColumn], list[ExportRecord], ExportOptions]] = []
+    calls: list[tuple[Path, list[ExportField], list[ExportRecord], ExportOptions]] = []
     view = _view(on_export=lambda *args: calls.append(args))
     row = _row(view, "title")
 
@@ -519,7 +519,7 @@ def test_export_view__ris_type_row_first_fixed_and_locked() -> None:
     view = _ris_view()
 
     row = view.rows[0]
-    assert isinstance(row.column, RisTypeColumn)
+    assert isinstance(row.column, RisTypeField)
     assert row.name is None
     assert row.checkbox.value is True
     assert row.checkbox.enabled is False
