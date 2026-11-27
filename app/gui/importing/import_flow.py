@@ -8,6 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.db.general import store_parsed_rows
 from app.db.models import SourceFile
+from app.gui.importing.options import (
+    ImportOptions,
+    default_options,
+    dump_options,
+    import_boxes,
+    profile_with,
+)
 from app.gui.other.activity_log import log_import
 from app.helpers.busy import run_busy
 from app.helpers.format import GRID_CLASSES, GRID_COLUMNS
@@ -52,13 +59,6 @@ from app.parsers.nbib import (
 )
 from app.parsers.parse_settings import ParseSettings
 from app.parsers.profiles import FormatProfile, source_label, sources_label
-from app.parsers.profiles.overview import (
-    ParsingChoices,
-    default_choices,
-    dump_choices,
-    option_boxes,
-    profile_with,
-)
 from app.parsers.ris import (
     parse_ris_file,
     read_ris_tags,
@@ -226,7 +226,7 @@ def import_file(
     summary: FileSummary,
     sources: Collection[str] = (),
     sheet: str | None = None,
-    choices: ParsingChoices | None = None,
+    choices: ImportOptions | None = None,
 ) -> SourceFile:
     profile = profile_with(file_type, sources, choices)
     result = _TYPES[file_type].parse_file(path, mapping, sheet, profile.settings)
@@ -245,8 +245,8 @@ def import_file(
         file_type, sources, summary
     ).model_dump()
     source_file.file_summary = asdict(summary)
-    source_file.option_choices = dump_choices(
-        choices or default_choices(file_type, sources)
+    source_file.option_choices = dump_options(
+        choices or default_options(file_type, sources)
     )
     log_import(session, source_file)
     return source_file
@@ -259,7 +259,7 @@ OnImport = Callable[
         FieldMapping,
         tuple[str, ...],
         str | None,
-        ParsingChoices,
+        ImportOptions,
         bool,
     ],
     Awaitable[None] | None,
@@ -279,7 +279,7 @@ class ImportView:
     sheet: str | None = None
     view: str | None = VIEW_MAPPING
     mapping_screen: MappingScreen | None = None
-    options_screen: OptionsScreen[ParsingChoices] | None = None
+    options_screen: OptionsScreen[ImportOptions] | None = None
     views: MappingParsingViews | None = None
     import_button: ui.button | None = None
     import_clean_button: ui.button | None = None
@@ -396,8 +396,8 @@ class ImportView:
     ) -> None:
         options_screen = render_options_overview(
             views.parsing,
-            option_boxes(file_type, type_label(file_type)),
-            default_choices(file_type, self.sources),
+            import_boxes(file_type, type_label(file_type)),
+            default_options(file_type, self.sources),
             current_mapping=self._current_mapping,
         )
         mapping_screen = render_mapping(

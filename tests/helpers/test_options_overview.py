@@ -3,34 +3,34 @@ from nicegui.element import Element
 from pydantic import BaseModel, Field
 
 from app.gui.general.layout import shell
+from app.gui.importing.options import (
+    ImportOptions,
+    default_options,
+    import_boxes,
+)
 from app.helpers.options_overview import (
+    OptionBox,
+    OptionItem,
     OptionsScreen,
     render_options_overview,
     render_view_toggle,
 )
 from app.parsers.common import FileType
 from app.parsers.mapping import FieldMapping
-from app.parsers.profiles.overview import (
-    OptionBox,
-    OptionItem,
-    ParsingChoices,
-    default_choices,
-    option_boxes,
-)
 from tests.mappings import mapping_of
 
 
 def _render(
     file_type: FileType = "csv",
     sources: tuple[str, ...] = (),
-    chosen: ParsingChoices | None = None,
+    chosen: ImportOptions | None = None,
     mapping: FieldMapping | None = None,
     middle: Element | None = None,
 ) -> OptionsScreen:
     return render_options_overview(
         middle or shell().middle,
-        option_boxes(file_type, file_type.upper()),
-        default_choices(file_type, sources),
+        import_boxes(file_type, file_type.upper()),
+        default_options(file_type, sources),
         chosen,
         (lambda: mapping) if mapping is not None else None,
     )
@@ -63,7 +63,7 @@ def _buttons(middle: Element, icon: str) -> list[ui.button]:
 def test_render_options_overview__defaults_give_the_profile_defaults() -> None:
     screen = _render(sources=("scopus",))
 
-    assert screen.current_choices() == default_choices("csv", ("scopus",))
+    assert screen.current_choices() == default_options("csv", ("scopus",))
 
 
 def test_render_options_overview__boxes_in_order_with_title_in_the_border() -> None:
@@ -193,7 +193,7 @@ def test_render_options_overview__restore_defaults_resets_every_choice() -> None
 
     screen.restore_defaults()
 
-    assert screen.current_choices() == default_choices("csv", ("scopus",))
+    assert screen.current_choices() == default_options("csv", ("scopus",))
     assert "bg-color" not in screen.widgets["label_maybe"].props
     assert len(screen.order_rows) == 1
 
@@ -202,7 +202,7 @@ def test_render_options_overview__restore_defaults_button_only_when_editable() -
     editable = shell().middle
     _render(middle=editable)
     readonly = shell().middle
-    _render(chosen=default_choices("csv", ()), middle=readonly)
+    _render(chosen=default_options("csv", ()), middle=readonly)
 
     def texts(middle: Element) -> list[str]:
         return [e.text for e in middle.descendants() if isinstance(e, ui.button)]
@@ -212,7 +212,7 @@ def test_render_options_overview__restore_defaults_button_only_when_editable() -
 
 
 def test_render_options_overview__chosen_is_read_only_and_shows_stored_values() -> None:
-    chosen = default_choices("csv", ()).model_copy(
+    chosen = default_options("csv", ()).model_copy(
         update={"label_maybe": "?!", "use_first": ["TT"]}
     )
 

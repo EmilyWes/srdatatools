@@ -17,7 +17,7 @@ from app.gui.export.options import (
     save_folder,
     save_options,
 )
-from app.parsers.profiles.overview import OptionItem
+from app.helpers.options_overview import OptionItem
 
 
 @pytest.fixture

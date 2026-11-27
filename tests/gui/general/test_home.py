@@ -17,11 +17,11 @@ from app.gui.general.home import home
 from app.gui.general.layout import ShellPanes
 from app.gui.general.left_panel import LeftPanel
 from app.gui.general.right_panel import RightPanel
+from app.gui.importing.options import default_options
 from app.gui.library.dashboard import save_hidden
 from app.gui.library.record_table import load_columns
 from app.helpers.format import author_id_key
 from app.parsers.common import FileSummary
-from app.parsers.profiles.overview import default_choices
 from tests.gui.clicks import click_and_wait
 from tests.mappings import mapping_of
 
@@ -260,7 +260,7 @@ def test_home__import_stores_given_summary_and_selects_new_file(
                 mapping_of({"Title": "title"}),
                 (),
                 None,
-                default_choices("csv", ()),
+                default_options("csv", ()),
                 False,
             )
 
@@ -303,7 +303,7 @@ def test_home__import_and_clean_cleans_only_the_imported_records(
                 mapping_of({"Pages": "pages"}),
                 (),
                 None,
-                default_choices("csv", ()),
+                default_options("csv", ()),
                 True,
             )
 
@@ -348,7 +348,7 @@ def test_home__multi_file_import_stores_each_file_and_selects_dashboard(
                 mapping_of({"Title": "title"}),
                 (),
                 None,
-                default_choices("csv", ()),
+                default_options("csv", ()),
                 False,
             )
 
@@ -590,7 +590,7 @@ def test_home__failing_file_is_logged_and_notified_without_undoing_others(
                 mapping_of({"Title": "title"}),
                 (),
                 None,
-                default_choices("csv", ()),
+                default_options("csv", ()),
                 False,
             )
 

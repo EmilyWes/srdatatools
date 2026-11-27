@@ -106,7 +106,6 @@ app/
     profiles/        # per-database tag/column mappings + parse settings
       base.py        # Profile/FormatProfile types
       default.py     # default profile per Type, used when Source is Unknown
-      overview.py    # Parsing view boxes per Type + applying the Parsing choices; box types shared with Cleaning
       asreview.py
       openalex.py
       pubmed.py
@@ -134,6 +133,7 @@ app/
       left_panel.py  # left panel navigation
     importing/
       import_flow.py # import view in the middle panel + the per-Type parser wiring it imports with
+      options.py     # import options (stored with the source file) + their boxes per Type, applied to the profile
     cleaning/
       cleaning_flow.py # cleaning view in the middle panel
       steps.py       # cleaning steps and the order they run in, per record
@@ -160,7 +160,7 @@ app/
       about.py       # About view (version, license, third-party licenses) and Help view
       activity_log.py # plain-language activity_log messages (for every module that acts)
   helpers/
-    options_overview.py # subject boxes (Parsing and Cleaning views) + the Mapping | Parsing toggle, for the import, source-file, cleaning and export views
+    options_overview.py # box types + subject boxes (Parsing and Cleaning views) + the Mapping | Parsing toggle, for the import, source-file, cleaning and export views
     mapping_table.py # field-mapping table (CSV columns, RIS/NBIB tags, BibTeX fields)
     busy.py          # runs slow work off the event loop, with a spinner dialog if it takes a while
     format.py        # shared count/source formatting and label/keyword setting keys

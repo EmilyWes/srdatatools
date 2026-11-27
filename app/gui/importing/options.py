@@ -1,17 +1,16 @@
 import logging
 from collections.abc import Collection
-from dataclasses import dataclass, replace
-from typing import Any, Literal
+from dataclasses import replace
+from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from app.helpers.options_overview import OptionBox, OptionItem, OptionList
 from app.models.record import LabelValue
 from app.parsers.common import FileType
 from app.parsers.profiles import FormatProfile, profile_for
 
 logger = logging.getLogger(__name__)
-
-Control = Literal["checkbox", "text", "number", "select", "note"]
 
 _FIELD_SIZE_TYPES: frozenset[FileType] = frozenset({"csv", "tsv"})
 _LABEL_VALUES_SEPARATOR = ";"
@@ -23,39 +22,13 @@ _LABEL_KEYS: dict[str, LabelValue] = {
 }
 
 
-class ParsingChoices(BaseModel):
+class ImportOptions(BaseModel):
     label_include: str
     label_exclude: str
     label_maybe: str
     label_unlabeled: str
     use_first: list[str]
     field_size_limit: int
-
-
-@dataclass(frozen=True)
-class OptionItem:
-    key: str
-    label: str
-    hover: str
-    control: Control
-    enabled_by: str | None = None
-    disabled_by: str | None = None
-    wide: bool = False
-    choices: dict[str, str] | None = None
-
-
-@dataclass(frozen=True)
-class OptionList:
-    """Repeating entries; the GUI supplies the select's options."""
-
-    key: Literal["empty_values", "use_first"]
-    parts: tuple[OptionItem, ...]
-
-
-@dataclass(frozen=True)
-class OptionBox:
-    title: str
-    items: tuple[OptionItem | OptionList, ...]
 
 
 _LABELING = OptionBox(
@@ -133,7 +106,7 @@ def _type_items(file_type: FileType) -> tuple[OptionItem, ...]:
     return tuple(items)
 
 
-def option_boxes(file_type: FileType, type_label: str) -> list[OptionBox]:
+def import_boxes(file_type: FileType, type_label: str) -> list[OptionBox]:
     """A Type with nothing of its own gets no box."""
     type_items = _type_items(file_type)
     type_box = [OptionBox(type_label, type_items)] if type_items else []
@@ -147,10 +120,10 @@ def _profile(file_type: FileType, sources: Collection[str]) -> FormatProfile:
     return profile
 
 
-def default_choices(file_type: FileType, sources: Collection[str]) -> ParsingChoices:
+def default_options(file_type: FileType, sources: Collection[str]) -> ImportOptions:
     profile = _profile(file_type, sources)
     settings = profile.settings
-    return ParsingChoices(
+    return ImportOptions(
         **{
             key: f"{_LABEL_VALUES_SEPARATOR} ".join(
                 value for value, label in settings.label_values if label == decision
@@ -162,7 +135,7 @@ def default_choices(file_type: FileType, sources: Collection[str]) -> ParsingCho
     )
 
 
-def _label_values(choices: ParsingChoices) -> tuple[tuple[str, LabelValue], ...]:
+def _label_values(choices: ImportOptions) -> tuple[tuple[str, LabelValue], ...]:
     pairs: list[tuple[str, LabelValue]] = []
     for key, decision in _LABEL_KEYS.items():
         for value in getattr(choices, key).split(_LABEL_VALUES_SEPARATOR):
@@ -174,7 +147,7 @@ def _label_values(choices: ParsingChoices) -> tuple[tuple[str, LabelValue], ...]
 def profile_with(
     file_type: FileType,
     sources: Collection[str],
-    choices: ParsingChoices | None = None,
+    choices: ImportOptions | None = None,
 ) -> FormatProfile:
     """The sources' profile with the choices applied; None keeps its defaults."""
     profile = _profile(file_type, sources)
@@ -189,19 +162,19 @@ def profile_with(
     return replace(profile, settings=settings)
 
 
-def dump_choices(choices: ParsingChoices) -> dict[str, Any]:
+def dump_options(choices: ImportOptions) -> dict[str, Any]:
     return choices.model_dump(mode="json")
 
 
-def load_choices(
+def load_options(
     data: dict[str, Any], file_type: FileType, sources: Collection[str]
-) -> ParsingChoices:
+) -> ImportOptions:
     """Unknown keys are dropped and missing ones keep the profile's defaults."""
-    defaults = default_choices(file_type, sources)
-    fields = ParsingChoices.model_fields
+    defaults = default_options(file_type, sources)
+    fields = ImportOptions.model_fields
     known = {key: value for key, value in data.items() if key in fields}
     try:
-        return ParsingChoices.model_validate({**defaults.model_dump(), **known})
+        return ImportOptions.model_validate({**defaults.model_dump(), **known})
     except ValidationError:
         logger.warning("Stored parsing choices %r don't fit; using defaults", data)
         return defaults

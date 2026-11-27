@@ -38,6 +38,7 @@ from app.gui.general.layout import shell
 from app.gui.general.left_panel import LeftPanel, render_left_panel
 from app.gui.general.right_panel import render_right_panel
 from app.gui.importing.import_flow import import_file, render_import_view
+from app.gui.importing.options import ImportOptions
 from app.gui.library.dashboard import (
     COMPLETENESS_FIELDS,
     dashboard_items,
@@ -85,7 +86,6 @@ from app.helpers.busy import run_busy
 from app.helpers.format import format_count
 from app.parsers.common import FileSummary, FileType
 from app.parsers.mapping import FieldMapping
-from app.parsers.profiles.overview import ParsingChoices
 
 logger = logging.getLogger(__name__)
 
@@ -296,7 +296,7 @@ def home() -> None:
         mapping: FieldMapping,
         sources: tuple[str, ...],
         sheet: str | None,
-        choices: ParsingChoices,
+        choices: ImportOptions,
         clean: bool,
     ) -> None:
         def store() -> tuple[list[int], list[tuple[str, str]]]:

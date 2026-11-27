@@ -13,7 +13,7 @@ from app.gui.cleaning.options import (
     reset_options,
     save_options,
 )
-from app.parsers.profiles.overview import OptionItem
+from app.helpers.options_overview import OptionItem
 
 
 @pytest.fixture

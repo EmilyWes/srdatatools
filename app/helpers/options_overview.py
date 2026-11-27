@@ -2,18 +2,42 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 from nicegui import ui
 from nicegui.element import Element
 from pydantic import BaseModel
 
 from app.parsers.mapping import FieldMapping
-from app.parsers.profiles.overview import (
-    OptionBox,
-    OptionItem,
-    OptionList,
-)
+
+Control = Literal["checkbox", "text", "number", "select", "note"]
+
+
+@dataclass(frozen=True)
+class OptionItem:
+    key: str
+    label: str
+    hover: str
+    control: Control
+    enabled_by: str | None = None
+    disabled_by: str | None = None
+    wide: bool = False
+    choices: dict[str, str] | None = None
+
+
+@dataclass(frozen=True)
+class OptionList:
+    """Repeating entries; the GUI supplies the select's options."""
+
+    key: Literal["empty_values", "use_first"]
+    parts: tuple[OptionItem, ...]
+
+
+@dataclass(frozen=True)
+class OptionBox:
+    title: str
+    items: tuple[OptionItem | OptionList, ...]
+
 
 _CHANGED_BG_COLOR = "blue-2"
 _CHANGED_CHECKBOX_COLOR = "blue"

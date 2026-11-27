@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.settings import get_setting, set_setting
 from app.helpers.format import LabelFormat
-from app.parsers.profiles.overview import OptionBox, OptionItem
+from app.helpers.options_overview import OptionBox, OptionItem
 
 _OPTIONS_KEY = "export_options"
 _FOLDER_KEY = "export_folder"
