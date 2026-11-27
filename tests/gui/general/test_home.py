@@ -729,7 +729,7 @@ def test_home__export_options_are_remembered(
     home()
     click_and_wait(_export_button(shells[-1]), monkeypatch)
 
-    views[-1].option_widgets["delimiter"].value = ";"
+    views[-1].screen.widgets["delimiter"].value = ";"
     click_and_wait(_export_button(shells[-1]), monkeypatch)
 
     assert views[-1].options.delimiter == ";"
@@ -741,7 +741,7 @@ def test_home__export_with_cut_values_warns(
     _add_source_file_with_record(engine)
     notifications = _capture_notifications(monkeypatch)
     [view] = _open_export(monkeypatch)
-    view.option_widgets["max_length"].value = 3
+    view.screen.widgets["max_length"].value = 3
     view.path = tmp_path / "library.csv"
     view._refresh_export_button()
 
@@ -762,7 +762,7 @@ def test_home__export_writes_excel_and_warns_about_cuts(
     [view] = _open_export(monkeypatch)
     assert view.file_type_select is not None
     view.file_type_select.value = "xlsx"
-    view.option_widgets["excel_max_length"].value = 3
+    view.screen.widgets["excel_max_length"].value = 3
     view.path = tmp_path / "library.xlsx"
     view._refresh_export_button()
 

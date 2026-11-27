@@ -21,7 +21,12 @@ from app.gui.export.fields import (
     export_fields,
     fill_count,
 )
-from app.gui.export.options import ExportFileType, ExportOptions, default_path
+from app.gui.export.options import (
+    ExportFileType,
+    ExportOptions,
+    default_path,
+    export_boxes,
+)
 from app.gui.export.ris_tags import (
     CURATED_TAGS,
     NOTE_TAG,
@@ -37,9 +42,8 @@ from app.gui.importing.import_flow import (
 from app.helpers.format import GRID_CLASSES, GRID_COLUMNS, format_count
 from app.helpers.mapping_table import ROW_FIELD_CSS, fill_color
 from app.helpers.options_overview import (
-    FIELD_CSS,
-    render_box_frame,
-    render_boxes_row,
+    OptionsScreen,
+    render_options_overview,
     render_view_toggle,
 )
 
@@ -55,7 +59,6 @@ _FILE_TYPES: dict[ExportFileType, str] = {
     "ris": "RIS files (*.ris)",
 }
 _TYPE_OPTIONS = {"csv": "CSV", "tsv": "TSV", "xlsx": "Excel", "ris": "RIS"}
-_EXCEL_MAX_LENGTH = 32_767
 _NO_RECORDS = "no records to export"
 _NO_COLUMNS = "no columns selected"
 _INVALID_TAGS = "invalid tag for: "
@@ -64,23 +67,12 @@ _UNCHECKED_CLASS = "opacity-50"
 _EMPTY_NAME_COLOR = "red-2"
 _SHARED_TAG_COLOR = "amber-2"
 _CHANGED_COLOR = "blue-2"
-_CHANGED_CHECKBOX_COLOR = "blue"
 _OPTION_ROW_CLASSES = "w-full no-wrap items-center gap-1"
 _OPTION_LABEL_CLASSES = "w-10 shrink-0 text-xs text-grey-7"
 _NAME_WIDTH = "width: 24ch"
 _FIELD_WIDTH = "width: 20ch"
-_BOX_FIELD_CLASSES = "option-field text-xs"
-_BOX_FIELD_WIDTH = "w-[6.5rem]"
-_WIDE_BOX_FIELD_WIDTH = "w-[9rem]"
-# Controls sit at the right edge of the (equally wide) boxes.
-_BOX_GRID_STYLE = "grid-template-columns: max-content 1fr"
 
 _DATE_PARTS = {"full": "Full date", "year": "Year", "month": "Month", "day": "Day"}
-
-_DELIMITERS = {",": "Comma", ";": "Semicolon", "\t": "Tab"}
-_ENCODINGS = {"utf-8-sig": "UTF-8 with BOM", "utf-8": "UTF-8"}
-_LABEL_FORMATS = {"numbers": "Numbers", "words": "Words"}
-_LINE_BREAKS = {"keep": "Keep", "space": "Replace with a space"}
 
 _TAG_SEPARATOR = " — "
 _TAG_OPTIONS = {
@@ -149,12 +141,9 @@ class ExportView:
     path: Path
     on_export: OnExport
     on_options_change: Callable[[ExportOptions], Any] | None = None
-    on_restore_options: Callable[[], Any] | None = None
     columns: list[ExportField] = field(default_factory=list)
     rows: list[_Row] = field(default_factory=list)
-    option_widgets: dict[str, ui.select | ui.checkbox | ui.number] = field(
-        default_factory=dict
-    )
+    screen: OptionsScreen[ExportOptions] = field(init=False)
     mapping: ui.column | None = None
     option_boxes: Element | None = None
     path_label: ui.label | None = None
@@ -467,7 +456,6 @@ class ExportView:
             value = int(value) if value else getattr(ExportOptions(), key)
         previous = self.options.file_type
         self.options = self.options.model_copy(update={key: value})
-        self._refresh_option_colors()
         if key == "file_type":
             self._change_file_type(value, previous)
         elif key in (
@@ -503,176 +491,18 @@ class ExportView:
             self._reset_columns()
         self._render_option_boxes()
 
-    def _refresh_option_colors(self) -> None:
-        defaults = ExportOptions()
-        for key, widget in self.option_widgets.items():
-            changed = getattr(self.options, key) != getattr(defaults, key)
-            if isinstance(widget, ui.checkbox):
-                if changed:
-                    widget.props(f"color={_CHANGED_CHECKBOX_COLOR}")
-                else:
-                    widget.props(remove="color")
-            elif changed:
-                widget.props(f"bg-color={_CHANGED_COLOR}")
-            else:
-                widget.props(remove="bg-color")
-        ignored = self.option_widgets.get("ignored_columns")
-        if ignored is not None:
-            ignored.set_enabled(not self.options.original_data)
-
-    def _box_item(
-        self,
-        key: str,
-        label: str,
-        hover: str,
-        choices: dict[str, str] | None = None,
-        maximum: int | None = None,
-        wide: bool = False,
-    ) -> None:
-        with ui.label(label).classes("text-xs"):
-            ui.tooltip(hover).classes("max-w-sm text-xs")
-        value = getattr(self.options, key)
-        widget: ui.select | ui.checkbox | ui.number
-        if isinstance(value, bool):
-            widget = ui.checkbox(value=value).props("dense keep-color size=32px")
-        elif isinstance(value, int):
-            widget = ui.number(value=value, min=1, max=maximum, precision=0)
-            widget.props("dense outlined")
-        else:
-            widget = ui.select(choices or {}, value=value)
-            widget.props("dense options-dense outlined")
-        if not isinstance(widget, ui.checkbox):
-            width = _WIDE_BOX_FIELD_WIDTH if wide else _BOX_FIELD_WIDTH
-            widget.classes(f"{_BOX_FIELD_CLASSES} {width}")
-        widget.classes("justify-self-end")
-        widget.on_value_change(lambda e: self._set_option(key, e.value))
-        self.option_widgets[key] = widget
-
     def _render_option_boxes(self) -> None:
         """Rendered again on a File type change, as Excel and RIS show other File
         and Values options."""
         assert self.option_boxes is not None
-        excel = self.options.file_type == "xlsx"
-        self.option_widgets = {}
-        self.option_boxes.clear()
-        with self.option_boxes, ui.column().classes("gap-1 w-full"):
-            with render_boxes_row():
-                with render_box_frame("File").style(_BOX_GRID_STYLE):
-                    if excel:
-                        self._box_item(
-                            "excel_max_length",
-                            "Maximum length",
-                            "Longest value written, in characters; longer values"
-                            " are cut. Excel holds at most 32.767 characters per"
-                            " cell.",
-                            maximum=_EXCEL_MAX_LENGTH,
-                        )
-                    elif self._ris:
-                        self._box_item(
-                            "ris_encoding",
-                            "Encoding",
-                            "Some RIS readers don't expect a BOM before the first"
-                            " tag.",
-                            _ENCODINGS,
-                        )
-                    else:
-                        self._box_item(
-                            "delimiter",
-                            "Delimiter",
-                            "The character between the values in a row.",
-                            _DELIMITERS,
-                        )
-                        self._box_item(
-                            "encoding",
-                            "Encoding",
-                            "With a BOM, Excel shows accented characters correctly"
-                            " when it opens the file.",
-                            _ENCODINGS,
-                        )
-                        self._box_item(
-                            "max_length",
-                            "Maximum length",
-                            "Longest value written, in characters; longer values"
-                            " are cut. 131.072 is the default limit of Python's CSV"
-                            " reader, which many tools use; Excel holds at most"
-                            " 32.767 characters per cell.",
-                        )
-                with render_box_frame("Values").style(_BOX_GRID_STYLE):
-                    self._box_item(
-                        "label_format",
-                        "Label values",
-                        "Numbers writes 1 / 0 / 0.5 / ?, Words writes include /"
-                        " exclude / maybe / unknown; unlabeled is empty in both.",
-                        _LABEL_FORMATS,
-                    )
-                    if self._ris:
-                        self._box_item(
-                            "one_line_per_value",
-                            "One line per value",
-                            "Writes each author, keyword, ISSN, label, … and each"
-                            " line of the notes on a tag line of its own, as RIS"
-                            " readers expect. Off joins them on one line with the"
-                            " row's delimiter.",
-                        )
-                        self._box_item(
-                            "split_pages",
-                            "Split pages into SP / EP",
-                            "Writes the start page to SP and the end page to EP."
-                            " Off writes the whole range to SP.",
-                        )
-                        self._box_item(
-                            "cleaned_dates_only",
-                            "Only export cleaned dates",
-                            "Writes only dates Cleaning turned into YYYY/MM/DD to"
-                            " DA. Off writes other dates as stored.",
-                        )
-                    else:
-                        self._box_item(
-                            "line_breaks",
-                            "Line breaks",
-                            "Line breaks inside a value (e.g. an abstract) are kept"
-                            + (" in the cell" if excel else " within quotes")
-                            + ", or replaced with a space.",
-                            _LINE_BREAKS,
-                            wide=True,
-                        )
-                with render_box_frame("Column selection").style(_BOX_GRID_STYLE):
-                    self._box_item(
-                        "empty_columns",
-                        "Export empty columns",
-                        "Adds the columns that none of the exported records has a"
-                        " value for.",
-                    )
-                    self._box_item(
-                        "ignored_columns",
-                        "Export ignored input columns",
-                        "Adds a row for each input column or tag that was set to"
-                        " ignore at import, with the value as it was imported.",
-                    )
-                    self._box_item(
-                        "original_data",
-                        "Export original data",
-                        "Adds a row for every input column or tag, with the value"
-                        " as it was imported.",
-                    )
-            with ui.row().classes("w-full justify-end"):
-                ui.button("Restore defaults", on_click=self._restore_options).props(
-                    "dense flat no-caps"
-                ).classes("text-xs")
-        self._refresh_option_colors()
-
-    def _restore_options(self) -> None:
-        """Resets the options model itself, as the File options of the other file
-        types have no widgets."""
-        previous = self.options.file_type
-        self.options = ExportOptions()
-        assert self.file_type_select is not None
-        self.file_type_select.value = self.options.file_type
-        self._change_file_type(self.options.file_type, previous)
-        self._rebuild_columns()
-        self._render_mapping()
-        if self.on_restore_options is not None:
-            self.on_restore_options()
+        self.screen = render_options_overview(
+            self.option_boxes,
+            export_boxes(self.options.file_type),
+            ExportOptions(),
+            start=self.options,
+        )
+        for key, widget in self.screen.widgets.items():
+            widget.on_value_change(lambda e, key=key: self._set_option(key, e.value))
 
     async def _choose_path(self) -> None:
         path = await pick_save_path(self.path, self.options.file_type)
@@ -718,7 +548,6 @@ class ExportView:
 
     def render(self) -> None:
         ui.add_css(ROW_FIELD_CSS)
-        ui.add_css(FIELD_CSS)
         self.middle.clear()
         with self.middle:
             with ui.column().classes("gap-4 pt-4 items-center w-full"):
@@ -763,7 +592,6 @@ def render_export_view(
     selected: bool,
     on_export: OnExport,
     on_options_change: Callable[[ExportOptions], Any] | None = None,
-    on_restore_options: Callable[[], Any] | None = None,
 ) -> ExportView:
     view = ExportView(
         middle=middle,
@@ -773,7 +601,6 @@ def render_export_view(
         path=path,
         on_export=on_export,
         on_options_change=on_options_change,
-        on_restore_options=on_restore_options,
     )
     view.render()
     return view

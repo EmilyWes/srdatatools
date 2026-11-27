@@ -30,7 +30,6 @@ from app.gui.export.options import (
     default_path,
     load_folder,
     load_options,
-    reset_options,
     save_folder,
     save_options,
 )
@@ -398,10 +397,6 @@ def home() -> None:
         with session_scope(_engine) as session:
             save_options(session, options)
 
-    def restore_export_options() -> None:
-        with session_scope(_engine) as session:
-            reset_options(session)
-
     async def start_export() -> None:
         clear_nav_selection()
         ids = set(selection.ids) or None
@@ -424,7 +419,6 @@ def home() -> None:
             selected=ids is not None,
             on_export=export,
             on_options_change=save_export_options,
-            on_restore_options=restore_export_options,
         )
 
     async def run_cleaning(options: CleaningOptions, ids: set[int] | None) -> None:
