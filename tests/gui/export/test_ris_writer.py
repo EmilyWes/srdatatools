@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pytest
 
-from app.gui.cleaning.steps import PUBLICATION_TYPES
 from app.gui.export.fields import ExportRecord, export_fields
 from app.gui.export.options import ExportOptions
 from app.gui.export.ris import write_ris
@@ -13,6 +12,7 @@ from app.gui.export.ris_tags import (
     TYPE_CODES,
     ris_type,
 )
+from app.helpers.format import PUBLICATION_TYPES
 from app.models.record import Record
 from app.parsers.ris import parse_ris_file, read_ris_tags, suggest_ris_mapping
 

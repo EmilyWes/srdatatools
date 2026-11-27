@@ -2,7 +2,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from app.gui.cleaning.steps import PUBLICATION_TYPES
+from app.helpers.format import PUBLICATION_TYPES
 from app.models.record import CLEANED_DATE
 
 # The record fields the checks read.

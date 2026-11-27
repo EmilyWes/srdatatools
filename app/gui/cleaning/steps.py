@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pydantic import ValidationError
 
 from app.gui.cleaning.options import CleaningOptions, DateOrder
+from app.helpers.format import STANDARD_PUBLICATION_TYPE
 from app.helpers.functions import sniff_separator
 from app.models.record import PartialDate, Record
 from app.parsers.authors import AuthorIds, clean_author_id, merge_author_ids
@@ -95,46 +96,6 @@ _RIS_NOTE_IDS = {"EID: ": "eid"}
 _RIS_NOTE_FIELDS = {"Conference name: ": "conference_name"}
 _BIBTEX_URL_KEY = "url"
 _CITATION_KEY = "Citation"
-PUBLICATION_TYPES = {
-    "Journal article": ("jour", "article", "journal article"),
-    "Review": ("review", "short survey"),
-    "Book": ("book",),
-    "Book chapter": (
-        "chap",
-        "book chapter",
-        "book-chapter",
-        "incollection",
-        "inbook",
-        "label.ris.referencetype.book_chapter",
-    ),
-    "Conference paper": (
-        "conf",
-        "cpaper",
-        "conference paper",
-        "conference-paper",
-        "inproceedings",
-        "conference",
-    ),
-    "Conference abstract": (
-        "conference review",
-        "conference-abstract",
-        "label.ris.referencetype.conference_review.p",
-    ),
-    "Thesis": ("thes", "phdthesis", "mastersthesis", "dissertation"),
-    "Report": ("rprt", "techreport", "report"),
-    "Dataset": ("data", "dataset", "data paper", "data-paper"),
-    "Preprint": ("preprint",),
-    "Letter": ("letter",),
-    "Editorial": ("editorial",),
-    "Note": ("note",),
-    "Erratum": ("errt", "erratum"),
-    "Retraction": ("retracted", "retraction"),
-}
-STANDARD_PUBLICATION_TYPE = {
-    value: standard
-    for standard, values in PUBLICATION_TYPES.items()
-    for value in values
-}
 
 
 @dataclass(frozen=True)

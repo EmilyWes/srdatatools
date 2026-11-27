@@ -16,6 +16,46 @@ _LABEL_NUMBERS = {
     "maybe": "0.5",
     "unknown": "?",
 }
+PUBLICATION_TYPES = {
+    "Journal article": ("jour", "article", "journal article"),
+    "Review": ("review", "short survey"),
+    "Book": ("book",),
+    "Book chapter": (
+        "chap",
+        "book chapter",
+        "book-chapter",
+        "incollection",
+        "inbook",
+        "label.ris.referencetype.book_chapter",
+    ),
+    "Conference paper": (
+        "conf",
+        "cpaper",
+        "conference paper",
+        "conference-paper",
+        "inproceedings",
+        "conference",
+    ),
+    "Conference abstract": (
+        "conference review",
+        "conference-abstract",
+        "label.ris.referencetype.conference_review.p",
+    ),
+    "Thesis": ("thes", "phdthesis", "mastersthesis", "dissertation"),
+    "Report": ("rprt", "techreport", "report"),
+    "Dataset": ("data", "dataset", "data paper", "data-paper"),
+    "Preprint": ("preprint",),
+    "Letter": ("letter",),
+    "Editorial": ("editorial",),
+    "Note": ("note",),
+    "Erratum": ("errt", "erratum"),
+    "Retraction": ("retracted", "retraction"),
+}
+STANDARD_PUBLICATION_TYPE = {
+    value: standard
+    for standard, values in PUBLICATION_TYPES.items()
+    for value in values
+}
 
 LabelFormat = Literal["words", "numbers"]
 

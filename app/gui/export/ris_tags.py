@@ -1,6 +1,6 @@
 import re
 
-from app.gui.cleaning.steps import STANDARD_PUBLICATION_TYPE
+from app.helpers.format import STANDARD_PUBLICATION_TYPE
 from app.parsers.mapping import LINE_DELIMITER
 
 TAG_PATTERN = re.compile(r"[A-Z][A-Z0-9]")
