@@ -13,6 +13,7 @@ from app.models.record import CLEANED_DATE, Label, Record
 from app.parsers.authors import ids_of_key
 from app.parsers.profiles import source_label
 
+# Ris standard keeps an extra "/"" at the end for other info.
 DatePart = Literal["full", "year", "month", "day", "ris"]
 PagesPart = Literal["start", "end"]
 ExtraKind = Literal["record_id", "sources", "source_files"]
@@ -392,7 +393,8 @@ def _raw_keys(records: Sequence[ExportRecord], options: ExportOptions) -> list[s
 
 def _date_text(record: Record, part: DatePart, options: ExportOptions) -> str:
     """A part is only read from a cleaned YYYY/MM/DD date, or the year from a
-    plain four-digit year. RIS writes a cleaned date as YYYY/MM/DD/."""
+    plain four-digit year. RIS writes a cleaned date as YYYY/MM/DD/: the RIS
+    spec's DA is YYYY/MM/DD/other, and the trailing slash leaves "other" empty."""
     date = record.publication_date or ""
     if part == "full":
         return date

@@ -9,7 +9,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet._write_only import WriteOnlyWorksheet
 
 from app.gui.export.columns import ExportColumn, ExportRecord, column_value
-from app.gui.export.csv_ import line_breaks
+from app.gui.export.csv import line_breaks
 from app.gui.export.options import ExportOptions
 
 _SHEET_NAME = "Records"

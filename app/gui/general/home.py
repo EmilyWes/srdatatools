@@ -22,7 +22,7 @@ from app.gui.cleaning.options import load_options as load_cleaning_options
 from app.gui.cleaning.options import save_options as save_cleaning_options
 from app.gui.cleaning.run import clean_records
 from app.gui.export.columns import ExportColumn, ExportRecord, load_export_records
-from app.gui.export.csv_ import write_csv
+from app.gui.export.csv import write_csv
 from app.gui.export.excel import write_excel
 from app.gui.export.export_flow import render_export_view
 from app.gui.export.options import (
