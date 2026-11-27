@@ -46,6 +46,7 @@ from app.helpers.options_overview import (
     render_options_overview,
     render_view_toggle,
 )
+from app.helpers.record_fields import DATE_PART_LABELS
 
 OnExport = Callable[
     [Path, list[ExportField], list[ExportRecord], ExportOptions],
@@ -72,7 +73,6 @@ _OPTION_LABEL_CLASSES = "w-10 shrink-0 text-xs text-grey-7"
 _NAME_WIDTH = "width: 24ch"
 _FIELD_WIDTH = "width: 20ch"
 
-_DATE_PARTS = {"full": "Full date", "year": "Year", "month": "Month", "day": "Day"}
 
 _TAG_SEPARATOR = " — "
 _TAG_OPTIONS = {
@@ -327,7 +327,7 @@ class ExportView:
         column = row.column
         joined = not (self._ris and self.options.one_line_per_value)
         if isinstance(column, DateField) and not self._ris:
-            self._option(row, "part", "part", "Part", _DATE_PARTS)
+            self._option(row, "part", "part", "Part", DATE_PART_LABELS)
         elif (
             isinstance(column, AuthorIdKeyField | JoinedField | KeywordsField)
             and joined

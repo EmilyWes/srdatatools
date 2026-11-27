@@ -27,6 +27,7 @@ from app.gui.importing.mapping import (
     default_row,
     row_with,
 )
+from app.helpers.record_fields import DATE_PART_LABELS, FIELD_LABELS
 
 ROW_FIELD_CSS = """
 .mapping-field .q-field__control, .mapping-field .q-field__marginal {
@@ -47,11 +48,11 @@ ROW_FIELD_CSS = """
 _IGNORE = "ignore"
 _TARGET_KEYS = (_IGNORE, *TARGETS)
 
-_LABELS: dict[str, str] = {
-    "doi": "DOI",
+# Targets that aren't a Record field of the same name; "Other ID" is singular
+# since one column gives one ID.
+_TARGET_LABELS: dict[str, str] = {
     ISSN_ISBN_TARGET: "ISSN/ISBN",
-    "pmid": "PMID",
-    "date": "Publication date",
+    DATE_TARGET: FIELD_LABELS["publication_date"],
     OTHER_IDS_TARGET: "Other ID",
 }
 
@@ -73,14 +74,7 @@ _OPTION_ROW_CLASSES = "w-full no-wrap items-center gap-1"
 _OPTION_LABEL_CLASSES = "w-10 shrink-0 text-xs text-grey-7"
 
 _OPTIONS: dict[str, tuple[_Option, ...]] = {
-    DATE_TARGET: (
-        _Option(
-            "part",
-            "part",
-            "Part",
-            {"full": "Full date", "year": "Year", "month": "Month", "day": "Day"},
-        ),
-    ),
+    DATE_TARGET: (_Option("part", "part", "Part", DATE_PART_LABELS),),
     PAGES_TARGET: (
         _Option(
             "part",
@@ -212,7 +206,9 @@ def _sorted_headers(headers: list[str], suggestion: FieldMapping) -> list[str]:
 
 
 def _option_label(key: str) -> str:
-    return _LABELS.get(key, key.replace("_", " ").capitalize())
+    if key in _TARGET_LABELS:
+        return _TARGET_LABELS[key]
+    return FIELD_LABELS.get(key, key.replace("_", " ").capitalize())
 
 
 _INPUT_WIDTH_CH = (8, 24)

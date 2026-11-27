@@ -39,6 +39,7 @@ from app.helpers.format import (
     label_text,
 )
 from app.helpers.options_overview import render_box_frame
+from app.helpers.record_fields import FIELD_LABELS
 from app.models.record import publication_year
 
 _COLUMNS_KEY = "table_columns"
@@ -62,31 +63,39 @@ _LABEL_FORMAT_KEY = "table_label_format"
 
 _LABEL_FORMATS: dict[LabelFormat, str] = {"numbers": "Numbers", "words": "Words"}
 
-COLUMNS: dict[str, str] = {
-    "doi": "DOI",
-    "title": "Title",
-    "author_names": "Authors",
-    "publication_date": "Publication date",
+_TABLE_LABELS = {
     "publication_year": "Publication year",
-    "journal": "Journal",
     "sources": "Sources",
-    "abstract": "Abstract",
-    "author_affiliations": "Affiliations",
-    "conference_name": "Conference",
-    "volume": "Volume",
-    "issue": "Issue",
-    "pages": "Pages",
-    "pmid": "PMID",
-    "issn": "ISSN",
-    "isbn": "ISBN",
-    "other_ids": "Other IDs",
-    "publication_type": "Publication type",
-    "keywords": "Keywords",
-    "language": "Language",
-    "publisher": "Publisher",
-    "url": "URL",
-    "notes": "Notes",
     "data_quality": "Data quality",
+}
+COLUMNS: dict[str, str] = {
+    key: _TABLE_LABELS.get(key) or FIELD_LABELS[key]
+    for key in (
+        "doi",
+        "title",
+        "author_names",
+        "publication_date",
+        "publication_year",
+        "journal",
+        "sources",
+        "abstract",
+        "author_affiliations",
+        "conference_name",
+        "volume",
+        "issue",
+        "pages",
+        "pmid",
+        "issn",
+        "isbn",
+        "other_ids",
+        "publication_type",
+        "keywords",
+        "language",
+        "publisher",
+        "url",
+        "notes",
+        "data_quality",
+    )
 }
 # Columns worked out from other fields rather than read from one.
 _DERIVED_COLUMNS = ("sources", "keywords", "publication_year", "data_quality")

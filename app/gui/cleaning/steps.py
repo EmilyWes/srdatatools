@@ -12,7 +12,6 @@ from app.gui.importing.mapping import (
     ISSN_ISBN_TOKEN,
     ISSN_LENGTH,
     LINE_DELIMITER,
-    SCALAR_FIELDS,
     AuthorsRow,
     FieldMapping,
     ScalarRow,
@@ -21,6 +20,7 @@ from app.gui.importing.mapping import (
 from app.helpers.authors import AuthorIds, clean_author_id, merge_author_ids
 from app.helpers.format import STANDARD_PUBLICATION_TYPE
 from app.helpers.functions import sniff_separator
+from app.helpers.record_fields import SCALAR_FIELDS
 from app.models.record import PartialDate, Record
 
 logger = logging.getLogger(__name__)

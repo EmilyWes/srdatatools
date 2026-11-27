@@ -3,12 +3,13 @@ import logging
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Annotated, Any, Literal, TypeVar, get_args
+from typing import Annotated, Any, Literal, TypeVar
 
 from pydantic import BaseModel, Field, TypeAdapter, field_validator
 
 from app.gui.importing.parse_settings import DEFAULT_SETTINGS, ParseSettings
 from app.helpers.authors import AuthorSlots, ids_by_key
+from app.helpers.record_fields import SCALAR_FIELDS, DatePart, PagesBound, ScalarField
 from app.models.record import Label, LabelValue, Record
 
 logger = logging.getLogger(__name__)
@@ -20,23 +21,6 @@ _ID_HEADER = re.compile(r"(?<![A-Za-z])[Ii][Dd](?![A-Za-z])|[A-Z]ID(?![A-Za-z])"
 _KEYWORD_HEADER = re.compile(r"keywords?", re.IGNORECASE)
 
 _DATE_PARTS = ("year", "month", "day")
-
-ScalarTarget = Literal[
-    "title",
-    "abstract",
-    "journal",
-    "conference_name",
-    "volume",
-    "issue",
-    "doi",
-    "pmid",
-    "publication_type",
-    "language",
-    "publisher",
-    "url",
-    "notes",
-]
-SCALAR_FIELDS = frozenset(get_args(ScalarTarget))
 
 DATE_TARGET = "date"
 PAGES_TARGET = "pages"
@@ -55,17 +39,17 @@ _AUTHOR_FIELDS = {"names": "author_names", "affiliations": "author_affiliations"
 
 
 class ScalarRow(BaseModel):
-    target: ScalarTarget
+    target: ScalarField
 
 
 class DateRow(BaseModel):
     target: Literal["date"] = "date"
-    part: Literal["full", "year", "month", "day"] = "full"
+    part: DatePart = "full"
 
 
 class PagesRow(BaseModel):
     target: Literal["pages"] = "pages"
-    part: Literal["range", "start", "end", "count"] = "range"
+    part: PagesBound | Literal["range", "count"] = "range"
 
 
 class IssnIsbnRow(BaseModel):

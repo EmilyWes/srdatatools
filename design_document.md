@@ -161,6 +161,7 @@ app/
       activity_log.py # plain-language activity_log messages (for every module that acts)
   helpers/
     authors.py       # author-ID field format shared by the parsers and cleaning
+    record_fields.py # Record field display names, the scalar fields and the date/pages part types shared by import, export and the record table
     options_overview.py # box types + subject boxes (Parsing and Cleaning views) + the Mapping | Parsing toggle, for the import, source-file, cleaning and export views
     mapping_table.py # field-mapping table (CSV columns, RIS/NBIB tags, BibTeX fields)
     busy.py          # runs slow work off the event loop, with a spinner dialog if it takes a while

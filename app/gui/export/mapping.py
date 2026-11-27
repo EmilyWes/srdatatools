@@ -17,11 +17,12 @@ from app.gui.export.options import ExportOptions
 from app.gui.importing.profiles import source_label
 from app.helpers.authors import ids_of_key
 from app.helpers.format import DISPLAY_SEPARATOR, label_text
+from app.helpers.record_fields import FIELD_LABELS, DatePart, PagesBound
+from app.helpers.record_fields import ScalarField as ScalarFieldName
 from app.models.record import CLEANED_DATE, Label, Record
 
 # Ris standard keeps an extra "/"" at the end for other info.
-DatePart = Literal["full", "year", "month", "day", "ris"]
-PagesPart = Literal["start", "end"]
+ExportDatePart = DatePart | Literal["ris"]
 ExtraType = Literal["record_id", "sources", "source_files"]
 
 _ORIGINAL_SUFFIX = " (original)"
@@ -31,26 +32,6 @@ _PAGE_DASH = "-"
 
 _UNCHECKED_IN_RIS = frozenset({"sources", "source_files"})
 
-_SCALAR_LABELS = {
-    "title": "Title",
-    "author_names": "Authors",
-    "author_affiliations": "Affiliations",
-    "journal": "Journal",
-    "conference_name": "Conference",
-    "volume": "Volume",
-    "issue": "Issue",
-    "pages": "Pages",
-    "abstract": "Abstract",
-    "doi": "DOI",
-    "pmid": "PMID",
-    "issn": "ISSN",
-    "isbn": "ISBN",
-    "publication_type": "Publication type",
-    "language": "Language",
-    "publisher": "Publisher",
-    "url": "URL",
-    "notes": "Notes",
-}
 _EXTRA_LABELS: dict[ExtraType, str] = {
     "record_id": "Record ID",
     "sources": "Sources",
@@ -132,12 +113,12 @@ class JoinedField(ScalarField):
 
 @dataclass
 class DateField(ExportField):
-    part: DatePart = "full"
+    part: ExportDatePart = "full"
 
 
 @dataclass
 class PagesField(ExportField):
-    part: PagesPart = "start"
+    part: PagesBound = "start"
 
 
 @dataclass
@@ -178,13 +159,13 @@ class RawField(ExportField):
     raw_key: str = ""
 
 
-def _scalar(field_name: str) -> ScalarField:
-    label = _SCALAR_LABELS[field_name]
+def _scalar(field_name: ScalarFieldName | Literal["pages"]) -> ScalarField:
+    label = FIELD_LABELS[field_name]
     return ScalarField(key=field_name, label=label, name=label, field=field_name)
 
 
 def _joined(field_name: str) -> JoinedField:
-    label = _SCALAR_LABELS[field_name]
+    label = FIELD_LABELS[field_name]
     return JoinedField(key=field_name, label=label, name=label, field=field_name)
 
 
@@ -234,9 +215,16 @@ def _date(schemas: Sequence[Record]) -> DateField:
     dates = [schema.publication_date for schema in schemas if schema.publication_date]
     if dates and all(map(_year_only, dates)):
         return DateField(
-            key="date", label="Publication date", name="Publication year", part="year"
+            key="date",
+            label=FIELD_LABELS["publication_date"],
+            name="Publication year",
+            part="year",
         )
-    return DateField(key="date", label="Publication date", name="Publication date")
+    return DateField(
+        key="date",
+        label=FIELD_LABELS["publication_date"],
+        name=FIELD_LABELS["publication_date"],
+    )
 
 
 def _extra(type: ExtraType) -> ExtraField:
@@ -349,7 +337,12 @@ def _ris_fields(
                 DateField(
                     key="date:year", label="Publication year", name="PY", part="year"
                 ),
-                DateField(key="date", label="Publication date", name="DA", part="ris"),
+                DateField(
+                    key="date",
+                    label=FIELD_LABELS["publication_date"],
+                    name="DA",
+                    part="ris",
+                ),
             ]
         elif column.key == "pages" and options.split_pages:
             result += [
@@ -375,7 +368,7 @@ def _raw_keys(records: Sequence[ExportRecord], options: ExportOptions) -> list[s
     )
 
 
-def _date_text(record: Record, part: DatePart, options: ExportOptions) -> str:
+def _date_text(record: Record, part: ExportDatePart, options: ExportOptions) -> str:
     """A part is only read from a cleaned YYYY/MM/DD date, or the year from a
     plain four-digit year. RIS writes a cleaned date as YYYY/MM/DD/: the RIS
     spec's DA is YYYY/MM/DD/other, and the trailing slash leaves "other" empty."""
