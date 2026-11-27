@@ -17,7 +17,7 @@ from app.gui.importing.profiles import sources_label
 from app.helpers.format import format_count
 from app.helpers.mapping_table import render_mapping_table
 from app.helpers.options_overview import render_options_overview, render_view_toggle
-from app.helpers.theme import MUTED_TEXT
+from app.helpers.theme import MUTED_TEXT, PAGE_TITLE
 
 
 def render_source_file_view(
@@ -48,7 +48,7 @@ def render_source_file_view(
                 )
 
         with ui.column().classes("w-full p-6 gap-4"):
-            ui.label(source_file.filename).classes("text-2xl")
+            ui.label(source_file.filename).classes(PAGE_TITLE)
             with ui.grid(columns="max-content auto").classes("gap-x-4 gap-y-1"):
                 details = [
                     ("Sources", sources_label(source_file.sources)),

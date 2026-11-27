@@ -16,6 +16,7 @@ from app.helpers.theme import (
     MULTIPLE_COLOR,
     OTHER_COLOR,
     OUTLINED_BOX,
+    PAGE_TITLE,
     SECTION_HEADING,
     UNKNOWN_COLOR,
     UU_GREEN,
@@ -425,7 +426,7 @@ def render_dashboard_settings(
     middle.clear()
     with middle:
         with ui.column().classes("w-full p-6 gap-2"):
-            ui.label("Dashboard settings").classes("text-2xl")
+            ui.label("Dashboard settings").classes(PAGE_TITLE)
             ui.label("Shown").classes(SECTION_HEADING)
             with ui.column().classes("gap-0"):
                 for key, label in items:

@@ -34,6 +34,7 @@ CHANGED_COLOR = "blue"
 MUTED_TEXT = "text-grey-7"
 OUTLINED_BOX = "border outline-variant rounded-xl"
 SECTION_HEADING = "title-small pt-2"
+PAGE_TITLE = "text-2xl"
 
 INPUT_PROPS = "dense outlined"
 SELECT_PROPS = f"{INPUT_PROPS} options-dense popup-content-class=text-xs"

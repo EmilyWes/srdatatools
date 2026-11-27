@@ -7,7 +7,7 @@ from nicegui.element import Element
 
 from app.db.models import ActivityLog
 from app.helpers.format import format_count
-from app.helpers.theme import UU_GREEN, UU_ORANGE
+from app.helpers.theme import PAGE_TITLE, UU_GREEN, UU_ORANGE
 
 _ACTIONS = {
     "Cleaning": "cleaning_services",
@@ -65,7 +65,7 @@ def render_right_panel(
         middle.clear()
         with middle:
             with ui.column().classes("p-6 gap-1 w-full"):
-                ui.label(f"{action} settings").classes("text-2xl")
+                ui.label(f"{action} settings").classes(PAGE_TITLE)
                 ui.label("Not available yet.").classes(
                     "text-sm text-on-surface-variant"
                 )
