@@ -6,14 +6,14 @@ from typing import Literal
 from sqlalchemy.orm import Session
 
 from app.db.record import load_records, record_schema
-from app.gui.export.options import ExportOptions
-from app.gui.export.ris_tags import (
+from app.gui.export.formats.ris_tags import (
     KEYWORD_TAG,
     NOTE_TAG,
     RIS_FIELD_TO_TAG,
     TAG_PATTERN,
     ris_type,
 )
+from app.gui.export.options import ExportOptions
 from app.helpers.format import DISPLAY_SEPARATOR, label_text
 from app.models.record import CLEANED_DATE, Label, Record
 from app.parsers.authors import ids_of_key

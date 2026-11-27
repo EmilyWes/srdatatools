@@ -3,7 +3,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.gui.export.excel import write_excel
+from app.gui.export.formats.excel import write_excel
 from app.gui.export.mapping import ExportField, ExportRecord, export_fields
 from app.gui.export.options import ExportOptions
 from app.models.record import Record

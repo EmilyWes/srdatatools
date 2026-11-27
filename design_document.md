@@ -151,10 +151,11 @@ app/
       export_flow.py # export view in the middle panel
       mapping.py     # export fields (one per output column) and their cell values + loading the records to export
       options.py     # export options, remembered in app_settings
-      csv_.py        # CSV writer
-      excel.py       # Excel (.xlsx) writer
-      ris.py         # RIS writer
-      ris_tags.py    # RIS tag list and publication type codes
+      formats/
+        csv.py       # CSV writer
+        excel.py     # Excel (.xlsx) writer
+        ris.py       # RIS writer
+        ris_tags.py  # RIS tag list and publication type codes
     other/
       source_file_view.py # source-file detail view in the middle panel
       about.py       # About view (version, license, third-party licenses) and Help view

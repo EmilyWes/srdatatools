@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from pathlib import Path
 
+from app.gui.export.formats.ris_tags import NOTE_TAG
 from app.gui.export.mapping import (
     ExportField,
     ExportRecord,
@@ -8,7 +9,6 @@ from app.gui.export.mapping import (
     field_values,
 )
 from app.gui.export.options import ExportOptions
-from app.gui.export.ris_tags import NOTE_TAG
 
 _END_LINE = "ER  - \n\n"
 

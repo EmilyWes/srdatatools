@@ -8,6 +8,12 @@ from nicegui import app, ui
 from nicegui.element import Element
 from webview import FileDialog
 
+from app.gui.export.formats.ris_tags import (
+    CURATED_TAGS,
+    NOTE_TAG,
+    RIS_TAG_TO_NAME,
+    TAG_PATTERN,
+)
 from app.gui.export.mapping import (
     AuthorIdKeyField,
     DateField,
@@ -26,12 +32,6 @@ from app.gui.export.options import (
     ExportOptions,
     default_path,
     export_boxes,
-)
-from app.gui.export.ris_tags import (
-    CURATED_TAGS,
-    NOTE_TAG,
-    RIS_TAG_TO_NAME,
-    TAG_PATTERN,
 )
 from app.gui.importing.import_flow import (
     BUTTON_PROPS,

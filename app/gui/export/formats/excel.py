@@ -8,7 +8,7 @@ from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE, Cell
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet._write_only import WriteOnlyWorksheet
 
-from app.gui.export.csv import line_breaks
+from app.gui.export.formats.csv import line_breaks
 from app.gui.export.mapping import ExportField, ExportRecord, field_value
 from app.gui.export.options import ExportOptions
 
